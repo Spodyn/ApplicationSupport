@@ -11,7 +11,6 @@ import {
 import {
   Activity,
   AlarmClock,
-  Archive,
   ArrowLeft,
   Ban,
   Check,
@@ -19,8 +18,6 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
-  CircleCheckBig,
-  CircleDot,
   Clock3,
   ExternalLink,
   FileArchive,
@@ -31,20 +28,17 @@ import {
   LoaderCircle,
   LockKeyhole,
   Mail,
-  MessageCircleQuestion,
   MessageSquareMore,
   MoreHorizontal,
   Paperclip,
   PanelRightClose,
   PanelRightOpen,
-  RefreshCw,
   RotateCcw,
   Send,
   Smile,
   Bold,
   TriangleAlert,
   UserCheck,
-  ShieldCheck,
   Tag,
   UserRound,
 } from "lucide-react"
@@ -77,77 +71,28 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@/components/ui/popover"
-import { ConfirmDialog } from "@/components/design-system/confirm-dialog"
 import { notify } from "@/components/design-system/notify"
-import {
-  ALL_VALUE,
-  FilterBar,
-  FilterSelect,
-  SearchFilter,
-} from "@/components/design-system/filter-bar"
 import { ErrorState } from "@/components/design-system/data-states"
 import { ConversationSkeleton, InboxPageSkeleton } from "@/components/design-system/page-skeletons"
 import { PlatformBadge, PlatformIcon } from "@/components/design-system/platform-badge"
 import { InboxStatusBadge } from "@/components/design-system/inbox-status-badge"
 import { UserAvatar } from "@/components/design-system/user-avatar"
 import {
-  inboxStatusLabels,
   type InboxCase,
   type InboxMessage,
-  type InboxStatus,
 } from "@/lib/domain/inbox"
-import {
-  channelLabels,
-  deliveryStatusLabels,
-} from "@/lib/domain/labels"
-import type { Channel, MessageDeliveryStatus, SlaState, User } from "@/lib/domain/types"
+import { deliveryStatusLabels } from "@/lib/domain/labels"
+import type { MessageDeliveryStatus, User } from "@/lib/domain/types"
 import { formatDateTime, formatRelative, formatTime } from "@/lib/format"
 import {
   useCurrentUser,
   useInboxCases,
   useInboxMessages,
   useInboxWorkflow,
-  useMarkAllResolvedRead,
   useMarkInboxCaseRead,
 } from "@/lib/services/queries"
 import { getInboxVoteWeight, InboxConflictError } from "@/lib/services/inbox"
 import { getEffectiveSlaState } from "@/lib/sla"
-
-type FolderId = "all" | "snoozed" | InboxStatus
-
-const folderItems: {
-  id: FolderId
-  label: string
-  icon: typeof Inbox
-}[] = [
-  { id: "all", label: "Wszystkie", icon: Inbox },
-  { id: "new", label: "Nowe", icon: CircleDot },
-  { id: "verification", label: "W trakcie weryfikacji", icon: ShieldCheck },
-  { id: "waiting_for_customer", label: "Dopytane", icon: MessageCircleQuestion },
-  { id: "partially_ignored", label: "Częściowo zignorowane", icon: MoreHorizontal },
-  { id: "snoozed", label: "Odłożone", icon: Archive },
-  { id: "ignored", label: "Zignorowane", icon: Ban },
-  { id: "resolved", label: "Rozwiązane", icon: CircleCheckBig },
-]
-
-const slaLabels: Record<SlaState, string> = {
-  on_track: "W normie",
-  at_risk: "Ostrzeżenie",
-  breached: "Przekroczone",
-  paused: "Wstrzymane",
-}
-
-const platformOptions = (
-  Object.entries(channelLabels) as [Channel, string][]
-).map(([value, label]) => ({ value, label }))
-
-const statusOptions = (
-  Object.entries(inboxStatusLabels) as [InboxStatus, string][]
-).map(([value, label]) => ({ value, label }))
-
-const slaOptions = (Object.entries(slaLabels) as [SlaState, string][]).map(
-  ([value, label]) => ({ value, label }),
-)
 
 export function CasesPage({
   onlyMine = false,
@@ -161,13 +106,6 @@ export function CasesPage({
   const currentUser = currentUserQuery.data
   const markRead = useMarkInboxCaseRead()
   const [selectedId, setSelectedId] = useState<string | undefined>(initialCaseId)
-  const [folder, setFolder] = useState<FolderId>("all")
-  const [search, setSearch] = useState("")
-  const [platform, setPlatform] = useState(ALL_VALUE)
-  const [customer, setCustomer] = useState(ALL_VALUE)
-  const [status, setStatus] = useState(ALL_VALUE)
-  const [owner, setOwner] = useState(ALL_VALUE)
-  const [sla, setSla] = useState(ALL_VALUE)
   const [mobileConversationOpen, setMobileConversationOpen] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
@@ -184,55 +122,9 @@ export function CasesPage({
     return () => window.clearInterval(timer)
   }, [])
 
-  const customerOptions = useMemo(
-    () =>
-      [...new Map(allCases.map((item) => [item.customer.id, item.customer])).values()]
-        .sort((a, b) => a.name.localeCompare(b.name, "pl"))
-        .map((item) => ({ value: item.id, label: item.name })),
-    [allCases],
-  )
-
-  const ownerOptions = useMemo(
-    () => [
-      { value: "unclaimed", label: "Nieprzypisane" },
-      ...[
-        ...new Map(
-          allCases
-            .filter((item): item is InboxCase & { owner: NonNullable<InboxCase["owner"]> } => Boolean(item.owner))
-            .map((item) => [item.owner.id, item.owner]),
-        ).values(),
-      ]
-        .sort((a, b) => a.fullName.localeCompare(b.fullName, "pl"))
-        .map((item) => ({ value: item.id, label: item.fullName })),
-    ],
-    [allCases],
-  )
-
   const visibleCases = useMemo(() => {
-    const normalizedSearch = search.toLocaleLowerCase("pl").trim()
-    return allCases
-      .filter((item) => {
-        if (folder === "snoozed" && !item.snoozedForCurrentUserUntil) return false
-        if (folder !== "all" && folder !== "snoozed" && item.status !== folder) return false
-        if (platform !== ALL_VALUE && item.platform !== platform) return false
-        if (customer !== ALL_VALUE && item.customer.id !== customer) return false
-        if (status !== ALL_VALUE && item.status !== status) return false
-        if (sla !== ALL_VALUE && item.sla.state !== sla) return false
-        if (owner === "unclaimed" && item.owner) return false
-        if (owner !== ALL_VALUE && owner !== "unclaimed" && item.owner?.id !== owner) return false
-        if (!normalizedSearch) return true
-        return [
-          item.reference,
-          item.subject,
-          item.customer.name,
-          item.customer.contactName,
-          item.sourceChannel,
-          item.lastMessagePreview,
-          ...item.metadata.tags,
-        ].some((value) => value.toLocaleLowerCase("pl").includes(normalizedSearch))
-      })
-      .sort((a, b) => compareCases(a, b, now))
-  }, [allCases, customer, folder, now, owner, platform, search, sla, status])
+    return [...allCases].sort((a, b) => compareCases(a, b, now))
+  }, [allCases, now])
 
   useEffect(() => {
     if (!selectedId && visibleCases[0]) {
@@ -263,38 +155,7 @@ export function CasesPage({
     setMobileConversationOpen(true)
   }
 
-  const resetFilters = () => {
-    setSearch("")
-    setPlatform(ALL_VALUE)
-    setCustomer(ALL_VALUE)
-    setStatus(ALL_VALUE)
-    setOwner(ALL_VALUE)
-    setSla(ALL_VALUE)
-  }
-
-  const filtersActive = Boolean(
-    search ||
-      platform !== ALL_VALUE ||
-      customer !== ALL_VALUE ||
-      status !== ALL_VALUE ||
-      owner !== ALL_VALUE ||
-      sla !== ALL_VALUE,
-  )
-
   const unreadCount = allCases.filter((item) => item.unreadForCurrentUser).length
-  const mobileFolderOptions = folderItems.map((folderItem) => {
-    const inFolder =
-      folderItem.id === "all"
-        ? allCases
-        : folderItem.id === "snoozed"
-          ? allCases.filter((item) => Boolean(item.snoozedForCurrentUserUntil))
-          : allCases.filter((item) => item.status === folderItem.id)
-    const unread = inFolder.filter((item) => item.unreadForCurrentUser).length
-    return {
-      value: folderItem.id,
-      label: `${folderItem.label} (${inFolder.length}${unread ? `, ${unread} nowych` : ""})`,
-    }
-  })
 
   return (
     <>
@@ -302,107 +163,20 @@ export function CasesPage({
         title={onlyMine ? "Bieżące case’y" : "Case’y"}
         description={
           onlyMine
-            ? "Case’y przypisane do bieżącego użytkownika"
-            : "Wspólna skrzynka Slack, Microsoft Teams i Telegram"
-        }
-        actions={
-          <div className="flex items-center gap-2">
-            <span className="hidden text-xs text-muted-foreground xl:inline">
-              {allCases.length} case’ów · {unreadCount} nieprzeczytanych
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void casesQuery.refetch()}
-              disabled={casesQuery.isFetching}
-            >
-              <RefreshCw className={casesQuery.isFetching ? "animate-spin" : undefined} />
-              <span className="hidden sm:inline">Odśwież</span>
-            </Button>
-          </div>
+            ? `${allCases.length} przypisanych · ${unreadCount} nieprzeczytanych`
+            : `${allCases.length} zgłoszeń · ${unreadCount} nieprzeczytanych`
         }
       />
 
-      <main className="flex min-h-0 flex-1 flex-col bg-muted/20">
-        <div className={`${mobileConversationOpen ? "hidden xl:block" : "block"} shrink-0 border-b bg-card px-3 py-2.5`}>
-          <div className="flex flex-col gap-2 2xl:flex-row 2xl:items-center">
-            <FilterBar className="min-w-0 flex-1">
-              <FilterSelect
-                value={folder}
-                onChange={(value) => setFolder(value as FolderId)}
-                options={mobileFolderOptions}
-                placeholder="Folder"
-                className="xl:hidden sm:w-56"
-              />
-              <SearchFilter
-                value={search}
-                onChange={setSearch}
-                placeholder="Szukaj po numerze, kliencie lub treści…"
-                className="sm:w-72"
-              />
-              <FilterSelect
-                value={platform}
-                onChange={setPlatform}
-                options={platformOptions}
-                placeholder="Platforma"
-                allLabel="Wszystkie platformy"
-                className="sm:w-42"
-              />
-              <FilterSelect
-                value={customer}
-                onChange={setCustomer}
-                options={customerOptions}
-                placeholder="Klient"
-                allLabel="Wszyscy klienci"
-                className="sm:w-48"
-              />
-              <FilterSelect
-                value={status}
-                onChange={setStatus}
-                options={statusOptions}
-                placeholder="Status"
-                allLabel="Wszystkie statusy"
-                className="sm:w-48"
-              />
-              <FilterSelect
-                value={owner}
-                onChange={setOwner}
-                options={ownerOptions}
-                placeholder="Opiekun"
-                allLabel="Wszyscy opiekunowie"
-                className="sm:w-48"
-              />
-              <FilterSelect
-                value={sla}
-                onChange={setSla}
-                options={slaOptions}
-                placeholder="SLA"
-                allLabel="Każdy stan SLA"
-                className="sm:w-40"
-              />
-            </FilterBar>
-            {filtersActive && (
-              <Button variant="ghost" size="sm" onClick={resetFilters}>
-                Wyczyść filtry
-              </Button>
-            )}
-          </div>
-        </div>
-
+      <main className="flex min-h-0 flex-1 flex-col bg-background">
         {casesQuery.isError || currentUserQuery.isError ? (
           <ErrorState title="Nie udało się wczytać skrzynki" description="Sprawdź połączenie i spróbuj ponownie." onRetry={() => { void casesQuery.refetch(); void currentUserQuery.refetch() }} className="flex-1" />
         ) : casesQuery.isLoading || currentUserQuery.isLoading || !currentUser ? (
           <InboxPageSkeleton />
         ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[220px_390px_minmax(0,1fr)]">
-            <FolderSidebar
-              cases={allCases}
-              activeFolder={folder}
-              onFolderChange={setFolder}
-            />
+          <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)]">
             <CaseList
               cases={visibleCases}
-              activeFolder={folder}
               selectedId={selectedId}
               now={now}
               onSelect={selectCase}
@@ -438,85 +212,20 @@ function compareCases(a: InboxCase, b: InboxCase, now: number) {
   return rank(a) - rank(b) || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
 }
 
-function FolderSidebar({
-  cases,
-  activeFolder,
-  onFolderChange,
-}: {
-  cases: InboxCase[]
-  activeFolder: FolderId
-  onFolderChange: (folder: FolderId) => void
-}) {
-  return (
-    <aside className="hidden min-h-0 flex-col border-r bg-card xl:flex" aria-label="Foldery skrzynki">
-      <div className="border-b px-3 py-3">
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Foldery</p>
-      </div>
-      <nav className="min-h-0 flex-1 overflow-y-auto p-2">
-        <ul className="space-y-0.5">
-          {folderItems.map((folder) => {
-            const inFolder =
-              folder.id === "all"
-                ? cases
-                : folder.id === "snoozed"
-                  ? cases.filter((item) => Boolean(item.snoozedForCurrentUserUntil))
-                  : cases.filter((item) => item.status === folder.id)
-            const unread = inFolder.filter((item) => item.unreadForCurrentUser).length
-            const active = activeFolder === folder.id
-            return (
-              <li key={folder.id}>
-                <button
-                  type="button"
-                  onClick={() => onFolderChange(folder.id)}
-                  aria-current={active ? "page" : undefined}
-                  className={`flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm transition-colors ${
-                    active
-                      ? "bg-accent font-medium text-accent-foreground"
-                      : "text-foreground/80 hover:bg-muted hover:text-foreground"
-                  }`}
-                >
-                  <folder.icon className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="min-w-0 flex-1 truncate">{folder.label}</span>
-                  {unread > 0 && (
-                    <span className="min-w-5 rounded-full bg-primary px-1.5 text-center text-[10px] font-semibold text-primary-foreground">
-                      {unread}
-                    </span>
-                  )}
-                  <span className="min-w-5 text-right text-[11px] tabular-nums text-muted-foreground">
-                    {inFolder.length}
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      </nav>
-      <div className="border-t p-3 text-[11px] leading-relaxed text-muted-foreground">
-        Nieprzeczytane są liczone osobno dla bieżącego użytkownika.
-      </div>
-    </aside>
-  )
-}
-
 function CaseList({
   cases,
-  activeFolder,
   selectedId,
   now,
   onSelect,
   className,
 }: {
   cases: InboxCase[]
-  activeFolder: FolderId
   selectedId?: string
   now: number
   onSelect: (item: InboxCase) => void
   className?: string
 }) {
-  const markAllRead = useMarkAllResolvedRead()
-  const [confirmReadOpen, setConfirmReadOpen] = useState(false)
   const itemRefs = useRef(new Map<string, HTMLButtonElement>())
-  const unreadResolved = cases.filter((item) => item.unreadForCurrentUser).length
 
   const focusCase = (index: number) => {
     const item = cases[Math.max(0, Math.min(cases.length - 1, index))]
@@ -525,43 +234,20 @@ function CaseList({
 
   return (
     <section className={`${className ?? "flex"} min-h-0 min-w-0 flex-col border-r bg-card`} aria-label="Lista case’ów">
-      <div className="flex h-10 shrink-0 items-center justify-between border-b px-3">
-        <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-          Kolejka
-        </span>
-        <div className="flex items-center gap-2">
-          {activeFolder === "resolved" && (
-            <>
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => setConfirmReadOpen(true)}
-                disabled={unreadResolved === 0 || markAllRead.isPending}
-              >
-                <CheckCheck /> Oznacz wszystkie jako przeczytane
-              </Button>
-              <ConfirmDialog
-                open={confirmReadOpen}
-                onOpenChange={setConfirmReadOpen}
-                title="Oznaczyć rozwiązane jako przeczytane?"
-                description="Zmiana dotyczy wyłącznie Twojego konta. Stany innych użytkowników pozostaną bez zmian."
-                confirmLabel="Oznacz jako przeczytane"
-                onConfirm={() =>
-                  markAllRead.mutate(undefined, {
-                    onSuccess: () => notify.success("Oznaczono jako przeczytane", "Zmieniono tylko Twój osobisty stan odczytu."),
-                  })
-                }
-              />
-            </>
-          )}
-          <span className="text-xs tabular-nums text-muted-foreground">{cases.length} wyników</span>
+      <div className="flex h-12 shrink-0 items-center justify-between border-b px-4">
+        <div className="flex flex-col leading-tight">
+          <span className="text-xs font-semibold tracking-wide text-foreground uppercase">Rozmowy</span>
+          <span className="text-[10px] text-muted-foreground">Najpilniejsze na górze</span>
         </div>
+        <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium tabular-nums text-muted-foreground">
+          {cases.length}
+        </span>
       </div>
       {cases.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
           <Inbox className="size-8 text-muted-foreground/50" />
-          <p className="text-sm font-medium">Brak pasujących case’ów</p>
-          <p className="text-xs text-muted-foreground">Zmień folder lub aktywne filtry.</p>
+          <p className="text-sm font-medium">Brak rozmów w kolejce</p>
+          <p className="text-xs text-muted-foreground">Nowe zgłoszenia pojawią się tutaj automatycznie.</p>
         </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto" role="listbox" aria-label="Case’y w kolejce">
@@ -720,7 +406,7 @@ function ConversationPanel({
   return (
     <section className={`${className ?? "flex"} min-h-0 min-w-0 flex-col bg-background`} aria-label={`Rozmowa ${item.reference}`}>
       <header className="shrink-0 border-b bg-card">
-        <div className="flex min-w-0 items-start gap-3 px-3 py-3 lg:px-4">
+        <div className="flex min-w-0 items-start gap-3 px-3 py-2.5 lg:px-4">
           <Button variant="ghost" size="icon-sm" className="mt-0.5 xl:hidden" onClick={onBack} aria-label="Wróć do listy case’ów">
             <ArrowLeft />
           </Button>
@@ -730,11 +416,27 @@ function ConversationPanel({
               <span className="font-mono text-[11px] font-semibold text-muted-foreground">{item.reference}</span>
               <h2 className="min-w-0 truncate text-sm font-semibold">{item.subject}</h2>
             </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
               <span className="font-medium text-foreground">{item.customer.name}</span>
               <span aria-hidden>·</span>
               <PlatformBadge channel={item.platform} />
               <span>{item.sourceChannel}</span>
+              <span className="hidden h-4 w-px bg-border sm:inline" aria-hidden />
+              <InboxStatusBadge status={item.status} compact />
+              <SlaCountdown item={item} now={now} compact />
+              {item.owner ? (
+                <span className="flex items-center gap-1.5 text-foreground/80">
+                  <UserAvatar user={item.owner} size="sm" showPresence />
+                  <span className="font-medium">{item.owner.fullName}</span>
+                </span>
+              ) : (
+                <span className="font-medium text-warning-foreground">Nieprzypisany</span>
+              )}
+              {item.ignoreVotes.current > 0 && (
+                <span className="flex items-center gap-1">
+                  <Ban className="size-3" /> {item.ignoreVotes.current}/2 głosów
+                </span>
+              )}
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
@@ -763,29 +465,9 @@ function ConversationPanel({
             </Button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2 lg:px-4">
-          <InboxStatusBadge status={item.status} />
-          <SlaCountdown item={item} now={now} />
-          <Separator orientation="vertical" className="mx-1 h-5" />
-          {item.owner ? (
-            <span className="flex items-center gap-1.5 text-xs">
-              <UserAvatar user={item.owner} size="sm" showPresence />
-              <span className="font-medium">{item.owner.fullName}</span>
-            </span>
-          ) : (
-            <Badge variant="secondary" className="border-transparent bg-warning/15 text-warning-foreground">
-              <UserRound /> Nieprzypisany
-            </Badge>
-          )}
-          {item.ignoreVotes.current > 0 && (
-            <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
-              <Ban className="size-3.5" /> Głosy ignorowania {item.ignoreVotes.current}/2
-            </span>
-          )}
-        </div>
       </header>
 
-      <CaseStateBanner item={item} now={now} currentUser={currentUser} />
+      <CaseStateBanner item={item} now={now} />
 
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
@@ -867,13 +549,13 @@ function ConversationStream({ messages }: { messages: InboxMessage[] }) {
     <div
       ref={containerRef}
       onScroll={handleScroll}
-      className="min-h-0 flex-1 overflow-y-auto bg-muted/10 px-3 py-4 lg:px-5"
+      className="min-h-0 flex-1 overflow-y-auto bg-muted/10 px-4 py-5 sm:px-6 lg:px-8"
       aria-label="Historia rozmowy"
       role="log"
       aria-live="polite"
       aria-relevant="additions text"
     >
-      <div className="mx-auto flex max-w-3xl flex-col gap-3">
+      <div className="flex w-full flex-col gap-4">
         {visibleStart > 0 && (
           <button
             type="button"
@@ -941,7 +623,7 @@ function MessageBubble({ message }: { message: InboxMessage }) {
   const support = message.kind === "support"
   return (
     <article className={`flex ${support ? "justify-end" : "justify-start"}`}>
-      <div className={`max-w-[82%] ${support ? "items-end" : "items-start"} flex flex-col gap-1`}>
+      <div className={`max-w-[min(88%,64rem)] ${support ? "items-end" : "items-start"} flex flex-col gap-1`}>
         <div className={`flex items-center gap-2 px-1 text-[10px] text-muted-foreground ${support ? "flex-row-reverse" : ""}`}>
           <span className="font-medium text-foreground/75">{message.sender}</span>
           <span>{formatTime(message.createdAt)}</span>
@@ -1011,8 +693,7 @@ function DeliveryStatus({ status }: { status: MessageDeliveryStatus }) {
   )
 }
 
-function CaseStateBanner({ item, now, currentUser }: { item: InboxCase; now: number; currentUser: User }) {
-  const assignedToCurrentUser = item.owner?.id === currentUser.id
+function CaseStateBanner({ item, now }: { item: InboxCase; now: number }) {
   const waiting = item.status === "waiting_for_customer"
   const terminal = item.status === "resolved" || item.status === "ignored"
 
@@ -1057,24 +738,6 @@ function CaseStateBanner({ item, now, currentUser }: { item: InboxCase; now: num
       <div className="flex shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/10 px-4 py-2 text-xs text-destructive">
         <TriangleAlert className="size-4" />
         Po oddaniu głosu ignorowania nie możesz przejąć tego case’u ani na niego odpowiadać.
-      </div>
-    )
-  }
-
-  if (assignedToCurrentUser) {
-    return (
-      <div className="flex shrink-0 items-center gap-2 border-b border-primary/15 bg-primary/5 px-4 py-2 text-xs text-primary">
-        <UserCheck className="size-4" />
-        <span className="font-medium">Przypisany do Ciebie</span>
-      </div>
-    )
-  }
-
-  if (item.owner) {
-    return (
-      <div className="flex shrink-0 items-center gap-2 border-b bg-muted/40 px-4 py-2 text-xs text-muted-foreground">
-        <UserRound className="size-4" />
-        Przypisany agent: <span className="font-medium text-foreground">{item.owner.fullName}</span>
       </div>
     )
   }

@@ -6,8 +6,7 @@ function Lines({ widths = ["w-2/3", "w-full"] }: { widths?: string[] }) {
 
 export function InboxPageSkeleton() {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[220px_390px_minmax(0,1fr)]" aria-label="Wczytywanie skrzynki" role="status">
-      <div className="hidden border-r bg-card p-3 xl:grid xl:content-start xl:gap-2">{Array.from({ length: 8 }).map((_, index) => <Skeleton key={index} className="h-9 w-full" />)}</div>
+    <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)]" aria-label="Wczytywanie skrzynki" role="status">
       <div className="grid min-h-0 content-start gap-0 overflow-hidden border-r bg-card">{Array.from({ length: 7 }).map((_, index) => <div key={index} className="grid gap-3 border-b p-3"><div className="flex gap-3"><Skeleton className="size-8 rounded-md" /><div className="min-w-0 flex-1"><Lines widths={["w-2/5", "w-3/5"]} /></div></div><Lines widths={["w-4/5", "w-full"]} /><div className="flex gap-2"><Skeleton className="h-5 w-24 rounded-full" /><Skeleton className="h-5 w-20 rounded-full" /></div></div>)}</div>
       <ConversationSkeleton className="hidden xl:flex" />
     </div>

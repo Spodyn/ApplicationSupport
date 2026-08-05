@@ -22,7 +22,14 @@ export function Providers({ children }: { children: ReactNode }) {
   )
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+    <ThemeProvider
+      attribute="class"
+      defaultTheme="light"
+      enableSystem={false}
+      themes={["light", "dark"]}
+      storageKey="support-inbox-theme"
+      disableTransitionOnChange
+    >
       <QueryClientProvider client={queryClient}>
         <TooltipProvider delay={200}>{children}</TooltipProvider>
         <Toaster richColors position="top-right" />

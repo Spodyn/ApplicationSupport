@@ -2,9 +2,10 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Headset, PanelLeftClose, PanelLeftOpen } from "lucide-react"
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { navItems } from "@/lib/navigation"
+import { UserMenu } from "@/components/layout/user-menu"
 
 /**
  * Wąska, główna listwa nawigacyjna aplikacji (po lewej stronie).
@@ -26,14 +27,7 @@ export function AppRail({
       aria-label="Nawigacja główna"
       className="flex w-20 shrink-0 flex-col items-center gap-1 bg-sidebar py-3 text-sidebar-foreground"
     >
-      <Link
-        href="/cases"
-        onClick={onNavigate}
-        className="mb-2 flex size-10 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
-        aria-label="Unified Support Inbox"
-      >
-        <Headset className="size-5" />
-      </Link>
+      <UserMenu variant="rail" onNavigate={onNavigate} />
 
       <ul className="flex w-full flex-col items-center gap-1 px-1.5">
         {navItems.map((item) => {

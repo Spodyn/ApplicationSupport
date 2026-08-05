@@ -2,7 +2,6 @@ import {
   ChartColumn,
   Inbox,
   MessagesSquare,
-  Settings,
   Users,
   type LucideIcon,
 } from "lucide-react"
@@ -39,11 +38,5 @@ export const navItems: NavItem[] = [
     href: "/users",
     icon: Users,
     description: "Agenci i klienci w systemie",
-  },
-  {
-    label: "Ustawienia",
-    href: "/settings",
-    icon: Settings,
-    description: "Integracje i konfiguracja aplikacji",
   },
 ]

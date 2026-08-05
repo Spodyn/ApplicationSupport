@@ -2,24 +2,18 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Headset } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { navItems } from "@/lib/navigation"
-import { ThemeToggle } from "./theme-toggle"
+import { UserMenu } from "./user-menu"
 
 export function MobileNavigation({ onNavigate }: { onNavigate: () => void }) {
   const pathname = usePathname()
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
-      <div className="flex items-center gap-3 border-b px-4 py-4">
-        <span className="flex size-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-          <Headset className="size-5" />
-        </span>
-        <div>
-          <p className="text-sm font-semibold">Unified Support Inbox</p>
-          <p className="text-xs text-muted-foreground">Nawigacja aplikacji</p>
-        </div>
+      <div className="flex items-center justify-between gap-3 border-b px-4 py-3">
+        <UserMenu variant="mobile" onNavigate={onNavigate} />
+        <p className="text-xs font-medium text-muted-foreground">Support Inbox</p>
       </div>
 
       <nav aria-label="Nawigacja mobilna" className="min-h-0 flex-1 overflow-y-auto p-3">
@@ -50,11 +44,6 @@ export function MobileNavigation({ onNavigate }: { onNavigate: () => void }) {
           })}
         </ul>
       </nav>
-
-      <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
-        <span>Wygląd interfejsu</span>
-        <ThemeToggle />
-      </div>
     </div>
   )
 }
