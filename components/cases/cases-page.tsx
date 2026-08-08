@@ -1,98 +1,131 @@
 "use client"
 
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react"
-import {
-  Activity,
   AlarmClock,
   ArrowLeft,
-  Ban,
+  Braces,
   Check,
   CheckCheck,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
+  ChevronDown,
   Clock3,
   ExternalLink,
-  FileArchive,
-  FileText,
-  ImageIcon,
-  Inbox,
-  Link2,
-  LoaderCircle,
-  LockKeyhole,
-  Mail,
-  MessageSquareMore,
-  MoreHorizontal,
+  Info,
   Paperclip,
-  PanelRightClose,
-  PanelRightOpen,
-  RotateCcw,
-  Send,
+  Search,
+  SlidersHorizontal,
   Smile,
-  Bold,
-  TriangleAlert,
-  UserCheck,
-  Tag,
   UserRound,
 } from "lucide-react"
-import { PageHeader } from "@/components/layout/page-header"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet"
-import {
-  Popover,
-  PopoverContent,
-  PopoverDescription,
-  PopoverHeader,
-  PopoverTitle,
-  PopoverTrigger,
-} from "@/components/ui/popover"
-import { notify } from "@/components/design-system/notify"
-import { ErrorState } from "@/components/design-system/data-states"
-import { ConversationSkeleton, InboxPageSkeleton } from "@/components/design-system/page-skeletons"
-import { PlatformBadge, PlatformIcon } from "@/components/design-system/platform-badge"
-import { InboxStatusBadge } from "@/components/design-system/inbox-status-badge"
-import { UserAvatar } from "@/components/design-system/user-avatar"
-import {
-  type InboxCase,
-  type InboxMessage,
-} from "@/lib/domain/inbox"
-import { deliveryStatusLabels } from "@/lib/domain/labels"
-import type { MessageDeliveryStatus, User } from "@/lib/domain/types"
-import { formatDateTime, formatRelative, formatTime } from "@/lib/format"
-import {
-  useCurrentUser,
-  useInboxCases,
-  useInboxMessages,
-  useInboxWorkflow,
-  useMarkInboxCaseRead,
-} from "@/lib/services/queries"
-import { getInboxVoteWeight, InboxConflictError } from "@/lib/services/inbox"
-import { getEffectiveSlaState } from "@/lib/sla"
+import type { InboxCase } from "@/lib/domain/inbox"
+import { useInboxCases, useInboxMessages, useMarkInboxCaseRead } from "@/lib/services/queries"
+import { cn } from "@/lib/utils"
+
+type QuickFilter = "all" | "sla" | "mine"
+type AdvancedFilter = "mine" | "unassigned" | "sla" | "unread"
+
+type CasePresentation = {
+  reference: string
+  initials: string
+  company: string
+  subject: string
+  time: string
+  platform: "Slack" | "E-mail" | "Telegram"
+  source: string
+  status: string
+  statusTone: "red" | "blue" | "purple" | "green"
+  sla: string
+  slaTone: "red" | "amber" | "green"
+  unread?: boolean
+  breached?: boolean
+  mine?: boolean
+}
+
+const casePresentations: CasePresentation[] = [
+  {
+    reference: "ZG-2048",
+    initials: "NR",
+    company: "Northstar Retail",
+    subject: "Płatność pobrana dwukrotnie po odnowieniu subskrypcji",
+    time: "7 min temu",
+    platform: "Slack",
+    source: "#rozliczenia-premium",
+    status: "W trakcie weryfikacji",
+    statusTone: "red",
+    sla: "SLA +15 min",
+    slaTone: "red",
+    breached: true,
+  },
+  {
+    reference: "ZG-2051",
+    initials: "EC",
+    company: "Evergreen Cloud",
+    subject: "Kanał alarmowy nie synchronizuje wiadomości od godziny.",
+    time: "9 min temu",
+    platform: "Slack",
+    source: "#incydenty",
+    status: "Oczekuje na klienta",
+    statusTone: "blue",
+    sla: "18 min do SLA",
+    slaTone: "amber",
+  },
+  {
+    reference: "ZG-2044",
+    initials: "OL",
+    company: "Orbit Labs",
+    subject: "Brak możliwości logowania po aktywacji SSO",
+    time: "11 min temu",
+    platform: "E-mail",
+    source: "#helpdesk",
+    status: "Oczekuje na zespół",
+    statusTone: "purple",
+    sla: "42 min do SLA",
+    slaTone: "green",
+  },
+  {
+    reference: "ZG-2053",
+    initials: "NW",
+    company: "Nova Works",
+    subject: "Duplikaty powiadomień po ponownym połączeniu workspace.",
+    time: "13 min temu",
+    platform: "Telegram",
+    source: "@support",
+    status: "Nowy",
+    statusTone: "green",
+    sla: "SLA +30 min",
+    slaTone: "red",
+    unread: true,
+  },
+  {
+    reference: "ZG-2038",
+    initials: "VE",
+    company: "Vistala Energy",
+    subject: "Nie mogę pobrać faktury VAT",
+    time: "15 min temu",
+    platform: "E-mail",
+    source: "faktury@vistala.com",
+    status: "Oczekuje na klienta",
+    statusTone: "blue",
+    sla: "1 godz. do SLA",
+    slaTone: "green",
+    unread: true,
+  },
+  {
+    reference: "ZG-2029",
+    initials: "AC",
+    company: "Atlas Commerce",
+    subject: "Czy można zintegrować z API v2?",
+    time: "22 min temu",
+    platform: "Slack",
+    source: "#integracje",
+    status: "Nowy",
+    statusTone: "green",
+    sla: "SLA +2 godz.",
+    slaTone: "red",
+    unread: true,
+    mine: true,
+  },
+]
 
 export function CasesPage({
   onlyMine = false,
@@ -102,1410 +135,528 @@ export function CasesPage({
   initialCaseId?: string
 }) {
   const casesQuery = useInboxCases()
-  const currentUserQuery = useCurrentUser()
-  const currentUser = currentUserQuery.data
   const markRead = useMarkInboxCaseRead()
-  const [selectedId, setSelectedId] = useState<string | undefined>(initialCaseId)
+  const [selectedReference, setSelectedReference] = useState(() => {
+    if (!initialCaseId) return casePresentations[0].reference
+    return casePresentations.find((item) => item.reference === initialCaseId)?.reference ?? casePresentations[0].reference
+  })
   const [mobileConversationOpen, setMobileConversationOpen] = useState(false)
-  const [now, setNow] = useState(() => Date.now())
+  const [search, setSearch] = useState("")
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>(onlyMine ? "mine" : "all")
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
+  const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilter[]>([])
+  const [locallyRead, setLocallyRead] = useState<string[]>([])
+  const filterMenuRef = useRef<HTMLDivElement>(null)
 
-  const allCases = useMemo(
-    () =>
-      onlyMine && currentUser
-        ? (casesQuery.data ?? []).filter((item) => item.owner?.id === currentUser.id)
-        : (casesQuery.data ?? []),
-    [casesQuery.data, currentUser, onlyMine],
+  const recordsByReference = useMemo(
+    () => new Map((casesQuery.data ?? []).map((item) => [item.reference, item])),
+    [casesQuery.data],
   )
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 30_000)
-    return () => window.clearInterval(timer)
-  }, [])
 
   const visibleCases = useMemo(() => {
-    return [...allCases].sort((a, b) => compareCases(a, b, now))
-  }, [allCases, now])
+    const normalized = search.trim().toLocaleLowerCase("pl")
+    return casePresentations.filter((item) => {
+      if (normalized && !`${item.company} ${item.subject} ${item.source}`.toLocaleLowerCase("pl").includes(normalized)) return false
+      if (quickFilter === "sla" && !item.breached) return false
+      if (quickFilter === "mine" && !item.mine) return false
+      if (advancedFilters.includes("mine") && !item.mine) return false
+      if (advancedFilters.includes("sla") && item.slaTone !== "red") return false
+      if (advancedFilters.includes("unread") && (!item.unread || locallyRead.includes(item.reference))) return false
+      if (advancedFilters.includes("unassigned") && recordsByReference.get(item.reference)?.owner) return false
+      return true
+    })
+  }, [advancedFilters, locallyRead, quickFilter, recordsByReference, search])
+
+  const selectedPresentation = casePresentations.find((item) => item.reference === selectedReference) ?? casePresentations[0]
+  const selectedRecord = recordsByReference.get(selectedPresentation.reference)
+  useInboxMessages(selectedRecord?.id)
 
   useEffect(() => {
-    if (!selectedId && visibleCases[0]) {
-      setSelectedId(visibleCases[0].id)
-    } else if (selectedId && !allCases.some((item) => item.id === selectedId)) {
-      setSelectedId(visibleCases[0]?.id)
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!filterMenuRef.current?.contains(event.target as Node)) setFilterMenuOpen(false)
     }
-  }, [allCases, selectedId, visibleCases])
+    document.addEventListener("pointerdown", handlePointerDown)
+    return () => document.removeEventListener("pointerdown", handlePointerDown)
+  }, [])
 
-  const selectedCase = allCases.find((item) => item.id === selectedId)
-  const messagesQuery = useInboxMessages(selectedCase?.id)
-  const markedReadCaseIds = useRef(new Set<string>())
-
-  useEffect(() => {
-    if (!selectedCase) return
-    if (!selectedCase.unreadForCurrentUser) {
-      markedReadCaseIds.current.delete(selectedCase.id)
-      return
-    }
-    if (!markedReadCaseIds.current.has(selectedCase.id)) {
-      markedReadCaseIds.current.add(selectedCase.id)
-      markRead.mutate(selectedCase.id)
-    }
-  }, [markRead, selectedCase])
-
-  const selectCase = (item: InboxCase) => {
-    setSelectedId(item.id)
+  const selectCase = (item: CasePresentation) => {
+    setSelectedReference(item.reference)
     setMobileConversationOpen(true)
+    if (item.unread && !locallyRead.includes(item.reference)) {
+      setLocallyRead((current) => [...current, item.reference])
+      const record = recordsByReference.get(item.reference)
+      if (record) markRead.mutate(record.id)
+    }
   }
 
-  const unreadCount = allCases.filter((item) => item.unreadForCurrentUser).length
+  const toggleAdvancedFilter = (filter: AdvancedFilter) => {
+    setAdvancedFilters((current) =>
+      current.includes(filter) ? current.filter((item) => item !== filter) : [...current, filter],
+    )
+  }
 
   return (
-    <>
-      <PageHeader
-        title={onlyMine ? "Bieżące case’y" : "Case’y"}
-        description={
-          onlyMine
-            ? `${allCases.length} przypisanych · ${unreadCount} nieprzeczytanych`
-            : `${allCases.length} zgłoszeń · ${unreadCount} nieprzeczytanych`
-        }
-      />
-
-      <main className="flex min-h-0 flex-1 flex-col bg-background">
-        {casesQuery.isError || currentUserQuery.isError ? (
-          <ErrorState title="Nie udało się wczytać skrzynki" description="Sprawdź połączenie i spróbuj ponownie." onRetry={() => { void casesQuery.refetch(); void currentUserQuery.refetch() }} className="flex-1" />
-        ) : casesQuery.isLoading || currentUserQuery.isLoading || !currentUser ? (
-          <InboxPageSkeleton />
-        ) : (
-          <div className="grid min-h-0 flex-1 grid-cols-1 xl:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[380px_minmax(0,1fr)]">
-            <CaseList
-              cases={visibleCases}
-              selectedId={selectedId}
-              now={now}
-              onSelect={selectCase}
-              className={mobileConversationOpen ? "hidden xl:flex" : "flex"}
-            />
-            <ConversationPanel
-              item={selectedCase}
-              messages={messagesQuery.data ?? []}
-              isLoading={messagesQuery.isLoading}
-              isError={messagesQuery.isError}
-              onRetry={() => void messagesQuery.refetch()}
-              now={now}
-              currentUser={currentUser}
-              onBack={() => setMobileConversationOpen(false)}
-              className={mobileConversationOpen ? "flex" : "hidden xl:flex"}
-            />
-          </div>
+    <main className="cases-workspace grid min-h-0 flex-1 grid-cols-1 overflow-hidden text-[#f4f4f5] lg:grid-cols-[434px_minmax(0,1fr)]">
+      <section
+        className={cn(
+          "min-h-0 min-w-0 flex-col border-r border-white/[0.09] bg-[#0b1422]",
+          mobileConversationOpen ? "hidden lg:flex" : "flex",
         )}
-      </main>
-    </>
+        aria-label="Lista czatów"
+      >
+        <div className="shrink-0 px-[34px] pb-[14px] pt-[23px]">
+          <div className="flex h-8 items-center gap-2.5">
+            <h1 className="text-[21px] font-bold tracking-[-0.02em]">Czaty</h1>
+            <span className="rounded-full bg-[#151f2e] px-2 py-0.5 text-[12px] font-semibold text-[#d8dce4]">18</span>
+          </div>
+
+          <div className="mt-[17px] flex gap-3">
+            <label className="flex h-[42px] min-w-0 flex-1 items-center gap-2.5 rounded-[9px] border border-white/[0.07] bg-[#111b29] px-3 text-[#8f9aad] shadow-[inset_0_1px_0_rgba(255,255,255,0.015)] focus-within:border-violet-500/50">
+              <Search className="size-[18px] shrink-0" strokeWidth={1.8} />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="min-w-0 flex-1 bg-transparent text-[13px] text-[#e8eaf0] outline-none placeholder:text-[#8f9aad]"
+                placeholder="Szukaj rozmów..."
+                aria-label="Szukaj rozmów"
+              />
+            </label>
+            <div className="relative" ref={filterMenuRef}>
+              <button
+                type="button"
+                onClick={() => setFilterMenuOpen((open) => !open)}
+                className={cn(
+                  "grid size-[42px] place-items-center rounded-[9px] border bg-[#111b29] text-[#99a5b7] transition hover:text-white",
+                  filterMenuOpen || advancedFilters.length ? "border-violet-500/50 text-violet-300" : "border-white/[0.07]",
+                )}
+                aria-label="Filtry"
+                aria-expanded={filterMenuOpen}
+              >
+                <SlidersHorizontal className="size-[18px]" strokeWidth={1.6} />
+              </button>
+              {filterMenuOpen && (
+                <div className="absolute right-0 top-12 z-30 w-52 rounded-xl border border-white/10 bg-[#111b29] p-2 shadow-2xl">
+                  {([
+                    ["mine", "Moje"],
+                    ["unassigned", "Nieprzypisane"],
+                    ["sla", "SLA"],
+                    ["unread", "Nieodczytane"],
+                  ] as const).map(([value, label]) => {
+                    const active = advancedFilters.includes(value)
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => toggleAdvancedFilter(value)}
+                        className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-[#d8dde6] hover:bg-white/[0.05]"
+                      >
+                        <span className={cn("grid size-4 place-items-center rounded border", active ? "border-violet-500 bg-violet-600" : "border-[#536074]")}>{active && <Check className="size-3" />}</span>
+                        <span className={value === "unread" ? "font-semibold" : undefined}>{label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="mt-[13px] flex gap-2.5" aria-label="Szybkie filtry">
+            <QuickFilterButton active={quickFilter === "all"} onClick={() => setQuickFilter("all")}>Wszystkie</QuickFilterButton>
+            <QuickFilterButton active={quickFilter === "sla"} onClick={() => setQuickFilter("sla")}>
+              SLA <ChevronDown className="size-3.5" />
+            </QuickFilterButton>
+            <QuickFilterButton active={quickFilter === "mine"} onClick={() => setQuickFilter("mine")}>Moje</QuickFilterButton>
+          </div>
+        </div>
+
+        <div className="cases-scrollbar min-h-0 flex-1 overflow-y-auto pb-3 pl-[13px] pr-[2px]" role="listbox" aria-label="Rozmowy">
+          {casesQuery.isLoading ? (
+            <CaseListSkeleton />
+          ) : casesQuery.isError ? (
+            <div className="mt-10 px-5 text-center text-sm text-[#9aa5b6]">Nie udało się wczytać rozmów.</div>
+          ) : visibleCases.length ? (
+            visibleCases.map((item) => (
+              <CaseListItem
+                key={item.reference}
+                item={item}
+                selected={item.reference === selectedReference}
+                unread={Boolean(item.unread && !locallyRead.includes(item.reference))}
+                onSelect={() => selectCase(item)}
+              />
+            ))
+          ) : (
+            <div className="mt-10 px-5 text-center text-sm text-[#9aa5b6]">Brak rozmów pasujących do filtrów.</div>
+          )}
+        </div>
+      </section>
+
+      <ConversationPanel
+        item={selectedPresentation}
+        record={selectedRecord}
+        onBack={() => setMobileConversationOpen(false)}
+        className={mobileConversationOpen ? "flex" : "hidden lg:flex"}
+      />
+    </main>
   )
 }
 
-function compareCases(a: InboxCase, b: InboxCase, now: number) {
-  const rank = (item: InboxCase) => {
-    const slaState = getEffectiveSlaState(item.sla, now)
-    if (slaState === "breached") return 0
-    if (slaState === "at_risk") return 1
-    if (item.unreadForCurrentUser && item.status === "new") return 2
-    if (item.status === "new") return 3
-    return 4
-  }
-  return rank(a) - rank(b) || new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+function QuickFilterButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex h-8 items-center gap-1.5 rounded-[7px] border px-3 text-[12px] font-medium transition",
+        active
+          ? "border-violet-600 bg-[#5724d6] text-white shadow-[0_2px_12px_rgba(91,33,232,0.23)]"
+          : "border-white/[0.09] bg-[#0d1624] text-[#c9ced8] hover:border-white/20 hover:text-white",
+      )}
+    >
+      {children}
+    </button>
+  )
 }
 
-function CaseList({
-  cases,
-  selectedId,
-  now,
-  onSelect,
-  className,
-}: {
-  cases: InboxCase[]
-  selectedId?: string
-  now: number
-  onSelect: (item: InboxCase) => void
-  className?: string
-}) {
-  const itemRefs = useRef(new Map<string, HTMLButtonElement>())
-
-  const focusCase = (index: number) => {
-    const item = cases[Math.max(0, Math.min(cases.length - 1, index))]
-    if (item) itemRefs.current.get(item.id)?.focus()
-  }
-
+function CaseListSkeleton() {
   return (
-    <section className={`${className ?? "flex"} min-h-0 min-w-0 flex-col border-r bg-card`} aria-label="Lista case’ów">
-      <div className="flex h-12 shrink-0 items-center justify-between border-b px-4">
-        <div className="flex flex-col leading-tight">
-          <span className="text-xs font-semibold tracking-wide text-foreground uppercase">Rozmowy</span>
-          <span className="text-[10px] text-muted-foreground">Najpilniejsze na górze</span>
-        </div>
-        <span className="rounded-full bg-muted px-2 py-1 text-[10px] font-medium tabular-nums text-muted-foreground">
-          {cases.length}
-        </span>
-      </div>
-      {cases.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-          <Inbox className="size-8 text-muted-foreground/50" />
-          <p className="text-sm font-medium">Brak rozmów w kolejce</p>
-          <p className="text-xs text-muted-foreground">Nowe zgłoszenia pojawią się tutaj automatycznie.</p>
-        </div>
-      ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto" role="listbox" aria-label="Case’y w kolejce">
-          {cases.map((item, index) => (
-            <CaseListItem
-              key={item.id}
-              item={item}
-              selected={selectedId === item.id}
-              now={now}
-              onSelect={() => onSelect(item)}
-              buttonRef={(node) => {
-                if (node) itemRefs.current.set(item.id, node)
-                else itemRefs.current.delete(item.id)
-              }}
-              tabIndex={selectedId === item.id || (!selectedId && index === 0) ? 0 : -1}
-              onKeyNavigate={(key) => {
-                if (key === "ArrowDown") focusCase(index + 1)
-                if (key === "ArrowUp") focusCase(index - 1)
-                if (key === "Home") focusCase(0)
-                if (key === "End") focusCase(cases.length - 1)
-              }}
-            />
-          ))}
-        </div>
-      )}
-    </section>
+    <div className="space-y-1.5">
+      {Array.from({ length: 6 }, (_, index) => (
+        <div key={index} className="h-[142px] animate-pulse rounded-[9px] border border-white/[0.05] bg-white/[0.025]" />
+      ))}
+    </div>
   )
 }
 
 function CaseListItem({
   item,
   selected,
-  now,
+  unread,
   onSelect,
-  buttonRef,
-  tabIndex,
-  onKeyNavigate,
 }: {
-  item: InboxCase
+  item: CasePresentation
   selected: boolean
-  now: number
+  unread: boolean
   onSelect: () => void
-  buttonRef: (node: HTMLButtonElement | null) => void
-  tabIndex: number
-  onKeyNavigate: (key: "ArrowDown" | "ArrowUp" | "Home" | "End") => void
 }) {
   return (
     <button
       type="button"
-      ref={buttonRef}
-      onClick={onSelect}
       role="option"
       aria-selected={selected}
-      tabIndex={tabIndex}
-      onKeyDown={(event) => {
-        if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
-          event.preventDefault()
-          onKeyNavigate(event.key as "ArrowDown" | "ArrowUp" | "Home" | "End")
-        }
-      }}
-      className={`group relative flex w-full flex-col gap-2 border-b px-3 py-3 text-left transition-colors ${
-        selected ? "bg-accent/70" : "hover:bg-muted/55"
-      }`}
+      onClick={onSelect}
+      className={cn(
+        "group relative mb-[5px] flex min-h-[139px] w-full overflow-hidden rounded-[9px] border px-[17px] py-[13px] text-left transition-colors",
+        item.breached
+          ? "border-red-500/45 bg-[linear-gradient(105deg,rgba(89,24,32,0.52),rgba(54,20,31,0.48))] hover:border-red-400/60"
+          : selected
+            ? "border-violet-500/45 bg-[linear-gradient(105deg,rgba(48,30,88,0.7),rgba(25,25,54,0.72))] shadow-[inset_0_0_22px_rgba(91,33,232,0.08)]"
+            : unread
+              ? "border-violet-500/25 bg-[linear-gradient(105deg,rgba(29,29,57,0.92),rgba(24,26,45,0.94))] hover:border-violet-500/40"
+              : "border-white/[0.075] bg-[#0f1927] hover:border-white/[0.15] hover:bg-[#121d2c]",
+      )}
     >
-      {selected && <span className="absolute inset-y-2 left-0 w-0.5 rounded-r bg-primary" aria-hidden />}
-      <div className="flex items-start gap-2.5">
-        <PlatformIcon channel={item.platform} className="mt-0.5 size-8" />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="truncate text-xs font-semibold">{item.customer.name}</span>
-            {item.unreadForCurrentUser && (
-              <span className="inline-flex shrink-0 items-center text-primary" title="Nieprzeczytane"><Mail className="size-3.5" aria-hidden /><span className="sr-only">Nieprzeczytane</span></span>
-            )}
-            <span className="ml-auto shrink-0 text-[10px] tabular-nums text-muted-foreground">
-              {formatRelative(item.updatedAt)}
-            </span>
-          </div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            <span className="truncate">{item.sourceChannel}</span>
-            <span aria-hidden>·</span>
-            <span className="font-mono">{item.reference}</span>
-          </div>
-        </div>
-      </div>
-
-      <div>
-        <p className={`line-clamp-2 text-[13px] leading-snug ${item.unreadForCurrentUser ? "font-semibold" : "font-medium"}`}>
-          {item.subject}
-        </p>
-        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-          {item.lastMessagePreview}
-        </p>
-      </div>
-
-      <div className="flex items-center gap-1.5">
-        <InboxStatusBadge status={item.status} compact />
-        <SlaCountdown item={item} now={now} compact />
-        {item.ignoreVotes.current > 0 && (
-          <Badge variant="secondary" className="border-transparent bg-muted px-1.5 text-[10px] text-muted-foreground">
-            <Ban className="size-2.5" /> {item.ignoreVotes.current}/2
-          </Badge>
-        )}
-        <span className="ml-auto flex min-w-0 items-center gap-1.5">
-          {item.owner ? (
-            <>
-              <UserAvatar user={item.owner} size="sm" showPresence />
-              <span className="max-w-24 truncate text-[10px] text-muted-foreground">
-                {item.owner.fullName.split(" ")[0]}
-              </span>
-            </>
-          ) : (
-            <span className="text-[10px] font-medium text-warning-foreground">Nieprzypisany</span>
-          )}
+      <span className={cn("absolute inset-y-0 left-0 w-1", item.breached ? "bg-red-500" : item.slaTone === "amber" ? "bg-amber-500" : item.slaTone === "green" ? "bg-emerald-500" : "bg-violet-500")} />
+      <span className={cn("mr-[16px] grid size-[38px] shrink-0 place-items-center rounded-[7px] text-[14px] font-semibold", avatarTone(item.initials))}>{item.initials}</span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-2">
+          <span className={cn("truncate text-[15px] leading-5", unread ? "font-bold text-white" : "font-semibold text-[#eff0f4]")}>{item.company}</span>
+          <span className={cn("ml-auto shrink-0 text-[11px] tabular-nums", unread ? "font-semibold text-[#d4d9e3]" : "text-[#9ba5b5]")}>{item.time}</span>
+          {unread && <span className="size-2.5 shrink-0 rounded-full bg-[#7650ff] shadow-[0_0_8px_rgba(118,80,255,0.6)]" aria-label="Nieodczytane" />}
         </span>
-      </div>
+        <span className={cn("mt-[2px] block max-w-[280px] text-[13px] leading-[18px] text-[#edf0f4]", unread ? "font-bold" : "font-medium")}>{item.subject}</span>
+        <span className="mt-[4px] flex min-w-0 items-center gap-2 text-[11px] text-[#9ca6b6]">
+          <span>{item.platform}</span><span className="size-1 rounded-full bg-[#6c7585]" /><span className="truncate">{item.source}</span>
+        </span>
+        <span className="mt-[10px] flex items-center justify-between gap-2">
+          <StatusBadge tone={item.statusTone}>{item.status}</StatusBadge>
+          <SlaBadge tone={item.slaTone}>{item.sla}</SlaBadge>
+        </span>
+      </span>
     </button>
   )
 }
 
+function avatarTone(initials: string) {
+  if (initials === "NR") return "bg-[#522033] text-[#ffe9f1]"
+  if (initials === "EC") return "bg-[#35253e] text-[#f3e8ff]"
+  if (initials === "OL" || initials === "AC") return "bg-[#1e314b] text-[#e4edfb]"
+  return "bg-[#30205c] text-[#efe8ff]"
+}
+
+function StatusBadge({ tone, children }: { tone: CasePresentation["statusTone"]; children: React.ReactNode }) {
+  const colors = {
+    red: "bg-red-500/[0.10] text-red-400",
+    blue: "bg-sky-500/[0.12] text-sky-400",
+    purple: "bg-violet-500/[0.13] text-violet-300",
+    green: "bg-emerald-500/[0.12] text-emerald-400",
+  }
+  return <span className={cn("rounded-[6px] px-2.5 py-[5px] text-[11px] font-medium leading-none", colors[tone])}>{children}</span>
+}
+
+function SlaBadge({ tone, children }: { tone: CasePresentation["slaTone"]; children: React.ReactNode }) {
+  const colors = {
+    red: "bg-red-500/[0.10] text-red-400",
+    amber: "bg-amber-500/[0.10] text-amber-400",
+    green: "bg-emerald-500/[0.09] text-emerald-400",
+  }
+  return <span className={cn("rounded-[6px] px-2.5 py-[5px] text-[11px] font-medium leading-none", colors[tone])}>{children}</span>
+}
+
 function ConversationPanel({
   item,
-  messages,
-  isLoading,
-  isError,
-  onRetry,
-  now,
-  currentUser,
+  record,
   onBack,
   className,
 }: {
-  item?: InboxCase
-  messages: InboxMessage[]
-  isLoading: boolean
-  isError: boolean
-  onRetry: () => void
-  now: number
-  currentUser: User
+  item: CasePresentation
+  record?: InboxCase
   onBack: () => void
-  className?: string
+  className: string
 }) {
-  const [detailsOpen, setDetailsOpen] = useState(false)
-  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false)
-
-  if (!item) {
-    return (
-      <section className={`${className ?? "flex"} min-h-0 min-w-0 items-center justify-center bg-background`}>
-        <div className="text-center">
-          <Inbox className="mx-auto size-10 text-muted-foreground/40" />
-          <p className="mt-3 text-sm font-medium">Wybierz case z kolejki</p>
-          <p className="mt-1 text-xs text-muted-foreground">Rozmowa pojawi się w tym miejscu.</p>
-        </div>
-      </section>
-    )
-  }
+  const [draft, setDraft] = useState("")
+  const [alsoOnChannel, setAlsoOnChannel] = useState(false)
+  const [replyingTo, setReplyingTo] = useState<string | null>(null)
 
   return (
-    <section className={`${className ?? "flex"} min-h-0 min-w-0 flex-col bg-background`} aria-label={`Rozmowa ${item.reference}`}>
-      <header className="shrink-0 border-b bg-card">
-        <div className="flex min-w-0 items-start gap-3 px-3 py-2.5 lg:px-4">
-          <Button variant="ghost" size="icon-sm" className="mt-0.5 xl:hidden" onClick={onBack} aria-label="Wróć do listy case’ów">
-            <ArrowLeft />
-          </Button>
-          <PlatformIcon channel={item.platform} className="mt-0.5 size-9" />
+    <section className={cn(className, "min-h-0 min-w-0 flex-col bg-[#08111f]")} aria-label={`Rozmowa ${item.company}`}>
+      <header className="h-[148px] shrink-0 border-b border-white/[0.08] bg-[#08111f] px-[23px] py-[19px]">
+        <div className="flex min-w-0 items-start gap-3">
+          <button type="button" onClick={onBack} className="mt-1 grid size-8 shrink-0 place-items-center rounded-lg text-[#9ba6b8] hover:bg-white/5 lg:hidden" aria-label="Wróć do listy">
+            <ArrowLeft className="size-5" />
+          </button>
           <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <span className="font-mono text-[11px] font-semibold text-muted-foreground">{item.reference}</span>
-              <h2 className="min-w-0 truncate text-sm font-semibold">{item.subject}</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="truncate text-[22px] font-bold leading-7 tracking-[-0.02em]">{item.source}</h2>
+              <ExternalLink className="size-[15px] text-[#8f9caf]" />
             </div>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span className="font-medium text-foreground">{item.customer.name}</span>
-              <span aria-hidden>·</span>
-              <PlatformBadge channel={item.platform} />
-              <span>{item.sourceChannel}</span>
-              <span className="hidden h-4 w-px bg-border sm:inline" aria-hidden />
-              <InboxStatusBadge status={item.status} compact />
-              <SlaCountdown item={item} now={now} compact />
-              {item.owner ? (
-                <span className="flex items-center gap-1.5 text-foreground/80">
-                  <UserAvatar user={item.owner} size="sm" showPresence />
-                  <span className="font-medium">{item.owner.fullName}</span>
-                </span>
-              ) : (
-                <span className="font-medium text-warning-foreground">Nieprzypisany</span>
-              )}
-              {item.ignoreVotes.current > 0 && (
-                <span className="flex items-center gap-1">
-                  <Ban className="size-3" /> {item.ignoreVotes.current}/2 głosów
-                </span>
-              )}
+            <div className="mt-[3px] flex items-center gap-2 text-[13px] text-[#d7dbe3]">
+              <span>{item.company}</span><span className="size-1 rounded-full bg-[#697587]" />
+              <a href="#source" onClick={(event) => event.preventDefault()} className="flex items-center gap-1.5 font-medium text-[#e0e3e9] hover:text-violet-300">
+                <SlackMark /> Slack <ExternalLink className="size-3.5 text-[#8592a5]" />
+              </a>
             </div>
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <Button variant="outline" size="sm" disabled title="Połączenie ze źródłem nie jest aktywne w makiecie">
-              <ExternalLink />
-              <span className="hidden 2xl:inline">Otwórz w źródle</span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="xl:hidden"
-              onClick={() => setMobileDetailsOpen(true)}
-              aria-label="Pokaż szczegóły case’u"
-            >
-              <PanelRightOpen />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="hidden xl:inline-flex"
-              onClick={() => setDetailsOpen((open) => !open)}
-              aria-label={detailsOpen ? "Ukryj szczegóły case’u" : "Pokaż szczegóły case’u"}
-              aria-pressed={detailsOpen}
-            >
-              {detailsOpen ? <PanelRightClose /> : <PanelRightOpen />}
-            </Button>
+          <HeaderActions />
+        </div>
+
+        <div className="mt-[15px] flex items-center gap-3 pl-0 lg:pl-0">
+          <button type="button" className="flex h-[45px] items-center gap-2 rounded-[9px] border border-violet-500/[0.12] bg-violet-950/35 px-3.5 text-[12px] font-medium text-violet-300 hover:bg-violet-950/50">
+            {item.status} <ChevronDown className="size-3.5" />
+          </button>
+          <button type="button" className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3.5 text-[12px] text-[#edf0f4] hover:border-white/[0.16]">
+            <Avatar initials="MW" size="sm" online />
+            Magdalena Wiśniewska <ChevronDown className="size-3.5 text-[#8995a7]" />
+          </button>
+          <div className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-red-500/[0.14] bg-red-950/20 px-3.5 text-[12px] font-semibold text-red-400">
+            <Clock3 className="size-[17px]" /> SLA +15 min <Info className="size-[15px]" />
           </div>
         </div>
       </header>
 
-      <CaseStateBanner item={item} now={now} />
+      <ConversationBody
+        company={item.company}
+        isNorthstar={item.reference === "ZG-2048"}
+        replyingTo={replyingTo}
+        onReply={setReplyingTo}
+      />
 
-      <div className="flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 flex-col">
-          {isLoading ? (
-            <ConversationSkeleton />
-          ) : isError ? (
-            <ErrorState title="Nie udało się wczytać rozmowy" onRetry={onRetry} className="flex-1" />
-          ) : (
-            <ConversationStream key={item.id} messages={messages} />
-          )}
-          <CaseInteractionPanel item={item} currentUser={currentUser} />
-        </div>
-        {detailsOpen && <CaseDetails item={item} now={now} />}
-      </div>
-      <Sheet open={mobileDetailsOpen} onOpenChange={setMobileDetailsOpen}>
-        <SheetContent side="right" className="w-[min(92vw,23rem)] gap-0 p-0 xl:hidden">
-          <SheetHeader className="border-b pr-12">
-            <SheetTitle>Szczegóły case’u</SheetTitle>
-            <SheetDescription>{item.reference} · {item.customer.name}</SheetDescription>
-          </SheetHeader>
-          <CaseDetails item={item} now={now} variant="sheet" />
-        </SheetContent>
-      </Sheet>
+      <Composer
+        value={draft}
+        onChange={setDraft}
+        alsoOnChannel={alsoOnChannel}
+        onToggleChannel={() => setAlsoOnChannel((value) => !value)}
+        replyingTo={replyingTo}
+        onCancelReply={() => setReplyingTo(null)}
+        owner={record?.owner?.fullName}
+      />
     </section>
   )
 }
 
-function ConversationStream({ messages }: { messages: InboxMessage[] }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const timeoutRef = useRef<number | undefined>(undefined)
-  const restoreRef = useRef<{ height: number; top: number } | undefined>(undefined)
-  const [visibleStart, setVisibleStart] = useState(() => Math.max(0, messages.length - 10))
-  const [loadingOlder, setLoadingOlder] = useState(false)
-  const initialScroll = useRef(true)
-  const previousMessageCount = useRef(messages.length)
-
-  useEffect(
-    () => () => {
-      if (timeoutRef.current) window.clearTimeout(timeoutRef.current)
-    },
-    [],
-  )
-
-  useLayoutEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-    if (restoreRef.current) {
-      const restore = restoreRef.current
-      container.scrollTop = container.scrollHeight - restore.height + restore.top
-      restoreRef.current = undefined
-    } else if (initialScroll.current) {
-      container.scrollTop = container.scrollHeight
-      initialScroll.current = false
-    } else if (messages.length > previousMessageCount.current) {
-      container.scrollTop = container.scrollHeight
-    }
-    previousMessageCount.current = messages.length
-  }, [visibleStart, messages.length])
-
-  const loadOlder = useCallback(() => {
-    const container = containerRef.current
-    if (!container || loadingOlder || visibleStart === 0) return
-    restoreRef.current = { height: container.scrollHeight, top: container.scrollTop }
-    setLoadingOlder(true)
-    timeoutRef.current = window.setTimeout(() => {
-      setVisibleStart((current) => Math.max(0, current - 6))
-      setLoadingOlder(false)
-    }, 450)
-  }, [loadingOlder, visibleStart])
-
-  const handleScroll = () => {
-    if ((containerRef.current?.scrollTop ?? 100) < 56) loadOlder()
-  }
-
-  const visibleMessages = messages.slice(visibleStart)
-  let previousDate = ""
-
+function HeaderActions() {
   return (
-    <div
-      ref={containerRef}
-      onScroll={handleScroll}
-      className="min-h-0 flex-1 overflow-y-auto bg-muted/10 px-4 py-5 sm:px-6 lg:px-8"
-      aria-label="Historia rozmowy"
-      role="log"
-      aria-live="polite"
-      aria-relevant="additions text"
-    >
-      <div className="flex w-full flex-col gap-4">
-        {visibleStart > 0 && (
-          <button
-            type="button"
-            onClick={loadOlder}
-            disabled={loadingOlder}
-            className="mx-auto flex items-center gap-1.5 rounded-full border bg-card px-3 py-1.5 text-xs text-muted-foreground shadow-sm hover:text-foreground disabled:opacity-60"
-          >
-            {loadingOlder ? <LoaderCircle className="size-3.5 animate-spin" /> : <Clock3 className="size-3.5" />}
-            {loadingOlder ? "Wczytywanie starszych wiadomości…" : "Wczytaj starsze wiadomości"}
-          </button>
-        )}
-
-        {visibleMessages.map((message) => {
-          const dateKey = new Date(message.createdAt).toDateString()
-          const showDate = dateKey !== previousDate
-          previousDate = dateKey
-          return (
-            <div key={message.id} className="contents">
-              {showDate && <DateSeparator value={message.createdAt} />}
-              <MessageBubble message={message} />
-            </div>
-          )
-        })}
+    <div className="hidden shrink-0 items-center gap-3 xl:flex">
+      <button disabled className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75 disabled:cursor-not-allowed"><UserRound className="size-[17px]" /> Przejmij</button>
+      <button disabled className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75 disabled:cursor-not-allowed"><AlarmClock className="size-[17px]" /> Odłóż</button>
+      <div className="flex h-[42px] overflow-hidden rounded-[9px] border border-white/[0.07] bg-[#111a28] text-[#7f899a] opacity-75">
+        <button disabled className="flex items-center gap-2 px-4 text-[12px] disabled:cursor-not-allowed"><Check className="size-[17px]" /> Zamknij sprawę</button>
+        <button disabled className="grid w-11 place-items-center border-l border-white/[0.07] disabled:cursor-not-allowed" aria-label="Opcje zamknięcia"><ChevronDown className="size-[16px]" /></button>
       </div>
     </div>
   )
 }
 
-function DateSeparator({ value }: { value: string }) {
-  const date = new Date(value)
-  const today = new Date()
-  const yesterday = new Date()
-  yesterday.setDate(today.getDate() - 1)
-  const label =
-    date.toDateString() === today.toDateString()
-      ? "Dzisiaj"
-      : date.toDateString() === yesterday.toDateString()
-        ? "Wczoraj"
-        : new Intl.DateTimeFormat("pl-PL", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-          }).format(date)
-
+function ConversationBody({
+  company,
+  isNorthstar,
+  replyingTo,
+  onReply,
+}: {
+  company: string
+  isNorthstar: boolean
+  replyingTo: string | null
+  onReply: (message: string) => void
+}) {
   return (
-    <div className="sticky top-0 z-10 flex justify-center py-1">
-      <span className="rounded-full border bg-background/95 px-2.5 py-1 text-[10px] font-medium text-muted-foreground shadow-sm backdrop-blur">
-        {label}
-      </span>
+    <div className="cases-scrollbar min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_72%_34%,rgba(23,48,76,0.12),transparent_42%)] py-[22px] pl-[22px] pr-[12px]">
+      <div className="flex min-h-full flex-col">
+        <div className="flex items-start gap-[25px]">
+          <Avatar initials="JB" />
+          <div className="min-w-0 max-w-[570px]">
+            <MessageAuthor name="Joanna Borkowska" time="16:38" />
+            <p className="mt-2 text-[14px] leading-[25px] text-[#edf0f4]">
+              {isNorthstar ? (
+                <>W panelu widzę dwa obciążenia za ten sam okres rozliczeniowy.<br />Problem udaje się odtworzyć na dwóch kontach. Wysyłam<br className="hidden 2xl:block" /> dodatkowe szczegóły.</>
+              ) : (
+                <>Dzień dobry, potrzebujemy pomocy w sprawie zgłoszenia dla {company}.<br />Problem udało się odtworzyć na dwóch kontach.</>
+              )}
+            </p>
+            {isNorthstar && <CodeBlock />}
+          </div>
+          <ReplyButton onClick={() => onReply("W panelu widzę dwa obciążenia...")} active={replyingTo !== null} />
+          <span className="ml-auto pt-8 text-[12px] tabular-nums text-[#9aa5b7]">16:38</span>
+        </div>
+
+        <div className="mt-[-54px] flex justify-end">
+          <AgentBubble time="18:31">Zweryfikowałam dane po naszej stronie. Zespół techniczny<br className="hidden 2xl:block" /> analizuje teraz konkretny request.</AgentBubble>
+        </div>
+
+        <div className="my-[13px] flex justify-center">
+          <div className="rounded-[9px] border border-white/[0.055] bg-[#0d1725] px-3 py-2 text-[11px] text-[#9ba6b6]">
+            <span className="mr-3 tabular-nums">12:38</span> Status SLA został ponownie przeliczony: <span className="ml-1 font-semibold text-red-400">SLA +15 min</span>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-[25px]">
+          <Avatar initials="JB" />
+          <div className="min-w-0">
+            <MessageAuthor name="Joanna Borkowska" time="14:05" />
+            <p className="mt-2 text-[14px] leading-6 text-[#edf0f4]">W panelu widzę dwa obciążenia za ten sam okres rozliczeniowy.</p>
+          </div>
+          <ReplyButton onClick={() => onReply("W panelu widzę dwa obciążenia...")} />
+        </div>
+
+        <div className="mt-[-1px] flex justify-end">
+          <AgentBubble time="14:05">Dziękuję za zgłoszenie. Sprawdzam konfigurację oraz<br className="hidden 2xl:block" /> ostatnie zdarzenie integracji.</AgentBubble>
+        </div>
+
+        <div className="mt-0 flex items-start gap-[25px]">
+          <Avatar initials="JB" />
+          <div className="min-w-0">
+            <MessageAuthor name="Joanna Borkowska" time="14:05" />
+            <p className="mt-2 text-[14px] leading-6 text-[#edf0f4]">Dziękuję za aktualizację, czekam na dalsze informacje.</p>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
 
-function MessageBubble({ message }: { message: InboxMessage }) {
-  if (message.kind === "system") {
-    return (
-      <div className="flex justify-center py-1">
-        <span className="rounded-full bg-muted px-3 py-1 text-[10px] text-muted-foreground">
-          {message.body} · {formatTime(message.createdAt)}
-        </span>
-      </div>
-    )
-  }
+function MessageAuthor({ name, time }: { name: string; time: string }) {
+  return <div className="flex items-center gap-3"><span className="text-[13px] font-medium text-[#f4f4f5]">{name}</span><span className="text-[11px] tabular-nums text-[#8f9bad]">{time}</span></div>
+}
 
-  const support = message.kind === "support"
+function ReplyButton({ onClick, active = false }: { onClick: () => void; active?: boolean }) {
+  return <button type="button" onClick={onClick} className={cn("mt-7 grid size-[38px] shrink-0 place-items-center rounded-[9px] border border-white/[0.07] bg-[#0d1725] text-[#8996a8] hover:text-white", active && "text-violet-300")} aria-label="Odpowiedz na wiadomość"><ArrowLeft className="size-[17px] rotate-[25deg]" /></button>
+}
+
+function CodeBlock() {
   return (
-    <article className={`flex ${support ? "justify-end" : "justify-start"}`}>
-      <div className={`max-w-[min(88%,64rem)] ${support ? "items-end" : "items-start"} flex flex-col gap-1`}>
-        <div className={`flex items-center gap-2 px-1 text-[10px] text-muted-foreground ${support ? "flex-row-reverse" : ""}`}>
-          <span className="font-medium text-foreground/75">{message.sender}</span>
-          <span>{formatTime(message.createdAt)}</span>
-          {message.edited && <span>edytowano</span>}
-        </div>
-        <div
-          className={`rounded-2xl px-3 py-2.5 text-[13px] leading-relaxed shadow-sm ${
-            support
-              ? "rounded-tr-sm bg-primary text-primary-foreground"
-              : "rounded-tl-sm border bg-card text-card-foreground"
-          }`}
-        >
-          <p className="whitespace-pre-wrap">{message.body}</p>
-          {message.attachments && (
-            <div className="mt-2 grid gap-1.5">
-              {message.attachments.map((attachment) => (
-                <div
-                  key={attachment.id}
-                  className={`flex items-center gap-2 rounded-lg border px-2.5 py-2 ${
-                    support ? "border-primary-foreground/25 bg-primary-foreground/10" : "bg-muted/50"
-                  }`}
-                >
-                  {attachment.type === "image" ? (
-                    <ImageIcon className="size-4" />
-                  ) : attachment.type === "archive" ? (
-                    <FileArchive className="size-4" />
-                  ) : (
-                    <FileText className="size-4" />
-                  )}
-                  <span className="min-w-0 flex-1 truncate text-xs font-medium">{attachment.fileName}</span>
-                  <span className="text-[10px] opacity-75">{attachment.size}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {message.codeBlock && (
-            <div className="mt-2 overflow-hidden rounded-lg bg-slate-950 text-slate-100 ring-1 ring-white/10">
-              <div className="border-b border-white/10 px-3 py-1 text-[10px] text-slate-400">
-                {message.codeBlock.language}
-              </div>
-              <pre className="overflow-x-auto p-3 font-mono text-[11px] leading-relaxed">
-                <code>{message.codeBlock.content}</code>
-              </pre>
-            </div>
-          )}
-        </div>
-        {support && message.deliveryStatus && (
-          <DeliveryStatus status={message.deliveryStatus} />
-        )}
-      </div>
-    </article>
+    <div className="mt-3 w-[466px] max-w-full overflow-hidden rounded-[10px] border border-white/[0.09] bg-[#08121f] text-[12px]">
+      <div className="flex h-[39px] items-center justify-between border-b border-white/[0.08] px-4 font-medium"><span>JSON</span><button type="button" className="text-[11px] font-semibold hover:text-violet-300">Kopiuj</button></div>
+      <pre className="overflow-x-auto px-4 py-2 font-mono text-[12px] leading-[23px] text-[#d8dee9]">{`{
+  "requestId": `}<span className="text-cyan-400">"ron_78_2949"</span>{`,
+  "status": `}<span className="text-cyan-400">503</span>{`,
+  "message": `}<span className="text-fuchsia-400">"upstream temporarily unavailable"</span>{`
+}`}</pre>
+    </div>
   )
 }
 
-function DeliveryStatus({ status }: { status: MessageDeliveryStatus }) {
-  const Icon = status === "failed"
-    ? TriangleAlert
-    : status === "queued" || status === "sending"
-      ? LoaderCircle
-      : status === "read" || status === "delivered"
-        ? CheckCheck
-        : Check
+function AgentBubble({ time, children }: { time: string; children: React.ReactNode }) {
   return (
-    <span className={`flex items-center gap-1 px-1 text-[10px] ${status === "failed" ? "text-destructive" : "text-muted-foreground"}`}>
-      <Icon className={`size-3 ${status === "queued" || status === "sending" ? "animate-spin" : ""}`} aria-hidden /> {deliveryStatusLabels[status]}
+    <div className="flex items-center gap-[18px]">
+      <span className="text-[12px] tabular-nums text-[#8f9bad]">{time}</span>
+      <div className="relative h-[98px] w-[416px] max-w-[46vw] overflow-hidden rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-[14px] py-[10px] shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
+        <div className="flex items-center gap-2.5"><Avatar initials="MW" size="xs" /><span className="text-[11px] text-[#d7cfee]">Magdalena Wiśniewska</span><span className="ml-auto text-[10px] text-[#9e91bd]">{time}</span></div>
+        <p className="mt-1.5 text-[12px] leading-[20px] text-[#ded9eb]">{children}</p>
+        <div className="absolute bottom-2 right-3 text-violet-400"><CheckCheck className="size-[16px]" /></div>
+      </div>
+    </div>
+  )
+}
+
+function Composer({
+  value,
+  onChange,
+  alsoOnChannel,
+  onToggleChannel,
+  replyingTo,
+  onCancelReply,
+}: {
+  value: string
+  onChange: (value: string) => void
+  alsoOnChannel: boolean
+  onToggleChannel: () => void
+  replyingTo: string | null
+  onCancelReply: () => void
+  owner?: string
+}) {
+  return (
+    <div className="shrink-0 pb-[22px] pl-[18px] pr-[22px] pt-0">
+      <div className="min-h-[118px] rounded-[11px] border border-white/[0.085] bg-[linear-gradient(110deg,#0d1725,#0b1522)] shadow-[0_8px_30px_rgba(0,0,0,0.13)]">
+        {replyingTo && (
+          <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-2 text-[11px] text-[#9ba6b6]">
+            <ArrowLeft className="size-3.5 rotate-[25deg] text-violet-300" /><span className="truncate">Odpowiedź: {replyingTo}</span><button type="button" className="ml-auto hover:text-white" onClick={onCancelReply}>×</button>
+          </div>
+        )}
+        <textarea
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="Napisz odpowiedź..."
+          className="block h-[57px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa]"
+        />
+        <div className="flex h-[51px] items-center px-[19px]">
+          <div className="flex items-center gap-[21px] text-[#a7b1c0]">
+            <ComposerIcon label="Dodaj załącznik"><Paperclip /></ComposerIcon>
+            <ComposerIcon label="Dodaj emoji"><Smile /></ComposerIcon>
+            <ComposerIcon label="Wstaw kod"><Braces /></ComposerIcon>
+            <ComposerIcon label="Formatowanie"><span className="text-[15px] font-medium">Aa</span></ComposerIcon>
+          </div>
+          <div className="ml-auto flex items-center gap-3">
+            <button type="button" onClick={onToggleChannel} className="hidden items-center gap-2 text-[12px] text-[#d6dae2] hover:text-white xl:flex">
+              <span className={cn("grid size-[18px] place-items-center rounded-[3px] border", alsoOnChannel ? "border-violet-500 bg-violet-600" : "border-[#738095]")}>{alsoOnChannel && <Check className="size-3" />}</span>
+              Wyślij również na kanał <Info className="ml-1 size-[15px] text-[#93a0b3]" />
+            </button>
+            <div className="flex h-[45px] overflow-hidden rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-white shadow-[0_4px_18px_rgba(91,33,232,0.25)]">
+              <button type="button" className="w-[117px] text-[12px] font-medium hover:bg-white/[0.06]">Wyślij</button>
+              <button type="button" className="grid w-[50px] place-items-center border-l border-white/20 hover:bg-white/[0.06]" aria-label="Opcje wysyłania"><ChevronDown className="size-[16px]" /></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ComposerIcon({ label, children }: { label: string; children: React.ReactNode }) {
+  return <button type="button" aria-label={label} title={label} className="grid size-5 place-items-center hover:text-white [&_svg]:size-[19px] [&_svg]:stroke-[1.7]">{children}</button>
+}
+
+function Avatar({ initials, size = "default", online = false }: { initials: string; size?: "default" | "sm" | "xs"; online?: boolean }) {
+  return (
+    <span className={cn("relative grid shrink-0 place-items-center rounded-full bg-[linear-gradient(145deg,#6331e9,#3f16a8)] font-semibold text-white", size === "default" && "size-[43px] text-[16px]", size === "sm" && "size-[32px] text-[12px]", size === "xs" && "size-[27px] text-[10px]")}>
+      {initials}
+      {online && <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-[#0d1624] bg-emerald-400" />}
     </span>
   )
 }
 
-function CaseStateBanner({ item, now }: { item: InboxCase; now: number }) {
-  const waiting = item.status === "waiting_for_customer"
-  const terminal = item.status === "resolved" || item.status === "ignored"
-
-  if (waiting) {
-    const remaining = item.waitingUntil
-      ? Math.max(0, Math.ceil((new Date(item.waitingUntil).getTime() - now) / 60_000))
-      : 0
-    return (
-      <div className="flex shrink-0 items-center gap-2 border-b border-warning/25 bg-warning/10 px-4 py-2 text-xs text-warning-foreground">
-        <AlarmClock className="size-4" />
-        <span className="font-medium">Oczekiwanie na klienta</span>
-        <span>
-          {remaining > 0
-            ? `Rozmowa tylko do odczytu · pozostało ${formatMinutes(remaining)}`
-            : "Minął 24-godzinny czas oczekiwania · rozmowa nadal tylko do odczytu"}
-        </span>
-      </div>
-    )
-  }
-
-  if (terminal) {
-    return (
-      <div
-        className={`flex shrink-0 items-center gap-2 border-b px-4 py-2 text-xs ${
-          item.status === "resolved"
-            ? "border-success/20 bg-success/10 text-success"
-            : "border-destructive/20 bg-destructive/10 text-destructive"
-        }`}
-      >
-        {item.status === "resolved" ? <CheckCircle2 className="size-4" /> : <Ban className="size-4" />}
-        <span className="font-medium">
-          {item.status === "resolved" ? "Case rozwiązany" : "Case zignorowany"}
-        </span>
-        <span>Widok tylko do odczytu.</span>
-        {item.resolutionCategory && <span className="ml-auto">Kategoria: {item.resolutionCategory}</span>}
-      </div>
-    )
-  }
-
-  if (item.currentUserRestrictedByIgnore) {
-    return (
-      <div className="flex shrink-0 items-center gap-2 border-b border-destructive/20 bg-destructive/10 px-4 py-2 text-xs text-destructive">
-        <TriangleAlert className="size-4" />
-        Po oddaniu głosu ignorowania nie możesz przejąć tego case’u ani na niego odpowiadać.
-      </div>
-    )
-  }
-
-  return null
-}
-
-function CaseInteractionPanel({ item, currentUser }: { item: InboxCase; currentUser: User }) {
-  const workflow = useInboxWorkflow(item.id)
-  const [actionsOpen, setActionsOpen] = useState(false)
-  const [ignoreOpen, setIgnoreOpen] = useState(false)
-  const [ignoreReason, setIgnoreReason] = useState("")
-  const [askOpen, setAskOpen] = useState(false)
-  const [askMessage, setAskMessage] = useState("")
-  const [resolveOpen, setResolveOpen] = useState(false)
-  const [resolutionCategory, setResolutionCategory] = useState("")
-  const voteWeight = getInboxVoteWeight(currentUser)
-
-  const assignedToCurrentUser = item.owner?.id === currentUser.id
-  const assignedToAnotherUser = Boolean(item.owner && !assignedToCurrentUser)
-  const waiting = item.status === "waiting_for_customer"
-  const terminal = item.status === "resolved" || item.status === "ignored"
-  const eligibleUnassigned =
-    !item.owner &&
-    !item.currentUserRestrictedByIgnore &&
-    (item.status === "new" || item.status === "partially_ignored")
-  const composerEnabled =
-    assignedToCurrentUser && !waiting && !terminal && !item.currentUserRestrictedByIgnore
-  const snoozeEnabled = eligibleUnassigned || (assignedToCurrentUser && !waiting && !terminal)
-
-  const claim = async () => {
-    try {
-      await workflow.claim.mutateAsync()
-      notify.success("Case przejęty", "Status zmieniono na „W trakcie weryfikacji”.")
-    } catch (error) {
-      notify.error(
-        error instanceof InboxConflictError ? "Konflikt 409" : "Nie udało się przejąć case’u",
-        error instanceof Error ? error.message : undefined,
-      )
-    }
-  }
-
-  const confirmIgnore = async () => {
-    try {
-      await workflow.ignore.mutateAsync({ reason: ignoreReason, weight: voteWeight })
-      setIgnoreOpen(false)
-      setIgnoreReason("")
-      notify.success("Głos zapisany", `Dodano ${voteWeight} ${voteWeight === 1 ? "punkt" : "punkty"} ignorowania.`)
-    } catch (error) {
-      notify.error("Nie udało się zapisać głosu", error instanceof Error ? error.message : undefined)
-    }
-  }
-
-  const confirmAsk = async () => {
-    if (!askMessage.trim()) return
-    try {
-      await workflow.askCustomer.mutateAsync({ message: askMessage.trim() })
-      setAskOpen(false)
-      setAskMessage("")
-      notify.success("Wiadomość wysłana", "Case oczekuje na klienta przez 24 godziny.")
-    } catch (error) {
-      notify.error("Nie udało się dopytać klienta", error instanceof Error ? error.message : undefined)
-    }
-  }
-
-  const confirmResolve = async () => {
-    try {
-      await workflow.resolve.mutateAsync({ category: resolutionCategory || undefined })
-      setResolveOpen(false)
-      setResolutionCategory("")
-      notify.success("Case rozwiązany", "Rozmowa została przełączona w tryb tylko do odczytu.")
-    } catch (error) {
-      notify.error("Nie udało się rozwiązać case’u", error instanceof Error ? error.message : undefined)
-    }
-  }
-
+function SlackMark() {
   return (
-    <div className="shrink-0 border-t bg-card">
-      <div className="hidden flex-wrap items-center gap-1.5 border-b px-3 py-2 md:flex">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!eligibleUnassigned || workflow.claim.isPending}
-          onClick={() => void claim()}
-        >
-          <UserCheck /> Przejmij
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!eligibleUnassigned}
-          onClick={() => setIgnoreOpen(true)}
-        >
-          <Ban /> Ignoruj
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!eligibleUnassigned}
-          onClick={() => setAskOpen(true)}
-        >
-          <MessageSquareMore /> Dopytaj
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!assignedToCurrentUser || waiting || terminal}
-          onClick={() => setResolveOpen(true)}
-        >
-          <CheckCircle2 /> Rozwiąż
-        </Button>
-        <SnoozeControl
-          enabled={snoozeEnabled}
-          pending={workflow.snooze.isPending}
-          onSnooze={async (until) => {
-            try {
-              await workflow.snooze.mutateAsync(until)
-              notify.success("Case odłożony", "Zmiana jest widoczna tylko w Twoim folderze „Odłożone”.")
-            } catch (error) {
-              notify.error("Nie udało się odłożyć case’u", error instanceof Error ? error.message : undefined)
-              throw error
-            }
-          }}
-        />
-
-        {eligibleUnassigned && (
-          <Button
-            variant="ghost"
-            size="xs"
-            className="ml-auto text-muted-foreground"
-            onClick={() =>
-              notify.error(
-                "Konflikt 409 — tryb demonstracyjny",
-                "Inny agent przejął case ułamek sekundy wcześniej. Odśwież kolejkę i wybierz ponownie.",
-              )
-            }
-          >
-            Demo 409
-          </Button>
-        )}
-        {assignedToAnotherUser && (
-          <span className="ml-auto text-xs text-muted-foreground">
-            Akcje zablokowane · {item.owner?.fullName}
-          </span>
-        )}
-      </div>
-
-      <div className="flex items-center gap-2 border-b px-3 py-2 md:hidden">
-        <Button variant="outline" className="w-full justify-between" onClick={() => setActionsOpen(true)} aria-haspopup="dialog">
-          <span className="flex items-center gap-2"><MoreHorizontal /> Akcje case’u</span>
-          <span className="max-w-36 truncate text-xs font-normal text-muted-foreground">{assignedToCurrentUser ? "Przypisany do Ciebie" : item.owner ? item.owner.fullName : "Nieprzypisany"}</span>
-        </Button>
-      </div>
-
-      <Sheet open={actionsOpen} onOpenChange={setActionsOpen}>
-        <SheetContent side="bottom" className="max-h-[85svh] gap-0 overflow-y-auto rounded-t-2xl p-0 md:hidden">
-          <SheetHeader className="border-b pr-12">
-            <SheetTitle>Akcje case’u {item.reference}</SheetTitle>
-            <SheetDescription>Dostępne operacje zależą od statusu i przypisanego użytkownika.</SheetDescription>
-          </SheetHeader>
-          <div className="grid gap-2 p-4">
-            <Button variant="outline" className="justify-start" disabled={!eligibleUnassigned || workflow.claim.isPending} onClick={() => { setActionsOpen(false); void claim() }}><UserCheck /> Przejmij</Button>
-            <Button variant="outline" className="justify-start" disabled={!eligibleUnassigned} onClick={() => { setActionsOpen(false); setIgnoreOpen(true) }}><Ban /> Ignoruj</Button>
-            <Button variant="outline" className="justify-start" disabled={!eligibleUnassigned} onClick={() => { setActionsOpen(false); setAskOpen(true) }}><MessageSquareMore /> Dopytaj</Button>
-            <Button variant="outline" className="justify-start" disabled={!assignedToCurrentUser || waiting || terminal} onClick={() => { setActionsOpen(false); setResolveOpen(true) }}><CheckCircle2 /> Rozwiąż</Button>
-            <SnoozeControl
-              enabled={snoozeEnabled}
-              pending={workflow.snooze.isPending}
-              className="w-full justify-start"
-              onSnooze={async (until) => {
-                try {
-                  await workflow.snooze.mutateAsync(until)
-                  setActionsOpen(false)
-                  notify.success("Case odłożony", "Zmiana jest widoczna tylko w Twoim folderze „Odłożone”.")
-                } catch (error) {
-                  notify.error("Nie udało się odłożyć case’u", error instanceof Error ? error.message : undefined)
-                  throw error
-                }
-              }}
-            />
-            {assignedToAnotherUser && <p className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">Akcje są zablokowane, ponieważ case jest przypisany do: {item.owner?.fullName}.</p>}
-          </div>
-        </SheetContent>
-      </Sheet>
-
-      <MessageComposer
-        enabled={composerEnabled}
-        unassigned={!item.owner}
-        readOnlyReason={
-          waiting
-            ? "Case oczekuje na odpowiedź klienta."
-            : terminal
-              ? "Case jest zakończony."
-              : assignedToAnotherUser
-                ? `Case jest przypisany do: ${item.owner?.fullName}.`
-                : item.currentUserRestrictedByIgnore
-                  ? "Oddałeś głos ignorowania dla tego case’u."
-                  : undefined
-        }
-        sendMessage={workflow.sendMessage.mutateAsync}
-      />
-
-      <Dialog open={ignoreOpen} onOpenChange={setIgnoreOpen}>
-        <DialogContent className="sm:max-w-lg" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Oddaj głos ignorowania</DialogTitle>
-            <DialogDescription>
-              Głos wpływa na wspólny status case’u i jest nieodwracalny dla bieżącego użytkownika.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="rounded-lg border border-destructive/25 bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">
-            <div className="flex items-start gap-2">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0" />
-              Po zagłosowaniu nie będziesz już mógł przejąć tego case’u ani na niego odpowiedzieć.
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-lg border p-3">
-              <p className="text-[10px] text-muted-foreground uppercase">Aktualne punkty</p>
-              <p className="mt-1 text-xl font-semibold">{item.ignoreVotes.current}/2</p>
-            </div>
-            <div className="rounded-lg border p-3">
-              <p className="text-[10px] text-muted-foreground uppercase">Waga Twojego głosu</p>
-              <p className="mt-1 text-xl font-semibold">{voteWeight}</p>
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/50 p-3 text-xs text-muted-foreground">
-            <p className="font-medium text-foreground">Przykładowe wagi</p>
-            <p className="mt-1">Agent wsparcia: 1 punkt · Kierownik lub administrator: 2 punkty.</p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ignore-reason">Powód (opcjonalnie)</Label>
-            <textarea
-              id="ignore-reason"
-              value={ignoreReason}
-              onChange={(event) => setIgnoreReason(event.target.value)}
-              placeholder="Np. wiadomość testowa lub duplikat…"
-              className="min-h-20 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIgnoreOpen(false)}>Anuluj</Button>
-            <Button variant="destructive" onClick={() => void confirmIgnore()} disabled={workflow.ignore.isPending}>
-              {workflow.ignore.isPending && <LoaderCircle className="animate-spin" />}
-              Oddaj głos ({voteWeight})
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={askOpen} onOpenChange={setAskOpen}>
-        <DialogContent className="sm:max-w-lg" showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Dopytaj klienta</DialogTitle>
-            <DialogDescription>
-              Wiadomość jest wymagana. Po wysłaniu case stanie się nieprzypisany i będzie czekać na odpowiedź przez 24 godziny.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-wrap gap-1.5">
-            {[
-              "Proszę o identyfikator operacji.",
-              "Czy problem nadal występuje?",
-              "Proszę o zrzut ekranu i godzinę zdarzenia.",
-            ].map((suggestion) => (
-              <Button key={suggestion} variant="outline" size="xs" onClick={() => setAskMessage(suggestion)}>
-                {suggestion}
-              </Button>
-            ))}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="ask-message">Wiadomość do klienta</Label>
-            <textarea
-              id="ask-message"
-              required
-              value={askMessage}
-              onChange={(event) => setAskMessage(event.target.value)}
-              placeholder="Wpisz pytanie do klienta…"
-              className="min-h-28 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            />
-          </div>
-          <div className="flex items-start gap-2 rounded-lg bg-warning/10 p-3 text-xs leading-relaxed text-warning-foreground">
-            <AlarmClock className="mt-0.5 size-4 shrink-0" />
-            Rozmowa zostanie przełączona w tryb tylko do odczytu do czasu odpowiedzi klienta lub upływu 24 godzin.
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAskOpen(false)}>Anuluj</Button>
-            <Button onClick={() => void confirmAsk()} disabled={!askMessage.trim() || workflow.askCustomer.isPending}>
-              {workflow.askCustomer.isPending && <LoaderCircle className="animate-spin" />}
-              Wyślij i oczekuj
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={resolveOpen} onOpenChange={setResolveOpen}>
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Oznaczyć case jako rozwiązany?</DialogTitle>
-            <DialogDescription>
-              Case otrzyma status końcowy, a rozmowa stanie się dostępna tylko do odczytu.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="resolution-category">Kategoria rozwiązania (opcjonalnie)</Label>
-            <select
-              id="resolution-category"
-              value={resolutionCategory}
-              onChange={(event) => setResolutionCategory(event.target.value)}
-              className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
-            >
-              <option value="">Bez kategorii</option>
-              <option value="Naprawa konfiguracji">Naprawa konfiguracji</option>
-              <option value="Wyjaśnienie klientowi">Wyjaśnienie klientowi</option>
-              <option value="Błąd produktu naprawiony">Błąd produktu naprawiony</option>
-              <option value="Brak możliwości odtworzenia">Brak możliwości odtworzenia</option>
-            </select>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setResolveOpen(false)}>Anuluj</Button>
-            <Button onClick={() => void confirmResolve()} disabled={workflow.resolve.isPending}>
-              {workflow.resolve.isPending && <LoaderCircle className="animate-spin" />}
-              Potwierdź rozwiązanie
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+    <span className="grid size-[14px] grid-cols-2 gap-[1.5px]" aria-hidden>
+      <span className="rounded-sm bg-[#36c5f0]" /><span className="rounded-sm bg-[#2eb67d]" />
+      <span className="rounded-sm bg-[#e01e5a]" /><span className="rounded-sm bg-[#ecb22e]" />
+    </span>
   )
-}
-
-function SnoozeControl({
-  enabled,
-  pending,
-  onSnooze,
-  className,
-}: {
-  enabled: boolean
-  pending: boolean
-  onSnooze: (until: string) => Promise<void>
-  className?: string
-}) {
-  const [open, setOpen] = useState(false)
-  const [customDate, setCustomDate] = useState("")
-
-  const snooze = async (date: Date) => {
-    await onSnooze(date.toISOString())
-    setOpen(false)
-    setCustomDate("")
-  }
-
-  const tomorrowMorning = () => {
-    const date = new Date()
-    date.setDate(date.getDate() + 1)
-    date.setHours(9, 0, 0, 0)
-    return date
-  }
-
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <Button variant="outline" size="sm" disabled={!enabled || pending} className={className}>
-            <AlarmClock /> Odłóż na później
-          </Button>
-        }
-      />
-      <PopoverContent align="start" className="w-80">
-        <PopoverHeader>
-          <PopoverTitle>Odłóż na później</PopoverTitle>
-          <PopoverDescription>
-            To ustawienie jest osobiste. Inni agenci nadal zobaczą case w swoich kolejkach.
-          </PopoverDescription>
-        </PopoverHeader>
-        <div className="grid grid-cols-2 gap-1.5">
-          {[
-            ["15 min", 15],
-            ["30 min", 30],
-            ["1 godzina", 60],
-            ["2 godziny", 120],
-          ].map(([label, minutes]) => (
-            <Button
-              key={String(label)}
-              variant="outline"
-              size="sm"
-              onClick={() => void snooze(new Date(Date.now() + Number(minutes) * 60_000))}
-            >
-              {label}
-            </Button>
-          ))}
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void snooze(tomorrowMorning())}>
-          Jutro rano · 09:00
-        </Button>
-        <Separator />
-        <div className="space-y-2">
-          <Label htmlFor="custom-snooze">Własny termin</Label>
-          <div className="flex gap-2">
-            <Input
-              id="custom-snooze"
-              type="datetime-local"
-              value={customDate}
-              min={toDateTimeLocal(new Date())}
-              onChange={(event) => setCustomDate(event.target.value)}
-            />
-            <Button
-              size="sm"
-              disabled={!customDate}
-              onClick={() => void snooze(new Date(customDate))}
-            >
-              Ustaw
-            </Button>
-          </div>
-        </div>
-      </PopoverContent>
-    </Popover>
-  )
-}
-
-function MessageComposer({
-  enabled,
-  unassigned,
-  readOnlyReason,
-  sendMessage,
-}: {
-  enabled: boolean
-  unassigned: boolean
-  readOnlyReason?: string
-  sendMessage: (input: {
-    body: string
-    attachments?: { fileName: string; size: string }[]
-    simulateFailure?: boolean
-  }) => Promise<unknown>
-}) {
-  const [draft, setDraft] = useState("")
-  const [attachments, setAttachments] = useState<{ fileName: string; size: string }[]>([])
-  const [simulateFailure, setSimulateFailure] = useState(false)
-  const [sendState, setSendState] = useState<"idle" | "pending" | "sent" | "failed">("idle")
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const sentResetTimer = useRef<number | undefined>(undefined)
-
-  useEffect(
-    () => () => {
-      if (sentResetTimer.current) window.clearTimeout(sentResetTimer.current)
-    },
-    [],
-  )
-
-  const performSend = async (retry = false) => {
-    if (!enabled || (!draft.trim() && attachments.length === 0)) return
-    setSendState("pending")
-    try {
-      await sendMessage({
-        body: draft.trim() || "Załącznik",
-        attachments,
-        simulateFailure: retry ? false : simulateFailure,
-      })
-      setDraft("")
-      setAttachments([])
-      setSimulateFailure(false)
-      setSendState("sent")
-      sentResetTimer.current = window.setTimeout(() => setSendState("idle"), 1800)
-    } catch (error) {
-      setSendState("failed")
-      notify.error("Wiadomość nie została wysłana", error instanceof Error ? error.message : undefined)
-    }
-  }
-
-  const insertText = (value: string) => {
-    if (!enabled) return
-    if (sendState === "failed") setSendState("idle")
-    setDraft((current) => `${current}${current ? " " : ""}${value}`)
-  }
-
-  return (
-    <div className="sticky bottom-0 z-20 bg-card p-3 md:static">
-      {unassigned && !readOnlyReason && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg bg-warning/10 px-3 py-2 text-xs font-medium text-warning-foreground">
-          <LockKeyhole className="size-3.5" />
-          Aby odpowiedzieć, najpierw przejmij case.
-        </div>
-      )}
-      {!enabled && readOnlyReason && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-          <LockKeyhole className="size-3.5" /> {readOnlyReason}
-        </div>
-      )}
-
-      <div className={`overflow-hidden rounded-lg border bg-background ${enabled ? "focus-within:border-ring focus-within:ring-3 focus-within:ring-ring/30" : "opacity-70"}`}>
-        <textarea
-          id="case-message-composer"
-          aria-label="Treść odpowiedzi do klienta"
-          aria-describedby={enabled ? "composer-shortcut" : undefined}
-          value={draft}
-          onChange={(event) => {
-            setDraft(event.target.value)
-            if (sendState === "failed") setSendState("idle")
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
-              event.preventDefault()
-              void performSend()
-            }
-          }}
-          disabled={!enabled || sendState === "pending"}
-          rows={3}
-          placeholder={enabled ? "Napisz odpowiedź…" : "Odpowiadanie jest zablokowane"}
-          className="block max-h-40 min-h-18 w-full resize-y bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
-        />
-
-        {attachments.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 px-3 pb-2">
-            {attachments.map((attachment) => (
-              <span key={attachment.fileName} className="flex items-center gap-1 rounded-md bg-muted px-2 py-1 text-[10px]">
-                <Paperclip className="size-3" /> {attachment.fileName} · {attachment.size}
-                <button
-                  type="button"
-                  onClick={() => setAttachments((current) => current.filter((item) => item !== attachment))}
-                  className="ml-1 text-muted-foreground hover:text-foreground"
-                  aria-label={`Usuń ${attachment.fileName}`}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-1 border-t bg-muted/25 px-2 py-1.5">
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            className="hidden"
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? [])
-              setAttachments((current) => [
-                ...current,
-                ...files.map((file) => ({ fileName: file.name, size: formatFileSize(file.size) })),
-              ])
-              if (sendState === "failed") setSendState("idle")
-              event.target.value = ""
-            }}
-          />
-          <Button variant="ghost" size="icon-xs" disabled={!enabled} onClick={() => fileInputRef.current?.click()} aria-label="Dodaj załącznik" title="Dodaj załącznik">
-            <Paperclip />
-          </Button>
-          <Button variant="ghost" size="icon-xs" disabled={!enabled} onClick={() => insertText("🙂")} aria-label="Dodaj emoji" title="Dodaj emoji">
-            <Smile />
-          </Button>
-          <Button variant="ghost" size="icon-xs" disabled={!enabled} onClick={() => insertText("**pogrubienie**")} aria-label="Dodaj pogrubienie" title="Dodaj pogrubienie">
-            <Bold />
-          </Button>
-          <Button
-            variant={simulateFailure ? "destructive" : "ghost"}
-            size="xs"
-            disabled={!enabled || sendState === "pending"}
-            onClick={() => {
-              setSimulateFailure((active) => !active)
-              if (sendState === "failed") setSendState("idle")
-            }}
-            title="Włącza jednorazowy symulowany błąd wysyłki"
-          >
-            <TriangleAlert /> Tryb błędu
-          </Button>
-
-          <div className="ml-auto flex items-center gap-2" aria-live="polite">
-            {sendState === "pending" && (
-              <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <LoaderCircle className="size-3 animate-spin" /> Wysyłanie…
-              </span>
-            )}
-            {sendState === "sent" && (
-              <span className="flex items-center gap-1 text-[10px] text-success">
-                <CheckCheck className="size-3" /> Wysłano
-              </span>
-            )}
-            {sendState === "failed" && (
-              <span className="flex items-center gap-1.5 text-[10px] text-destructive">
-                <TriangleAlert className="size-3" /> Wysyłka nieudana
-                <Button variant="destructive" size="xs" onClick={() => void performSend(true)}>
-                  <RotateCcw /> Ponów
-                </Button>
-              </span>
-            )}
-            {sendState !== "failed" && (
-              <Button
-                size="sm"
-                disabled={!enabled || sendState === "pending" || (!draft.trim() && attachments.length === 0)}
-                onClick={() => void performSend()}
-              >
-                <Send /> Wyślij
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-      {enabled && <p id="composer-shortcut" className="mt-1.5 text-[10px] text-muted-foreground">Ctrl/⌘ + Enter, aby wysłać</p>}
-    </div>
-  )
-}
-
-function toDateTimeLocal(date: Date) {
-  const offset = date.getTimezoneOffset()
-  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16)
-}
-
-function formatFileSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
-function CaseDetails({ item, now, variant = "inline" }: { item: InboxCase; now: number; variant?: "inline" | "sheet" }) {
-  return (
-    <aside className={variant === "sheet" ? "min-h-0 w-full flex-1 overflow-y-auto bg-card" : "hidden w-72 shrink-0 overflow-y-auto border-l bg-card xl:block"} aria-label="Szczegóły case’u">
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <h3 className="text-sm font-semibold">Szczegóły case’u</h3>
-        <Badge variant="outline" className="font-mono text-[10px]">{item.reference}</Badge>
-      </div>
-      <div className="space-y-5 p-4">
-        <DetailSection title="Metadane">
-          <DetailRow label="Klient" value={item.customer.name} />
-          <DetailRow label="Kontakt" value={item.customer.contactName} />
-          <DetailRow label="Priorytet" value={item.metadata.priority} />
-          <DetailRow label="Kategoria" value={item.metadata.category} />
-          <DetailRow label="Produkt" value={item.metadata.product} />
-          <DetailRow label="Środowisko" value={item.metadata.environment} />
-          <DetailRow label="Utworzono" value={formatDateTime(item.createdAt)} />
-        </DetailSection>
-
-        <DetailSection title="SLA">
-          <div className="rounded-lg border bg-muted/20 p-3">
-            <SlaCountdown item={item} now={now} />
-            <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              Termin: {item.sla.dueAt ? formatDateTime(item.sla.dueAt) : "wstrzymany"}
-            </p>
-          </div>
-        </DetailSection>
-
-        <DetailSection title="Głosy ignorowania">
-          <div className="rounded-lg border p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">Wymagana większość</span>
-              <span className="font-mono text-xs font-semibold">{item.ignoreVotes.current}/2</span>
-            </div>
-            <div className="mt-2 flex gap-1.5">
-              {[0, 1].map((vote) => (
-                <span
-                  key={vote}
-                  className={`h-1.5 flex-1 rounded-full ${vote < item.ignoreVotes.current ? "bg-destructive" : "bg-muted"}`}
-                />
-              ))}
-            </div>
-            {item.ignoreVotes.voters.length > 0 && (
-              <p className="mt-2 text-[11px] text-muted-foreground">
-                {item.ignoreVotes.voters.join(", ")}
-              </p>
-            )}
-          </div>
-        </DetailSection>
-
-        {item.relatedCase && (
-          <DetailSection title="Powiązany case">
-            <div className="rounded-lg border p-3">
-              <div className="flex items-center gap-2 text-xs font-medium text-primary">
-                <Link2 className="size-3.5" /> {item.relatedCase.reference}
-              </div>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                {item.relatedCase.subject}
-              </p>
-            </div>
-          </DetailSection>
-        )}
-
-        <DetailSection title="Tagi">
-          <div className="flex flex-wrap gap-1.5">
-            {item.metadata.tags.map((tag) => (
-              <Badge key={tag} variant="secondary" className="border-transparent text-[10px]">
-                <Tag /> {tag}
-              </Badge>
-            ))}
-          </div>
-        </DetailSection>
-
-        <DetailSection title="Dziennik aktywności">
-          <ol className="space-y-3">
-            {[...item.activity].reverse().map((event, index) => (
-              <li key={event.id} className="relative flex gap-2.5 text-xs">
-                <span className="mt-1 flex size-5 shrink-0 items-center justify-center rounded-full bg-muted">
-                  <Activity className="size-3 text-muted-foreground" />
-                </span>
-                {index < item.activity.length - 1 && <span className="absolute top-6 bottom-[-12px] left-2.5 w-px bg-border" />}
-                <div className="min-w-0">
-                  <p className="leading-relaxed">{event.label}</p>
-                  <p className="mt-0.5 text-[10px] text-muted-foreground">
-                    {event.author ? `${event.author} · ` : ""}{formatRelative(event.createdAt)}
-                  </p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </DetailSection>
-      </div>
-    </aside>
-  )
-}
-
-function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section>
-      <h4 className="mb-2 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">{title}</h4>
-      {children}
-    </section>
-  )
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start justify-between gap-3 border-b py-2 text-xs last:border-0">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="max-w-40 text-right font-medium text-pretty">{value}</dd>
-    </div>
-  )
-}
-
-function SlaCountdown({
-  item,
-  now,
-  compact = false,
-}: {
-  item: InboxCase
-  now: number
-  compact?: boolean
-}) {
-  const dueAt = item.sla.dueAt ? new Date(item.sla.dueAt).getTime() : undefined
-  const remainingMinutes = dueAt ? Math.round((dueAt - now) / 60_000) : undefined
-  const terminal = item.status === "resolved" || item.status === "ignored"
-  const effectiveState = getEffectiveSlaState(item.sla, now)
-  const label =
-    terminal
-      ? "SLA zakończone"
-      : effectiveState === "paused" || remainingMinutes === undefined
-        ? "SLA wstrzymane"
-      : remainingMinutes < 0
-        ? `SLA +${formatMinutes(Math.abs(remainingMinutes))}`
-        : `SLA ${formatMinutes(remainingMinutes)}`
-  const className =
-    effectiveState === "breached"
-      ? "bg-destructive/10 text-destructive"
-      : effectiveState === "at_risk"
-        ? "bg-warning/15 text-warning-foreground"
-        : effectiveState === "paused"
-          ? "bg-muted text-muted-foreground"
-          : "bg-success/10 text-success"
-
-  return (
-    <Badge
-      variant="secondary"
-      className={`border-transparent tabular-nums ${className} ${compact ? "px-1.5 text-[10px]" : ""}`}
-    >
-      <Clock3 /> {label}
-    </Badge>
-  )
-}
-
-function formatMinutes(minutes: number) {
-  if (minutes < 60) return `${minutes} min`
-  const hours = Math.floor(minutes / 60)
-  const rest = minutes % 60
-  return rest ? `${hours} godz. ${rest} min` : `${hours} godz.`
 }

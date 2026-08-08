@@ -1,7 +1,8 @@
 import {
   ChartColumn,
-  Inbox,
-  MessagesSquare,
+  MessageCircleMore,
+  Settings,
+  SquareCheckBig,
   Users,
   type LucideIcon,
 } from "lucide-react"
@@ -16,16 +17,16 @@ export interface NavItem {
 /** Główna nawigacja aplikacji (lewa listwa). */
 export const navItems: NavItem[] = [
   {
-    label: "Case’y",
+    label: "Czaty",
     href: "/cases",
-    icon: Inbox,
-    description: "Wszystkie zgłoszenia ze wszystkich kanałów",
+    icon: MessageCircleMore,
+    description: "Wszystkie rozmowy ze wszystkich kanałów",
   },
   {
-    label: "Bieżące case’y",
+    label: "Do zrobienia",
     href: "/current-cases",
-    icon: MessagesSquare,
-    description: "Zgłoszenia przypisane do Ciebie",
+    icon: SquareCheckBig,
+    description: "Sprawy wymagające działania",
   },
   {
     label: "Statystyki",
@@ -38,5 +39,11 @@ export const navItems: NavItem[] = [
     href: "/users",
     icon: Users,
     description: "Agenci i klienci w systemie",
+  },
+  {
+    label: "Ustawienia",
+    href: "/settings",
+    icon: Settings,
+    description: "Ustawienia aplikacji",
   },
 ]

@@ -298,5 +298,7 @@ export function useAnalytics(filters: AnalyticsFilters) {
     queryKey: queryKeys.analytics(filters),
     queryFn: () => serviceRegistry.analytics.calculate(filters),
     placeholderData: (previous) => previous,
+    refetchInterval: 5_000,
+    refetchOnWindowFocus: true,
   })
 }

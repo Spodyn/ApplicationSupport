@@ -177,3 +177,26 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+.cases-workspace {
+  color-scheme: dark;
+  background: #08111f;
+}
+
+.cases-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.16) transparent;
+}
+
+.cases-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.cases-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.16);
+}
+
+.cases-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}

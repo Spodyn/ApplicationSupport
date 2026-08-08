@@ -85,10 +85,13 @@ export function UserMenu({
             <Button
               variant="ghost"
               size="icon-lg"
-              className="mb-2 size-11 rounded-xl border border-sidebar-border bg-sidebar-accent/70 p-0 text-sidebar-foreground shadow-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+              className="mb-2 size-[54px] rounded-full border-0 bg-transparent p-0 text-white shadow-none hover:bg-white/[0.04] hover:text-white"
               aria-label={`Otwórz menu profilu: ${user.fullName}`}
             >
-              <UserAvatar user={user} size="lg" showPresence />
+              <span className="relative grid size-[51px] place-items-center rounded-full bg-[linear-gradient(145deg,#6231e6,#3d159f)] text-[17px] font-medium text-white">
+                AK
+                <span className="absolute bottom-0 right-0 size-[13px] rounded-full border-[3px] border-[#08111f] bg-emerald-400" />
+              </span>
             </Button>
           ) : (
             <Button variant="ghost" size="sm" className="h-11 gap-2 px-1.5">
