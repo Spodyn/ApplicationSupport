@@ -2,7 +2,6 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { navItems } from "@/lib/navigation"
 import { UserMenu } from "@/components/layout/user-menu"
@@ -13,12 +12,8 @@ import { UserMenu } from "@/components/layout/user-menu"
  */
 export function AppRail({
   onNavigate,
-  onToggleSecondary,
-  secondarySidebarOpen,
 }: {
   onNavigate?: () => void
-  onToggleSecondary?: () => void
-  secondarySidebarOpen?: boolean
 }) {
   const pathname = usePathname()
 
@@ -65,19 +60,7 @@ export function AppRail({
         })}
       </ul>
 
-      {onToggleSecondary && (
-        <button
-          type="button"
-          onClick={onToggleSecondary}
-          className="mt-auto flex size-9 items-center justify-center rounded-lg text-[#8e99aa] transition-colors hover:bg-white/[0.05] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500"
-          aria-label={secondarySidebarOpen ? "Zwiń panel kontekstowy" : "Rozwiń panel kontekstowy"}
-          title={secondarySidebarOpen ? "Zwiń panel kontekstowy" : "Rozwiń panel kontekstowy"}
-        >
-          {secondarySidebarOpen ? <PanelLeftClose className="size-4" /> : <PanelLeftOpen className="size-4" />}
-        </button>
-      )}
-
-      <div className={onToggleSecondary ? "mb-3 mt-3" : "mb-3 mt-auto"}>
+      <div className="mb-3 mt-auto">
         <UserMenu variant="rail" onNavigate={onNavigate} />
       </div>
     </nav>

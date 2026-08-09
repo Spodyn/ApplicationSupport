@@ -1,17 +1,12 @@
 import type { Channel, UserPresence } from "./types"
 
 export type AdministrationRole = "user" | "admin"
-export type IgnoreVoteWeight = 1 | 2
 
 export type AdministrationPermission =
   | "manage_users"
   | "manage_integrations"
   | "manage_sla"
   | "view_global_statistics"
-  | "force_resolve"
-  | "reassign_cases"
-  | "revoke_ignore_votes"
-  | "view_audit_log"
 
 export interface AdministrationUser {
   id: string
@@ -20,7 +15,6 @@ export interface AdministrationUser {
   role: AdministrationRole
   active: boolean
   presence: UserPresence
-  ignoreVoteWeight: IgnoreVoteWeight
   validFrom: string
   validUntil?: string
   activeAssignedCases: number
@@ -36,7 +30,6 @@ export type AdministrationUserInput = Omit<
 export interface GeneralSettings {
   organizationName: string
   interfaceLanguage: "pl"
-  defaultCaseView: "all" | "current"
   compactMode: boolean
 }
 
@@ -94,17 +87,12 @@ export interface ManagedIntegration {
   health: IntegrationHealth
 }
 
-export type GroupingMode = "thread" | "conversation" | "daily"
-
 export interface ManagedChannel {
   id: string
   platform: Channel
   channelName: string
   customer: string
-  enabled: boolean
-  groupingMode: GroupingMode
-  slaPolicy: string
-  scheduleName: string
+  ignored: boolean
   lastMessageAt?: string
 }
 
@@ -143,13 +131,9 @@ export interface AdministrationSettings {
 
 export const administrationPermissionLabels: Record<AdministrationPermission, string> = {
   manage_users: "Zarządzanie użytkownikami",
-  manage_integrations: "Zarządzanie integracjami",
+  manage_integrations: "Zarządzanie integracjami i kanałami",
   manage_sla: "Konfiguracja SLA",
   view_global_statistics: "Statystyki globalne",
-  force_resolve: "Wymuszone rozwiązanie case’a",
-  reassign_cases: "Przepisywanie case’ów",
-  revoke_ignore_votes: "Cofanie głosów ignorowania",
-  view_audit_log: "Dziennik audytowy",
 }
 
 export const allAdministrationPermissions = Object.keys(

@@ -1,17 +1,4 @@
-import type { Channel, SlaState, User } from "./types"
-import type { InboxCase, InboxStatus } from "./inbox"
-
-export interface CurrentCaseAdminItem extends InboxCase {
-  claimedAt?: string
-}
-
-export interface CurrentCaseFilters {
-  userId?: string
-  status?: InboxStatus
-  platform?: Channel
-  customerId?: string
-  slaState?: SlaState
-}
+import type { Channel, User } from "./types"
 
 export type AnalyticsSlaState = "met" | "warning" | "breached"
 export type AnalyticsResolutionReason = "resolved" | "not_applicable" | "spam"

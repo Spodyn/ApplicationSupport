@@ -3,13 +3,11 @@ import type { User } from "@/lib/domain/types"
 import { mockInboxCaseRecords, mockInboxMessages } from "@/mocks/inbox"
 import { mockCurrentUser } from "@/mocks/users"
 import {
-  getAdministrationUserSnapshot,
   getCurrentAdministrationSettingsSnapshot,
 } from "./administration"
 
 export interface InboxIgnoreInput {
   reason?: string
-  weight: 1 | 2
 }
 
 export interface InboxAskInput {
@@ -129,12 +127,6 @@ const canUseUnassignedActions = (caseId: string) => {
   )
 }
 
-export function getInboxVoteWeight(user: User): 1 | 2 {
-  const administrationUser = getAdministrationUserSnapshot(user.email)
-  if (administrationUser?.active) return administrationUser.ignoreVoteWeight
-  return user.role === "supervisor" || user.role === "admin" ? 2 : 1
-}
-
 export const mockInboxRepository: InboxRepository = {
   async list() {
     const cases = mockInboxCaseRecords.map(
@@ -199,7 +191,7 @@ export const mockInboxRepository: InboxRepository = {
     const record = getRecord(caseId)
     record.ignoreVotes.current = Math.min(
       record.ignoreVotes.required,
-      record.ignoreVotes.current + input.weight,
+      record.ignoreVotes.current + 1,
     )
     record.ignoreVotes.voters = [
       ...new Set([...record.ignoreVotes.voters, mockCurrentUser.fullName]),
@@ -219,7 +211,7 @@ export const mockInboxRepository: InboxRepository = {
     const reason = input.reason?.trim() ? ` Powód: ${input.reason.trim()}` : ""
     appendSystemEvent(
       caseId,
-      `${mockCurrentUser.fullName} oddała głos ignorowania o wadze ${input.weight}.${reason}`,
+      `${mockCurrentUser.fullName} oddała głos ignorowania.${reason}`,
     )
   },
 

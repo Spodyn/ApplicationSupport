@@ -43,7 +43,6 @@ export const queryKeys = {
     ["administration", "users", query ?? {}] as const,
   currentAdministrationUser: () => ["administration", "current-user"] as const,
   administrationSettings: () => ["administration", "settings"] as const,
-  currentCases: () => ["administration", "current-cases"] as const,
   analytics: (filters: AnalyticsFilters) => ["analytics", filters] as const,
 }
 
@@ -205,7 +204,11 @@ export function useAdministrationUserActions() {
     mutationFn: (id: string) => serviceRegistry.administrationUsers.deactivate(id),
     onSuccess: invalidate,
   })
-  return { save, deactivate }
+  const deleteUser = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationUsers.delete(id),
+    onSuccess: invalidate,
+  })
+  return { save, deactivate, delete: deleteUser }
 }
 
 export function useAdministrationSettings() {
@@ -242,9 +245,9 @@ export function useAdministrationSettingsActions() {
     mutationFn: (id: string) => serviceRegistry.administrationSettings.testIntegration(id),
     onSuccess: invalidate,
   })
-  const toggleChannel = useMutation({
-    mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) =>
-      serviceRegistry.administrationSettings.toggleChannel(id, enabled),
+  const setChannelIgnored = useMutation({
+    mutationFn: ({ id, ignored }: { id: string; ignored: boolean }) =>
+      serviceRegistry.administrationSettings.setChannelIgnored(id, ignored),
     onSuccess: invalidate,
   })
   const toggleNotification = useMutation({
@@ -258,39 +261,9 @@ export function useAdministrationSettingsActions() {
     configureIntegration,
     setIntegrationStatus,
     testIntegration,
-    toggleChannel,
+    setChannelIgnored,
     toggleNotification,
   }
-}
-
-export function useCurrentCases() {
-  return useQuery({
-    queryKey: queryKeys.currentCases(),
-    queryFn: () => serviceRegistry.currentCases.list(),
-  })
-}
-
-export function useCurrentCaseActions() {
-  const queryClient = useQueryClient()
-  const invalidate = () => Promise.all([
-    queryClient.invalidateQueries({ queryKey: queryKeys.currentCases() }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() }),
-  ])
-
-  const reassign = useMutation({
-    mutationFn: ({ caseId, userId }: { caseId: string; userId: string }) =>
-      serviceRegistry.currentCases.reassign(caseId, userId),
-    onSuccess: invalidate,
-  })
-  const unassign = useMutation({
-    mutationFn: (caseId: string) => serviceRegistry.currentCases.unassign(caseId),
-    onSuccess: invalidate,
-  })
-  const forceResolve = useMutation({
-    mutationFn: (caseId: string) => serviceRegistry.currentCases.forceResolve(caseId),
-    onSuccess: invalidate,
-  })
-  return { reassign, unassign, forceResolve }
 }
 
 export function useAnalytics(filters: AnalyticsFilters) {

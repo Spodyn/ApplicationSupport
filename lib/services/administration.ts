@@ -24,6 +24,7 @@ export interface AdministrationUserRepository {
   getCurrent(): Promise<AdministrationUser | undefined>
   save(input: AdministrationUserInput, id?: string): Promise<AdministrationUser>
   deactivate(id: string): Promise<AdministrationUser>
+  delete(id: string): Promise<void>
 }
 
 export interface AdministrationSettingsRepository {
@@ -38,7 +39,7 @@ export interface AdministrationSettingsRepository {
     status: ManagedIntegration["status"],
   ): Promise<ManagedIntegration>
   testIntegration(id: string): Promise<ManagedIntegration>
-  toggleChannel(id: string, enabled: boolean): Promise<void>
+  setChannelIgnored(id: string, ignored: boolean): Promise<void>
   toggleNotification(id: string, enabled: boolean): Promise<void>
 }
 
@@ -142,6 +143,17 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
     user.validUntil = new Date().toISOString().slice(0, 10)
     return delay(user)
   },
+
+  async delete(id) {
+    requireCurrentAdministrationPermission("manage_users")
+    const user = usersState.find((item) => item.id === id)
+    if (!user) throw new Error("Nie znaleziono użytkownika.")
+    if (normalize(user.email) === normalize(mockCurrentUser.email)) {
+      throw new Error("Nie możesz usunąć własnego konta.")
+    }
+    usersState = usersState.filter((item) => item.id !== id)
+    return delay(undefined)
+  },
 }
 
 export const mockAdministrationSettingsRepository: AdministrationSettingsRepository = {
@@ -202,11 +214,11 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     return delay(integration, 600)
   },
 
-  async toggleChannel(id, enabled) {
+  async setChannelIgnored(id, ignored) {
     requireCurrentAdministrationPermission("manage_integrations")
     const channel = settingsState.channels.find((item) => item.id === id)
     if (!channel) throw new Error("Nie znaleziono kanału.")
-    channel.enabled = enabled
+    channel.ignored = ignored
     return delay(undefined)
   },
 

@@ -359,11 +359,11 @@ function CaseListItem({
       <span className={cn("mr-[16px] grid size-[38px] shrink-0 place-items-center rounded-[7px] text-[14px] font-semibold", avatarTone(item.initials))}>{item.initials}</span>
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-2">
-          <span className={cn("truncate text-[15px] leading-5", unread ? "font-bold text-white" : "font-semibold text-[#eff0f4]")}>{item.company}</span>
+          <span className={cn("truncate text-[15px] leading-5", unread ? "font-bold text-white" : "font-normal text-[#eff0f4]")}>{item.company}</span>
           <span className={cn("ml-auto shrink-0 text-[11px] tabular-nums", unread ? "font-semibold text-[#d4d9e3]" : "text-[#9ba5b5]")}>{item.time}</span>
           {unread && <span className="size-2.5 shrink-0 rounded-full bg-[#7650ff] shadow-[0_0_8px_rgba(118,80,255,0.6)]" aria-label="Nieodczytane" />}
         </span>
-        <span className={cn("mt-[2px] block max-w-[280px] text-[13px] leading-[18px] text-[#edf0f4]", unread ? "font-bold" : "font-medium")}>{item.subject}</span>
+        <span className={cn("mt-[2px] block max-w-[280px] text-[13px] leading-[18px] text-[#edf0f4]", unread ? "font-bold" : "font-normal")}>{item.subject}</span>
         <span className="mt-[4px] flex min-w-0 items-center gap-2 text-[11px] text-[#9ca6b6]">
           <span>{item.platform}</span><span className="size-1 rounded-full bg-[#6c7585]" /><span className="truncate">{item.source}</span>
         </span>

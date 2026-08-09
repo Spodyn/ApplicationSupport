@@ -1,10 +1,8 @@
 "use client"
 
 import { useState, type ReactNode } from "react"
-import { usePathname } from "next/navigation"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { AppRail } from "@/components/layout/app-rail"
-import { SecondarySidebar } from "@/components/layout/secondary-sidebar"
 import { ShellProvider } from "@/components/layout/shell-context"
 import { MobileNavigation } from "@/components/layout/mobile-navigation"
 import { ConnectionStatusBanner } from "@/components/layout/connection-status-banner"
@@ -14,11 +12,7 @@ interface AppShellProps {
 }
 
 export function AppShell({ children }: AppShellProps) {
-  const pathname = usePathname()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
-  const [secondarySidebarOpen, setSecondarySidebarOpen] = useState(true)
-  const usesContextSidebar =
-    !pathname.startsWith("/cases") && !pathname.startsWith("/current-cases")
 
   return (
     <ShellProvider value={{ openMobileNav: () => setMobileNavOpen(true) }}>
@@ -28,15 +22,7 @@ export function AppShell({ children }: AppShellProps) {
       </a>
       {/* Desktop navigation */}
       <div className="hidden lg:flex">
-        <AppRail
-          secondarySidebarOpen={usesContextSidebar ? secondarySidebarOpen : undefined}
-          onToggleSecondary={
-            usesContextSidebar
-              ? () => setSecondarySidebarOpen((open) => !open)
-              : undefined
-          }
-        />
-        {usesContextSidebar && secondarySidebarOpen && <SecondarySidebar />}
+        <AppRail />
       </div>
 
       {/* Mobile navigation */}

@@ -224,7 +224,7 @@ export default function StatisticsRoute() {
 
       <main className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
         <div className="mx-auto flex w-full max-w-[1760px] flex-col gap-4 p-4 md:p-6">
-          <Card size="sm">
+          <Card size="sm" className="sticky top-0 z-20 shadow-sm">
             <CardContent className="grid gap-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="mr-1 text-xs font-medium text-muted-foreground">Zakres czasu</span>

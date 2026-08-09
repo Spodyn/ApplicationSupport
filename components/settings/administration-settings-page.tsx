@@ -185,12 +185,6 @@ function GeneralPanel({ data, actions }: { data: GeneralSettings; actions: Setti
         <Field label="Język interfejsu">
           <Select value="pl" disabled><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pl">Polski</SelectItem></SelectContent></Select>
         </Field>
-        <Field label="Domyślny ekran case’ów">
-          <Select value={form.defaultCaseView} onValueChange={(value) => setForm({ ...form, defaultCaseView: String(value) as GeneralSettings["defaultCaseView"] })}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-            <SelectContent><SelectItem value="all">Wszystkie case’y</SelectItem><SelectItem value="current">Bieżące case’y</SelectItem></SelectContent>
-          </Select>
-        </Field>
         <SettingSwitch label="Widok kompaktowy" description="Zmniejsza odstępy w tabelach i listach." checked={form.compactMode} onChange={(checked) => setForm({ ...form, compactMode: checked })} />
       </div>
       <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "general", form, "Zapisano ustawienia ogólne")} />
@@ -466,44 +460,40 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
   )
 }
 
-const groupingLabels: Record<ManagedChannel["groupingMode"], string> = {
-  thread: "Wątek = case",
-  conversation: "Rozmowa = case",
-  daily: "Jeden case dziennie",
-}
-
 function ChannelsPanel({ data, actions }: { data: ManagedChannel[]; actions: SettingsActions }) {
-  const toggle = async (channel: ManagedChannel, enabled: boolean) => {
+  const setIgnored = async (channel: ManagedChannel, ignored: boolean) => {
     try {
-      await actions.toggleChannel.mutateAsync({ id: channel.id, enabled })
-      notify.success(enabled ? "Kanał został włączony" : "Kanał został wyłączony", channel.channelName)
+      await actions.setChannelIgnored.mutateAsync({ id: channel.id, ignored })
+      notify.success(ignored ? "Kanał będzie ignorowany" : "Kanał będzie kwalifikowany", channel.channelName)
     } catch (error) {
-      notify.error("Nie udało się zmienić stanu kanału", getErrorMessage(error))
+      notify.error("Nie udało się zmienić reguły kanału", getErrorMessage(error))
     }
   }
 
   return (
-    <SettingsCard title="Kanały" description="Mapowanie kanałów źródłowych na klientów, reguły grupowania i SLA.">
+    <SettingsCard title="Ignorowane kanały" description="Wybierz kanały, których wiadomości nie mają być kwalifikowane jako sprawy do zrobienia.">
+      <Alert>
+        <Info />
+        <AlertTitle>Wiadomości bez case’a i SLA</AlertTitle>
+        <AlertDescription>Wiadomość z ignorowanego kanału pozostaje zwykłą wiadomością. Nie tworzy sprawy do zrobienia i nie uruchamia dla niej SLA.</AlertDescription>
+      </Alert>
       <div className="overflow-hidden rounded-lg border">
         <Table>
-          <TableHeader><TableRow className="bg-muted/40"><TableHead>Platforma</TableHead><TableHead>Kanał</TableHead><TableHead>Klient</TableHead><TableHead>Włączony</TableHead><TableHead>Grupowanie</TableHead><TableHead>Polityka SLA</TableHead><TableHead>Harmonogram</TableHead><TableHead>Ostatnia wiadomość</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow className="bg-muted/40"><TableHead>Platforma</TableHead><TableHead>Kanał</TableHead><TableHead>Klient</TableHead><TableHead>Ignoruj</TableHead><TableHead>Ostatnia wiadomość</TableHead></TableRow></TableHeader>
           <TableBody>
             {data.map((channel) => (
               <TableRow key={channel.id}>
                 <TableCell><div className="flex items-center gap-2"><PlatformIcon channel={channel.platform} /> <span className="text-xs">{channelLabels[channel.platform]}</span></div></TableCell>
                 <TableCell className="font-medium">{channel.channelName}</TableCell>
                 <TableCell>{channel.customer}</TableCell>
-                <TableCell><div className="flex items-center gap-2"><Switch checked={channel.enabled} onCheckedChange={(checked) => void toggle(channel, checked)} aria-label={`${channel.channelName}: ${channel.enabled ? "włączony" : "wyłączony"}`} /><EnabledState enabled={channel.enabled} /></div></TableCell>
-                <TableCell><Badge variant="outline">{groupingLabels[channel.groupingMode]}</Badge></TableCell>
-                <TableCell>{channel.slaPolicy}</TableCell>
-                <TableCell>{channel.scheduleName}</TableCell>
+                <TableCell><div className="flex items-center gap-2"><Switch checked={channel.ignored} onCheckedChange={(checked) => void setIgnored(channel, checked)} aria-label={`${channel.channelName}: ${channel.ignored ? "ignorowany" : "kwalifikowany"}`} /><span className={`text-xs ${channel.ignored ? "text-warning-foreground" : "text-muted-foreground"}`}>{channel.ignored ? "Ignorowany" : "Kwalifikowany"}</span></div></TableCell>
                 <TableCell className="text-xs text-muted-foreground">{channel.lastMessageAt ? formatDateTime(channel.lastMessageAt) : "Brak"}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-      <p className="text-xs text-muted-foreground">Zmiana stanu kanału wymaga potwierdzenia w powiadomieniu i dotyczy tylko nowych wiadomości.</p>
+      <p className="text-xs text-muted-foreground">Zmiana dotyczy nowych wiadomości przychodzących po zapisaniu reguły.</p>
     </SettingsCard>
   )
 }
@@ -629,14 +619,10 @@ function PermissionsPanel({ data, actions }: { data: RolePermissions[]; actions:
 }
 
 const permissionDescriptions: Record<AdministrationPermission, string> = {
-  manage_users: "Dodawanie, edycja i dezaktywacja kont.",
-  manage_integrations: "Konfiguracja połączeń Slack, Teams i Telegram.",
+  manage_users: "Dodawanie, edycja, dezaktywacja i usuwanie kont.",
+  manage_integrations: "Konfiguracja połączeń oraz ignorowanych kanałów Slack, Teams i Telegram.",
   manage_sla: "Zmiana czasów i zasad naliczania SLA.",
   view_global_statistics: "Dostęp do statystyk całej organizacji.",
-  force_resolve: "Rozwiązywanie case’ów bez bycia właścicielem.",
-  reassign_cases: "Zmiana właściciela aktywnych case’ów.",
-  revoke_ignore_votes: "Cofanie oddanych głosów ignorowania.",
-  view_audit_log: "Wgląd w historię zmian administracyjnych.",
 }
 
 function SettingsCard({ title, description, actions, children }: { title: string; description: string; actions?: ReactNode; children: ReactNode }) {

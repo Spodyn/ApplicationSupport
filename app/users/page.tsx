@@ -8,6 +8,7 @@ import {
   Plus,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   UserX,
   Users,
 } from "lucide-react"
@@ -60,7 +61,6 @@ import type {
   AdministrationRole,
   AdministrationUser,
   AdministrationUserInput,
-  IgnoreVoteWeight,
 } from "@/lib/domain/administration"
 import { formatDate, formatDateTime } from "@/lib/format"
 import {
@@ -79,7 +79,6 @@ const emptyForm: AdministrationUserInput = {
   email: "",
   role: "user",
   active: true,
-  ignoreVoteWeight: 1,
   validFrom: "2026-08-03",
   validUntil: undefined,
   permissions: [],
@@ -92,6 +91,7 @@ export default function UsersRoute() {
   const [editedUser, setEditedUser] = useState<AdministrationUser | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deactivatedUser, setDeactivatedUser] = useState<AdministrationUser | null>(null)
+  const [deletedUser, setDeletedUser] = useState<AdministrationUser | null>(null)
 
   const query = useMemo(
     () => ({
@@ -160,16 +160,6 @@ export default function UsersRoute() {
         ),
       },
       {
-        id: "weight",
-        header: "Waga głosu",
-        align: "center",
-        cell: (user) => (
-          <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-            {user.ignoreVoteWeight}
-          </span>
-        ),
-      },
-      {
         id: "validity",
         header: "Okres ważności",
         className: "min-w-40 text-xs",
@@ -217,12 +207,19 @@ export default function UsersRoute() {
               >
                 <UserX /> Dezaktywuj
               </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                disabled={!canManageUsers || user.id === currentAdministrationUserQuery.data?.id}
+                onClick={() => setDeletedUser(user)}
+              >
+                <Trash2 /> Usuń użytkownika
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ),
       },
     ],
-    [canManageUsers],
+    [canManageUsers, currentAdministrationUserQuery.data?.id],
   )
 
   const activeCount = users.filter((user) => user.active).length
@@ -246,11 +243,22 @@ export default function UsersRoute() {
     }
   }
 
+  const deleteUser = async () => {
+    if (!deletedUser) return
+    try {
+      await actions.delete.mutateAsync(deletedUser.id)
+      notify.success("Użytkownik został usunięty", deletedUser.fullName)
+      setDeletedUser(null)
+    } catch (error) {
+      notify.error("Nie udało się usunąć użytkownika", getErrorMessage(error))
+    }
+  }
+
   return (
     <>
       <PageHeader
         title="Użytkownicy"
-        description="Konta, uprawnienia i wagi głosów zespołu wsparcia"
+        description="Konta i uprawnienia zespołu wsparcia"
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -356,6 +364,16 @@ export default function UsersRoute() {
         destructive
         onConfirm={() => void deactivate()}
       />
+
+      <ConfirmDialog
+        open={Boolean(deletedUser)}
+        onOpenChange={(open) => !open && setDeletedUser(null)}
+        title="Usunąć użytkownika?"
+        description={deletedUser ? `${deletedUser.fullName} zostanie trwale usunięty z listy użytkowników. Tej operacji nie można cofnąć.` : undefined}
+        confirmLabel="Usuń"
+        destructive
+        onConfirm={() => void deleteUser()}
+      />
     </>
   )
 }
@@ -383,7 +401,6 @@ function UserDialog({
             email: user.email,
             role: user.role,
             active: user.active,
-            ignoreVoteWeight: user.ignoreVoteWeight,
             validFrom: user.validFrom,
             validUntil: user.validUntil,
             permissions: [...user.permissions],
@@ -451,18 +468,6 @@ function UserDialog({
                 <SelectContent>
                   <SelectItem value="user">Użytkownik</SelectItem>
                   <SelectItem value="admin">Administrator</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <Field label="Waga głosu ignorowania">
-              <Select
-                value={String(form.ignoreVoteWeight)}
-                onValueChange={(next) => setForm({ ...form, ignoreVoteWeight: Number(next) as IgnoreVoteWeight })}
-              >
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">1 — standardowa</SelectItem>
-                  <SelectItem value="2">2 — podwyższona</SelectItem>
                 </SelectContent>
               </Select>
             </Field>

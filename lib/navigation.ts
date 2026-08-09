@@ -2,7 +2,6 @@ import {
   ChartColumn,
   MessageCircleMore,
   Settings,
-  SquareCheckBig,
   Users,
   type LucideIcon,
 } from "lucide-react"
@@ -21,12 +20,6 @@ export const navItems: NavItem[] = [
     href: "/cases",
     icon: MessageCircleMore,
     description: "Wszystkie rozmowy ze wszystkich kanałów",
-  },
-  {
-    label: "Do zrobienia",
-    href: "/current-cases",
-    icon: SquareCheckBig,
-    description: "Sprawy wymagające działania",
   },
   {
     label: "Statystyki",

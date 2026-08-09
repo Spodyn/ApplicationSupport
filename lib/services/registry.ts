@@ -2,7 +2,6 @@ import { repositories } from "./mock-repositories"
 import { mockInboxRepository } from "./inbox"
 import { mockAdministrationSettingsRepository, mockAdministrationUserRepository } from "./administration"
 import { mockAnalyticsRepository } from "./analytics"
-import { mockCurrentCasesRepository } from "./current-cases"
 
 /**
  * Jedyny punkt wiążący interfejsy usług z implementacją danych.
@@ -18,5 +17,4 @@ export const serviceRegistry = {
   administrationUsers: mockAdministrationUserRepository,
   administrationSettings: mockAdministrationSettingsRepository,
   analytics: mockAnalyticsRepository,
-  currentCases: mockCurrentCasesRepository,
 }
