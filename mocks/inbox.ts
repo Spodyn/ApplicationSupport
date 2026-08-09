@@ -1,5 +1,5 @@
 import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
-import type { Channel, SlaState, User } from "@/lib/domain/types"
+import type { Channel, SlaState, User } from "@/lib/domain/shared"
 import { mockUsers } from "@/mocks/users"
 
 export interface InboxCaseRecord

@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import { PlatformIcon } from "@/components/design-system/platform-badge"
-import type { Channel } from "@/lib/domain/types"
+import type { Channel } from "@/lib/domain/shared"
 
 interface Notification {
   id: string

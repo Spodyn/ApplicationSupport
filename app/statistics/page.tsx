@@ -82,7 +82,7 @@ import type {
   UserPerformance,
 } from "@/lib/domain/analytics"
 import { channelLabels } from "@/lib/domain/labels"
-import type { Channel } from "@/lib/domain/types"
+import type { Channel } from "@/lib/domain/shared"
 import { formatDuration, formatNumber, formatPercent } from "@/lib/format"
 import { useAnalytics } from "@/lib/services/queries"
 import { cn } from "@/lib/utils"

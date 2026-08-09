@@ -1,4 +1,4 @@
-import type { Channel, UserPresence } from "./types"
+import type { Channel, UserPresence } from "./shared"
 
 export type AdministrationRole = "user" | "admin"
 

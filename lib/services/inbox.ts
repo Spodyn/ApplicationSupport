@@ -1,5 +1,5 @@
 import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
-import type { User } from "@/lib/domain/types"
+import type { User } from "@/lib/domain/shared"
 import { mockInboxCaseRecords, mockInboxMessages } from "@/mocks/inbox"
 import { mockCurrentUser } from "@/mocks/users"
 import {

@@ -3,7 +3,7 @@ import type {
   MessageDeliveryStatus,
   SlaState,
   User,
-} from "@/lib/domain/types"
+} from "@/lib/domain/shared"
 
 export type InboxStatus =
   | "new"

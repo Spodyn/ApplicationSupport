@@ -7,7 +7,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { slaStateLabels } from "@/lib/domain/labels"
-import type { SlaState } from "@/lib/domain/types"
+import type { SlaState } from "@/lib/domain/shared"
 import { getEffectiveSlaState } from "@/lib/sla"
 
 const slaConfig: Record<SlaState, { icon: LucideIcon; className: string }> = {

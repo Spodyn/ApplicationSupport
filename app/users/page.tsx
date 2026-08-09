@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react"
+import { useMemo, useState, type FormEvent, type ReactNode } from "react"
 import {
   MoreHorizontal,
   CheckCircle2,
@@ -339,21 +339,24 @@ export default function UsersRoute() {
         </div>
       </main>
 
-      <UserDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        user={editedUser}
-        saving={actions.save.isPending}
-        onSave={async (input) => {
-          try {
-            await actions.save.mutateAsync({ input, id: editedUser?.id })
-            notify.success(editedUser ? "Zapisano zmiany użytkownika" : "Dodano użytkownika", input.fullName)
-            setDialogOpen(false)
-          } catch (error) {
-            notify.error("Nie udało się zapisać użytkownika", getErrorMessage(error))
-          }
-        }}
-      />
+      {dialogOpen ? (
+        <UserDialog
+          key={editedUser?.id ?? "new-user"}
+          open
+          onOpenChange={setDialogOpen}
+          user={editedUser}
+          saving={actions.save.isPending}
+          onSave={async (input) => {
+            try {
+              await actions.save.mutateAsync({ input, id: editedUser?.id })
+              notify.success(editedUser ? "Zapisano zmiany użytkownika" : "Dodano użytkownika", input.fullName)
+              setDialogOpen(false)
+            } catch (error) {
+              notify.error("Nie udało się zapisać użytkownika", getErrorMessage(error))
+            }
+          }}
+        />
+      ) : null}
 
       <ConfirmDialog
         open={Boolean(deactivatedUser)}
@@ -391,27 +394,19 @@ function UserDialog({
   saving: boolean
   onSave: (input: AdministrationUserInput) => Promise<void>
 }) {
-  const [form, setForm] = useState<AdministrationUserInput>(emptyForm)
-
-  const reset = () => {
-    setForm(
-      user
-        ? {
-            fullName: user.fullName,
-            email: user.email,
-            role: user.role,
-            active: user.active,
-            validFrom: user.validFrom,
-            validUntil: user.validUntil,
-            permissions: [...user.permissions],
-          }
-        : structuredClone(emptyForm),
-    )
-  }
-
-  useEffect(() => {
-    if (open) reset()
-  }, [open, user])
+  const [form, setForm] = useState<AdministrationUserInput>(() =>
+    user
+      ? {
+          fullName: user.fullName,
+          email: user.email,
+          role: user.role,
+          active: user.active,
+          validFrom: user.validFrom,
+          validUntil: user.validUntil,
+          permissions: [...user.permissions],
+        }
+      : structuredClone(emptyForm),
+  )
 
   const togglePermission = (permission: AdministrationPermission, checked: boolean) => {
     setForm((current) => ({

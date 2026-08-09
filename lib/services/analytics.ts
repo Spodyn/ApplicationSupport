@@ -11,7 +11,7 @@ import type {
   ResponseTimePoint,
   UserPerformance,
 } from "@/lib/domain/analytics"
-import type { Channel } from "@/lib/domain/types"
+import type { Channel } from "@/lib/domain/shared"
 import { mockAnalyticsRecords } from "@/mocks/analytics"
 import { mockUsers } from "@/mocks/users"
 import { requireCurrentAdministrationPermission } from "./administration"

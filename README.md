@@ -4,31 +4,52 @@ Produkcyjnie stylizowany frontend wspólnej skrzynki wsparcia dla Slacka, Micros
 
 ## Uruchomienie
 
-Wymagany jest Node.js 20+ oraz pnpm.
+Wymagany jest Node.js 22.12.0 LTS (wersja zapisana w `.nvmrc`) oraz pnpm 11.18.0 wskazany w `package.json`. Jedynym wspieranym lockfile jest `pnpm-lock.yaml`.
 
 ```bash
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Aplikacja będzie dostępna pod adresem `http://localhost:3000`. Kontrola jakości:
+Aplikacja będzie dostępna pod adresem `http://localhost:3000`.
+
+## Kontrola jakości
+
+Przed pierwszym uruchomieniem testów E2E zainstaluj przypisaną przeglądarkę:
 
 ```bash
-pnpm exec tsc --noEmit
-pnpm build
+pnpm exec playwright install chromium
 ```
+
+Pełna lokalna bramka jakości obejmuje lint, typecheck, testy jednostkowe/komponentowe, produkcyjny build i testy E2E:
+
+```bash
+pnpm check
+```
+
+Poszczególne bramki można uruchamiać osobno:
+
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test:unit
+pnpm build
+pnpm test:e2e
+```
+
+`pnpm test:unit:watch` uruchamia Vitest w trybie obserwowania. Samodzielne `pnpm test:e2e` wymaga istniejącego produkcyjnego buildu; `pnpm check` tworzy go automatycznie. Szczegóły znajdują się w [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Trasy
 
 | Trasa | Przeznaczenie |
 | --- | --- |
-| `/cases` | Trójkolumnowa skrzynka: foldery, kolejka, rozmowa, szczegóły i lokalne workflow. |
-| `/current-cases` | Gęsta tabela administracyjna aktywnych case’ów z filtrami i operacjami audytowalnymi. |
+| `/` | Przekierowanie do `/cases`. |
+| `/cases` | Dwukolumnowa skrzynka czatów: lista rozmów i wybrana rozmowa. |
 | `/statistics` | KPI, wykresy i tabela efektywności z zakresami dat oraz filtrami. |
-| `/users` | Zarządzanie użytkownikami, rolami, wagami głosów i uprawnieniami. |
+| `/users` | Zarządzanie użytkownikami, rolami, ważnością kont i uprawnieniami. |
 | `/settings` | SLA, godziny pracy, out of office, integracje, kanały, powiadomienia i uprawnienia. |
 
-Na telefonie nawigacja, lista case’ów i rozmowa są osobnymi widokami. Akcje rozmowy są dostępne w dolnym arkuszu, a edytor odpowiedzi pozostaje przy dolnej krawędzi. Na tablecie można schować listę i panel szczegółów; na desktopie zachowany jest zwarty układ wielokolumnowy.
+Na telefonie lista czatów i rozmowa są osobnymi widokami z możliwością powrotu do listy. Nieistniejąca trasa `/current-cases` nie jest częścią zaimplementowanego produktu; jej ewentualny przyszły zakres pozostaje decyzją produktową opisaną w [`docs/OPEN_DECISIONS.md`](docs/OPEN_DECISIONS.md).
 
 ## Architektura danych mockowych
 
@@ -44,7 +65,7 @@ TanStack Query — lib/services/queries.ts
 rejestr usług — lib/services/registry.ts
         │
         ▼
-typowane interfejsy — lib/services/types.ts
+typowane interfejsy obszarowe — lib/services/*.ts
         │
         ▼
 lokalne implementacje — lib/services/*.ts
@@ -53,21 +74,28 @@ lokalne implementacje — lib/services/*.ts
 dane początkowe — mocks/*.ts
 ```
 
-- `lib/domain/` zawiera typy domenowe, statusy i etykiety niezależne od Reacta.
-- `lib/services/types.ts` definiuje kontrakty repozytoriów i usług.
+- `lib/domain/inbox.ts` jest jedynym kanonicznym modelem workflow sprawy.
+- `lib/domain/shared.ts` zawiera współdzielone typy frontendu, które nie są typami transportowymi.
+- Pliki obszarowe w `lib/services/` definiują kontrakty usług obok ich implementacji mock.
 - `lib/services/registry.ts` jest jedynym miejscem wiążącym aplikację z aktualnymi implementacjami.
 - `lib/services/queries.ts` udostępnia hooki TanStack Query i centralizuje klucze cache oraz mutacje.
 - `mocks/` zawiera wyłącznie realistyczne dane początkowe; komponenty nie importują ich bezpośrednio.
 
+Szczegóły obecnej architektury i modeli opisują [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) oraz [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md).
+
 Zmiany wykonywane w interfejsie są przechowywane w pamięci procesu przeglądarki. Odświeżenie strony przywraca dane początkowe.
 
-## Podłączenie przyszłego API Java
+## Planowana granica backendu
 
-Docelowy backend może działać w Java 25 i Spring Boot 4.1. Zalecany przepływ integracji:
+Backend nie jest częścią obecnej implementacji. Planowana granica integracji to:
 
-1. W Spring Boot opublikuj dokument OpenAPI obejmujący użytkowników, case’y, wiadomości, integracje, ustawienia i statystyki.
+`Spring Boot REST/OpenAPI → wygenerowany klient transportowy TypeScript → adapter frontendu → stabilne typy domenowe frontendu`
+
+Kiedy rozpocznie się osobne zadanie backendowe:
+
+1. W Spring Boot opublikuj uzgodniony dokument OpenAPI.
 2. Wygeneruj klienta TypeScript obsługującego żądania oraz typowane odpowiedzi. Wygenerowany kod trzymaj w osobnym katalogu, np. `lib/api/generated/`, i nie edytuj go ręcznie.
-3. Dodaj adaptery implementujące kontrakty z `lib/services/types.ts`. Adapter odpowiada za mapowanie DTO API na typy z `lib/domain/` oraz za normalizację błędów HTTP.
+3. Dodaj adaptery implementujące obszarowe kontrakty z `lib/services/`. Adapter odpowiada za mapowanie DTO API na typy z `lib/domain/` oraz za normalizację błędów HTTP.
 4. W `lib/services/registry.ts` zamień lokalne implementacje na adaptery API. Komponenty i hooki zapytań nie powinny wymagać zmian.
 5. Dodaj konfigurację bazowego URL, uwierzytelniania i identyfikatora bieżącego użytkownika po stronie serwera. Nie umieszczaj tokenów w kodzie klienta.
 6. Ustal strategię unieważniania kluczy TanStack Query po mutacjach i obsługę konfliktów, w tym HTTP 409 dla przejęcia case’a.

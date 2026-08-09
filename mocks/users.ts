@@ -1,8 +1,8 @@
-import type { User } from "@/lib/domain/types"
+import type { User } from "@/lib/domain/shared"
 
 /**
- * Dane makietowe użytkowników. W środowisku produkcyjnym zostaną zastąpione
- * odpowiedziami z API (Java 25 / Spring Boot 4.1) poprzez wygenerowanego klienta OpenAPI.
+ * Dane makietowe użytkowników. Docelowy adapter API zastąpi źródło danych bez
+ * uzależniania komponentów od typów transportowych.
  */
 export const mockUsers: User[] = [
   {

@@ -1,34 +1,15 @@
 import type {
-  CasePriority,
-  CaseStatus,
-  CaseUserState,
   Channel,
   MessageDeliveryStatus,
   SlaState,
   UserPresence,
   UserRole,
-} from "./types"
+} from "./shared"
 
 /**
  * Polskie etykiety i mapowania wariantów dla wartości domenowych.
  * Trzymane w jednym miejscu, aby cały interfejs pozostał spójny językowo.
  */
-
-export const caseStatusLabels: Record<CaseStatus, string> = {
-  new: "Nowy",
-  open: "Otwarty",
-  pending: "Oczekujący",
-  on_hold: "Wstrzymany",
-  resolved: "Rozwiązany",
-  closed: "Zamknięty",
-}
-
-export const casePriorityLabels: Record<CasePriority, string> = {
-  low: "Niski",
-  medium: "Średni",
-  high: "Wysoki",
-  urgent: "Krytyczny",
-}
 
 export const slaStateLabels: Record<SlaState, string> = {
   on_track: "W normie",
@@ -63,11 +44,4 @@ export const userPresenceLabels: Record<UserPresence, string> = {
   busy: "Zajęty",
   away: "Zaraz wracam",
   offline: "Offline",
-}
-
-export const caseUserStateLabels: Record<CaseUserState, string> = {
-  assignee: "Przypisany",
-  collaborator: "Współpracownik",
-  watcher: "Obserwujący",
-  requester: "Zgłaszający",
 }

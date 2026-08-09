@@ -1,4 +1,4 @@
-import type { SlaState } from "@/lib/domain/types"
+import type { SlaState } from "@/lib/domain/shared"
 
 export interface SlaSnapshot {
   state: SlaState

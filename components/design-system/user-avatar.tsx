@@ -2,7 +2,7 @@ import { Ban, Check, Clock3, Minus, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { userPresenceLabels } from "@/lib/domain/labels"
-import type { User, UserPresence } from "@/lib/domain/types"
+import type { User, UserPresence } from "@/lib/domain/shared"
 
 const presenceConfig: Record<UserPresence, { className: string; icon: LucideIcon }> = {
   online: { className: "bg-success", icon: Check },

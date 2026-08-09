@@ -1,7 +1,7 @@
 import { Hash, MessagesSquare, Send, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { channelLabels } from "@/lib/domain/labels"
-import type { Channel } from "@/lib/domain/types"
+import type { Channel } from "@/lib/domain/shared"
 
 /**
  * Odznaki platform (Slack, Microsoft Teams, Telegram).

@@ -565,9 +565,9 @@ function CodeBlock() {
     <div className="mt-3 w-[466px] max-w-full overflow-hidden rounded-[10px] border border-white/[0.09] bg-[#08121f] text-[12px]">
       <div className="flex h-[39px] items-center justify-between border-b border-white/[0.08] px-4 font-medium"><span>JSON</span><button type="button" className="text-[11px] font-semibold hover:text-violet-300">Kopiuj</button></div>
       <pre className="overflow-x-auto px-4 py-2 font-mono text-[12px] leading-[23px] text-[#d8dee9]">{`{
-  "requestId": `}<span className="text-cyan-400">"ron_78_2949"</span>{`,
+  "requestId": `}<span className="text-cyan-400">&quot;ron_78_2949&quot;</span>{`,
   "status": `}<span className="text-cyan-400">503</span>{`,
-  "message": `}<span className="text-fuchsia-400">"upstream temporarily unavailable"</span>{`
+  "message": `}<span className="text-fuchsia-400">&quot;upstream temporarily unavailable&quot;</span>{`
 }`}</pre>
     </div>
   )

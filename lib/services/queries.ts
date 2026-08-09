@@ -8,7 +8,6 @@ import type {
   InboxResolveInput,
   InboxSendInput,
 } from "./inbox"
-import type { CaseQuery, UserQuery } from "./types"
 import type {
   AdministrationSettings,
   AdministrationUserInput,
@@ -29,14 +28,7 @@ export type AdministrationSectionInput = {
  * unieważniać po podłączeniu prawdziwych mutacji z backendu.
  */
 export const queryKeys = {
-  cases: (query?: CaseQuery) => ["cases", query ?? {}] as const,
-  case: (id: string) => ["case", id] as const,
-  caseMessages: (id: string) => ["case", id, "messages"] as const,
-  users: (query?: UserQuery) => ["users", query ?? {}] as const,
-  user: (id: string) => ["user", id] as const,
   currentUser: () => ["current-user"] as const,
-  statistics: () => ["statistics"] as const,
-  integrations: () => ["integrations"] as const,
   inboxCases: () => ["support-inbox", "cases"] as const,
   inboxMessages: (caseId: string) => ["support-inbox", "messages", caseId] as const,
   administrationUsers: (query?: AdministrationUserQuery) =>
@@ -46,46 +38,10 @@ export const queryKeys = {
   analytics: (filters: AnalyticsFilters) => ["analytics", filters] as const,
 }
 
-export function useCases(query?: CaseQuery) {
-  return useQuery({
-    queryKey: queryKeys.cases(query),
-    queryFn: () => serviceRegistry.cases.list(query),
-  })
-}
-
-export function useCase(id: string) {
-  return useQuery({
-    queryKey: queryKeys.case(id),
-    queryFn: () => serviceRegistry.cases.getById(id),
-    enabled: Boolean(id),
-  })
-}
-
-export function useUsers(query?: UserQuery) {
-  return useQuery({
-    queryKey: queryKeys.users(query),
-    queryFn: () => serviceRegistry.users.list(query),
-  })
-}
-
 export function useCurrentUser() {
   return useQuery({
     queryKey: queryKeys.currentUser(),
-    queryFn: () => serviceRegistry.users.getCurrentUser(),
-  })
-}
-
-export function useStatistics() {
-  return useQuery({
-    queryKey: queryKeys.statistics(),
-    queryFn: () => serviceRegistry.statistics.getOverview(),
-  })
-}
-
-export function useIntegrations() {
-  return useQuery({
-    queryKey: queryKeys.integrations(),
-    queryFn: () => serviceRegistry.integrations.list(),
+    queryFn: () => serviceRegistry.currentUser.get(),
   })
 }
 

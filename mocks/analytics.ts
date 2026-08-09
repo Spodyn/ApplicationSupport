@@ -3,7 +3,7 @@ import type {
   AnalyticsResolutionReason,
   AnalyticsSlaState,
 } from "@/lib/domain/analytics"
-import type { Channel } from "@/lib/domain/types"
+import type { Channel } from "@/lib/domain/shared"
 
 export const analyticsDataToday = "2026-08-08"
 

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useState, useSyncExternalStore } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useTheme } from "next-themes"
 import {
@@ -29,6 +29,10 @@ import { notify } from "@/components/design-system/notify"
 import { userRoleLabels } from "@/lib/domain/labels"
 import { useCurrentUser } from "@/lib/services/queries"
 
+const subscribe = () => () => {}
+const getClientSnapshot = () => true
+const getServerSnapshot = () => false
+
 export function UserMenu({
   variant = "rail",
   onNavigate,
@@ -40,10 +44,8 @@ export function UserMenu({
   const queryClient = useQueryClient()
   const { resolvedTheme, setTheme } = useTheme()
   const { data: user } = useCurrentUser()
-  const [mounted, setMounted] = useState(false)
+  const mounted = useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot)
   const [refreshing, setRefreshing] = useState(false)
-
-  useEffect(() => setMounted(true), [])
 
   const isDark = mounted && resolvedTheme === "dark"
 

@@ -1,4 +1,10 @@
-import type { Channel, User } from "./types"
+import type { Channel, User } from "./shared"
+
+/**
+ * Wymiar raportowy pochodzący z danych analitycznych. Nie jest stanem workflow
+ * i nie zastępuje kanonicznego `InboxStatus`.
+ */
+export type AnalyticsStatusDimension = string
 
 export type AnalyticsSlaState = "met" | "warning" | "breached"
 export type AnalyticsResolutionReason = "resolved" | "not_applicable" | "spam"
@@ -10,7 +16,7 @@ export interface AnalyticsFilters {
   customerId?: string
   platform?: Channel
   sourceChannel?: string
-  status?: string
+  status?: AnalyticsStatusDimension
   slaState?: AnalyticsSlaState
   priority?: string
   tag?: string
@@ -31,7 +37,7 @@ export interface AnalyticsRecord {
   customerName: string
   platform: Channel
   sourceChannel: string
-  status: string
+  status: AnalyticsStatusDimension
   statusLabel: string
   priority: "low" | "medium" | "high" | "urgent"
   tags: string[]
@@ -146,7 +152,7 @@ export interface AnalyticsResult {
     users: Pick<User, "id" | "fullName">[]
     customers: { id: string; name: string }[]
     channels: { value: string; label: string; platform: Channel }[]
-    statuses: { value: string; label: string }[]
+    statuses: { value: AnalyticsStatusDimension; label: string }[]
     slaStates: { value: AnalyticsSlaState; label: string }[]
   }
 }

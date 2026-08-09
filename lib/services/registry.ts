@@ -1,4 +1,4 @@
-import { repositories } from "./mock-repositories"
+import { mockCurrentUserRepository } from "./current-user"
 import { mockInboxRepository } from "./inbox"
 import { mockAdministrationSettingsRepository, mockAdministrationUserRepository } from "./administration"
 import { mockAnalyticsRepository } from "./analytics"
@@ -9,10 +9,7 @@ import { mockAnalyticsRepository } from "./analytics"
  * implementacje w tym rejestrze; komponenty i hooki zapytań pozostają bez zmian.
  */
 export const serviceRegistry = {
-  cases: repositories.cases,
-  users: repositories.users,
-  statistics: repositories.statistics,
-  integrations: repositories.integrations,
+  currentUser: mockCurrentUserRepository,
   inbox: mockInboxRepository,
   administrationUsers: mockAdministrationUserRepository,
   administrationSettings: mockAdministrationSettingsRepository,

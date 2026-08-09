@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import {
   BellRing,
   CalendarClock,
@@ -347,9 +347,10 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
   const [workspace, setWorkspace] = useState("")
   const [disconnected, setDisconnected] = useState<ManagedIntegration | null>(null)
 
-  useEffect(() => {
-    setWorkspace(configured?.workspace ?? "")
-  }, [configured])
+  const openConfiguration = (integration: ManagedIntegration) => {
+    setWorkspace(integration.workspace)
+    setConfigured(integration)
+  }
 
   const test = async (integration: ManagedIntegration) => {
     try {
@@ -411,7 +412,7 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                 <div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">Health check</dt><dd className="flex items-center gap-1.5">{integration.health === "healthy" ? <CheckCircle2 className="size-3.5 text-success" /> : integration.health === "degraded" ? <TriangleAlert className="size-3.5 text-warning-foreground" /> : <Unplug className="size-3.5 text-destructive" />}{integrationHealthLabels[integration.health]}</dd></div>
               </dl>
               <div className="flex flex-wrap gap-2 border-t pt-3">
-                <Button variant="outline" size="sm" onClick={() => setConfigured(integration)}><Settings2 /> Konfiguruj</Button>
+                <Button variant="outline" size="sm" onClick={() => openConfiguration(integration)}><Settings2 /> Konfiguruj</Button>
                 <Button variant="outline" size="sm" disabled={integration.status !== "connected" || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> Testuj</Button>
                 {integration.status === "reauthorization" && <Button size="sm" onClick={() => void reauthorize(integration)}><RefreshCw /> Autoryzuj ponownie</Button>}
                 {integration.status !== "disconnected" && <Button variant="destructive" size="sm" onClick={() => setDisconnected(integration)}><Unplug /> Rozłącz</Button>}

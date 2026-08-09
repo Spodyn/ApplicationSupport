@@ -44,7 +44,7 @@ export interface AdministrationSettingsRepository {
 }
 
 let usersState = structuredClone(mockAdministrationUsers)
-let settingsState = structuredClone(mockAdministrationSettings)
+const settingsState = structuredClone(mockAdministrationSettings)
 
 function delay<T>(value: T, ms = 260): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(structuredClone(value)), ms))
