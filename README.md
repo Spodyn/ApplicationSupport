@@ -4,7 +4,7 @@ Produkcyjnie stylizowany frontend wspólnej skrzynki wsparcia dla Slacka, Micros
 
 ## Uruchomienie
 
-Wymagany jest Node.js 22.12.0 LTS (wersja zapisana w `.nvmrc`) oraz pnpm 11.18.0 wskazany w `package.json`. Jedynym wspieranym lockfile jest `pnpm-lock.yaml`.
+Wymagany jest Node.js 22.23.2 LTS (wersja zapisana w `.nvmrc`) oraz pnpm 11.18.0 wskazany w `package.json`. pnpm 11.18.0 wymaga Node.js co najmniej 22.13. Jedynym wspieranym lockfile jest `pnpm-lock.yaml`.
 
 ```bash
 pnpm install --frozen-lockfile

@@ -1,6 +1,8 @@
 overrides:
   hono: 4.12.25
 
+enableGlobalVirtualStore: false
+
 allowBuilds:
   msw: false
   sharp: true
