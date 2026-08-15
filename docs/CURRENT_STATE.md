@@ -9,10 +9,10 @@ Sprawdzono kod aplikacji, komponenty układu i design systemu, modele domenowe, 
 ## Stos i uruchomienie
 
 - Next.js 16, React 19, strict TypeScript, Tailwind CSS, TanStack Query i Recharts.
-- Wymagane środowisko jest udokumentowane jako Node.js 22.12.0 LTS (`.nvmrc`) i pnpm 11.18.0 (`packageManager`).
+- Wymagane środowisko jest udokumentowane jako Node.js 22.23.2 LTS (`.nvmrc`) i pnpm 11.18.0 (`packageManager`); ta wersja Node spełnia wymaganie pnpm `>=22.13`.
 - Jedynym lockfile jest `pnpm-lock.yaml`; `package-lock.json` usunięto, a manifest i lockfile wskazują dokładnie Next.js 16.3.0.
 - `pnpm-workspace.yaml` jawnie określa politykę skryptów instalacyjnych: `msw: false`, `sharp: true` i `unrs-resolver: true`.
-- Instalacja `pnpm install --frozen-lockfile` jest deterministyczna i zakończyła się sukcesem. Walidację wykonano przy użyciu dostępnego w środowisku pnpm 11.16.0.
+- Instalacja `pnpm install --frozen-lockfile` jest deterministyczna i zakończyła się sukcesem. Końcową walidację CI wykonano przy użyciu Node.js 22.23.2 i pnpm 11.18.0.
 - Lokalny serwer deweloperski uruchomił Next.js 16.3.0 i poprawnie obsłużył wszystkie istniejące trasy.
 
 ## Rzeczywiste trasy

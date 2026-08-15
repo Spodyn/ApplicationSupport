@@ -23,14 +23,14 @@ Walidację rozpoczęto od usunięcia lokalnych artefaktów zależności i build�
 
 | Polecenie | Wynik | Czas | Narzędzie / wersja |
 | --- | --- | ---: | --- |
-| `pnpm install --frozen-lockfile` | PASS; 740 pakietów, lockfile bez zmian | 12,78 s | pnpm 11.16.0 |
-| `pnpm lint` | PASS; 0 błędów i ostrzeżeń | 8,36 s | ESLint 9.39.5 |
-| `pnpm typecheck` | PASS; strict TypeScript | 6,47 s | TypeScript 5.7.3 |
-| `pnpm test:unit` | PASS; 3 pliki, 6/6 testów | 4,15 s | Vitest 4.1.10 |
-| `pnpm build` | PASS; 13 tras/zasobów App Router | 20,52 s | Next.js 16.3.0 |
-| `pnpm test:e2e` | PASS; 8/8 testów Chromium | 10,10 s | Playwright 1.62.1 |
+| `pnpm install --frozen-lockfile` | PASS; 740 pakietów, lockfile bez zmian | 8,91 s | pnpm 11.18.0 |
+| `pnpm lint` | PASS; 0 błędów i ostrzeżeń | 6,20 s | ESLint 9.39.5 |
+| `pnpm typecheck` | PASS; strict TypeScript | 3,18 s | TypeScript 5.7.3 |
+| `pnpm test:unit` | PASS; 3 pliki, 6/6 testów | 3,80 s | Vitest 4.1.10 |
+| `pnpm build` | PASS; 13 tras/zasobów App Router | 8,09 s | Next.js 16.3.0 |
+| `pnpm test:e2e` | PASS; 8/8 testów Chromium | 6,34 s | Playwright 1.62.1 |
 
-Środowisko walidacji: Node.js 22.12.0. `package.json` deklaruje pnpm 11.18.0; dostępny runner miał wersję 11.16.0, ale wykonał instalację `--frozen-lockfile` bez modyfikacji lockfile. Jest to informacja o środowisku walidacji, nie błąd repozytorium.
+Środowisko walidacji: Node.js 22.23.2 LTS i pnpm 11.18.0. Oficjalne metadane pnpm 11.18.0 wymagają Node.js `>=22.13`; `.nvmrc`, README i dokumentacja testów wskazują ten sam kompatybilny runtime. `enableGlobalVirtualStore: false` jest ustawione jawnie, aby instalacja lokalna i CI używały zgodnego układu `node_modules`.
 
 README prowadzi od czystego checkoutu przez wymagane wersje, `pnpm install --frozen-lockfile`, instalację Chromium i `pnpm check`. Workflow `.github/workflows/ci.yml` odtwarza tę samą kolejność na `push` i `pull_request`, ma wyłącznie uprawnienie `contents: read` i nie wymaga poświadczeń produkcyjnych.
 

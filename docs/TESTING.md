@@ -4,7 +4,7 @@ Stan na 9 sierpnia 2026 r. Testy korzystają wyłącznie z lokalnych danych mock
 
 ## Wymagania
 
-- Node.js 22.12.0 LTS z `.nvmrc`.
+- Node.js 22.23.2 LTS z `.nvmrc` (pnpm 11.18.0 wymaga Node.js `>=22.13`).
 - pnpm 11.18.0 zadeklarowany w `package.json`.
 - Chromium Playwright zainstalowany poleceniem `pnpm exec playwright install chromium`.
 
