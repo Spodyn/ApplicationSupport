@@ -4,12 +4,18 @@ import {
   administrationRoles,
   hasAdministrationPermission,
 } from "@/lib/domain/administration"
-import { inboxStatusLabels } from "@/lib/domain/inbox"
+import {
+  inboxOwnershipByStatus,
+  inboxStatuses,
+  inboxStateTransitionTargets,
+  terminalInboxStatuses,
+} from "@/lib/domain/inbox"
 import { channelLabels } from "@/lib/domain/labels"
+import { mockInboxCaseRecords } from "@/mocks/inbox"
 
 describe("kanoniczny workflow inbox", () => {
   it("udostępnia wyłącznie uzgodnione statusy frontendu", () => {
-    expect(Object.keys(inboxStatusLabels)).toEqual([
+    expect(inboxStatuses).toEqual([
       "new",
       "verification",
       "waiting_for_customer",
@@ -17,6 +23,42 @@ describe("kanoniczny workflow inbox", () => {
       "ignored",
       "resolved",
     ])
+  })
+
+  it("utrwala pełną macierz dozwolonych przejść", () => {
+    expect(inboxStateTransitionTargets).toEqual({
+      new: ["verification", "partially_ignored", "ignored", "resolved"],
+      verification: ["waiting_for_customer", "resolved"],
+      waiting_for_customer: ["new", "resolved"],
+      partially_ignored: ["new", "verification", "ignored", "resolved"],
+      ignored: [],
+      resolved: [],
+    })
+  })
+
+  it("utrwala stany terminalne i invariants ownership", () => {
+    expect(terminalInboxStatuses).toEqual(["ignored", "resolved"])
+    expect(inboxOwnershipByStatus).toEqual({
+      new: "unassigned",
+      verification: "required",
+      waiting_for_customer: "unassigned",
+      partially_ignored: "unassigned",
+      ignored: "unassigned",
+      resolved: "preserve_if_assigned",
+    })
+  })
+
+  it("utrzymuje ownership fixture’ów zgodny ze stanem", () => {
+    const invalidRecords = mockInboxCaseRecords
+      .filter((record) => {
+        const requirement = inboxOwnershipByStatus[record.status]
+        if (requirement === "required") return !record.owner
+        if (requirement === "unassigned") return Boolean(record.owner)
+        return false
+      })
+      .map((record) => record.reference)
+
+    expect(invalidRecords).toEqual([])
   })
 })
 

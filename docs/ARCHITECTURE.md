@@ -48,6 +48,8 @@ USI-33 zamraża v1 jako lokalny e-mail i hasło z sesją serwerową przekazywan�
 
 USI-34 zamraża provider-neutral grouping wykonywany przez inbound adapters przed utworzeniem lub odnalezieniem sprawy. Slack używa root+thread, Teams root+replies w kontekstach potwierdzonych capability matrix, Telegram topic albo jednej aktywnej sprawy na chat bez topics. Pełny kontrakt kluczy, terminal linking i idempotency znajduje się w `docs/CASE_GROUPING.md`.
 
+USI-35 zamraża sześć globalnych statusów Case, pełną macierz przejść i invariants ownership. `VERIFICATION` ma dokładnie jednego ownera, stany `NEW`/`WAITING_FOR_CUSTOMER`/`PARTIALLY_IGNORED`/`IGNORED` są nieprzypisane, a `RESOLVED` zachowuje ostatniego ownera, jeżeli istniał. Każda zmiana stanu ma dedykowany command, stany terminalne nie są reopenowane, a szczegóły kontraktu znajdują się w `docs/CASE_WORKFLOW.md`.
+
 USI-40 zamraża v1 jako model single-tenant: jeden klient ma osobny deployment, PostgreSQL, object storage, sekrety i konfigurację, ale korzysta z tego samego kodu. Runtime nie ma `tenant_id`, tenant selectora ani cross-tenant API. Retencja, kontrolowany purge, legal hold per deployment oraz rotacja backupów są kontraktem przyszłej infrastruktury opisanym w `docs/RETENTION.md`.
 
 ## Planowana granica backendu
@@ -82,7 +84,7 @@ Adaptery providerów planowane dla v1 mogą dotyczyć wyłącznie Slacka, Micros
 
 Adapter normalizuje providerowe ID do `external_conversation_id` i opcjonalnego `external_thread_key`; komponenty frontendu nigdy nie implementują logiki root/thread/topic. Strategia jest konfigurowana per Channel i walidowana względem capability providera.
 
-Wygenerowane pliki nie powinny być ręcznie edytowane. Szczegóły autoryzacji, konfliktów, idempotencji, paginacji i reguł workflow wymagają osobnego uzgodnienia kontraktu; ten etap ich nie implementuje.
+Wygenerowane pliki nie powinny być ręcznie edytowane. Zamrożone reguły workflow i ownership muszą zostać odwzorowane przez dedykowane commandy z `docs/CASE_WORKFLOW.md`; szczegóły transportowe konfliktów, idempotencji i paginacji wymagają osobnego kontraktu OpenAPI i nie są implementowane na tym etapie.
 
 Przyszły backend jest jedyną granicą bezpieczeństwa: każda chroniona operacja powtarza kontrolę aktywnej sesji, literalnej roli i effective permissions niezależnie od widoczności elementu UI. Frontend mapuje `401`/`403` na stany aplikacji, ale nie jest źródłem decyzji autoryzacyjnej.
 

@@ -217,10 +217,16 @@ export const mockInboxRepository: InboxRepository = {
 
   async askCustomer(caseId, input) {
     await wait(undefined, 260)
-    if (!canUseUnassignedActions(caseId)) {
+    const record = getRecord(caseId)
+    if (
+      record.status !== "verification" ||
+      record.owner?.id !== mockCurrentUser.id
+    ) {
       throw new Error("Nie możesz dopytać klienta w aktualnym stanie case’u.")
     }
-    const record = getRecord(caseId)
+    if (!input.message.trim()) {
+      throw new Error("Wiadomość do klienta nie może być pusta.")
+    }
     appendSupportMessage(caseId, { body: input.message })
     record.owner = undefined
     record.status = "waiting_for_customer"
@@ -242,6 +248,9 @@ export const mockInboxRepository: InboxRepository = {
     }
     if (record.status === "waiting_for_customer") {
       throw new Error("Case oczekujący na klienta jest tylko do odczytu.")
+    }
+    if (record.status !== "verification") {
+      throw new Error("Case nie może zostać rozwiązany w aktualnym stanie.")
     }
     if (record.owner?.id !== mockCurrentUser.id) {
       throw new Error("Tylko przypisany agent może rozwiązać ten case.")

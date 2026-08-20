@@ -5,13 +5,39 @@ import type {
   User,
 } from "@/lib/domain/shared"
 
-export type InboxStatus =
-  | "new"
-  | "verification"
-  | "waiting_for_customer"
-  | "partially_ignored"
-  | "ignored"
-  | "resolved"
+export const inboxStatuses = [
+  "new",
+  "verification",
+  "waiting_for_customer",
+  "partially_ignored",
+  "ignored",
+  "resolved",
+] as const
+
+export type InboxStatus = (typeof inboxStatuses)[number]
+
+export const terminalInboxStatuses = ["ignored", "resolved"] as const satisfies
+  readonly InboxStatus[]
+
+export const inboxStateTransitionTargets = {
+  new: ["verification", "partially_ignored", "ignored", "resolved"],
+  verification: ["waiting_for_customer", "resolved"],
+  waiting_for_customer: ["new", "resolved"],
+  partially_ignored: ["new", "verification", "ignored", "resolved"],
+  ignored: [],
+  resolved: [],
+} as const satisfies Readonly<Record<InboxStatus, readonly InboxStatus[]>>
+
+export const inboxOwnershipByStatus = {
+  new: "unassigned",
+  verification: "required",
+  waiting_for_customer: "unassigned",
+  partially_ignored: "unassigned",
+  ignored: "unassigned",
+  resolved: "preserve_if_assigned",
+} as const satisfies Readonly<
+  Record<InboxStatus, "unassigned" | "required" | "preserve_if_assigned">
+>
 
 export interface InboxCustomer {
   id: string
