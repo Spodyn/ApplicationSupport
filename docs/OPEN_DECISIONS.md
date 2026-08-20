@@ -22,10 +22,11 @@ Ustawienia → Kanały przechowują `ManagedChannel.ignored` i opisują oczekiwa
 
 Do decyzji:
 
-- w którym adapterze lub serwisie reguła będzie egzekwowana,
 - czy ignorowane wiadomości nadal będą widoczne w skrzynce czatów,
 - jak zmiana reguły wpłynie na istniejące sprawy,
 - czy zakres reguły będzie per kanał, workspace i klient.
+
+USI-34 ustalił, że providerowy inbound adapter stosuje konfigurację Channel przed utworzeniem lub odnalezieniem Case. Nie rozstrzyga to powyższej polityki ignorowania ani jej zasięgu.
 
 ## 4. Wspólna tożsamość użytkownika
 

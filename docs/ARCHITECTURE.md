@@ -46,6 +46,8 @@ USI-32 zamraża kanoniczne role `USER` i `ADMIN` oraz dziewięć granularnych pe
 
 USI-33 zamraża v1 jako lokalny e-mail i hasło z sesją serwerową przekazywaną wyłącznie przez bezpieczne cookie `HttpOnly`. Przeglądarkowe mutacje wymagają CSRF, a identyfikator sesji nie może trafić do web storage ani cache PWA. Przyszłe OIDC ustanawia tę samą sesję i mapuje do kanonicznego użytkownika bez zaufania do claims roli/permissions. Pełny kontrakt znajduje się w `docs/AUTHENTICATION.md`.
 
+USI-34 zamraża provider-neutral grouping wykonywany przez inbound adapters przed utworzeniem lub odnalezieniem sprawy. Slack używa root+thread, Teams root+replies w kontekstach potwierdzonych capability matrix, Telegram topic albo jednej aktywnej sprawy na chat bez topics. Pełny kontrakt kluczy, terminal linking i idempotency znajduje się w `docs/CASE_GROUPING.md`.
+
 ## Planowana granica backendu
 
 Planowany kierunek, bez implementowania go w tym repozytorium:
@@ -75,6 +77,8 @@ Odpowiedzialności warstw:
 5. Hooki i komponenty pozostają zależne od stabilnych interfejsów usług, nie od DTO.
 
 Adaptery providerów planowane dla v1 mogą dotyczyć wyłącznie Slacka, Microsoft Teams i Telegrama. E-mail nie może zostać dodany do `Channel`, OpenAPI ani warstwy adapterów w ramach v1. USI-6 nie implementuje żadnego z tych adapterów.
+
+Adapter normalizuje providerowe ID do `external_conversation_id` i opcjonalnego `external_thread_key`; komponenty frontendu nigdy nie implementują logiki root/thread/topic. Strategia jest konfigurowana per Channel i walidowana względem capability providera.
 
 Wygenerowane pliki nie powinny być ręcznie edytowane. Szczegóły autoryzacji, konfliktów, idempotencji, paginacji i reguł workflow wymagają osobnego uzgodnienia kontraktu; ten etap ich nie implementuje.
 

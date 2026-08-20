@@ -39,6 +39,12 @@ Nie istnieje drugi ogólny `CaseStatus`. Usunięty model ze stanami `open`, `pen
 
 `InboxMessage` jest osobnym modelem wiadomości w rozmowie. Operacje i kontrakt repozytorium znajdują się w `lib/services/inbox.ts`.
 
+## Providerowe grupowanie spraw
+
+USI-34 rozdziela tożsamość providerowej konwersacji od kanonicznego workflow Case. Przyszły inbound adapter wylicza `external_conversation_id` i opcjonalny `external_thread_key` według strategii Channel, a UI otrzymuje już wybraną sprawę. Root/thread/topic nie są statusami ani logiką komponentu.
+
+Slack grupuje root z threadem, Teams root z replies tylko w kontekstach potwierdzonych przez capability matrix, Telegram według topicu, a bez topics utrzymuje jedną aktywną sprawę na chat. Wiadomość po terminalnej sprawie tworzy nową powiązaną sprawę bez reopen poprzedniej. Pełny kontrakt znajduje się w `CASE_GROUPING.md`.
+
 ## Typy współdzielone
 
 `lib/domain/shared.ts` zawiera wyłącznie niekonfliktowe typy używane przez kilka obszarów:

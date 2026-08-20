@@ -53,6 +53,8 @@ Docelowy przepływ jest zachowany:
 - Operacje skrzynki i administracji są udostępnione przez hooki TanStack Query.
 - Istotny wyjątek: `components/cases/cases-page.tsx` zawiera własne dane prezentacyjne listy i rozmowy. Usługa inbox dostarcza tylko część stanu, między innymi odczytanie i wiadomości. Powoduje to rozjazdy między widoczną prezentacją a rekordami domenowymi dla tych samych referencji.
 
+USI-34 definiuje przyszłą granicę inbound grouping, ale repo nadal nie zawiera wejścia eventów providerów. Dokument `CASE_GROUPING.md` zamraża Slack root+thread, Teams root+replies dla capability-supported contexts, Telegram topics oraz jeden aktywny case/chat bez topics. Bieżące fixture’y UI nie implementują ani nie symulują tych reguł.
+
 ## Modele domenowe
 
 Kanoniczny model workflow znajduje się w `lib/domain/inbox.ts`. Obowiązujące statusy to:
