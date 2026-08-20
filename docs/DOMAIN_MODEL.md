@@ -10,18 +10,18 @@ Jedynym źródłem prawdy dla cyklu życia sprawy jest `lib/domain/inbox.ts`:
 InboxCase.status: InboxStatus
 ```
 
-Dozwolone wartości:
+Dozwolone wartości oraz ich kanoniczne odpowiedniki persistence/API:
 
-| Status | Znaczenie w aktualnym mocku frontendu |
-| --- | --- |
-| `new` | Nowa, nieprzejęta sprawa. |
-| `verification` | Sprawa przejęta do weryfikacji. |
-| `waiting_for_customer` | Wysłano pytanie i sprawa oczekuje na klienta. |
-| `partially_ignored` | Oddano część wymaganych głosów ignorowania. |
-| `ignored` | Osiągnięto wymagany próg ignorowania; mock traktuje status jako końcowy. |
-| `resolved` | Sprawa rozwiązana; mock traktuje status jako końcowy. |
+| Frontend | Persistence/API | Znaczenie |
+| --- | --- | --- |
+| `new` | `NEW` | Nowa, nieprzejęta sprawa. |
+| `verification` | `VERIFICATION` | Sprawa przejęta do weryfikacji przez dokładnie jednego ownera. |
+| `waiting_for_customer` | `WAITING_FOR_CUSTOMER` | Wysłano pytanie i sprawa oczekuje na klienta bez ownera. |
+| `partially_ignored` | `PARTIALLY_IGNORED` | Oddano część wymaganych głosów ignorowania; sprawa nie ma ownera. |
+| `ignored` | `IGNORED` | Osiągnięto próg ignorowania; stan terminalny bez ownera. |
+| `resolved` | `RESOLVED` | Sprawa rozwiązana; stan terminalny zachowujący ostatniego ownera, jeżeli istniał. |
 
-Tabela dokumentuje wyłącznie zachowanie obecnej implementacji mock. Nie rozstrzyga docelowych uprawnień, przejść ani warunków backendowych poza tym, co jest już zakodowane.
+USI-35 zamraża macierz przejść, invariants ownership, dedykowane commandy i brak reopen stanów terminalnych. `lib/domain/inbox.ts` utrwala ten kontrakt w danych frontendu, a pełne warunki poszczególnych commandów opisuje `CASE_WORKFLOW.md`. Backend pozostaje authoritative i nie może udostępnić generic aktualizacji statusu.
 
 Nie istnieje drugi ogólny `CaseStatus`. Usunięty model ze stanami `open`, `pending`, `on_hold` i `closed` nie może zostać odtworzony jako kontrakt API bez jawnej decyzji produktowej.
 
@@ -43,7 +43,7 @@ Nie istnieje drugi ogólny `CaseStatus`. Usunięty model ze stanami `open`, `pen
 
 USI-34 rozdziela tożsamość providerowej konwersacji od kanonicznego workflow Case. Przyszły inbound adapter wylicza `external_conversation_id` i opcjonalny `external_thread_key` według strategii Channel, a UI otrzymuje już wybraną sprawę. Root/thread/topic nie są statusami ani logiką komponentu.
 
-Slack grupuje root z threadem, Teams root z replies tylko w kontekstach potwierdzonych przez capability matrix, Telegram według topicu, a bez topics utrzymuje jedną aktywną sprawę na chat. Wiadomość po terminalnej sprawie tworzy nową powiązaną sprawę bez reopen poprzedniej. Pełny kontrakt znajduje się w `CASE_GROUPING.md`.
+Slack grupuje root z threadem, Teams root z replies tylko w kontekstach potwierdzonych przez capability matrix, Telegram według topicu, a bez topics utrzymuje jedną aktywną sprawę na chat. Wiadomość po terminalnej sprawie tworzy nową powiązaną sprawę bez reopen poprzedniej. Regułę groupingową opisuje `CASE_GROUPING.md`, a terminal semantics — `CASE_WORKFLOW.md`.
 
 ## Typy współdzielone
 
@@ -101,4 +101,4 @@ Aktywne ekrany korzystały już z `InboxCase`, `AnalyticsResult` oraz modeli adm
 - Lista prezentacyjna pokazuje również e-mail. Zgodnie z USI-6 jest to fixture poza v1, a nie brakująca wartość `Channel`; fixture ma zostać usunięty przy zastąpieniu danych prezentacyjnych realnym API.
 - Reguła ignorowanych kanałów jest konfigurowana w administracji, ale nie ma jeszcze procesu przyjmowania wiadomości, który ją egzekwuje.
 
-Otwarte kwestie są opisane w `docs/OPEN_DECISIONS.md`, zamknięty kontrakt kanałów w `docs/V1_SCOPE.md`, a kontrakt retencji i izolacji w `docs/RETENTION.md`. Nie powinny być rozstrzygane przez przypadkowe rozszerzanie typów.
+Otwarte kwestie są opisane w `docs/OPEN_DECISIONS.md`, zamknięty kontrakt kanałów w `docs/V1_SCOPE.md`, maszyna stanów w `docs/CASE_WORKFLOW.md`, a kontrakt retencji i izolacji w `docs/RETENTION.md`. Nie powinny być rozstrzygane przez przypadkowe rozszerzanie typów.

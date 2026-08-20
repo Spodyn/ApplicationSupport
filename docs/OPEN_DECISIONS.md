@@ -6,6 +6,8 @@ Lista kanałów nie jest już otwartą decyzją. USI-6 zamroził v1/GA do Slacka
 
 Retencja i model wdrożenia nie są już otwartą decyzją. USI-40 zamroził konfigurację retencji per single-tenant deployment, purge semantics, legal hold per deployment i zasady backup/restore; aktualny kontrakt znajduje się w [RETENTION.md](RETENTION.md). Bezterminowa retencja jako zwykła konfiguracja oraz legal hold per Case/user pozostają jawnie poza v1, a nie na tej liście do samodzielnego rozstrzygnięcia przez implementację.
 
+Maszyna stanów i ownership nie są już otwartą decyzją. USI-35 zamroził pełną transition matrix, Ask Customer bieżącego ownera, zwykły Resolve, ADMIN force-resolve oraz brak reopen stanów terminalnych; aktualny kontrakt znajduje się w [CASE_WORKFLOW.md](CASE_WORKFLOW.md).
+
 ## 1. Ewentualny zakres `/current-cases`
 
 Trasa i pozycja nawigacji nie istnieją, a README wymienia wyłącznie aktualnie zaimplementowane widoki. Funkcja nie powinna być przywracana na podstawie starych opisów.
@@ -50,4 +52,4 @@ Do decyzji: które wymiary raportowe mają być bezpośrednią projekcją `Inbox
 
 Warstwa usług zawiera `claim`, `ignore`, `askCustomer`, `resolve`, `snooze` i `sendMessage`, ale aktualny ekran `/cases` nie podłącza pełnego zestawu operacji. W zweryfikowanym stanie część przycisków jest wyłączona, a dialogów ignorowania i pytania klienta brak.
 
-Do decyzji: czy jest to celowy zakres makiety, czy brak względem zaakceptowanego produktu. Nie należy podłączać operacji bez potwierdzenia przejść, uprawnień i obsługi konfliktów.
+Semantyka przejść, ownership i terminal states jest zamknięta w `CASE_WORKFLOW.md`. Nadal do decyzji pozostaje wyłącznie to, które niepodłączone działania mają zostać aktywowane w zaakceptowanym UI i w jakim ticketcie. Aktywowanie ich wymaga osobnego zakresu oraz obsługi stanów ładowania, błędów i konfliktów; nie może zmienić zamrożonego workflow.

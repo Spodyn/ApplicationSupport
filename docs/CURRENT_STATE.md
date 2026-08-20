@@ -42,6 +42,12 @@ USI-33 utrwala v1 jako lokalny e-mail i hasło oraz sesję serwerową w bezpiecz
 
 Repo nadal nie zawiera `/login`, sesji ani backendowego auth; dokument `AUTHENTICATION.md` jest kontraktem dla przyszłej implementacji i nie zmienia obecnego UX.
 
+## Zamrożona maszyna stanów Case
+
+USI-35 utrwala dokładnie sześć statusów, pełną macierz przejść, terminal semantics i invariants ownership. Ask Customer działa wyłącznie dla bieżącego ownera w `VERIFICATION`, wymaga outgoing message, przechodzi do `WAITING_FOR_CUSTOMER` i zeruje ownera. Zwykły Resolve jest operacją bieżącego ownera w `VERIFICATION`; osobny ADMIN force-resolve wymaga `force_resolve` i może zamknąć każdy stan nieterminalny. `IGNORED` i `RESOLVED` nie są reopenowane.
+
+Repo nadal nie zawiera backendowej maszyny stanów, force-resolve, inbound customer reply/timeout ani kompletnego UI workflow. `CASE_WORKFLOW.md` jest kontraktem przyszłych commandów. Bieżący mock utrwala katalog stanów, dozwolone pary przejść i ownership oraz nie pozwala już Ask Customer lub zwykłemu Resolve przeczyć zamrożonym guardom.
+
 ## Zamrożony kontrakt retencji i izolacji
 
 USI-40 utrwala model v1 jako jeden klient na osobny deployment, bazę, object storage, sekrety i konfigurację, bez `tenant_id`, tenant selectora i cross-tenant API. Kontrakt definiuje walidowane zakresy retencji dla wiadomości, inbound eventów, audytu i attachments, odrębne purge semantics, legal hold per deployment oraz rotację backupów i obowiązkowy purge po restore.
@@ -71,6 +77,8 @@ Kanoniczny model workflow znajduje się w `lib/domain/inbox.ts`. Obowiązujące 
 - `partially_ignored`
 - `ignored`
 - `resolved`
+
+Ten sam moduł utrwala dozwolone cele przejść, stany terminalne oraz ownership per status. Szczegółowa macierz commandów i zdarzeń znajduje się w `CASE_WORKFLOW.md`.
 
 Starszy, ogólny `Case` wraz z `CaseStatus`, repozytoriami, hookami i osobnymi mockami został usunięty po potwierdzeniu braku konsumentów. Współdzielone, niekonfliktowe typy kanału, SLA, dostarczenia wiadomości i tożsamości znajdują się w `lib/domain/shared.ts` i są jawnie oddzielone od przyszłych DTO OpenAPI.
 

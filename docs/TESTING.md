@@ -31,6 +31,7 @@ Konfiguracja znajduje się w `vitest.config.mts`. Środowisko jsdom jest inicjal
 Aktualny zakres:
 
 - dokładny zestaw statusów kanonicznego workflow inbox,
+- pełna macierz dozwolonych par przejść, stany terminalne i ownership per status,
 - dokładny zestaw kanałów v1: Slack, Microsoft Teams i Telegram, bez e-maila,
 - dokładne role `USER`/`ADMIN`, katalog dziewięciu permissions i wymóg jednoczesnej roli `ADMIN` oraz permission,
 - wyliczanie efektywnego stanu SLA, w tym przekroczenie terminu i wstrzymanie,
@@ -79,6 +80,10 @@ Obecne repozytorium nie implementuje auth, dlatego USI-33 nie dodaje pozornych t
 ## Przyszłe testy providerowego groupingu
 
 Repo nie zawiera inbound adapterów, dlatego USI-34 dokumentuje obowiązkową macierz fixture’ów zamiast dodawać pozorne integracje. Implementacja backendowa musi pokryć root/reply dla Slacka i wspieranych kontekstów Teams, Telegram topic i chat bez topics, nową powiązaną sprawę po terminalnym case, deduplikację eventu, równoległe pierwsze eventy oraz walidację strategy/provider capability. Szczegóły zawiera `CASE_GROUPING.md`.
+
+## Przyszłe testy maszyny stanów
+
+Repo nie zawiera backendowych commandów ani persistence, dlatego USI-35 testuje statyczny kontrakt domenowy i zgodność istniejącego mocka zamiast pozornych integracji. Implementacja backendowa musi pokryć każdą dozwoloną i zakazaną pozycję macierzy, invariants ownership, Ask Customer atomowy z outgoing message, zwykły Resolve bieżącego ownera, ADMIN force-resolve z rolą i permission, audit actora, brak reopen terminalnych spraw oraz nową powiązaną sprawę po terminalnej wiadomości. Szczegóły zawiera `CASE_WORKFLOW.md`.
 
 ## Przyszłe testy retencji i izolacji
 

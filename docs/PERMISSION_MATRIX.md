@@ -72,7 +72,7 @@ Wszystkie ścieżki są pod publicznym prefiksem `/api/v1`. Wzorzec `/**` obejmu
 | `POST /admin/cases/{id}/force-resolve` | `ADMIN` + `force_resolve`. |
 | `GET /admin/audit` | `ADMIN` + `view_audit`. |
 
-Zwykłe `resolve` wykonywane przez bieżącego ownera nie jest `force-resolve`. Historia wiadomości i zmian widoczna w kontekście sprawy nie jest administracyjnym audytem; `view_audit` dotyczy przekrojowego API audytowego.
+Zwykłe `resolve` wykonywane przez bieżącego ownera nie jest `force-resolve`. Force-resolve jest osobnym commandem i nie może być emulowany przez generic aktualizację statusu; jego dozwolone stany i skutki ownership opisuje `CASE_WORKFLOW.md`. Historia wiadomości i zmian widoczna w kontekście sprawy nie jest administracyjnym audytem; `view_audit` dotyczy przekrojowego API audytowego.
 
 ## Persistence i effective permissions
 

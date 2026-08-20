@@ -34,7 +34,7 @@ Dokładna macierz wspieranych kontekstów Teams powstaje w capability POC E18-T0
 - Zmiana konfiguracji Channel działa dla przyszłego inbound processing. Nie przepisuje historycznych spraw ani wiadomości.
 - Providerowe ID pozostają danymi adaptera/persistence. Nie są odtwarzane z tekstu, nazwy kanału lub kolejności wiadomości.
 
-Jeżeli ostatnia sprawa dla klucza jest terminalna, nowa wiadomość nie otwiera jej ponownie. Powstaje nowa sprawa `NEW`, powiązana z poprzednią przez kanoniczne relation pole. Następne wiadomości tego klucza trafiają do nowej aktywnej sprawy. Szczegółowe statusy terminalne i maszyna stanów pozostają kontraktem workflow, nie regułą providera.
+Jeżeli ostatnia sprawa dla klucza jest terminalna, nowa wiadomość nie otwiera jej ponownie. Powstaje nowa sprawa `NEW`, powiązana z poprzednią przez kanoniczne relation pole. Następne wiadomości tego klucza trafiają do nowej aktywnej sprawy. Szczegółowe statusy terminalne i maszyna stanów są zamrożone w `CASE_WORKFLOW.md`; pozostają kontraktem workflow, nie regułą providera.
 
 ## Idempotency i concurrency
 
