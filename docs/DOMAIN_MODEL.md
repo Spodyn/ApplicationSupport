@@ -58,7 +58,11 @@ USI-6 zamraża `Channel` jako dokładny zestaw kanałów v1/GA: `slack`, `teams`
 
 ### Administracja
 
-`lib/domain/administration.ts` definiuje konta administracyjne, ustawienia, integracje, ignorowane kanały, powiadomienia i uprawnienia. `AdministrationUser` nie jest drugim modelem sprawy. Jego relacja do współdzielonego `User` pozostaje otwartą decyzją dotyczącą tożsamości.
+`lib/domain/administration.ts` definiuje konta administracyjne, ustawienia, integracje, ignorowane kanały, powiadomienia i uprawnienia. Kanoniczne role aplikacji to dokładnie `USER` i `ADMIN`. Katalog permissions zawiera dokładnie: `manage_users`, `manage_integrations`, `manage_sla`, `manage_schedule`, `manage_notifications`, `view_global_statistics`, `reassign_cases`, `force_resolve` i `view_audit`.
+
+Permission administracyjny jest skuteczny tylko dla roli `ADMIN`; sam grant zapisany przy `USER` nie daje dostępu. Ogólne ustawienia wymagają `ADMIN` bez dodatkowego permission. Szczegółową matrycę akcji, widoków i przyszłych endpointów opisuje `PERMISSION_MATRIX.md`.
+
+`AdministrationUser` nie jest drugim modelem sprawy. Jego relacja do współdzielonego `User` nadal wymaga realizacji przez przyszły kanoniczny model tożsamości i mapper, ale starsze wartości `agent/supervisor/admin` nie są docelową rolą aplikacji ani kontraktem API.
 
 ### Analityka
 

@@ -6,7 +6,10 @@ import type {
   AdministrationUserInput,
   ManagedIntegration,
 } from "@/lib/domain/administration"
-import { administrationPermissionLabels } from "@/lib/domain/administration"
+import {
+  administrationPermissionLabels,
+  hasAdministrationPermission,
+} from "@/lib/domain/administration"
 import { mockCurrentUser } from "@/mocks/users"
 import {
   mockAdministrationSettings,
@@ -64,6 +67,16 @@ export class PermissionDeniedError extends Error {
   }
 }
 
+export class AdministratorRoleRequiredError extends Error {
+  readonly status = 403
+  readonly code = "ADMINISTRATOR_ROLE_REQUIRED"
+
+  constructor() {
+    super("Ta funkcja wymaga roli administratora.")
+    this.name = "AdministratorRoleRequiredError"
+  }
+}
+
 export function getAdministrationUserSnapshot(email: string) {
   return usersState.find((user) => normalize(user.email) === normalize(email))
 }
@@ -75,6 +88,14 @@ export function getCurrentAdministrationSettingsSnapshot() {
 export function requireCurrentAdministrationPermission(
   permission: AdministrationPermission,
 ) {
+  const current = requireCurrentAdministrator()
+  if (!hasAdministrationPermission(current, permission)) {
+    throw new PermissionDeniedError(permission)
+  }
+  return current
+}
+
+export function requireCurrentAdministrator() {
   const current = getAdministrationUserSnapshot(mockCurrentUser.email)
   const today = new Date().toISOString().slice(0, 10)
   const valid = Boolean(
@@ -82,14 +103,15 @@ export function requireCurrentAdministrationPermission(
       current.validFrom <= today &&
       (!current.validUntil || current.validUntil >= today),
   )
-  if (!valid || !current?.permissions.includes(permission)) {
-    throw new PermissionDeniedError(permission)
+  if (!valid || current?.role !== "ADMIN") {
+    throw new AdministratorRoleRequiredError()
   }
   return current
 }
 
 export const mockAdministrationUserRepository: AdministrationUserRepository = {
   async list(query = {}) {
+    requireCurrentAdministrationPermission("manage_users")
     let result = [...usersState]
     if (query.search) {
       const search = normalize(query.search)
@@ -112,6 +134,9 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
 
   async save(input, id) {
     requireCurrentAdministrationPermission("manage_users")
+    if (input.role === "USER" && input.permissions.length > 0) {
+      throw new Error("Rola USER nie może otrzymywać uprawnień administracyjnych.")
+    }
     const duplicate = usersState.find(
       (user) => normalize(user.email) === normalize(input.email) && user.id !== id,
     )
@@ -158,6 +183,7 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
 
 export const mockAdministrationSettingsRepository: AdministrationSettingsRepository = {
   async get() {
+    requireCurrentAdministrator()
     return delay(settingsState)
   },
 
@@ -166,15 +192,19 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
       Record<keyof AdministrationSettings, AdministrationPermission>
     > = {
       sla: "manage_sla",
-      schedule: "manage_sla",
-      outOfOffice: "manage_sla",
+      schedule: "manage_schedule",
+      outOfOffice: "manage_schedule",
       integrations: "manage_integrations",
       channels: "manage_integrations",
-      notifications: "manage_integrations",
+      notifications: "manage_notifications",
       rolePermissions: "manage_users",
     }
     const requiredPermission = permissionBySection[key]
-    if (requiredPermission) requireCurrentAdministrationPermission(requiredPermission)
+    if (requiredPermission) {
+      requireCurrentAdministrationPermission(requiredPermission)
+    } else {
+      requireCurrentAdministrator()
+    }
     settingsState[key] = structuredClone(value) as never
     return delay(settingsState[key])
   },
@@ -223,7 +253,7 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
   },
 
   async toggleNotification(id, enabled) {
-    requireCurrentAdministrationPermission("manage_integrations")
+    requireCurrentAdministrationPermission("manage_notifications")
     const destination = settingsState.notifications.find((item) => item.id === id)
     if (!destination) throw new Error("Nie znaleziono celu powiadomień.")
     destination.enabled = enabled

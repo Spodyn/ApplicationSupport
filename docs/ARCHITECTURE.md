@@ -42,6 +42,8 @@ Nie istnieje wspólny, ogólny kontrakt `CaseRepository`. Został usunięty wraz
 
 Kontrakt v1/GA zamraża listę providerów do Slacka, Microsoft Teams i Telegrama. E-mail jako kanał wsparcia oraz funkcje AI są poza v1. Pełną granicę wydania i przegląd powierzchni frontendu opisuje `docs/V1_SCOPE.md`.
 
+USI-32 zamraża kanoniczne role `USER` i `ADMIN` oraz dziewięć granularnych permissions. Funkcja administracyjna wymaga jednocześnie roli `ADMIN` i przypisanego permission; wyjątkiem są ustawienia Ogólne, wymagające samej roli `ADMIN`. Pełna matryca widoków, akcji i rodzin endpointów znajduje się w `docs/PERMISSION_MATRIX.md`.
+
 ## Planowana granica backendu
 
 Planowany kierunek, bez implementowania go w tym repozytorium:
@@ -73,6 +75,8 @@ Odpowiedzialności warstw:
 Adaptery providerów planowane dla v1 mogą dotyczyć wyłącznie Slacka, Microsoft Teams i Telegrama. E-mail nie może zostać dodany do `Channel`, OpenAPI ani warstwy adapterów w ramach v1. USI-6 nie implementuje żadnego z tych adapterów.
 
 Wygenerowane pliki nie powinny być ręcznie edytowane. Szczegóły autoryzacji, konfliktów, idempotencji, paginacji i reguł workflow wymagają osobnego uzgodnienia kontraktu; ten etap ich nie implementuje.
+
+Przyszły backend jest jedyną granicą bezpieczeństwa: każda chroniona operacja powtarza kontrolę aktywnej sesji, literalnej roli i effective permissions niezależnie od widoczności elementu UI. Frontend mapuje `401`/`403` na stany aplikacji, ale nie jest źródłem decyzji autoryzacyjnej.
 
 ## Granice bezpieczeństwa
 

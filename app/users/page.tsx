@@ -55,6 +55,7 @@ import { notify } from "@/components/design-system/notify"
 import {
   allAdministrationPermissions,
   administrationPermissionLabels,
+  hasAdministrationPermission,
 } from "@/lib/domain/administration"
 import type {
   AdministrationPermission,
@@ -70,14 +71,14 @@ import {
 } from "@/lib/services/queries"
 
 const roleLabels: Record<AdministrationRole, string> = {
-  user: "Użytkownik",
-  admin: "Administrator",
+  USER: "Użytkownik",
+  ADMIN: "Administrator",
 }
 
 const emptyForm: AdministrationUserInput = {
   fullName: "",
   email: "",
-  role: "user",
+  role: "USER",
   active: true,
   validFrom: "2026-08-03",
   validUntil: undefined,
@@ -105,7 +106,10 @@ export default function UsersRoute() {
   const currentAdministrationUserQuery = useCurrentAdministrationUser()
   const actions = useAdministrationUserActions()
   const users = usersQuery.data ?? []
-  const canManageUsers = currentAdministrationUserQuery.data?.permissions.includes("manage_users") ?? false
+  const canManageUsers = hasAdministrationPermission(
+    currentAdministrationUserQuery.data,
+    "manage_users",
+  )
 
   const openCreate = () => {
     setEditedUser(null)
@@ -136,8 +140,8 @@ export default function UsersRoute() {
         id: "role",
         header: "Rola",
         cell: (user) => (
-          <Badge variant={user.role === "admin" ? "default" : "secondary"}>
-            {user.role === "admin" && <ShieldCheck />}
+          <Badge variant={user.role === "ADMIN" ? "default" : "secondary"}>
+            {user.role === "ADMIN" && <ShieldCheck />}
             {roleLabels[user.role]}
           </Badge>
         ),
@@ -223,7 +227,7 @@ export default function UsersRoute() {
   )
 
   const activeCount = users.filter((user) => user.active).length
-  const adminCount = users.filter((user) => user.role === "admin").length
+  const adminCount = users.filter((user) => user.role === "ADMIN").length
   const assignedCount = users.reduce((sum, user) => sum + user.activeAssignedCases, 0)
 
   const resetFilters = () => {
@@ -295,8 +299,8 @@ export default function UsersRoute() {
                   placeholder="Rola"
                   allLabel="Wszystkie role"
                   options={[
-                    { value: "user", label: "Użytkownik" },
-                    { value: "admin", label: "Administrator" },
+                    { value: "USER", label: "Użytkownik" },
+                    { value: "ADMIN", label: "Administrator" },
                   ]}
                 />
                 <FilterSelect
@@ -455,14 +459,15 @@ function UserDialog({
                   setForm({
                     ...form,
                     role,
-                    permissions: role === "admin" ? [...allAdministrationPermissions] : form.permissions,
+                    permissions:
+                      role === "ADMIN" ? [...allAdministrationPermissions] : [],
                   })
                 }}
               >
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="user">Użytkownik</SelectItem>
-                  <SelectItem value="admin">Administrator</SelectItem>
+                  <SelectItem value="USER">Użytkownik</SelectItem>
+                  <SelectItem value="ADMIN">Administrator</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
@@ -484,7 +489,7 @@ function UserDialog({
 
           <fieldset className="grid gap-2 rounded-lg border p-3">
             <legend className="px-1 text-sm font-medium">Uprawnienia indywidualne</legend>
-            <p className="text-xs text-muted-foreground">Administrator otrzymuje komplet uprawnień. Dla roli użytkownika można nadać wybrane wyjątki.</p>
+            <p className="text-xs text-muted-foreground">Uprawnienia administracyjne można nadać wyłącznie roli Administrator. Rola Użytkownik nie uzyskuje dostępu przez indywidualny grant.</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {allAdministrationPermissions.map((permission) => (
                 <label key={permission} className="flex items-center gap-2 rounded-md p-2 text-sm hover:bg-muted/50">
@@ -492,6 +497,7 @@ function UserDialog({
                     type="checkbox"
                     className="size-4 accent-primary"
                     checked={form.permissions.includes(permission)}
+                    disabled={form.role !== "ADMIN"}
                     onChange={(event) => togglePermission(permission, event.target.checked)}
                   />
                   {administrationPermissionLabels[permission]}

@@ -60,7 +60,7 @@ Kanoniczny model workflow znajduje się w `lib/domain/inbox.ts`. Obowiązujące 
 
 Starszy, ogólny `Case` wraz z `CaseStatus`, repozytoriami, hookami i osobnymi mockami został usunięty po potwierdzeniu braku konsumentów. Współdzielone, niekonfliktowe typy kanału, SLA, dostarczenia wiadomości i tożsamości znajdują się w `lib/domain/shared.ts` i są jawnie oddzielone od przyszłych DTO OpenAPI.
 
-`AdministrationUser` częściowo dubluje współdzielony `User`, ale ma osobny model roli, aktywności, ważności i uprawnień. `AnalyticsRecord.status` używa jawnie nazwanego `AnalyticsStatusDimension`; jest wymiarem raportowym, a nie drugim modelem workflow.
+`AdministrationUser` częściowo dubluje współdzielony `User`, ale jego model administracyjny używa już zamrożonych ról `USER`/`ADMIN` oraz dokładnego katalogu dziewięciu permissions z USI-32. Guard mock wymaga jednocześnie roli `ADMIN` i odpowiedniego permission; konto `USER` nie może zachować administracyjnych grantów. Starszy `UserRole` w modelu prezentacyjnym nadal używa `agent/supervisor/admin` i nie jest kontraktem backendu. `AnalyticsRecord.status` używa jawnie nazwanego `AnalyticsStatusDimension`; jest wymiarem raportowym, a nie drugim modelem workflow.
 
 ## Zweryfikowane zachowanie UI
 
@@ -74,7 +74,7 @@ Starszy, ogólny `Case` wraz z `CaseStatus`, repozytoriami, hookami i osobnymi m
 | Rozwiązanie | `Zamknij sprawę` i menu zamknięcia są wyłączone. |
 | Odłożenie | `Odłóż` jest wyłączone. |
 | Wysyłanie odpowiedzi | Kompozytor jest widoczny, ale przycisk wysyłania nie ma podłączonej operacji workflow. |
-| Tworzenie użytkownika | Dialog otwiera się i zawiera dane konta oraz cztery aktualne uprawnienia indywidualne. |
+| Tworzenie użytkownika | Dialog otwiera się i zawiera dane konta oraz dziewięć zamrożonych permissions; dla roli `USER` administracyjne granty są wyłączone. |
 | Edycja użytkownika | Dialog otwiera się z poprawnie wypełnionymi danymi. |
 | Akcje użytkownika | Menu zawiera edycję, dezaktywację i usunięcie użytkownika. |
 | Ustawienia | Wszystkie osiem zakładek otwiera właściwy panel; formularze są dostępne. |
@@ -88,7 +88,7 @@ Testy interakcji nie zapisywały zmian w danych mock. Konsola przeglądarki nie 
 ## Jakość, testy i CI
 
 - Dostępne skrypty obejmują `lint`, `typecheck`, `test:unit`, `test:unit:watch`, `build`, `test:e2e` i zbiorczy `check`.
-- Vitest 4 z Testing Library i jsdom chroni kanoniczne statusy inbox, dokładną listę kanałów v1, logikę SLA oraz interakcję pola wyszukiwania: 3 pliki, 7 testów.
+- Vitest 4 z Testing Library i jsdom chroni kanoniczne statusy inbox, dokładną listę kanałów v1, zamrożony kontrakt ról i permissions, logikę SLA oraz interakcję pola wyszukiwania: 3 pliki, 9 testów.
 - Playwright uruchamia 8 deterministycznych testów Chromium dla czterech tras, wyboru/odczytania czatu, odpowiedzi, formularza użytkownika i mobilnego przepływu `/cases`.
 - Testy E2E blokują zewnętrzne żądania HTTP, wyłączają service worker i korzystają wyłącznie z lokalnego serwera oraz danych mock.
 - `.github/workflows/ci.yml` uruchamia pełną bramkę na `push` i `pull_request`, korzysta z cache pnpm i wysyła raport oraz artefakty Playwright po niepowodzeniu.
@@ -128,3 +128,4 @@ Zrzuty są częścią audytu i stanowią punkt odniesienia przed dalszym hardeni
 2. `User` i `AdministrationUser` nadal częściowo opisują te same osoby; docelowa granica tożsamości wymaga decyzji przed projektem OpenAPI.
 3. Ustawienie ignorowanego kanału jest dostępne w administracji, ale obecny mock inbox nie implementuje punktu przyjmowania wiadomości, w którym reguła byłaby egzekwowana.
 4. Obecny zestaw jest celowo lekki i chroni krytyczne smoke flow; pełne mutacje workflow wymagają rozszerzenia testów po potwierdzeniu ich docelowej semantyki produktowej.
+5. Frontend nie implementuje jeszcze sesji ani pełnego ukrywania tras/zakładek według permissions. Guardy mock pomagają zachować kontrakt, ale authoritative enforcement pozostaje zadaniem przyszłego backendu E04.

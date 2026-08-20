@@ -32,6 +32,7 @@ Aktualny zakres:
 
 - dokładny zestaw statusów kanonicznego workflow inbox,
 - dokładny zestaw kanałów v1: Slack, Microsoft Teams i Telegram, bez e-maila,
+- dokładne role `USER`/`ADMIN`, katalog dziewięciu permissions i wymóg jednoczesnej roli `ADMIN` oraz permission,
 - wyliczanie efektywnego stanu SLA, w tym przekroczenie terminu i wstrzymanie,
 - wpisywanie oraz czyszczenie kontrolowanego pola wyszukiwania.
 
