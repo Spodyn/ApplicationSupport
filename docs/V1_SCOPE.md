@@ -23,7 +23,7 @@ Klasyfikacja „po GA / poza v1” nie jest zobowiązaniem do realizacji ani ter
 
 ## Przegląd ekranów i funkcji
 
-Poniższa tabela klasyfikuje zaakceptowane powierzchnie frontendu względem zakresu v1. „Kontrakt UX v1” oznacza zachowanie istniejącego wyglądu i stanów; nie oznacza implementacji produkcyjnego backendu w USI-6.
+Poniższa tabela przegląda zaakceptowane powierzchnie frontendu względem zakresu v1. Klasyfikacja jest podana wyłącznie tam, gdzie wynika z USI-6; kwestie pozostawione do osobnej decyzji są jawnie oznaczone jako nierozstrzygnięte. „Kontrakt UX v1” oznacza zachowanie istniejącego wyglądu i stanów; nie oznacza implementacji produkcyjnego backendu w USI-6.
 
 | Powierzchnia lub funkcja | Klasyfikacja | Ograniczenie USI-6 |
 | --- | --- | --- |
@@ -33,7 +33,7 @@ Poniższa tabela klasyfikuje zaakceptowane powierzchnie frontendu względem zakr
 | `/users`: konta, role, ważność i uprawnienia | Kontrakt UX v1 | Adres e-mail użytkownika nie jest kanałem wsparcia. |
 | `/settings`: SLA, godziny pracy, poza biurem, integracje, kanały, powiadomienia i uprawnienia | Kontrakt UX v1 | Konfiguracja providerów dotyczy Slacka, Teams i Telegrama; USI-6 nie tworzy realnych połączeń. |
 | `/`, nawigacja, stany danych, dostępność i PWA | Kontrakt UX v1 | Bez zmian w USI-6. |
-| `/current-cases` | Poza v1 | Trasa nie istnieje w zaakceptowanym frontendzie; ewentualny przyszły zakres wymaga osobnej specyfikacji. |
+| `/current-cases` | Nierozstrzygnięte w USI-6 | Brak istniejącej trasy nie klasyfikuje funkcjonalności względem v1. Docelowy zakres i umiejscowienie pozostają osobną decyzją E00 oraz wymagają osobnego ticketu-decyzji. |
 | E-mail jako źródło spraw i wiadomości | Poza v1 | Nie rozszerzać `Channel`, usług, adapterów ani przyszłego kontraktu API o e-mail w ramach v1. |
 | Funkcje AI | Poza v1 | Nie dodawać elementów UI, usług, endpointów ani przetwarzania AI w ramach v1. |
 
