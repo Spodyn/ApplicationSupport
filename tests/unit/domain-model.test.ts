@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { inboxStatusLabels } from "@/lib/domain/inbox"
+import { channelLabels } from "@/lib/domain/labels"
 
 describe("kanoniczny workflow inbox", () => {
   it("udostępnia wyłącznie uzgodnione statusy frontendu", () => {
@@ -11,5 +12,11 @@ describe("kanoniczny workflow inbox", () => {
       "ignored",
       "resolved",
     ])
+  })
+})
+
+describe("kanały v1", () => {
+  it("udostępnia wyłącznie Slack, Microsoft Teams i Telegram", () => {
+    expect(Object.keys(channelLabels)).toEqual(["slack", "teams", "telegram"])
   })
 })

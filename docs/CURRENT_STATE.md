@@ -30,6 +30,12 @@ Ponadto App Router generuje zasoby metadanych/PWA: manifest, ikony aplikacji i i
 
 README wymienia wyłącznie pięć istniejących tras. Ewentualny powrót `/current-cases` pozostaje jawną decyzją produktową i nie jest opisany jako funkcja bieżąca.
 
+## Zamrożony zakres v1
+
+USI-6 utrwala v1/GA jako obsługę Slacka, Microsoft Teams i Telegrama. E-mail jako kanał wsparcia oraz funkcje AI są poza v1. Szczegółowy przegląd ekranów, funkcji i wyłączeń znajduje się w [V1_SCOPE.md](V1_SCOPE.md).
+
+E-mail widoczny w lokalnym modelu prezentacyjnym `/cases` jest istniejącym fixture’em mockupu, a nie czwartym kanałem domenowym. Pozostaje bez zmian dla zachowania zaakceptowanego UX i ma zostać usunięty dopiero przy zastąpieniu fixture’ów realnym API. Adresy e-mail użytkowników są danymi konta i nie zmieniają listy kanałów wsparcia.
+
 ## Granica danych
 
 Docelowy przepływ jest zachowany:
@@ -82,7 +88,7 @@ Testy interakcji nie zapisywały zmian w danych mock. Konsola przeglądarki nie 
 ## Jakość, testy i CI
 
 - Dostępne skrypty obejmują `lint`, `typecheck`, `test:unit`, `test:unit:watch`, `build`, `test:e2e` i zbiorczy `check`.
-- Vitest 4 z Testing Library i jsdom chroni kanoniczne statusy inbox, logikę SLA oraz interakcję pola wyszukiwania: 3 pliki, 6 testów.
+- Vitest 4 z Testing Library i jsdom chroni kanoniczne statusy inbox, dokładną listę kanałów v1, logikę SLA oraz interakcję pola wyszukiwania: 3 pliki, 7 testów.
 - Playwright uruchamia 8 deterministycznych testów Chromium dla czterech tras, wyboru/odczytania czatu, odpowiedzi, formularza użytkownika i mobilnego przepływu `/cases`.
 - Testy E2E blokują zewnętrzne żądania HTTP, wyłączają service worker i korzystają wyłącznie z lokalnego serwera oraz danych mock.
 - `.github/workflows/ci.yml` uruchamia pełną bramkę na `push` i `pull_request`, korzysta z cache pnpm i wysyła raport oraz artefakty Playwright po niepowodzeniu.

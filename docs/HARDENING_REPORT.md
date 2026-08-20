@@ -66,7 +66,7 @@ Mobilny przepływ `/cases` jest objęty testami Playwright w widoku 390×844 i p
 
 ## Remaining decisions
 
-Nierozstrzygnięte kwestie produktowe i kontraktowe są jawnie opisane w [OPEN_DECISIONS.md](OPEN_DECISIONS.md). Najważniejsze dotyczą źródła prawdy dla prezentacji `/cases`, wspólnej tożsamości użytkownika, kanału e-mail, wymiarów analitycznych, egzekwowania ignorowanych kanałów oraz docelowego workflow akcji sprawy.
+Nierozstrzygnięte na dzień raportu kwestie produktowe i kontraktowe opisano w [OPEN_DECISIONS.md](OPEN_DECISIONS.md). Późniejszy ticket USI-6 zamknął decyzję o kanałach: aktualny kontrakt v1/GA znajduje się w [V1_SCOPE.md](V1_SCOPE.md). Pozostałe otwarte kwestie dotyczą źródła prawdy dla prezentacji `/cases`, wspólnej tożsamości użytkownika, wymiarów analitycznych, egzekwowania ignorowanych kanałów oraz docelowego workflow akcji sprawy.
 
 ## Ready for the next phase
 

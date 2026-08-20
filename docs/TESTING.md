@@ -31,6 +31,7 @@ Konfiguracja znajduje się w `vitest.config.mts`. Środowisko jsdom jest inicjal
 Aktualny zakres:
 
 - dokładny zestaw statusów kanonicznego workflow inbox,
+- dokładny zestaw kanałów v1: Slack, Microsoft Teams i Telegram, bez e-maila,
 - wyliczanie efektywnego stanu SLA, w tym przekroczenie terminu i wstrzymanie,
 - wpisywanie oraz czyszczenie kontrolowanego pola wyszukiwania.
 
