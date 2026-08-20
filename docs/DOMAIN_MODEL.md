@@ -52,6 +52,8 @@ Nie istnieje drugi ogólny `CaseStatus`. Usunięty model ze stanami `open`, `pen
 
 Są to typy domenowe frontendu, nie wygenerowane typy transportowe. Przyszły adapter może je wypełniać danymi z API, ale DTO nie powinny być importowane bezpośrednio przez komponenty.
 
+USI-6 zamraża `Channel` jako dokładny zestaw kanałów v1/GA: `slack`, `teams` i `telegram`. E-mail jako kanał wsparcia jest poza v1 i nie może zostać dodany do tego typu bez nowej, jawnej decyzji produktowej. Pola `email` w modelach użytkowników opisują tożsamość konta, nie kanał przyjmowania spraw.
+
 ## Pozostałe obszary
 
 ### Administracja
@@ -76,7 +78,7 @@ Aktywne ekrany korzystały już z `InboxCase`, `AnalyticsResult` oraz modeli adm
 ## Znane granice
 
 - `components/cases/cases-page.tsx` nadal łączy dane usługi inbox z lokalnym modelem prezentacyjnym; kierunek konsolidacji pozostaje otwarty.
-- Lista prezentacyjna pokazuje również e-mail, którego nie ma w typie `Channel`.
+- Lista prezentacyjna pokazuje również e-mail. Zgodnie z USI-6 jest to fixture poza v1, a nie brakująca wartość `Channel`; fixture ma zostać usunięty przy zastąpieniu danych prezentacyjnych realnym API.
 - Reguła ignorowanych kanałów jest konfigurowana w administracji, ale nie ma jeszcze procesu przyjmowania wiadomości, który ją egzekwuje.
 
-Te kwestie są opisane w `docs/OPEN_DECISIONS.md` i nie powinny być rozstrzygane przez przypadkowe rozszerzanie typów.
+Otwarte kwestie są opisane w `docs/OPEN_DECISIONS.md`, a zamknięty kontrakt kanałów w `docs/V1_SCOPE.md`. Nie powinny być rozstrzygane przez przypadkowe rozszerzanie typów.

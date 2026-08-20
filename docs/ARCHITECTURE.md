@@ -40,6 +40,8 @@ Aktywne kontrakty usług są definiowane obszarowo:
 
 Nie istnieje wspólny, ogólny kontrakt `CaseRepository`. Został usunięty wraz z nieużywanym modelem legacy, aby nie został przypadkowo potraktowany jako projekt backendu.
 
+Kontrakt v1/GA zamraża listę providerów do Slacka, Microsoft Teams i Telegrama. E-mail jako kanał wsparcia oraz funkcje AI są poza v1. Pełną granicę wydania i przegląd powierzchni frontendu opisuje `docs/V1_SCOPE.md`.
+
 ## Planowana granica backendu
 
 Planowany kierunek, bez implementowania go w tym repozytorium:
@@ -67,6 +69,8 @@ Odpowiedzialności warstw:
 3. Adapter wywołuje klienta, mapuje DTO na typy `lib/domain/` i normalizuje błędy.
 4. `lib/services/registry.ts` wybiera adapter zamiast implementacji mock.
 5. Hooki i komponenty pozostają zależne od stabilnych interfejsów usług, nie od DTO.
+
+Adaptery providerów planowane dla v1 mogą dotyczyć wyłącznie Slacka, Microsoft Teams i Telegrama. E-mail nie może zostać dodany do `Channel`, OpenAPI ani warstwy adapterów w ramach v1. USI-6 nie implementuje żadnego z tych adapterów.
 
 Wygenerowane pliki nie powinny być ręcznie edytowane. Szczegóły autoryzacji, konfliktów, idempotencji, paginacji i reguł workflow wymagają osobnego uzgodnienia kontraktu; ten etap ich nie implementuje.
 

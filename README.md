@@ -2,6 +2,8 @@
 
 Produkcyjnie stylizowany frontend wspólnej skrzynki wsparcia dla Slacka, Microsoft Teams i Telegrama. Interfejs jest w całości po polsku, działa responsywnie i korzysta wyłącznie z lokalnych danych oraz usług mockowych. Backend nie jest częścią tego repozytorium.
 
+Zamrożony kontrakt wydania v1/GA, wspieranych kanałów i wyłączeń opisuje [`docs/V1_SCOPE.md`](docs/V1_SCOPE.md).
+
 ## Uruchomienie
 
 Wymagany jest Node.js 22.23.2 LTS (wersja zapisana w `.nvmrc`) oraz pnpm 11.18.0 wskazany w `package.json`. pnpm 11.18.0 wymaga Node.js co najmniej 22.13. Jedynym wspieranym lockfile jest `pnpm-lock.yaml`.
@@ -115,5 +117,7 @@ Aplikacja udostępnia manifest, ikony zastępcze oraz rejestruje prosty service 
 - Preferencja `prefers-reduced-motion` ogranicza animacje i przejścia.
 
 ## Zakres projektu
+
+Zakres v1/GA obejmuje Slacka, Microsoft Teams i Telegrama. E-mail jako kanał wsparcia oraz wszystkie funkcje AI są poza v1. Wpisy e-mail widoczne w `/cases` są fixture’em prezentacyjnym do usunięcia przy zastąpieniu mocków realnym API; adresy e-mail kont użytkowników pozostają danymi tożsamości, a nie kanałem wsparcia.
 
 Projekt nie zawiera funkcji AI, prawdziwych integracji z komunikatorami ani backendu. Symulowane działania służą wyłącznie do demonstracji przepływów opisanych w interfejsie.
