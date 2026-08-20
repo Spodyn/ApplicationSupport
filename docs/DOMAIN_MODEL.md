@@ -78,6 +78,12 @@ USI-33 rozdziela kanoniczną tożsamość użytkownika od sposobu uwierzytelnien
 
 `lib/domain/analytics.ts` definiuje projekcję raportową. `AnalyticsStatusDimension` jest wymiarem danych analitycznych i może zawierać klucze inne niż `InboxStatus`. Nie jest maszyną stanów workflow. Sposób mapowania statusów domenowych na wymiary raportowe pozostaje do uzgodnienia przed OpenAPI.
 
+### Retencja przyszłego backendu
+
+USI-40 klasyfikuje przyszłe dane persistence jako `messages`, `inbound_events`, `audit_events` i `attachments` wraz z binary objects. Klasyfikacja nie dodaje drugiego frontendowego modelu wiadomości ani sprawy. Po expiry wiadomość lub attachment może pozostawić wyłącznie minimalny, sanityzowany tombstone potrzebny dla integralności Case/history; inbound i audit events podlegają kontrolowanemu hard delete zgodnie z `RETENTION.md`.
+
+Runtime v1 pozostaje single-tenant i nie dodaje `tenant_id` do modeli domenowych. Granica klienta jest granicą deploymentu, bazy, object storage, sekretów i konfiguracji, a nie polem wybieranym przez UI lub API.
+
 ## Świadomie usunięty model legacy
 
 Po sprawdzeniu wszystkich referencji usunięto nieużywany, równoległy łańcuch:
@@ -95,4 +101,4 @@ Aktywne ekrany korzystały już z `InboxCase`, `AnalyticsResult` oraz modeli adm
 - Lista prezentacyjna pokazuje również e-mail. Zgodnie z USI-6 jest to fixture poza v1, a nie brakująca wartość `Channel`; fixture ma zostać usunięty przy zastąpieniu danych prezentacyjnych realnym API.
 - Reguła ignorowanych kanałów jest konfigurowana w administracji, ale nie ma jeszcze procesu przyjmowania wiadomości, który ją egzekwuje.
 
-Otwarte kwestie są opisane w `docs/OPEN_DECISIONS.md`, a zamknięty kontrakt kanałów w `docs/V1_SCOPE.md`. Nie powinny być rozstrzygane przez przypadkowe rozszerzanie typów.
+Otwarte kwestie są opisane w `docs/OPEN_DECISIONS.md`, zamknięty kontrakt kanałów w `docs/V1_SCOPE.md`, a kontrakt retencji i izolacji w `docs/RETENTION.md`. Nie powinny być rozstrzygane przez przypadkowe rozszerzanie typów.

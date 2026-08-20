@@ -79,3 +79,7 @@ Obecne repozytorium nie implementuje auth, dlatego USI-33 nie dodaje pozornych t
 ## Przyszłe testy providerowego groupingu
 
 Repo nie zawiera inbound adapterów, dlatego USI-34 dokumentuje obowiązkową macierz fixture’ów zamiast dodawać pozorne integracje. Implementacja backendowa musi pokryć root/reply dla Slacka i wspieranych kontekstów Teams, Telegram topic i chat bez topics, nową powiązaną sprawę po terminalnym case, deduplikację eventu, równoległe pierwsze eventy oraz walidację strategy/provider capability. Szczegóły zawiera `CASE_GROUPING.md`.
+
+## Przyszłe testy retencji i izolacji
+
+Repo nie zawiera backendu, jobów retencji, object storage ani backup automation, dlatego USI-40 dokumentuje obowiązkową macierz zamiast dodawać pozorne testy runtime. Implementacja musi pokryć wartości domyślne i granice konfiguracji, odrzucenie wartości spoza zakresu, purge właściwy dla każdej klasy danych, sanityzowane tombstones bez body/PII, brak przypadkowego cascade, legal hold per deployment, purge po restore oraz izolację bazy, storage, sekretów i configu między deploymentami. Szczegóły zawiera `RETENTION.md`.

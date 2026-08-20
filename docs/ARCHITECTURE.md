@@ -48,6 +48,8 @@ USI-33 zamraża v1 jako lokalny e-mail i hasło z sesją serwerową przekazywan�
 
 USI-34 zamraża provider-neutral grouping wykonywany przez inbound adapters przed utworzeniem lub odnalezieniem sprawy. Slack używa root+thread, Teams root+replies w kontekstach potwierdzonych capability matrix, Telegram topic albo jednej aktywnej sprawy na chat bez topics. Pełny kontrakt kluczy, terminal linking i idempotency znajduje się w `docs/CASE_GROUPING.md`.
 
+USI-40 zamraża v1 jako model single-tenant: jeden klient ma osobny deployment, PostgreSQL, object storage, sekrety i konfigurację, ale korzysta z tego samego kodu. Runtime nie ma `tenant_id`, tenant selectora ani cross-tenant API. Retencja, kontrolowany purge, legal hold per deployment oraz rotacja backupów są kontraktem przyszłej infrastruktury opisanym w `docs/RETENTION.md`.
+
 ## Planowana granica backendu
 
 Planowany kierunek, bez implementowania go w tym repozytorium:
@@ -85,6 +87,8 @@ Wygenerowane pliki nie powinny być ręcznie edytowane. Szczegóły autoryzacji,
 Przyszły backend jest jedyną granicą bezpieczeństwa: każda chroniona operacja powtarza kontrolę aktywnej sesji, literalnej roli i effective permissions niezależnie od widoczności elementu UI. Frontend mapuje `401`/`403` na stany aplikacji, ale nie jest źródłem decyzji autoryzacyjnej.
 
 Spring Session JDBC przechowuje docelowy stan sesji w PostgreSQL. Login, logout i `auth/me` należą do kontraktu API, ale ich implementacja oraz trasa `/login` pozostają poza obecnym repozytorium.
+
+Każdy przyszły deployment backendu obsługuje dokładnie jednego klienta i korzysta z własnej bazy, object storage, sekretów oraz konfiguracji. Retention job działa w granicy tego deploymentu, respektuje legal hold i jawnie redaguje lub usuwa klasy danych bez przypadkowego cascade przez relacje zachowujące historię. Restore backupu nie otwiera ruchu, dopóki polityka retention/purge nie zostanie ponownie zastosowana.
 
 ## Granice bezpieczeństwa
 
