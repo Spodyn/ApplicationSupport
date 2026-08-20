@@ -71,3 +71,7 @@ Workflow ma wyłącznie uprawnienie `contents: read`, nie korzysta z sekretów p
 ## Zmiany domenowe
 
 Po zmianach w `lib/domain/` należy zawsze uruchomić `pnpm check`. Typecheck wykrywa pozostałe importy usuniętych modeli, a E2E chroni bieżące zachowanie czatów, statystyk, użytkowników i ustawień przed skutkami refaktoru typów. Testy nie zatwierdzają nowych reguł workflow — takie reguły wymagają wcześniej jawnej decyzji produktowej.
+
+## Przyszłe testy providerowego groupingu
+
+Repo nie zawiera inbound adapterów, dlatego USI-34 dokumentuje obowiązkową macierz fixture’ów zamiast dodawać pozorne integracje. Implementacja backendowa musi pokryć root/reply dla Slacka i wspieranych kontekstów Teams, Telegram topic i chat bez topics, nową powiązaną sprawę po terminalnym case, deduplikację eventu, równoległe pierwsze eventy oraz walidację strategy/provider capability. Szczegóły zawiera `CASE_GROUPING.md`.
