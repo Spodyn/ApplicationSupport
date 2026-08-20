@@ -36,6 +36,12 @@ USI-6 utrwala v1/GA jako obsługę Slacka, Microsoft Teams i Telegrama. E-mail j
 
 E-mail widoczny w lokalnym modelu prezentacyjnym `/cases` jest istniejącym fixture’em mockupu, a nie czwartym kanałem domenowym. Pozostaje bez zmian dla zachowania zaakceptowanego UX i ma zostać usunięty dopiero przy zastąpieniu fixture’ów realnym API. Adresy e-mail użytkowników są danymi konta i nie zmieniają listy kanałów wsparcia.
 
+## Zamrożony baseline uwierzytelniania
+
+USI-33 utrwala v1 jako lokalny e-mail i hasło oraz sesję serwerową w bezpiecznym cookie `HttpOnly`. Mutacje przeglądarkowe wymagają CSRF, a token sesyjny nie może być przechowywany w web storage ani cache PWA. Invitation/reset używają jednorazowych tokenów przechowywanych wyłącznie jako hash. OIDC/SSO pozostaje przyszłym rozszerzeniem mapującym do tego samego kanonicznego użytkownika.
+
+Repo nadal nie zawiera `/login`, sesji ani backendowego auth; dokument `AUTHENTICATION.md` jest kontraktem dla przyszłej implementacji i nie zmienia obecnego UX.
+
 ## Granica danych
 
 Docelowy przepływ jest zachowany:

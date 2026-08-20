@@ -71,3 +71,7 @@ Workflow ma wyłącznie uprawnienie `contents: read`, nie korzysta z sekretów p
 ## Zmiany domenowe
 
 Po zmianach w `lib/domain/` należy zawsze uruchomić `pnpm check`. Typecheck wykrywa pozostałe importy usuniętych modeli, a E2E chroni bieżące zachowanie czatów, statystyk, użytkowników i ustawień przed skutkami refaktoru typów. Testy nie zatwierdzają nowych reguł workflow — takie reguły wymagają wcześniej jawnej decyzji produktowej.
+
+## Przyszłe testy uwierzytelniania
+
+Obecne repozytorium nie implementuje auth, dlatego USI-33 nie dodaje pozornych testów sesji. Gdy powstanie backend i `/login`, bramka musi objąć: bezpieczne atrybuty oraz rotację cookie, logout i unieważnienie sesji, CSRF dla mutacji, konta nieaktywne/nieważne, brak tokenów w web storage i cache PWA, jednorazowe invitation/reset tokeny oraz mapowanie OIDC do istniejącego użytkownika. Pełna macierz znajduje się w `AUTHENTICATION.md`.

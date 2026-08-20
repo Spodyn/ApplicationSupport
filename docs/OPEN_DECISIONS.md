@@ -35,6 +35,8 @@ USI-32 zamknął wartości docelowej roli do `USER` i `ADMIN` oraz zasadę `ADMI
 
 Do realizacji pozostaje konsolidacja obu frontendowych reprezentacji wokół kanonicznej tożsamości z backendu i jawnego mappera. Dane nie powinny być synchronizowane wyłącznie przez adres e-mail bez uzgodnionego identyfikatora. Ta praca nie może zmienić zamrożonej matrycy z `PERMISSION_MATRIX.md`.
 
+USI-33 zamknął mechanizm v1 do lokalnego e-maila i hasła z sesją serwerową oraz ustalił, że przyszłe OIDC mapuje do tej samej kanonicznej tożsamości bez nadawania roli z claims. Nadal otwarty jest kształt konsolidacji istniejących frontendowych reprezentacji; mechanizm logowania nie rozstrzyga mappera domenowego.
+
 ## 5. Status jako wymiar analityczny
 
 `AnalyticsStatusDimension` jest celowo oddzielony od `InboxStatus`. Dane mock analityki zawierają również klucze raportowe takie jak `waiting_team` i `snoozed`, których nie ma w kanonicznym workflow.

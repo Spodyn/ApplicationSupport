@@ -64,6 +64,10 @@ Permission administracyjny jest skuteczny tylko dla roli `ADMIN`; sam grant zapi
 
 `AdministrationUser` nie jest drugim modelem sprawy. Jego relacja do współdzielonego `User` nadal wymaga realizacji przez przyszły kanoniczny model tożsamości i mapper, ale starsze wartości `agent/supervisor/admin` nie są docelową rolą aplikacji ani kontraktem API.
 
+### Tożsamość i uwierzytelnianie
+
+USI-33 rozdziela kanoniczną tożsamość użytkownika od sposobu uwierzytelnienia. Lokalne hasło oraz przyszłe powiązanie OIDC są danymi serwerowymi służącymi potwierdzeniu tej samej tożsamości; nie tworzą wariantów modelu `User`. Rola, permissions, aktywność i ważność konta pozostają właściwościami lokalnego użytkownika, a nie claims z mechanizmu logowania. Szczegóły zawiera `AUTHENTICATION.md`.
+
 ### Analityka
 
 `lib/domain/analytics.ts` definiuje projekcję raportową. `AnalyticsStatusDimension` jest wymiarem danych analitycznych i może zawierać klucze inne niż `InboxStatus`. Nie jest maszyną stanów workflow. Sposób mapowania statusów domenowych na wymiary raportowe pozostaje do uzgodnienia przed OpenAPI.
