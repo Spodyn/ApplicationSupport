@@ -2,7 +2,7 @@
 
 Produkcyjnie stylizowany frontend wspólnej skrzynki wsparcia dla Slacka, Microsoft Teams i Telegrama. Interfejs jest w całości po polsku, działa responsywnie i korzysta wyłącznie z lokalnych danych oraz usług mockowych. Backend nie jest częścią tego repozytorium.
 
-Zamrożony kontrakt wydania v1/GA, wspieranych kanałów i wyłączeń opisuje [`docs/V1_SCOPE.md`](docs/V1_SCOPE.md). Role `USER`/`ADMIN`, katalog permissions i matrycę guardów UI/API utrwala [`docs/PERMISSION_MATRIX.md`](docs/PERMISSION_MATRIX.md). Baseline lokalnego logowania, sesji serwerowej, CSRF i przyszłej granicy OIDC opisuje [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md), a providerowe reguły grupowania wiadomości do spraw — [`docs/CASE_GROUPING.md`](docs/CASE_GROUPING.md).
+Zamrożony kontrakt wydania v1/GA, wspieranych kanałów i wyłączeń opisuje [`docs/V1_SCOPE.md`](docs/V1_SCOPE.md). Role `USER`/`ADMIN`, katalog permissions i matrycę guardów UI/API utrwala [`docs/PERMISSION_MATRIX.md`](docs/PERMISSION_MATRIX.md). Baseline lokalnego logowania, sesji serwerowej, CSRF i przyszłej granicy OIDC opisuje [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md), providerowe reguły grupowania wiadomości do spraw — [`docs/CASE_GROUPING.md`](docs/CASE_GROUPING.md), a retencję, purge, backupy i izolację single-tenant — [`docs/RETENTION.md`](docs/RETENTION.md).
 
 ## Uruchomienie
 

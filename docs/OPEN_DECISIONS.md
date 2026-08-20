@@ -4,6 +4,8 @@ Stan na 20 sierpnia 2026 r. Poniższe kwestie nie są rozstrzygane przez bieżą
 
 Lista kanałów nie jest już otwartą decyzją. USI-6 zamroził v1/GA do Slacka, Microsoft Teams i Telegrama, z e-mailem oraz funkcjami AI poza v1; aktualny kontrakt znajduje się w [V1_SCOPE.md](V1_SCOPE.md).
 
+Retencja i model wdrożenia nie są już otwartą decyzją. USI-40 zamroził konfigurację retencji per single-tenant deployment, purge semantics, legal hold per deployment i zasady backup/restore; aktualny kontrakt znajduje się w [RETENTION.md](RETENTION.md). Bezterminowa retencja jako zwykła konfiguracja oraz legal hold per Case/user pozostają jawnie poza v1, a nie na tej liście do samodzielnego rozstrzygnięcia przez implementację.
+
 ## 1. Ewentualny zakres `/current-cases`
 
 Trasa i pozycja nawigacji nie istnieją, a README wymienia wyłącznie aktualnie zaimplementowane widoki. Funkcja nie powinna być przywracana na podstawie starych opisów.

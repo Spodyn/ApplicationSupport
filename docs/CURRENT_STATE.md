@@ -42,6 +42,12 @@ USI-33 utrwala v1 jako lokalny e-mail i hasło oraz sesję serwerową w bezpiecz
 
 Repo nadal nie zawiera `/login`, sesji ani backendowego auth; dokument `AUTHENTICATION.md` jest kontraktem dla przyszłej implementacji i nie zmienia obecnego UX.
 
+## Zamrożony kontrakt retencji i izolacji
+
+USI-40 utrwala model v1 jako jeden klient na osobny deployment, bazę, object storage, sekrety i konfigurację, bez `tenant_id`, tenant selectora i cross-tenant API. Kontrakt definiuje walidowane zakresy retencji dla wiadomości, inbound eventów, audytu i attachments, odrębne purge semantics, legal hold per deployment oraz rotację backupów i obowiązkowy purge po restore.
+
+Repo nadal nie zawiera backendu, jobów retencji, migracji, object storage ani automatyzacji backupów. Dokument `RETENTION.md` jest kontraktem przyszłej implementacji i nie zmienia danych mock ani zaakceptowanego UX.
+
 ## Granica danych
 
 Docelowy przepływ jest zachowany:
@@ -137,3 +143,4 @@ Zrzuty są częścią audytu i stanowią punkt odniesienia przed dalszym hardeni
 3. Ustawienie ignorowanego kanału jest dostępne w administracji, ale obecny mock inbox nie implementuje punktu przyjmowania wiadomości, w którym reguła byłaby egzekwowana.
 4. Obecny zestaw jest celowo lekki i chroni krytyczne smoke flow; pełne mutacje workflow wymagają rozszerzenia testów po potwierdzeniu ich docelowej semantyki produktowej.
 5. Frontend nie implementuje jeszcze sesji ani pełnego ukrywania tras/zakładek według permissions. Guardy mock pomagają zachować kontrakt, ale authoritative enforcement pozostaje zadaniem przyszłego backendu E04.
+6. Retencja, legal hold i backupy są obecnie wyłącznie zamrożonym kontraktem; ich poprawne egzekwowanie wymaga przyszłego backendu i warstwy deployment/ops.
