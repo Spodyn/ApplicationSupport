@@ -599,7 +599,7 @@ function PermissionsPanel({ data, actions }: { data: RolePermissions[]; actions:
   }
 
   return (
-    <SettingsCard title="Uprawnienia ról" description="Domyślny zakres dostępu dla użytkowników i administratorów. Indywidualne wyjątki ustawisz na ekranie użytkowników.">
+    <SettingsCard title="Uprawnienia ról" description="Granularny zakres funkcji administracyjnych. Rola Użytkownik nie otrzymuje uprawnień administracyjnych.">
       <div className="overflow-hidden rounded-lg border">
         <Table>
           <TableHeader><TableRow className="bg-muted/40"><TableHead>Uprawnienie</TableHead><TableHead className="w-32 text-center">Użytkownik</TableHead><TableHead className="w-32 text-center">Administrator</TableHead></TableRow></TableHeader>
@@ -607,7 +607,7 @@ function PermissionsPanel({ data, actions }: { data: RolePermissions[]; actions:
             {allAdministrationPermissions.map((permission) => (
               <TableRow key={permission}>
                 <TableCell><p className="font-medium">{administrationPermissionLabels[permission]}</p><p className="text-xs text-muted-foreground">{permissionDescriptions[permission]}</p></TableCell>
-                {(["user", "admin"] as const).map((role) => <TableCell key={role} className="text-center"><Switch checked={form.find((entry) => entry.role === role)?.permissions.includes(permission) ?? false} onCheckedChange={(checked) => toggle(role, permission, checked)} aria-label={`${administrationPermissionLabels[permission]}: ${role}`} /></TableCell>)}
+                {(["USER", "ADMIN"] as const).map((role) => <TableCell key={role} className="text-center"><Switch checked={form.find((entry) => entry.role === role)?.permissions.includes(permission) ?? false} disabled={role === "USER"} onCheckedChange={(checked) => toggle(role, permission, checked)} aria-label={`${administrationPermissionLabels[permission]}: ${role}`} /></TableCell>)}
               </TableRow>
             ))}
           </TableBody>
@@ -623,7 +623,12 @@ const permissionDescriptions: Record<AdministrationPermission, string> = {
   manage_users: "Dodawanie, edycja, dezaktywacja i usuwanie kont.",
   manage_integrations: "Konfiguracja połączeń oraz ignorowanych kanałów Slack, Teams i Telegram.",
   manage_sla: "Zmiana czasów i zasad naliczania SLA.",
+  manage_schedule: "Zmiana godzin pracy, wyjątków kalendarza i odpowiedzi poza biurem.",
+  manage_notifications: "Konfiguracja celów i reguł powiadomień.",
   view_global_statistics: "Dostęp do statystyk całej organizacji.",
+  reassign_cases: "Administracyjne przepisanie lub odpięcie właściciela sprawy.",
+  force_resolve: "Rozwiązanie sprawy poza zwykłą regułą bieżącego właściciela.",
+  view_audit: "Przeglądanie przefiltrowanej historii audytowej.",
 }
 
 function SettingsCard({ title, description, actions, children }: { title: string; description: string; actions?: ReactNode; children: ReactNode }) {

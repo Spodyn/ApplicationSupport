@@ -1,12 +1,22 @@
 import type { Channel, UserPresence } from "./shared"
 
-export type AdministrationRole = "user" | "admin"
+export const administrationRoles = ["USER", "ADMIN"] as const
 
-export type AdministrationPermission =
-  | "manage_users"
-  | "manage_integrations"
-  | "manage_sla"
-  | "view_global_statistics"
+export type AdministrationRole = (typeof administrationRoles)[number]
+
+export const administrationPermissions = [
+  "manage_users",
+  "manage_integrations",
+  "manage_sla",
+  "manage_schedule",
+  "manage_notifications",
+  "view_global_statistics",
+  "reassign_cases",
+  "force_resolve",
+  "view_audit",
+] as const
+
+export type AdministrationPermission = (typeof administrationPermissions)[number]
 
 export interface AdministrationUser {
   id: string
@@ -133,9 +143,20 @@ export const administrationPermissionLabels: Record<AdministrationPermission, st
   manage_users: "Zarządzanie użytkownikami",
   manage_integrations: "Zarządzanie integracjami i kanałami",
   manage_sla: "Konfiguracja SLA",
+  manage_schedule: "Konfiguracja godzin pracy i poza biurem",
+  manage_notifications: "Zarządzanie powiadomieniami",
   view_global_statistics: "Statystyki globalne",
+  reassign_cases: "Przepisywanie i odpinanie spraw",
+  force_resolve: "Administracyjne rozwiązanie sprawy",
+  view_audit: "Dostęp do audytu",
 }
 
-export const allAdministrationPermissions = Object.keys(
-  administrationPermissionLabels,
-) as AdministrationPermission[]
+export const allAdministrationPermissions: readonly AdministrationPermission[] =
+  administrationPermissions
+
+export function hasAdministrationPermission(
+  principal: Pick<AdministrationUser, "role" | "permissions"> | undefined,
+  permission: AdministrationPermission,
+) {
+  return principal?.role === "ADMIN" && principal.permissions.includes(permission)
+}

@@ -31,7 +31,9 @@ Do decyzji:
 
 `User` z `lib/domain/shared.ts` oraz `AdministrationUser` opisują częściowo te same osoby, ale różnią się rolami, aktywnością, ważnością i uprawnieniami.
 
-Do decyzji: czy administracja rozszerza wspólny model tożsamości, czy pozostaje osobnym obszarem z jawnym mapperem. Dane nie powinny być synchronizowane wyłącznie przez adres e-mail bez uzgodnionego identyfikatora.
+USI-32 zamknął wartości docelowej roli do `USER` i `ADMIN` oraz zasadę `ADMIN` + wymagany permission. Wartości `agent/supervisor/admin` w obecnym modelu prezentacyjnym nie są kontraktem backendu.
+
+Do realizacji pozostaje konsolidacja obu frontendowych reprezentacji wokół kanonicznej tożsamości z backendu i jawnego mappera. Dane nie powinny być synchronizowane wyłącznie przez adres e-mail bez uzgodnionego identyfikatora. Ta praca nie może zmienić zamrożonej matrycy z `PERMISSION_MATRIX.md`.
 
 ## 5. Status jako wymiar analityczny
 
