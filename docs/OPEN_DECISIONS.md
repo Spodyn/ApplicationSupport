@@ -1,55 +1,41 @@
 # Otwarte decyzje
 
-Stan na 20 sierpnia 2026 r. Poniższe kwestie nie są rozstrzygane przez bieżący kod ani dokumentację.
+**Stan: 24 sierpnia 2026 - DECISION FREEZE COMPLETE.**
 
-Lista kanałów nie jest już otwartą decyzją. USI-6 zamroził v1/GA do Slacka, Microsoft Teams i Telegrama, z e-mailem oraz funkcjami AI poza v1; aktualny kontrakt znajduje się w [V1_SCOPE.md](V1_SCOPE.md).
+Na podstawie ponownego cross-checku Jira E00-E25 oraz repozytorium **nie ma obecnie znanej nierozstrzygniętej decyzji produktowej ani architektonicznej, która powinna blokować autonomiczną implementację**.
 
-Retencja i model wdrożenia nie są już otwartą decyzją. USI-40 zamroził konfigurację retencji per single-tenant deployment, purge semantics, legal hold per deployment i zasady backup/restore; aktualny kontrakt znajduje się w [RETENTION.md](RETENTION.md). Bezterminowa retencja jako zwykła konfiguracja oraz legal hold per Case/user pozostają jawnie poza v1, a nie na tej liście do samodzielnego rozstrzygnięcia przez implementację.
+## Hierarchia źródeł prawdy
 
-Maszyna stanów i ownership nie są już otwartą decyzją. USI-35 zamroził pełną transition matrix, Ask Customer bieżącego ownera, zwykły Resolve, ADMIN force-resolve oraz brak reopen stanów terminalnych; aktualny kontrakt znajduje się w [CASE_WORKFLOW.md](CASE_WORKFLOW.md).
+1. Aktualny Jira ticket i jego późniejsze `FINAL DECISION FREEZE`, `CONTRACT OVERRIDE` lub `USER_DECISION_RESOLVED` comments.
+2. `PRODUCT_CONTRACT.md`.
+3. `decision-registry.yaml`.
+4. `PRODUCT_SPEC.md`, `WORKFLOW_MATRIX.md`, `ARCHITECTURE.md`, `INTEGRATIONS.md`, `SECURITY.md`, `OPERATIONS.md`.
+5. Starsze dokumenty obszarowe tylko w zakresie niesprzecznym z powyższymi.
 
-## 1. Ewentualny zakres `/current-cases`
+Starsze opisy "do decyzji" są materiałem historycznym, jeżeli późniejszy freeze rozstrzygnął temat.
 
-Trasa i pozycja nawigacji nie istnieją, a README wymienia wyłącznie aktualnie zaimplementowane widoki. Funkcja nie powinna być przywracana na podstawie starych opisów.
+## Kwestie wcześniej wymienione jako otwarte - rozstrzygnięte
 
-Do decyzji produktowej pozostaje, czy osobny widok bieżących spraw będzie kiedykolwiek potrzebny. Jeśli tak, wymaga nowej specyfikacji; nie jest funkcją bieżącą ani automatycznie planowaną.
+### Admin current-work overview
+USI-39: funkcja znajduje się w `/statistics` jako ADMIN-only zakładka **Aktualna praca**, a backend używa `GET /api/v1/admin/current-cases`. Nie wraca osobna trasa `/current-cases`.
 
-## 2. Źródło prawdy dla prezentacji `/cases`
+### Źródło danych prezentacji `/cases`
+USI-88: transportowe DTO mapuje jeden jawny mapper na stabilny frontend domain/view model. Lokalny component fixture nie jest drugim kontraktem backendu.
 
-Lista i rozmowa używają danych prezentacyjnych osadzonych w `components/cases/cases-page.tsx`, a część stanu łączą z `InboxCase` po referencji. Dla niektórych wpisów pola prezentacyjne nie odpowiadają rekordom domenowym.
+### Ignorowane kanały
+USI-80: `channel.ignored=true` działa per Channel i prospektywnie. Inbound jest uwierzytelniany/deduplikowany i zapisany jako `IGNORED_BY_CHANNEL`, ale nie tworzy Case, Message, SLA ani read-state. Existing history pozostaje bez zmian; ponieważ nie powstaje Message, inbound nie jest zwykłą wiadomością widoczną w inboxie.
 
-Do decyzji: czy `InboxCase` ma dostarczać cały model widoku, czy potrzebny jest osobny mapper/prezenter zasilany wyłącznie przez usługę. Lokalny fixture komponentu nie powinien stać się drugim kontraktem backendowym.
+### Tożsamość użytkownika
+Backendowy user ID jest kanoniczną tożsamością; `User` i `AdministrationUser` są frontendowymi projekcjami/mapowaniami tej samej osoby. Konsolidacja typów jest decyzją techniczną i nie zmienia ról `USER`/`ADMIN`, permissions ani auth.
 
-## 3. Egzekwowanie ignorowanych kanałów
+### Status jako wymiar analityczny
+`AnalyticsStatusDimension` może być pochodną kategorią raportową, ale nie jest `CaseStatus`. Workflow ma dokładnie sześć zamrożonych statusów.
 
-Ustawienia → Kanały przechowują `ManagedChannel.ignored` i opisują oczekiwane zachowanie: zwykła wiadomość, bez sprawy i bez SLA. Obecny mock inbox nie ma procesu przyjmowania wiadomości, który sprawdza tę regułę.
+### Workflow na ekranie czatów
+USI-113: Claim, Ignore, Ask Customer, Resolve, Snooze i akcje admina są podłączane do realnego API; action availability pochodzi z backendu, UI obsługuje pending i stabilne błędy 401/403/409/provider failure/retry i nie implementuje drugiej maszyny stanów. Akceptowany design pozostaje baseline.
 
-Do decyzji:
+## Kiedy wolno dodać nową otwartą decyzję
 
-- czy ignorowane wiadomości nadal będą widoczne w skrzynce czatów,
-- jak zmiana reguły wpłynie na istniejące sprawy,
-- czy zakres reguły będzie per kanał, workspace i klient.
+Tylko gdy implementacja ujawni realną zmianę kontraktu, której nie da się rozstrzygnąć powyższą hierarchią - np. rozszerzenie v1, fundamentalną zmianę workflow, nową rolę/permission, nową security boundary, destrukcyjną semantykę danych, płatną usługę/commitment, produkcyjne uprawnienia, pricing/customer commitment lub nowy wymóg prawno-compliance.
 
-USI-34 ustalił, że providerowy inbound adapter stosuje konfigurację Channel przed utworzeniem lub odnalezieniem Case. Nie rozstrzyga to powyższej polityki ignorowania ani jej zasięgu.
-
-## 4. Wspólna tożsamość użytkownika
-
-`User` z `lib/domain/shared.ts` oraz `AdministrationUser` opisują częściowo te same osoby, ale różnią się rolami, aktywnością, ważnością i uprawnieniami.
-
-USI-32 zamknął wartości docelowej roli do `USER` i `ADMIN` oraz zasadę `ADMIN` + wymagany permission. Wartości `agent/supervisor/admin` w obecnym modelu prezentacyjnym nie są kontraktem backendu.
-
-Do realizacji pozostaje konsolidacja obu frontendowych reprezentacji wokół kanonicznej tożsamości z backendu i jawnego mappera. Dane nie powinny być synchronizowane wyłącznie przez adres e-mail bez uzgodnionego identyfikatora. Ta praca nie może zmienić zamrożonej matrycy z `PERMISSION_MATRIX.md`.
-
-USI-33 zamknął mechanizm v1 do lokalnego e-maila i hasła z sesją serwerową oraz ustalił, że przyszłe OIDC mapuje do tej samej kanonicznej tożsamości bez nadawania roli z claims. Nadal otwarty jest kształt konsolidacji istniejących frontendowych reprezentacji; mechanizm logowania nie rozstrzyga mappera domenowego.
-
-## 5. Status jako wymiar analityczny
-
-`AnalyticsStatusDimension` jest celowo oddzielony od `InboxStatus`. Dane mock analityki zawierają również klucze raportowe takie jak `waiting_team` i `snoozed`, których nie ma w kanonicznym workflow.
-
-Do decyzji: które wymiary raportowe mają być bezpośrednią projekcją `InboxStatus`, a które są niezależnymi kategoriami. Mapowanie powinno należeć do przyszłego adaptera lub backendu analitycznego, nie do komponentów wykresów.
-
-## 6. Oczekiwany workflow na ekranie czatów
-
-Warstwa usług zawiera `claim`, `ignore`, `askCustomer`, `resolve`, `snooze` i `sendMessage`, ale aktualny ekran `/cases` nie podłącza pełnego zestawu operacji. W zweryfikowanym stanie część przycisków jest wyłączona, a dialogów ignorowania i pytania klienta brak.
-
-Semantyka przejść, ownership i terminal states jest zamknięta w `CASE_WORKFLOW.md`. Nadal do decyzji pozostaje wyłącznie to, które niepodłączone działania mają zostać aktywowane w zaakceptowanym UI i w jakim ticketcie. Aktywowanie ich wymaga osobnego zakresu oraz obsługi stanów ładowania, błędów i konfliktów; nie może zmienić zamrożonego workflow.
+Nazwy klas, indeksów, lokalne refaktoryzacje, sposób implementacji blokad/retry, test design i aktualne szczegóły SDK providera są delegowanymi decyzjami technicznymi i **nie trafiają na tę listę**.
