@@ -1,90 +1,134 @@
 # Testowanie i CI
 
-Stan na 9 sierpnia 2026 r. Testy korzystają wyłącznie z lokalnych danych mock i nie wymagają poświadczeń Slacka, Microsoft Teams ani Telegrama.
+**Stan:** current frontend gate + frozen v1 testing contract, 24 sierpnia 2026.
 
-## Wymagania
+## Obecny frontend gate
 
-- Node.js 22.23.2 LTS z `.nvmrc` (pnpm 11.18.0 wymaga Node.js `>=22.13`).
-- pnpm 11.18.0 zadeklarowany w `package.json`.
-- Chromium Playwright zainstalowany poleceniem `pnpm exec playwright install chromium`.
-
-Instalacja zależności na czystym checkout:
+Aktualne repo używa Node.js 22.23.2, pnpm 11.18.0, Vitest i Playwright Chromium. Instalacja:
 
 ```bash
 pnpm install --frozen-lockfile
 ```
 
-## Polecenia
+Dostępne komendy:
 
-| Polecenie | Zakres |
-| --- | --- |
-| `pnpm test:unit` | Jednorazowe uruchomienie Vitest. |
-| `pnpm test:unit:watch` | Vitest w trybie obserwowania. |
-| `pnpm build` | Produkcyjny build wymagany przez samodzielne E2E. |
-| `pnpm test:e2e` | Testy Playwright na lokalnym `next start` pod portem 3100. |
-| `pnpm check` | Lint, typecheck, testy jednostkowe, build i E2E. |
+- `pnpm lint`
+- `pnpm typecheck`
+- `pnpm test:unit`
+- `pnpm build`
+- `pnpm test:e2e`
+- `pnpm check`
 
-## Testy jednostkowe i komponentowe
+Obecne E2E korzystają z lokalnego Next.js/mock data, blokują zewnętrzne HTTP i wyłączają service worker dla deterministyczności.
 
-Konfiguracja znajduje się w `vitest.config.mts`. Środowisko jsdom jest inicjalizowane przez `tests/unit/setup.ts` i rozszerzone o matchery Testing Library.
+## Zasada nadrzędna
 
-Aktualny zakres:
+Test historycznego mocka nie może utrwalić zachowania sprzecznego z finalnym freeze. Gdy ticket implementuje realny backend/API flow, test musi zostać zaktualizowany do kanonicznego kontraktu.
 
-- dokładny zestaw statusów kanonicznego workflow inbox,
-- pełna macierz dozwolonych par przejść, stany terminalne i ownership per status,
-- dokładny zestaw kanałów v1: Slack, Microsoft Teams i Telegram, bez e-maila,
-- dokładne role `USER`/`ADMIN`, katalog dziewięciu permissions i wymóg jednoczesnej roli `ADMIN` oraz permission,
-- wyliczanie efektywnego stanu SLA, w tym przekroczenie terminu i wstrzymanie,
-- wpisywanie oraz czyszczenie kontrolowanego pola wyszukiwania.
+Przykład: obecny mock może usuwać badge unread przy samym otwarciu rozmowy. Frozen v1 wymaga jednak, aby samo otwarcie **nie oznaczało read**; read-position przesuwa się dopiero po actual render/seen i acknowledgement. Przy wdrożeniu E10/realnego `/cases` test ma chronić frozen behavior, nie fixture.
 
-## Playwright
+## Frontend contract tests
 
-Konfiguracja znajduje się w `playwright.config.ts`. Testy używają produkcyjnego serwera Next.js oraz jednego projektu Chromium.
+Testy powinny chronić co najmniej:
 
-Chronione przepływy:
+- dokładnie sześć CaseStatus,
+- dokładnie trzy support channels v1,
+- role `USER`/`ADMIN` i dziewięć permissions,
+- DTO -> stable domain/view mapper,
+- server-calculated workflow action availability,
+- personal read/snooze isolation,
+- loading/empty/error/401/403/409/provider-failure states,
+- zaakceptowany visual baseline bez niezamierzonego redesignu.
 
-- smoke dla `/cases`, `/statistics`, `/users` i `/settings`,
-- wybór nieodczytanego czatu, otwarcie rozmowy i oznaczenie wpisu jako odczytany,
-- rozpoczęcie odpowiedzi na konkretną wiadomość,
-- otwarcie i reset formularza dodawania użytkownika,
-- mobilne przejście z listy czatów do rozmowy i z powrotem.
+## Backend gate po uruchomieniu Spring Boot
 
-Każdy scenariusz blokuje żądania HTTP poza `http://127.0.0.1:3100`. Service worker jest wyłączony w kontekście testowym, aby cache PWA nie wpływał na deterministyczność.
+Docelowy CI rozszerza frontend gate o:
 
-Przy niepowodzeniu Playwright zapisuje screenshot i trace w `test-results/`, a raport HTML w `playwright-report/`. Oba katalogi są ignorowane przez Git.
+1. Java 25 / Maven Wrapper compile + tests,
+2. Spring Modulith `ApplicationModules.verify()`,
+3. backend unit/module tests,
+4. PostgreSQL/RabbitMQ/object-storage integration tests przez Testcontainers,
+5. Flyway clean migration + upgrade validation,
+6. OpenAPI lint/generation/compatibility i TypeScript compile,
+7. concurrency/idempotency tests,
+8. required security checks.
 
-## GitHub Actions
+Testy nigdy nie korzystają z production DB, storage ani provider credentials.
 
-Workflow `.github/workflows/ci.yml` działa dla `push` i `pull_request` i wykonuje kolejno:
+## Workflow i concurrency
 
-1. checkout,
-2. konfigurację pnpm i Node.js z cache pnpm,
-3. `pnpm install --frozen-lockfile`,
-4. instalację Chromium wraz z zależnościami systemowymi,
-5. lint,
-6. typecheck,
-7. testy jednostkowe/komponentowe,
-8. produkcyjny build,
-9. testy Playwright.
+Wymagane są deterministyczne testy m.in. dla:
 
-Workflow ma wyłącznie uprawnienie `contents: read`, nie korzysta z sekretów produkcyjnych i wysyła artefakty Playwright tylko po błędzie.
+- pełnej transition matrix i owner invariants,
+- 20 równoległych Claim -> dokładnie jeden winner,
+- Ignore weight snapshot/idempotent duplicate/reset/lifetime voter restriction,
+- Ask Customer pozostaje `VERIFICATION` do provider `SENT`,
+- permanent Ask delivery failure nie przełącza do WAITING,
+- normal Reply/Resolve tylko current owner,
+- reassign/unassign/force-resolve permissions,
+- terminal Case nigdy nie reopen; nowa customer message tworzy dokładnie jeden linked Case,
+- retry/idempotency bez duplicate business effects.
 
-## Zmiany domenowe
+## Read/unread i Snooze
 
-Po zmianach w `lib/domain/` należy zawsze uruchomić `pnpm check`. Typecheck wykrywa pozostałe importy usuniętych modeli, a E2E chroni bieżące zachowanie czatów, statystyk, użytkowników i ustawień przed skutkami refaktoru typów. Testy nie zatwierdzają nowych reguł workflow — takie reguły wymagają wcześniej jawnej decyzji produktowej.
+Pokryć:
 
-## Przyszłe testy uwierzytelniania
+- sparse per-user read state + new-user baseline,
+- customer new/edit -> unread dla eligible users,
+- samo otwarcie bez read acknowledgement -> nadal unread,
+- read acknowledgement po actual render/seen,
+- privacy stanów innych users,
+- Snooze per-user, bez zmiany status/owner/SLA,
+- wake/clear przez customer message, terminal state i Claim.
 
-Obecne repozytorium nie implementuje auth, dlatego USI-33 nie dodaje pozornych testów sesji. Gdy powstanie backend i `/login`, bramka musi objąć: bezpieczne atrybuty oraz rotację cookie, logout i unieważnienie sesji, CSRF dla mutacji, konta nieaktywne/nieważne, brak tokenów w web storage i cache PWA, jednorazowe invitation/reset tokeny oraz mapowanie OIDC do istniejącego użytkownika. Pełna macierz znajduje się w `AUTHENTICATION.md`.
+## Provider integrations
 
-## Przyszłe testy providerowego groupingu
+Każdy adapter ma używać fake/sandbox providera i testować:
 
-Repo nie zawiera inbound adapterów, dlatego USI-34 dokumentuje obowiązkową macierz fixture’ów zamiast dodawać pozorne integracje. Implementacja backendowa musi pokryć root/reply dla Slacka i wspieranych kontekstów Teams, Telegram topic i chat bez topics, nową powiązaną sprawę po terminalnym case, deduplikację eventu, równoległe pierwsze eventy oraz walidację strategy/provider capability. Szczegóły zawiera `CASE_GROUPING.md`.
+- auth/signature/secret verification,
+- durable ingest przed async processing,
+- dedup provider retries,
+- grouping i post-terminal linking,
+- ignored/unmapped/disabled contexts bez niedozwolonych business records,
+- edit/delete semantics,
+- transient/permanent outbound failures i Retry-After,
+- recovery/resync bez pełnego history importu.
 
-## Przyszłe testy maszyny stanów
+Aktualne vendor API paths/scopes/SDK details są weryfikowane względem oficjalnej dokumentacji przy implementacji; product semantics pozostają frozen.
 
-Repo nie zawiera backendowych commandów ani persistence, dlatego USI-35 testuje statyczny kontrakt domenowy i zgodność istniejącego mocka zamiast pozornych integracji. Implementacja backendowa musi pokryć każdą dozwoloną i zakazaną pozycję macierzy, invariants ownership, Ask Customer atomowy z outgoing message, zwykły Resolve bieżącego ownera, ADMIN force-resolve z rolą i permission, audit actora, brak reopen terminalnych spraw oraz nową powiązaną sprawę po terminalnej wiadomości. Szczegóły zawiera `CASE_WORKFLOW.md`.
+## Attachments/security
 
-## Przyszłe testy retencji i izolacji
+Pokryć limity 25 MiB/file, 10 plików, 50 MiB/message, provider lower limit, declared+detected MIME, malware states, archive limits, path traversal, unauthorized cross-case download, orphan cleanup oraz brak publicznego/trwałego credential-bearing URL.
 
-Repo nie zawiera backendu, jobów retencji, object storage ani backup automation, dlatego USI-40 dokumentuje obowiązkową macierz zamiast dodawać pozorne testy runtime. Implementacja musi pokryć wartości domyślne i granice konfiguracji, odrzucenie wartości spoza zakresu, purge właściwy dla każdej klasy danych, sanityzowane tombstones bez body/PII, brak przypadkowego cascade, legal hold per deployment, purge po restore oraz izolację bazy, storage, sekretów i configu między deploymentami. Szczegóły zawiera `RETENTION.md`.
+## SLA/business hours/notifications
+
+Testy muszą używać kontrolowanego czasu, bez flaky sleeps, i pokryć:
+
+- first response/unclaimed/in-progress business-time clocks,
+- pause/resume z zachowaniem elapsed,
+- policy/schedule/timezone snapshot,
+- DST, weekly intervals, date exceptions i `NO_FUTURE_OPENING`,
+- OOO once per Case/closure,
+- monotonic warning/breach,
+- notification dedup/retry/DLQ/suppression/recheck-enabled.
+
+## Auth/security
+
+Pokryć kontrakt z `AUTHENTICATION.md` i `SECURITY.md`: cookie/session, CSRF, rate limits/backoff, invite/reset, bootstrap, permissions, content sanitizer, SSRF, forwarded headers, secret redaction i security headers.
+
+Actionable Critical/High security finding blokuje merge zgodnie z frozen security policy.
+
+## Retention, DR i performance
+
+Testy implementacyjne obejmują:
+
+- wszystkie retention defaults/ranges i purge semantics,
+- legal hold oraz purge po restore,
+- backup restore evidence,
+- race/resilience failures,
+- acceptance load 200 users/WS, 5k Cases/day, burst 100 inbound/s przez 60 s,
+- 24h soak przed production acceptance.
+
+## Completion rule
+
+Ticket nie jest gotowy, jeśli wymagany gate jest czerwony. Reviewer ocenia dokładny HEAD SHA. Zmiana HEAD po review wymaga ponownej walidacji/review zgodnie z agent/orchestrator contract.
