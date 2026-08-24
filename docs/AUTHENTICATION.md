@@ -1,85 +1,111 @@
 # Kontrakt uwierzytelniania
 
-Stan na 20 sierpnia 2026 r. Dokument zamraża baseline z Jira USI-33 w ramach epika USI-5. Jest kontraktem produktowym i architektonicznym dla przyszłego backendu; nie oznacza implementacji logowania, Spring Security, sesji, OpenAPI, wysyłki wiadomości ani bazy danych w tym zadaniu.
+**Status:** FROZEN v1, reconciled 24 sierpnia 2026.  
+**Authority:** `PRODUCT_CONTRACT.md`, `decision-registry.yaml`, USI-33 oraz późniejszy E04 pre-flight freeze.
 
 ## Baseline v1
 
-- Użytkownik uwierzytelnia się lokalnym adresem e-mail i hasłem.
-- Role `USER` i `ADMIN` korzystają z tego samego mechanizmu logowania. Rola i permissions nie są danymi wejściowymi logowania.
-- Po poprawnym logowaniu backend tworzy sesję serwerową. Przeglądarka przechowuje wyłącznie identyfikator sesji w cookie `HttpOnly`.
-- Stan sesji jest docelowo przechowywany przez Spring Session JDBC. PostgreSQL pozostaje źródłem prawdy dla konta, jego aktywności, ważności, roli i permissions.
-- OIDC/SSO jest rozszerzeniem po v1. Nie zastępuje ani nie rozgałęzia kanonicznego modelu użytkownika.
+- Uwierzytelnianie: lokalny e-mail + hasło.
+- Kanoniczny użytkownik jest jeden; `USER` i `ADMIN` logują się tym samym mechanizmem.
+- Sesja jest server-side przez Spring Session JDBC.
+- Future OIDC/SSO mapuje do tej samej lokalnej identity/session i nie nadaje roli ani permissions z nieufnych IdP claims.
 
-Backend weryfikuje konto przy logowaniu oraz przy każdym chronionym żądaniu. Konto nieaktywne, jeszcze nieważne albo wygasłe nie może utworzyć ani kontynuować sesji. Odpowiedź logowania nie może ujawniać, czy podany adres istnieje, konto jest nieaktywne albo hasło jest błędne.
+## Normalizacja konta
 
-## Sesja i cookie
+- e-mail: trim + lowercase przed persistence/login lookup,
+- normalized e-mail: UNIQUE,
+- `display_name` jest osobnym polem,
+- konto inactive albo poza `valid_from`/`valid_until` nie może utworzyć ani utrzymać ważnej sesji.
 
-Cookie sesyjne musi być:
+## Cookie i sesja
 
-- `HttpOnly`, aby kod JavaScript nie mógł odczytać identyfikatora sesji;
-- `Secure` poza kontrolowanym lokalnym środowiskiem deweloperskim;
-- ograniczone do właściwego hosta i niezbędnej ścieżki;
-- skonfigurowane z polityką `SameSite` zgodną z docelową topologią wdrożenia, bez traktowania jej jako zamiennika ochrony CSRF.
+Kanoniczne cookie v1:
 
-Identyfikator sesji jest losowy, nie zawiera danych użytkownika i podlega rotacji po uwierzytelnieniu. Logout unieważnia stan po stronie serwera i wygasza cookie. Dezaktywacja, wygaśnięcie konta lub administracyjna zmiana wymagająca ponownego uwierzytelnienia musi uniemożliwić dalsze użycie istniejącej sesji.
+- name: `USI_SESSION`,
+- `HttpOnly`,
+- `Secure` na staging i production,
+- `SameSite=Lax`,
+- `Path=/`,
+- idle timeout: 12 godzin,
+- brak remember-me w v1.
 
-Nazwa cookie, czas bezczynności i maksymalny czas życia są konfiguracją backendu i wdrożenia. USI-33 nie ustala ich wartości liczbowych; implementacja nie może osłabić powyższych własności bezpieczeństwa.
+Logout natychmiast unieważnia server session. Session fixation protection i rotacja identyfikatora po uwierzytelnieniu są wymagane. Dezaktywacja/wygaśnięcie konta oraz skuteczny password reset unieważniają istniejące sesje zgodnie z kontraktem.
 
-## API
+## Password policy
 
-Publiczny prefiks pozostaje `/api/v1`.
+- hashing: Argon2id,
+- długość: 12-128 Unicode characters,
+- brak sztucznego obowiązku upper/lower/digit/symbol,
+- brak okresowej rotacji,
+- brak security questions,
+- generic login failure bez account enumeration,
+- rehash przy poprawnym loginie, gdy parametry hasha są już nieaktualne.
 
-| Operacja | Kontrakt |
-| --- | --- |
-| `POST /auth/login` | Przyjmuje lokalny e-mail i hasło. Sukces ustanawia sesję przez cookie; odpowiedź nie zwraca bearer tokenu. |
-| `POST /auth/logout` | Unieważnia bieżącą sesję po stronie serwera i wygasza cookie. Operacja jest idempotentna z perspektywy klienta. |
-| `GET /auth/me` | Zwraca kanoniczną tożsamość bieżącego użytkownika, rolę `USER`/`ADMIN` i effective permissions obliczone przez backend. |
-| Invitation | Dedykowany command administracyjny wymaga `ADMIN` + `manage_users` i wydaje jednorazowy token aktywacyjny. |
-| Password reset | Dedykowane request/confirm commands wydają i zużywają jednorazowy token resetu bez ujawniania istnienia konta. |
+Plaintext password nie trafia do DB, logów, audit, events ani command line.
 
-Dokładne ścieżki i payloady invitation/reset zostaną utrwalone w przyszłym OpenAPI bez zmiany powyższej semantyki. Błędy API używają `application/problem+json` i stabilnych kodów zgodnie z kontraktem v1.
+## Invitation
 
-## CSRF i przechowywanie po stronie klienta
+- minimum 256-bit CSPRNG entropy,
+- plaintext istnieje tylko przy generacji,
+- DB przechowuje wyłącznie hash,
+- TTL: 24 godziny,
+- one-time use,
+- nowy invite unieważnia wcześniejsze aktywne invite tego usera,
+- user nie loguje się przed ustawieniem pierwszego hasła.
 
-Każda mutacja przeglądarkowa uwierzytelniana cookie wymaga ochrony CSRF egzekwowanej przez backend. Token CSRF nie jest tokenem sesyjnym, musi być powiązany z sesją i przesyłany w sposób, którego żądanie cross-site nie może odtworzyć. Kontrole `Origin`/`Referer` oraz `SameSite` mogą wzmacniać ochronę, ale nie zastępują uzgodnionego mechanizmu CSRF.
+V1 nie wymaga produkcyjnego e-mail providera do dostarczenia invite; dev/test może użyć kontrolowanego kanału testowego.
 
-Frontend nie może przechowywać identyfikatora sesji, hasła, invitation/reset tokenu ani przyszłego tokenu OIDC w `localStorage`, `sessionStorage`, IndexedDB lub Cache Storage. Service worker nie buforuje `/api/**`, mutacji ani odpowiedzi uwierzytelnionych.
+## Password reset
 
-## Invitation i reset hasła
+- minimum 256-bit CSPRNG entropy,
+- hash-only persistence,
+- TTL: 30 minut,
+- nowy reset invaliduje wcześniejsze aktywne reset tokens,
+- request endpoint zwraca neutralną odpowiedź,
+- sukces invaliduje wszystkie reset tokens i wszystkie istniejące sessions tego usera.
 
-- Konta tworzy lub zaprasza `ADMIN` z `manage_users`.
-- Token invitation/reset jest losowy, jednorazowy, ma ograniczoną ważność i jest przechowywany w bazie wyłącznie jako hash.
-- Zużycie, wygaśnięcie lub zastąpienie tokenu uniemożliwia jego ponowne użycie.
-- Hasło jest przechowywane wyłącznie jako wynik adaptacyjnej funkcji haszującej z parametrami zarządzanymi przez backend; plaintext nie trafia do bazy, logów ani eventów.
-- Kanał dostarczenia invitation/reset oraz wartości TTL są szczegółami późniejszej implementacji. Nie zmieniają zakresu kanałów wsparcia zamrożonego w USI-6.
+## Pierwszy administrator
 
-## Granica przyszłego OIDC/SSO
+Bootstrap pierwszego `ADMIN` odbywa się przez kontrolowaną lokalną/server operational command, nigdy publiczny unauthenticated endpoint.
 
-OIDC może zostać dodane jako alternatywny sposób potwierdzenia tożsamości. Po poprawnym callbacku backend wiąże zewnętrzną tożsamość z istniejącym kanonicznym użytkownikiem i ustanawia tę samą sesję serwerową co logowanie lokalne.
+- działa tylko, gdy nie istnieje aktywny ADMIN,
+- e-mail może być podany jako argument/env,
+- hasło przez stdin/secret input, nie command-line argument,
+- credentiali nie logować,
+- drugi bootstrap jest odrzucany.
 
-- Provider OIDC nie tworzy drugiego modelu `User`.
-- Role, permissions, aktywność i ważność konta nadal pochodzą z lokalnego źródła prawdy; claims providera nie nadają dostępu administracyjnego.
-- Stabilne powiązanie zewnętrznego subjectu jest utrzymywane po stronie serwera i nie może opierać się wyłącznie na zmiennym adresie e-mail.
-- Frontend po zalogowaniu korzysta z tego samego `GET /auth/me` i nie rozróżnia mechanizmu uwierzytelnienia w domenowych komponentach.
+## API boundary
 
-## Frontend i UX
+Publiczne API pozostaje pod `/api/v1`:
 
-Docelowa `/login` znajduje się poza `AppShell`. Po zalogowaniu zaakceptowany układ `/cases`, `/statistics`, `/users` i `/settings` pozostaje baseline. Routing chroniony, formularz logowania i stany `401` nie są implementowane w USI-33.
+- `POST /api/v1/auth/login`,
+- `POST /api/v1/auth/logout`,
+- `GET /api/v1/auth/me`,
+- dedykowane invite/password-reset commands zgodne z OpenAPI.
 
-## Wymagane testy przyszłej implementacji
+`/auth/me` zwraca kanoniczny user ID, rolę i effective permissions, bez password material.
 
-- poprawne i błędne logowanie bez enumeracji kont;
-- atrybuty cookie, rotacja sesji, logout i unieważnienie serwerowe;
-- blokada konta nieaktywnego, jeszcze nieważnego i wygasłego, także dla istniejącej sesji;
-- odrzucenie mutacji bez poprawnego CSRF;
-- brak tokenów sesyjnych w web storage i cache PWA;
-- jednorazowość, hash i wygaśnięcie invitation/reset tokenów;
-- OIDC mapujące do tego samego użytkownika bez zaufania do roli/permissions z claims.
+## CSRF i browser storage
 
-## Poza zakresem USI-33
+Każda state-changing browser mutation uwierzytelniana cookie wymaga CSRF protection. SameSite/Origin/Referer mogą wzmacniać ochronę, ale nie zastępują uzgodnionej ochrony CSRF.
 
-- implementacja Spring Security, Spring Session JDBC i migracji DB;
-- ekran oraz trasa `/login`;
-- endpointy, OpenAPI i klient wygenerowany;
-- wysyłka invitation/reset i integracja z providerem OIDC;
-- zmiana zaakceptowanego UX po zalogowaniu.
+Frontend nie przechowuje session identifiers, haseł ani action tokens w `localStorage`, `sessionStorage`, IndexedDB ani Cache Storage. PWA service worker nie cache'uje authenticated `/api/**` responses.
+
+## Authorization boundary
+
+Admin capability zwykle wymaga jednocześnie roli `ADMIN` i odpowiedniego granular permission. `USER + permission` nie daje capability administracyjnego. General settings pozostaje ADMIN-only bez dodatkowego permission.
+
+## Testy wymagane przy implementacji
+
+- valid/invalid login bez enumeracji,
+- cookie flags, session rotation/persistence/logout,
+- inactive/expired account denial,
+- CSRF positive/negative,
+- password hash/rehash policy,
+- invite/reset entropy, hash, TTL, replay i invalidation,
+- password reset session invalidation,
+- bootstrap first-admin safety,
+- brak session/action tokens w browser storage/cache,
+- OIDC mapping do tej samej identity bez zaufania do IdP permissions.
+
+Szczegóły Spring Security classes, controller composition i test harness są delegowanymi decyzjami technicznymi, jeśli zachowują powyższy kontrakt.
