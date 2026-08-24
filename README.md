@@ -1,123 +1,96 @@
 # Unified Support Inbox
 
-Produkcyjnie stylizowany frontend wspólnej skrzynki wsparcia dla Slacka, Microsoft Teams i Telegrama. Interfejs jest w całości po polsku, działa responsywnie i korzysta wyłącznie z lokalnych danych oraz usług mockowych. Backend nie jest częścią tego repozytorium.
+Unified Support Inbox (USI) to produkcyjnie projektowana wspólna skrzynka wsparcia dla Slacka, Microsoft Teams i Telegrama. Obecny kod zawiera zaakceptowany frontend/mock baseline; docelowy system jest rozwijany jako full-stack modularny monolit zgodnie z zamrożonym kontraktem v1.
 
-Zamrożony kontrakt wydania v1/GA, wspieranych kanałów i wyłączeń opisuje [`docs/V1_SCOPE.md`](docs/V1_SCOPE.md). Role `USER`/`ADMIN`, katalog permissions i matrycę guardów UI/API utrwala [`docs/PERMISSION_MATRIX.md`](docs/PERMISSION_MATRIX.md). Baseline lokalnego logowania, sesji serwerowej, CSRF i przyszłej granicy OIDC opisuje [`docs/AUTHENTICATION.md`](docs/AUTHENTICATION.md), providerowe reguły grupowania wiadomości do spraw — [`docs/CASE_GROUPING.md`](docs/CASE_GROUPING.md), kanoniczną maszynę stanów i ownership — [`docs/CASE_WORKFLOW.md`](docs/CASE_WORKFLOW.md), a retencję, purge, backupy i izolację single-tenant — [`docs/RETENTION.md`](docs/RETENTION.md).
+## Dokumentacja kanoniczna
 
-## Uruchomienie
+Punktem wejścia jest [`docs/README.md`](docs/README.md). Najważniejsze źródła prawdy:
 
-Wymagany jest Node.js 22.23.2 LTS (wersja zapisana w `.nvmrc`) oraz pnpm 11.18.0 wskazany w `package.json`. pnpm 11.18.0 wymaga Node.js co najmniej 22.13. Jedynym wspieranym lockfile jest `pnpm-lock.yaml`.
+- [`docs/PRODUCT_CONTRACT.md`](docs/PRODUCT_CONTRACT.md) — normatywny kontrakt produktu/architektury,
+- [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md) — pełna specyfikacja funkcjonalna,
+- [`docs/WORKFLOW_MATRIX.md`](docs/WORKFLOW_MATRIX.md) — workflow i action guards,
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), [`docs/INTEGRATIONS.md`](docs/INTEGRATIONS.md), [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/OPERATIONS.md`](docs/OPERATIONS.md),
+- [`docs/decision-registry.yaml`](docs/decision-registry.yaml) — machine-readable frozen decisions,
+- [`docs/ORCHESTRATOR_CONTRACT.md`](docs/ORCHESTRATOR_CONTRACT.md) i [`docs/orchestrator-policy.yaml`](docs/orchestrator-policy.yaml) — autonomous development/review/merge policy.
+
+Starsze dokumenty focused/current-state pozostają pomocnicze i nie mogą nadpisywać późniejszych finalnych decyzji.
+
+## Scope v1
+
+Kanały supportowe v1 to dokładnie:
+
+- Slack,
+- Microsoft Teams,
+- Telegram.
+
+E-mail jako kanał wsparcia i funkcje AI są poza v1. Adres e-mail użytkownika pozostaje daną identity.
+
+## Uruchomienie obecnego frontendu
+
+Wymagany jest Node.js 22.23.2 LTS (`.nvmrc`) i pnpm 11.18.0.
 
 ```bash
 pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Aplikacja będzie dostępna pod adresem `http://localhost:3000`.
+Frontend jest dostępny na `http://localhost:3000`.
 
-## Kontrola jakości
-
-Przed pierwszym uruchomieniem testów E2E zainstaluj przypisaną przeglądarkę:
+## Kontrola jakości frontendu
 
 ```bash
 pnpm exec playwright install chromium
-```
-
-Pełna lokalna bramka jakości obejmuje lint, typecheck, testy jednostkowe/komponentowe, produkcyjny build i testy E2E:
-
-```bash
 pnpm check
 ```
 
-Poszczególne bramki można uruchamiać osobno:
+`pnpm check` obejmuje lint, typecheck, testy jednostkowe, production build i Playwright E2E. Docelowy full-stack gate zostanie rozszerzony o Java/Maven, Testcontainers, Spring Modulith, Flyway, OpenAPI i security checks zgodnie z [`docs/TESTING.md`](docs/TESTING.md).
 
-```bash
-pnpm lint
-pnpm typecheck
-pnpm test:unit
-pnpm build
-pnpm test:e2e
-```
-
-`pnpm test:unit:watch` uruchamia Vitest w trybie obserwowania. Samodzielne `pnpm test:e2e` wymaga istniejącego produkcyjnego buildu; `pnpm check` tworzy go automatycznie. Szczegóły znajdują się w [`docs/TESTING.md`](docs/TESTING.md).
-
-## Trasy
+## Trasy obecnego frontendu
 
 | Trasa | Przeznaczenie |
 | --- | --- |
-| `/` | Przekierowanie do `/cases`. |
-| `/cases` | Dwukolumnowa skrzynka czatów: lista rozmów i wybrana rozmowa. |
-| `/statistics` | KPI, wykresy i tabela efektywności z zakresami dat oraz filtrami. |
-| `/users` | Zarządzanie użytkownikami, rolami, ważnością kont i uprawnieniami. |
-| `/settings` | SLA, godziny pracy, out of office, integracje, kanały, powiadomienia i uprawnienia. |
+| `/` | Redirect do `/cases`. |
+| `/cases` | Skrzynka spraw i rozmowa. |
+| `/statistics` | Statystyki; docelowo również ADMIN-only sekcja **Aktualna praca**. |
+| `/users` | Administracja użytkownikami. |
+| `/settings` | Ustawienia systemu. |
 
-Na telefonie lista czatów i rozmowa są osobnymi widokami z możliwością powrotu do listy. Nieistniejąca trasa `/current-cases` nie jest częścią zaimplementowanego produktu; jej ewentualny przyszły zakres pozostaje decyzją produktową opisaną w [`docs/OPEN_DECISIONS.md`](docs/OPEN_DECISIONS.md).
+Osobna top-level trasa `/current-cases` **nie należy do frozen v1**. Admin current-work jest rozstrzygnięty: UI `/statistics` -> **Aktualna praca**, backend `GET /api/v1/admin/current-cases`.
 
-## Architektura danych mockowych
-
-Kod jest rozdzielony tak, aby warstwę lokalną można było zastąpić klientem wygenerowanym z OpenAPI bez przebudowy komponentów:
+## Granica danych frontendu
 
 ```text
-komponenty i trasy
-        │
-        ▼
-TanStack Query — lib/services/queries.ts
-        │
-        ▼
-rejestr usług — lib/services/registry.ts
-        │
-        ▼
-typowane interfejsy obszarowe — lib/services/*.ts
-        │
-        ▼
-lokalne implementacje — lib/services/*.ts
-        │
-        ▼
-dane początkowe — mocks/*.ts
+UI
+ -> lib/services/queries.ts
+ -> lib/services/registry.ts
+ -> typed service interfaces
+ -> mock lub production API adapter
+ -> generated transport client (za adapterem)
 ```
 
-- `lib/domain/inbox.ts` jest jedynym kanonicznym modelem workflow sprawy.
-- `lib/domain/shared.ts` zawiera współdzielone typy frontendu, które nie są typami transportowymi.
-- Pliki obszarowe w `lib/services/` definiują kontrakty usług obok ich implementacji mock.
-- `lib/services/registry.ts` jest jedynym miejscem wiążącym aplikację z aktualnymi implementacjami.
-- `lib/services/queries.ts` udostępnia hooki TanStack Query i centralizuje klucze cache oraz mutacje.
-- `mocks/` zawiera wyłącznie realistyczne dane początkowe; komponenty nie importują ich bezpośrednio.
+Generated OpenAPI DTO nie są frontend domain modelami. Obowiązuje jeden jawny DTO -> stable domain/view mapper. Komponenty nie importują bezpośrednio z `mocks/`.
 
-Szczegóły obecnej architektury i modeli opisują [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) oraz [`docs/DOMAIN_MODEL.md`](docs/DOMAIN_MODEL.md).
+## Backend baseline
 
-Zmiany wykonywane w interfejsie są przechowywane w pamięci procesu przeglądarki. Odświeżenie strony przywraca dane początkowe.
+Frozen production baseline:
 
-## Planowana granica backendu
+- Java 25 LTS,
+- Spring Boot 4.1.x,
+- Spring Modulith 2.1.x,
+- PostgreSQL 18.x + Flyway,
+- RabbitMQ 4.3.x,
+- S3-compatible object storage / MinIO,
+- WebSocket/STOMP,
+- OpenTelemetry/Micrometer + Prometheus/Grafana,
+- modular monolith,
+- Docker/Compose + Terraform/Ansible; bez Kubernetes w v1.
 
-Backend nie jest częścią obecnej implementacji. Planowana granica integracji to:
+## PWA i bezpieczeństwo
 
-`Spring Boot REST/OpenAPI → wygenerowany klient transportowy TypeScript → adapter frontendu → stabilne typy domenowe frontendu`
+Service worker nie może cache'ować authenticated API responses. Produkcyjne secrets/provider tokens/password material nie trafiają do browser bundle, repo, logów ani audit. Codex/CI/testy nie mają dostępu do production DB, object storage ani provider credentials.
 
-Kiedy rozpocznie się osobne zadanie backendowe:
+## Stan projektu
 
-1. W Spring Boot opublikuj uzgodniony dokument OpenAPI.
-2. Wygeneruj klienta TypeScript obsługującego żądania oraz typowane odpowiedzi. Wygenerowany kod trzymaj w osobnym katalogu, np. `lib/api/generated/`, i nie edytuj go ręcznie.
-3. Dodaj adaptery implementujące obszarowe kontrakty z `lib/services/`. Adapter odpowiada za mapowanie DTO API na typy z `lib/domain/` oraz za normalizację błędów HTTP.
-4. W `lib/services/registry.ts` zamień lokalne implementacje na adaptery API. Komponenty i hooki zapytań nie powinny wymagać zmian.
-5. Dodaj konfigurację bazowego URL, uwierzytelniania i identyfikatora bieżącego użytkownika po stronie serwera. Nie umieszczaj tokenów w kodzie klienta.
-6. Ustal strategię unieważniania kluczy TanStack Query po mutacjach i obsługę konfliktów, w tym HTTP 409 dla przejęcia case’a.
+Decision freeze E00-E25 jest zakończony: nie ma obecnie znanego product/architecture decision gap blokującego implementację. Obecny brak backendu, realnych provider adapters i części workflow UI to **implementation backlog**, nie otwarte decyzje produktowe.
 
-Typy generowane z OpenAPI warto traktować jako typy transportowe. Typy domenowe interfejsu pozostają stabilną granicą aplikacji i chronią UI przed zmianami kształtu pojedynczego endpointu.
-
-## PWA i dane wrażliwe
-
-Aplikacja udostępnia manifest, ikony zastępcze oraz rejestruje prosty service worker. Service worker zapisuje wyłącznie publiczny manifest i ikony instalacyjne. Żądania z nagłówkiem `Authorization`, wszystkie ścieżki `/api/`, mutacje oraz strony aplikacji zawsze korzystają z sieci i nie są zapisywane w Cache Storage. Dzięki temu warstwa PWA nie tworzy kopii przyszłych uwierzytelnionych danych API.
-
-## Dostępność i stany interfejsu
-
-- Statusy łączą tekst, ikonę i kolor; kolor nie jest jedynym nośnikiem informacji.
-- Interaktywne elementy mają widoczny fokus, etykiety, opisy i obsługę klawiatury.
-- Dialogi oraz arkusze zachowują fokus i mają tytuły oraz opisy dla technologii asystujących.
-- Widoki zawierają szkielety, stany puste i błędy. Globalny baner informuje o pracy offline, a ustawienia pokazują stan rozłączonych integracji.
-- Preferencja `prefers-reduced-motion` ogranicza animacje i przejścia.
-
-## Zakres projektu
-
-Zakres v1/GA obejmuje Slacka, Microsoft Teams i Telegrama. E-mail jako kanał wsparcia oraz wszystkie funkcje AI są poza v1. Wpisy e-mail widoczne w `/cases` są fixture’em prezentacyjnym do usunięcia przy zastąpieniu mocków realnym API; adresy e-mail kont użytkowników pozostają danymi tożsamości, a nie kanałem wsparcia.
-
-Projekt nie zawiera funkcji AI, prawdziwych integracji z komunikatorami ani backendu. Symulowane działania służą wyłącznie do demonstracji przepływów opisanych w interfejsie.
+Autonomiczni agenci korzystają z frozen contract i dependency graph; produkcyjne wdrożenia oraz inne high-risk production actions nadal wymagają explicit human approval.

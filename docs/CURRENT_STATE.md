@@ -1,154 +1,149 @@
 # Stan bieżący aplikacji
 
-Audyt wykonano 9 sierpnia 2026 r. dla rewizji `65a513b`, a stan zależności, testów, domeny i dokumentacji zaktualizowano w zadaniach 02–05. Dokument opisuje zastany frontend i nie jest specyfikacją planowanego backendu. Wynik końcowej walidacji zawiera [HARDENING_REPORT.md](HARDENING_REPORT.md).
+**Frontend audit baseline:** 9 sierpnia 2026  
+**Contract reconciliation:** 24 sierpnia 2026  
 
-## Zakres audytu
+Ten dokument opisuje **rzeczywiście istniejący frontend/mock** oraz jawnie oddziela go od zamrożonego kontraktu v1. Nie jest źródłem nadrzędnym dla przyszłego backendu ani zachowania produkcyjnego. W razie konfliktu obowiązuje kolejność z `docs/README.md`, przede wszystkim `PRODUCT_CONTRACT.md` i `decision-registry.yaml`.
 
-Sprawdzono kod aplikacji, komponenty układu i design systemu, modele domenowe, granicę usług, mocki, konfigurację Next.js/TypeScript/PWA, skrypty i lockfile. Aplikację uruchomiono lokalnie i zweryfikowano w przeglądarce w rozdzielczości 1440×900 oraz na widoku mobilnym 390×844.
-
-## Stos i uruchomienie
+## 1. Aktualny stos i uruchomienie
 
 - Next.js 16, React 19, strict TypeScript, Tailwind CSS, TanStack Query i Recharts.
-- Wymagane środowisko jest udokumentowane jako Node.js 22.23.2 LTS (`.nvmrc`) i pnpm 11.18.0 (`packageManager`); ta wersja Node spełnia wymaganie pnpm `>=22.13`.
-- Jedynym lockfile jest `pnpm-lock.yaml`; `package-lock.json` usunięto, a manifest i lockfile wskazują dokładnie Next.js 16.3.0.
-- `pnpm-workspace.yaml` jawnie określa politykę skryptów instalacyjnych: `msw: false`, `sharp: true` i `unrs-resolver: true`.
-- Instalacja `pnpm install --frozen-lockfile` jest deterministyczna i zakończyła się sukcesem. Końcową walidację CI wykonano przy użyciu Node.js 22.23.2 i pnpm 11.18.0.
-- Lokalny serwer deweloperski uruchomił Next.js 16.3.0 i poprawnie obsłużył wszystkie istniejące trasy.
+- Node.js 22.23.2 LTS (`.nvmrc`) i pnpm 11.18.0 (`packageManager`).
+- Jedyny lockfile: `pnpm-lock.yaml`.
+- Aktualny frontend korzysta z lokalnych danych/mock services; repo nie zawiera jeszcze produkcyjnego Spring Boot backendu, PostgreSQL schema ani realnych adapterów Slack/Teams/Telegram.
 
-## Rzeczywiste trasy
+## 2. Rzeczywiste trasy frontendu
 
-| Trasa | Stan | Zachowanie |
+| Trasa | Stan aktualny | Uwagi |
 | --- | --- | --- |
 | `/` | istnieje | Przekierowuje do `/cases`. |
-| `/cases` | istnieje | Dwukolumnowa skrzynka czatów: lista i rozmowa. |
-| `/statistics` | istnieje | KPI, wykresy, tabela oraz filtry okresu i wymiarów. |
-| `/users` | istnieje | Lista kont, filtry, formularze tworzenia/edycji i akcje administracyjne. |
-| `/settings` | istnieje | Ogólne, SLA, godziny pracy, poza biurem, integracje, kanały, powiadomienia i uprawnienia. |
-| `/current-cases` | nie istnieje | Zwraca 404 i nie występuje w nawigacji. |
+| `/cases` | istnieje | Dwukolumnowa skrzynka: lista spraw i rozmowa. |
+| `/statistics` | istnieje | KPI, wykresy, tabela i filtry. Docelowo zawiera również ADMIN-only sekcję **Aktualna praca**. |
+| `/users` | istnieje | Lista kont i formularze administracyjne. |
+| `/settings` | istnieje | Ogólne, SLA, godziny pracy, OOO, integracje, kanały, powiadomienia i permissions. |
+| `/current-cases` | nie istnieje | I zgodnie z finalnym freeze **nie ma wracać jako osobna top-level trasa**. Current-work trafia do `/statistics`; backend używa `GET /api/v1/admin/current-cases`. |
 
-Ponadto App Router generuje zasoby metadanych/PWA: manifest, ikony aplikacji i ikony PWA.
+## 3. Zamrożony zakres v1
 
-README wymienia wyłącznie pięć istniejących tras. Ewentualny powrót `/current-cases` pozostaje jawną decyzją produktową i nie jest opisany jako funkcja bieżąca.
+V1 obsługuje dokładnie:
 
-## Zamrożony zakres v1
+- Slack,
+- Microsoft Teams,
+- Telegram.
 
-USI-6 utrwala v1/GA jako obsługę Slacka, Microsoft Teams i Telegrama. E-mail jako kanał wsparcia oraz funkcje AI są poza v1. Szczegółowy przegląd ekranów, funkcji i wyłączeń znajduje się w [V1_SCOPE.md](V1_SCOPE.md).
+E-mail jako kanał supportowy oraz funkcje AI są poza v1. E-mail widoczny w lokalnych fixture'ach `/cases` jest wyłącznie elementem starej prezentacji mockowej i ma zniknąć przy podmianie danych na realny API flow.
 
-E-mail widoczny w lokalnym modelu prezentacyjnym `/cases` jest istniejącym fixture’em mockupu, a nie czwartym kanałem domenowym. Pozostaje bez zmian dla zachowania zaakceptowanego UX i ma zostać usunięty dopiero przy zastąpieniu fixture’ów realnym API. Adresy e-mail użytkowników są danymi konta i nie zmieniają listy kanałów wsparcia.
+## 4. Granica danych frontendu
 
-## Zamrożony baseline uwierzytelniania
+Aktualna granica pozostaje celowa:
 
-USI-33 utrwala v1 jako lokalny e-mail i hasło oraz sesję serwerową w bezpiecznym cookie `HttpOnly`. Mutacje przeglądarkowe wymagają CSRF, a token sesyjny nie może być przechowywany w web storage ani cache PWA. Invitation/reset używają jednorazowych tokenów przechowywanych wyłącznie jako hash. OIDC/SSO pozostaje przyszłym rozszerzeniem mapującym do tego samego kanonicznego użytkownika.
+`UI -> lib/services/queries.ts -> lib/services/registry.ts -> typed service interfaces -> mock/API implementation`
 
-Repo nadal nie zawiera `/login`, sesji ani backendowego auth; dokument `AUTHENTICATION.md` jest kontraktem dla przyszłej implementacji i nie zmienia obecnego UX.
+Zasady docelowe:
 
-## Zamrożona maszyna stanów Case
+- komponenty nie importują bezpośrednio z `mocks/`,
+- `registry.ts` jest composition boundary,
+- generated OpenAPI DTO są typami transportowymi,
+- jeden jawny adapter/maper mapuje DTO na stabilne frontend domain/view models,
+- lokalny model prezentacyjny w komponencie nie jest drugim kontraktem backendu.
 
-USI-35 utrwala dokładnie sześć statusów, pełną macierz przejść, terminal semantics i invariants ownership. Ask Customer działa wyłącznie dla bieżącego ownera w `VERIFICATION`, wymaga outgoing message, przechodzi do `WAITING_FOR_CUSTOMER` i zeruje ownera. Zwykły Resolve jest operacją bieżącego ownera w `VERIFICATION`; osobny ADMIN force-resolve wymaga `force_resolve` i może zamknąć każdy stan nieterminalny. `IGNORED` i `RESOLVED` nie są reopenowane.
+`components/cases/cases-page.tsx` nadal zawiera część własnych fixture'ów/prezentacji. To **implementation debt**, a nie nierozstrzygnięta decyzja produktowa. Kierunek został zamrożony: realne dane mają pochodzić z API przez service boundary i mapper.
 
-Repo nadal nie zawiera backendowej maszyny stanów, force-resolve, inbound customer reply/timeout ani kompletnego UI workflow. `CASE_WORKFLOW.md` jest kontraktem przyszłych commandów. Bieżący mock utrwala katalog stanów, dozwolone pary przejść i ownership oraz nie pozwala już Ask Customer lub zwykłemu Resolve przeczyć zamrożonym guardom.
+## 5. Kanoniczny workflow
 
-## Zamrożony kontrakt retencji i izolacji
+Frontendowy workflow używa dokładnie sześciu statusów:
 
-USI-40 utrwala model v1 jako jeden klient na osobny deployment, bazę, object storage, sekrety i konfigurację, bez `tenant_id`, tenant selectora i cross-tenant API. Kontrakt definiuje walidowane zakresy retencji dla wiadomości, inbound eventów, audytu i attachments, odrębne purge semantics, legal hold per deployment oraz rotację backupów i obowiązkowy purge po restore.
+- `new` -> `NEW`,
+- `verification` -> `VERIFICATION`,
+- `waiting_for_customer` -> `WAITING_FOR_CUSTOMER`,
+- `partially_ignored` -> `PARTIALLY_IGNORED`,
+- `ignored` -> `IGNORED`,
+- `resolved` -> `RESOLVED`.
 
-Repo nadal nie zawiera backendu, jobów retencji, migracji, object storage ani automatyzacji backupów. Dokument `RETENTION.md` jest kontraktem przyszłej implementacji i nie zmienia danych mock ani zaakceptowanego UX.
+Backend będzie authoritative dla transition policy, ownership i action availability. Snooze, unread i analityczne dimensions nie są `CaseStatus`.
 
-## Granica danych
+Terminalne `IGNORED` i `RESOLVED` nie są reopenowane. Nowa customer message po terminalnym Case tworzy nowy linked Case.
 
-Docelowy przepływ jest zachowany:
+## 6. Tożsamość i permissions
 
-`UI → lib/services/queries.ts → lib/services/registry.ts → obszarowe interfejsy usług → implementacje mock`
+Kanoniczna backendowa tożsamość to jeden `User` identyfikowany stabilnym user ID. Obecne frontendowe `User` i `AdministrationUser` są różnymi projekcjami tej samej osoby; ich techniczna konsolidacja/mapowanie **nie wymaga nowej decyzji produktowej**.
 
-- Komponenty aplikacji nie importują bezpośrednio z `mocks/`.
-- `lib/services/registry.ts` pozostaje miejscem kompozycji implementacji.
-- Operacje skrzynki i administracji są udostępnione przez hooki TanStack Query.
-- Istotny wyjątek: `components/cases/cases-page.tsx` zawiera własne dane prezentacyjne listy i rozmowy. Usługa inbox dostarcza tylko część stanu, między innymi odczytanie i wiadomości. Powoduje to rozjazdy między widoczną prezentacją a rekordami domenowymi dla tych samych referencji.
+Role są dokładnie `USER` i `ADMIN`, a katalog granular permissions zawiera dokładnie dziewięć kodów zamrożonych w `PRODUCT_CONTRACT.md`.
 
-USI-34 definiuje przyszłą granicę inbound grouping, ale repo nadal nie zawiera wejścia eventów providerów. Dokument `CASE_GROUPING.md` zamraża Slack root+thread, Teams root+replies dla capability-supported contexts, Telegram topics oraz jeden aktywny case/chat bez topics. Bieżące fixture’y UI nie implementują ani nie symulują tych reguł.
+Aktualny frontend nie implementuje jeszcze produkcyjnego auth. Docelowy kontrakt to local e-mail/password, Spring Session JDBC i server-side session cookie.
 
-## Modele domenowe
+## 7. Aktualne zachowanie mock UI a kontrakt docelowy
 
-Kanoniczny model workflow znajduje się w `lib/domain/inbox.ts`. Obowiązujące statusy to:
+Poniższe rozbieżności są świadomie oznaczone, aby current-state snapshot nie został pomylony z wymaganiem v1:
 
-- `new`
-- `verification`
-- `waiting_for_customer`
-- `partially_ignored`
-- `ignored`
-- `resolved`
+| Obszar | Obecny mock | Zamrożony kontrakt v1 |
+| --- | --- | --- |
+| Odczytanie | Otwarcie nieodczytanego czatu obecnie usuwa badge. | Samo otwarcie Case **nie oznacza read**. Read cursor przesuwa się dopiero po faktycznym wyrenderowaniu/zobaczeniu wiadomości i acknowledgement z frontendu. |
+| Ignorowany kanał | Stare copy UI może sugerować, że wiadomość pozostaje zwykłą wiadomością bez Case/SLA. | `channel.ignored=true` powoduje techniczny `IGNORED_BY_CHANNEL`; nie powstaje **Case, Message, SLA ani read-state**. |
+| Workflow buttons | Część akcji jest wyłączona lub niepodłączona. | Claim/Ignore/Ask/Resolve/Snooze mają zostać podłączone do dedykowanych backend commands i server-calculated action availability. |
+| E-mail fixture | Może być widoczny w prezentacji. | E-mail support channel jest poza v1 i nie występuje w realnym dataset. |
 
-Ten sam moduł utrwala dozwolone cele przejść, stany terminalne oraz ownership per status. Szczegółowa macierz commandów i zdarzeń znajduje się w `CASE_WORKFLOW.md`.
+Testy obecnego mocka mogą chronić zachowanie zastane, ale przy implementacji odpowiednich ticketów muszą zostać zaktualizowane tak, aby chronić zamrożony kontrakt, a nie historyczną imitację.
 
-Starszy, ogólny `Case` wraz z `CaseStatus`, repozytoriami, hookami i osobnymi mockami został usunięty po potwierdzeniu braku konsumentów. Współdzielone, niekonfliktowe typy kanału, SLA, dostarczenia wiadomości i tożsamości znajdują się w `lib/domain/shared.ts` i są jawnie oddzielone od przyszłych DTO OpenAPI.
+## 8. Analityka
 
-`AdministrationUser` częściowo dubluje współdzielony `User`, ale jego model administracyjny używa już zamrożonych ról `USER`/`ADMIN` oraz dokładnego katalogu dziewięciu permissions z USI-32. Guard mock wymaga jednocześnie roli `ADMIN` i odpowiedniego permission; konto `USER` nie może zachować administracyjnych grantów. Starszy `UserRole` w modelu prezentacyjnym nadal używa `agent/supervisor/admin` i nie jest kontraktem backendu. `AnalyticsRecord.status` używa jawnie nazwanego `AnalyticsStatusDimension`; jest wymiarem raportowym, a nie drugim modelem workflow.
+`AnalyticsStatusDimension` jest projekcją raportową, nie drugą maszyną stanów. Może zawierać pochodne kategorie, ale nigdy nie rozszerza sześciu kanonicznych `CaseStatus`.
 
-## Zweryfikowane zachowanie UI
+Admin current-work jest już rozstrzygnięty: `/statistics` -> **Aktualna praca**, API `GET /api/v1/admin/current-cases`, read access `ADMIN` only. Nie jest to otwarta decyzja.
 
-| Obszar | Wynik |
-| --- | --- |
-| Wybór czatu | Działa; zmienia zaznaczenie i treść rozmowy. |
-| Odczytanie czatu | Działa; po otwarciu „Nieodczytane” znika z wybranego wpisu. |
-| Przejęcie sprawy | Przycisk `Przejmij` jest wyłączony dla sprawdzonego stanu. |
-| Ignorowanie | Brak przycisku/dialogu ignorowania w aktualnym ekranie `/cases`. |
-| Pytanie klienta | Brak przycisku/dialogu w aktualnym ekranie `/cases`. |
-| Rozwiązanie | `Zamknij sprawę` i menu zamknięcia są wyłączone. |
-| Odłożenie | `Odłóż` jest wyłączone. |
-| Wysyłanie odpowiedzi | Kompozytor jest widoczny, ale przycisk wysyłania nie ma podłączonej operacji workflow. |
-| Tworzenie użytkownika | Dialog otwiera się i zawiera dane konta oraz dziewięć zamrożonych permissions; dla roli `USER` administracyjne granty są wyłączone. |
-| Edycja użytkownika | Dialog otwiera się z poprawnie wypełnionymi danymi. |
-| Akcje użytkownika | Menu zawiera edycję, dezaktywację i usunięcie użytkownika. |
-| Ustawienia | Wszystkie osiem zakładek otwiera właściwy panel; formularze są dostępne. |
-| Ignorowane kanały | UI jasno komunikuje, że wiadomość pozostaje zwykłą wiadomością bez case’a i SLA. |
-| Filtry statystyk | Panel ma `position: sticky`; podczas przewijania pozostaje przy górnej krawędzi obszaru treści. |
+## 9. Provider grouping i ingestion
 
-Po zmianach wymaganych przez ESLint dodatkowo sprawdzono reset formularza tworzenia użytkownika, zachowanie wartości w konfiguracji integracji i przełączanie motywu. Widok `/users` pozostał pikselowo zgodny z plikiem baseline przy jego rzeczywistym wymiarze 1280×720.
+Repo nie zawiera jeszcze realnych inbound adapterów. Zamrożony kontrakt określa jednak jednoznacznie:
 
-Testy interakcji nie zapisywały zmian w danych mock. Konsola przeglądarki nie zarejestrowała ostrzeżeń ani błędów aplikacji.
+- Slack: root + thread,
+- Teams standard channel: root + replies; group chat: one active Case per chat,
+- Telegram forum topic: one active Case per topic; bez topic: one active Case per chat,
+- ignored/unmapped/disabled contexts nie mogą przypadkowo tworzyć business records niezgodnie z kontraktem.
 
-## Jakość, testy i CI
+Bieżące fixture'y nie są źródłem prawdy dla tych reguł.
 
-- Dostępne skrypty obejmują `lint`, `typecheck`, `test:unit`, `test:unit:watch`, `build`, `test:e2e` i zbiorczy `check`.
-- Vitest 4 z Testing Library i jsdom chroni kanoniczne statusy inbox, dokładną listę kanałów v1, zamrożony kontrakt ról i permissions, logikę SLA oraz interakcję pola wyszukiwania: 3 pliki, 9 testów.
-- Playwright uruchamia 8 deterministycznych testów Chromium dla czterech tras, wyboru/odczytania czatu, odpowiedzi, formularza użytkownika i mobilnego przepływu `/cases`.
-- Testy E2E blokują zewnętrzne żądania HTTP, wyłączają service worker i korzystają wyłącznie z lokalnego serwera oraz danych mock.
-- `.github/workflows/ci.yml` uruchamia pełną bramkę na `push` i `pull_request`, korzysta z cache pnpm i wysyła raport oraz artefakty Playwright po niepowodzeniu.
-- ESLint 9.39.5 i `eslint-config-next` 16.3.0 są bezpośrednimi zależnościami deweloperskimi. Projekt korzysta z flat config obejmującego reguły Next.js Core Web Vitals i TypeScript.
-- W kodzie nie znaleziono znaczników `TODO` ani `FIXME`.
+## 10. Jakość, testy i CI - stan obecny
 
-Wyniki czystej bramki końcowej po zadaniu 05:
+Repo posiada skrypty:
 
-- `pnpm install --frozen-lockfile` — sukces.
-- `pnpm lint` — sukces.
-- `pnpm typecheck` — sukces.
-- `pnpm test:unit` — sukces, 6/6 testów.
-- `pnpm build` — sukces, 13 tras/zasobów App Router.
-- `pnpm test:e2e` — sukces, 8/8 testów Chromium.
-- `pnpm check` — sukces dla całej powyższej sekwencji.
+- `lint`,
+- `typecheck`,
+- `test:unit`,
+- `test:unit:watch`,
+- `build`,
+- `test:e2e`,
+- `check`.
 
-## Bezpieczeństwo i PWA
+Istniejący frontend gate obejmuje lint, typecheck, Vitest, produkcyjny build i Playwright Chromium. Testy E2E korzystają z lokalnego serwera/mocków, blokują zewnętrzne HTTP i wyłączają service worker dla deterministyczności.
 
-- Nie znaleziono plików `.env`, kluczy, tokenów ani zmiennych środowiskowych eksponowanych do klienta.
-- Jedynym użyciem `process.env` jest serwerowe sprawdzenie `NODE_ENV` dla Analytics.
-- Service worker nie buforuje żądań z nagłówkiem autoryzacji ani tras `/api`; żądania inne niż GET także omijają cache.
-- Cache PWA obejmuje tylko publiczne zasoby manifestu i ikon.
+Po dodaniu backendu gate ma zostać rozszerzony o Maven/Java, backend unit/integration, Testcontainers, Spring Modulith architecture verification, OpenAPI generation/compatibility oraz wymagane security checks.
 
-## Wizualny baseline
+## 11. Bezpieczeństwo i PWA - stan obecny
 
-Zrzuty są częścią audytu i stanowią punkt odniesienia przed dalszym hardeningiem:
+- Repo nie zawiera produkcyjnych sekretów.
+- Authenticated API responses nie mogą być cache'owane przez PWA service worker.
+- Browser może otrzymać wyłącznie bezpieczne public config values.
+- Codex/CI/testy nie mogą otrzymać production DB/provider/object-storage credentials.
 
-- [Czaty — desktop](baseline/2026-08-09/desktop-cases-1440x900.png)
-- [Statystyki — desktop](baseline/2026-08-09/desktop-statistics-1440x900.png)
-- [Użytkownicy — desktop](baseline/2026-08-09/desktop-users-1440x900.png)
-- [Ustawienia — desktop](baseline/2026-08-09/desktop-settings-1440x900.png)
-- [Czaty — mobile](baseline/2026-08-09/mobile-cases-390x844.png)
+## 12. Wizualny baseline
 
-## Najważniejsze ryzyka
+Zrzuty z audytu 9 sierpnia pozostają referencją wizualną:
 
-1. Widok `/cases` nie korzysta z pełnego, istniejącego workflow usługi inbox, a część prezentacji jest zdublowana w komponencie.
-2. `User` i `AdministrationUser` nadal częściowo opisują te same osoby; docelowa granica tożsamości wymaga decyzji przed projektem OpenAPI.
-3. Ustawienie ignorowanego kanału jest dostępne w administracji, ale obecny mock inbox nie implementuje punktu przyjmowania wiadomości, w którym reguła byłaby egzekwowana.
-4. Obecny zestaw jest celowo lekki i chroni krytyczne smoke flow; pełne mutacje workflow wymagają rozszerzenia testów po potwierdzeniu ich docelowej semantyki produktowej.
-5. Frontend nie implementuje jeszcze sesji ani pełnego ukrywania tras/zakładek według permissions. Guardy mock pomagają zachować kontrakt, ale authoritative enforcement pozostaje zadaniem przyszłego backendu E04.
-6. Retencja, legal hold i backupy są obecnie wyłącznie zamrożonym kontraktem; ich poprawne egzekwowanie wymaga przyszłego backendu i warstwy deployment/ops.
+- [Czaty - desktop](baseline/2026-08-09/desktop-cases-1440x900.png)
+- [Statystyki - desktop](baseline/2026-08-09/desktop-statistics-1440x900.png)
+- [Użytkownicy - desktop](baseline/2026-08-09/desktop-users-1440x900.png)
+- [Ustawienia - desktop](baseline/2026-08-09/desktop-settings-1440x900.png)
+- [Czaty - mobile](baseline/2026-08-09/mobile-cases-390x844.png)
+
+Baseline chroni layout/styl, ale **nie może nadpisywać późniejszego kontraktu zachowania**.
+
+## 13. Pozostałe ryzyka implementacyjne - nie otwarte decyzje
+
+1. `/cases` nadal zawiera presentation fixtures i wymaga podmiany na API mapper/service flow.
+2. Backend, DB, auth i provider adapters nie są jeszcze zaimplementowane.
+3. Workflow UI nie jest jeszcze podłączony do server commands.
+4. Ignored-channel ingestion nie istnieje runtime mimo zamrożonej semantyki.
+5. Retention/legal hold/backup są kontraktem, ale nie mają jeszcze runtime implementation.
+6. Testy zastanego mocka trzeba etapami przestawiać z historycznego zachowania na frozen contract podczas realizacji właściwych Jira tickets.
+
+Żaden z tych punktów nie jest obecnie znaną nierozstrzygniętą decyzją produktową/architektoniczną. `OPEN_DECISIONS.md` zawiera zasady tworzenia nowego human blockera, a `PRODUCT_CONTRACT.md` i `decision-registry.yaml` pozostają źródłami nadrzędnymi.

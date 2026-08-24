@@ -1,0 +1,91 @@
+version: 1
+product: Unified Support Inbox
+status: frozen-v1
+
+source_precedence:
+  - current_jira_ticket_later_final_decision_contract_override_or_resolved_comment
+  - e00_and_e01_e25_parent_preflight_freeze
+  - product_contract_and_decision_registry
+  - canonical_product_workflow_architecture_integrations_security_operations_docs
+  - older_non_conflicting_docs_and_implementation
+
+dependency_graph:
+  sources:
+    - native_jira_link
+    - ticket_dependencies_description
+    - reviewed_manual_override
+  provenance_required: true
+  ready_requires_all_dependencies_status: Gotowe
+  scan_whole_graph: true
+  detect_cycles: true
+
+jira_lifecycle:
+  todo: Do zrobienia
+  working: W toku
+  review: Do przeglądu
+  done: Gotowe
+  done_only_after_actual_merge: true
+  decision_freeze_alone_marks_done: false
+
+workers:
+  developer:
+    may_merge: false
+    may_mark_jira_done: false
+    production_credentials: false
+    preferred_jira_mutation_credentials: false
+    duties: [implement, test, commit, push, create_or_update_pr, completion_report]
+  decision:
+    escalate_only_real_contract_change: true
+  reviewer:
+    fresh_context: true
+    review_exact_head_sha: true
+    allowed_results: [APPROVE, REQUEST_CHANGES, BLOCKED]
+
+merge_gate:
+  method: squash
+  requires:
+    - reviewed_sha_equals_current_pr_head
+    - reviewer_approved
+    - required_ci_and_security_green
+    - pr_mergeable
+    - no_unresolved_review_blocker
+    - all_dependencies_still_done
+    - no_new_higher_precedence_contract_change
+    - no_production_secret_or_prohibited_action
+
+conflicts:
+  default_strategy: merge_latest_main_into_feature
+  default_rebase: false
+  default_force_push: false
+  rerun_validation: true
+  full_rereview_after_head_change: true
+
+restart_safety:
+  durable_state: true
+  recommended_store: sqlite
+  leases_and_heartbeat: true
+  reconcile_remote_state_before_new_mutations: true
+  mutation_idempotency_required: true
+  track:
+    - ticket_state
+    - lease
+    - branch_and_worktree
+    - pr_number
+    - pr_head_sha
+    - reviewed_sha_and_result
+    - validation_state
+    - remote_mutation_markers
+
+production_boundary:
+  codex_has_production_credentials: false
+  explicit_human_approval_required_for:
+    - production_deployment
+    - pitr_or_destructive_recovery
+    - production_secret_rotation
+    - dns_or_provider_callback_cutover
+    - return_to_service_after_high_risk_recovery
+
+provider_freshness:
+  official_vendor_docs_may_update_technical_details: true
+  product_scope_may_change_without_human: false
+  security_boundary_may_change_without_human: false

@@ -1,104 +1,90 @@
 # Model domenowy frontendu
 
-Stan na 9 sierpnia 2026 r. Dokument opisuje aktualny kontrakt frontendu. Nie jest schematem OpenAPI ani specyfikacją przyszłego backendu.
+**Stan:** reconciled with frozen v1 contract, 24 sierpnia 2026.
 
-## Kanoniczny workflow sprawy
+Ten dokument opisuje stabilne typy i granice frontendu. W razie konfliktu pierwszeństwo mają `PRODUCT_CONTRACT.md`, `WORKFLOW_MATRIX.md` i `decision-registry.yaml`.
 
-Jedynym źródłem prawdy dla cyklu życia sprawy jest `lib/domain/inbox.ts`:
+## Case workflow
 
-```text
-InboxCase.status: InboxStatus
-```
+Kanoniczny frontendowy status `InboxCase.status` ma dokładnie sześć wartości i mapuje 1:1 na API/persistence:
 
-Dozwolone wartości oraz ich kanoniczne odpowiedniki persistence/API:
+- `new` -> `NEW`
+- `verification` -> `VERIFICATION`
+- `waiting_for_customer` -> `WAITING_FOR_CUSTOMER`
+- `partially_ignored` -> `PARTIALLY_IGNORED`
+- `ignored` -> `IGNORED`
+- `resolved` -> `RESOLVED`
 
-| Frontend | Persistence/API | Znaczenie |
-| --- | --- | --- |
-| `new` | `NEW` | Nowa, nieprzejęta sprawa. |
-| `verification` | `VERIFICATION` | Sprawa przejęta do weryfikacji przez dokładnie jednego ownera. |
-| `waiting_for_customer` | `WAITING_FOR_CUSTOMER` | Wysłano pytanie i sprawa oczekuje na klienta bez ownera. |
-| `partially_ignored` | `PARTIALLY_IGNORED` | Oddano część wymaganych głosów ignorowania; sprawa nie ma ownera. |
-| `ignored` | `IGNORED` | Osiągnięto próg ignorowania; stan terminalny bez ownera. |
-| `resolved` | `RESOLVED` | Sprawa rozwiązana; stan terminalny zachowujący ostatniego ownera, jeżeli istniał. |
+Nie wolno tworzyć drugiego `CaseStatus` ani dodawać stanów typu `open`, `pending`, `on_hold`, `closed`, `snoozed` czy `waiting_team`. Snooze, unread i analytics dimensions są projekcjami/personal state, nie workflow states.
 
-USI-35 zamraża macierz przejść, invariants ownership, dedykowane commandy i brak reopen stanów terminalnych. `lib/domain/inbox.ts` utrwala ten kontrakt w danych frontendu, a pełne warunki poszczególnych commandów opisuje `CASE_WORKFLOW.md`. Backend pozostaje authoritative i nie może udostępnić generic aktualizacji statusu.
+Backend jest authoritative dla transition policy, ownership i action availability. UI nie implementuje drugiej maszyny stanów.
 
-Nie istnieje drugi ogólny `CaseStatus`. Usunięty model ze stanami `open`, `pending`, `on_hold` i `closed` nie może zostać odtworzony jako kontrakt API bez jawnej decyzji produktowej.
+## InboxCase i transport
 
-## `InboxCase`
+`InboxCase` jest stabilnym frontend domain/view modelem. Generated OpenAPI DTO są wyłącznie transportem.
 
-`InboxCase` jest stabilnym modelem obszaru skrzynki używanym przez usługę inbox. Obejmuje między innymi:
+Obowiązująca granica:
 
-- identyfikator, referencję i temat,
-- kanał platformy i kanał źródłowy,
-- klienta i właściciela,
-- kanoniczny `InboxStatus`,
-- stan odczytania i odłożenia bieżącego użytkownika,
-- bieżący stan SLA,
-- metadane prezentacyjne, powiązaną sprawę i aktywność.
+`OpenAPI DTO -> API adapter/mapper -> stable frontend domain/view model -> TanStack Query -> UI`
 
-`InboxMessage` jest osobnym modelem wiadomości w rozmowie. Operacje i kontrakt repozytorium znajdują się w `lib/services/inbox.ts`.
+`components/cases/cases-page.tsx` i lokalne fixture'y prezentacyjne nie są kontraktem backendu. USI-88 zamraża jeden jawny mapper; kierunek nie jest już otwartą decyzją.
 
-## Providerowe grupowanie spraw
+## Messages i Activity
 
-USI-34 rozdziela tożsamość providerowej konwersacji od kanonicznego workflow Case. Przyszły inbound adapter wylicza `external_conversation_id` i opcjonalny `external_thread_key` według strategii Channel, a UI otrzymuje już wybraną sprawę. Root/thread/topic nie są statusami ani logiką komponentu.
+`InboxMessage` reprezentuje content rozmowy. Kanoniczni autorzy backendowi to `CUSTOMER`, `SUPPORT`, `SYSTEM`.
 
-Slack grupuje root z threadem, Teams root z replies tylko w kontekstach potwierdzonych przez capability matrix, Telegram według topicu, a bez topics utrzymuje jedną aktywną sprawę na chat. Wiadomość po terminalnej sprawie tworzy nową powiązaną sprawę bez reopen poprzedniej. Regułę groupingową opisuje `CASE_GROUPING.md`, a terminal semantics — `CASE_WORKFLOW.md`.
+Claim, Ignore, Resolve, Reassign i provider-internal events należą do Activity/audit, nie do fake chat messages. Read-position opiera się o stabilną kolejność wiadomości/opaque server cursor, nie sam timestamp.
 
-## Typy współdzielone
+## Provider grouping
 
-`lib/domain/shared.ts` zawiera wyłącznie niekonfliktowe typy używane przez kilka obszarów:
+UI otrzymuje już wybrany Case. Grouping wykonuje backend/provider adapter:
 
-- `Channel`,
-- `SlaState`,
-- `MessageDeliveryStatus`,
-- `UserRole`,
-- `UserPresence`,
-- `User`.
+- Slack: root + thread,
+- Teams standard channel: root + replies,
+- Teams group chat: one active Case per chat,
+- Telegram topic: one active Case per topic,
+- Telegram bez topics: one active Case per chat.
 
-Są to typy domenowe frontendu, nie wygenerowane typy transportowe. Przyszły adapter może je wypełniać danymi z API, ale DTO nie powinny być importowane bezpośrednio przez komponenty.
+Po terminalnym `IGNORED`/`RESOLVED` nowa customer message tworzy nowy linked `NEW` Case; poprzedni Case nie jest reopenowany.
 
-USI-6 zamraża `Channel` jako dokładny zestaw kanałów v1/GA: `slack`, `teams` i `telegram`. E-mail jako kanał wsparcia jest poza v1 i nie może zostać dodany do tego typu bez nowej, jawnej decyzji produktowej. Pola `email` w modelach użytkowników opisują tożsamość konta, nie kanał przyjmowania spraw.
+## Channels
 
-## Pozostałe obszary
+Frontendowy kanał v1 to dokładnie `slack`, `teams`, `telegram`. E-mail support channel i AI są poza v1. E-mail użytkownika jest daną identity, nie providerem supportowym.
 
-### Administracja
+## User identity i permissions
 
-`lib/domain/administration.ts` definiuje konta administracyjne, ustawienia, integracje, ignorowane kanały, powiadomienia i uprawnienia. Kanoniczne role aplikacji to dokładnie `USER` i `ADMIN`. Katalog permissions zawiera dokładnie: `manage_users`, `manage_integrations`, `manage_sla`, `manage_schedule`, `manage_notifications`, `view_global_statistics`, `reassign_cases`, `force_resolve` i `view_audit`.
+Kanoniczna backendowa tożsamość to stabilne `user.id`. Frontendowe `User` i `AdministrationUser` są projekcjami tej samej osoby, nie osobnymi identity models. Ich konsolidacja/mapowanie jest decyzją techniczną i nie wymaga nowego product decision.
 
-Permission administracyjny jest skuteczny tylko dla roli `ADMIN`; sam grant zapisany przy `USER` nie daje dostępu. Ogólne ustawienia wymagają `ADMIN` bez dodatkowego permission. Szczegółową matrycę akcji, widoków i przyszłych endpointów opisuje `PERMISSION_MATRIX.md`.
+Role są dokładnie `USER` i `ADMIN`. Granular permissions są dokładnie dziewięcioma kodami z `PRODUCT_CONTRACT.md`. Starsze fixture roles `agent/supervisor/admin` nie są kontraktem API.
 
-`AdministrationUser` nie jest drugim modelem sprawy. Jego relacja do współdzielonego `User` nadal wymaga realizacji przez przyszły kanoniczny model tożsamości i mapper, ale starsze wartości `agent/supervisor/admin` nie są docelową rolą aplikacji ani kontraktem API.
+## Read/unread i Snooze
 
-### Tożsamość i uwierzytelnianie
+Read state jest per-user i sparse. Nowy user nie dziedziczy historycznych Case jako unread. Customer new/edit może ustawić unread dla eligible users. Samo otwarcie Case **nie oznacza read**; read-position przesuwa się dopiero po actual render/seen i acknowledgement z frontendu.
 
-USI-33 rozdziela kanoniczną tożsamość użytkownika od sposobu uwierzytelnienia. Lokalne hasło oraz przyszłe powiązanie OIDC są danymi serwerowymi służącymi potwierdzeniu tej samej tożsamości; nie tworzą wariantów modelu `User`. Rola, permissions, aktywność i ważność konta pozostają właściwościami lokalnego użytkownika, a nie claims z mechanizmu logowania. Szczegóły zawiera `AUTHENTICATION.md`.
+Snooze jest per-user, nie zmienia statusu, ownera ani SLA. New customer message, terminal state oraz Claim kończą stare snoozes zgodnie z frozen workflow.
 
-### Analityka
+## Analytics
 
-`lib/domain/analytics.ts` definiuje projekcję raportową. `AnalyticsStatusDimension` jest wymiarem danych analitycznych i może zawierać klucze inne niż `InboxStatus`. Nie jest maszyną stanów workflow. Sposób mapowania statusów domenowych na wymiary raportowe pozostaje do uzgodnienia przed OpenAPI.
+`AnalyticsStatusDimension` jest raportową projekcją pochodną. Może zawierać reporting keys inne niż sześć workflow statusów, ale nie rozszerza `CaseStatus`. Sposób technicznego mapowania na dimensions nie jest human decision blockerem.
 
-### Retencja przyszłego backendu
+## Ignored channels
 
-USI-40 klasyfikuje przyszłe dane persistence jako `messages`, `inbound_events`, `audit_events` i `attachments` wraz z binary objects. Klasyfikacja nie dodaje drugiego frontendowego modelu wiadomości ani sprawy. Po expiry wiadomość lub attachment może pozostawić wyłącznie minimalny, sanityzowany tombstone potrzebny dla integralności Case/history; inbound i audit events podlegają kontrolowanemu hard delete zgodnie z `RETENTION.md`.
+`channel.ignored=true` działa prospektywnie per Channel. Inbound jest uwierzytelniany i deduplikowany z technicznym wynikiem `IGNORED_BY_CHANNEL`, ale nie tworzy `Case`, `Message`, `SLA` ani read-state side effect. Brak runtime ingestion w obecnym repo jest implementation gap, nie otwartą decyzją.
 
-Runtime v1 pozostaje single-tenant i nie dodaje `tenant_id` do modeli domenowych. Granica klienta jest granicą deploymentu, bazy, object storage, sekretów i konfiguracji, a nie polem wybieranym przez UI lub API.
+## Tenancy i retention
 
-## Świadomie usunięty model legacy
+V1 jest single-tenant-per-deployment bez runtime `tenant_id`, tenant selectora i cross-tenant API. Retencja `messages`, `inbound_events`, `audit_events` i `attachments` wynika z `RETENTION.md` oraz canonical contract.
 
-Po sprawdzeniu wszystkich referencji usunięto nieużywany, równoległy łańcuch:
+## Historyczne/legacy elementy
 
-- ogólne `Case`, `CaseStatus`, `CaseRepository` i `SupportStatistics`,
-- stare hooki `useCases`, `useCase`, `useStatistics` i `useIntegrations`,
-- osobne mocki spraw, statystyk i integracji,
-- nieużywane odznaki oparte na starych statusach.
+Nie wolno przywracać jako backend contract:
 
-Aktywne ekrany korzystały już z `InboxCase`, `AnalyticsResult` oraz modeli administracji, dlatego usunięcie nie zmienia zachowania UI.
+- generic `Case`/`CaseStatus`,
+- e-mail jako kanału v1,
+- fixture roles `agent/supervisor/admin`,
+- component-local presentation data jako source of truth,
+- timestamp-only read cursor.
 
-## Znane granice
+## Pozostałe luki
 
-- `components/cases/cases-page.tsx` nadal łączy dane usługi inbox z lokalnym modelem prezentacyjnym; kierunek konsolidacji pozostaje otwarty.
-- Lista prezentacyjna pokazuje również e-mail. Zgodnie z USI-6 jest to fixture poza v1, a nie brakująca wartość `Channel`; fixture ma zostać usunięty przy zastąpieniu danych prezentacyjnych realnym API.
-- Reguła ignorowanych kanałów jest konfigurowana w administracji, ale nie ma jeszcze procesu przyjmowania wiadomości, który ją egzekwuje.
-
-Otwarte kwestie są opisane w `docs/OPEN_DECISIONS.md`, zamknięty kontrakt kanałów w `docs/V1_SCOPE.md`, maszyna stanów w `docs/CASE_WORKFLOW.md`, a kontrakt retencji i izolacji w `docs/RETENTION.md`. Nie powinny być rozstrzygane przez przypadkowe rozszerzanie typów.
+Realny backend/auth/provider adapters oraz API-backed `/cases` nie są jeszcze zaimplementowane. Workflow UI nie jest jeszcze podłączony do dedykowanych commandów. Są to taski implementacyjne, nie nierozstrzygnięte decyzje. Nowy human blocker można utworzyć wyłącznie zgodnie z `OPEN_DECISIONS.md` i `AGENTS.md`.

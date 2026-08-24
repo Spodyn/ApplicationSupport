@@ -1,0 +1,406 @@
+version: 1
+product: Unified Support Inbox
+contract_status: frozen-v1
+primary_jira: USI-5
+precedence:
+  - current_jira_ticket_later_final_decision_or_contract_override
+  - e00_and_parent_epic_preflight_freeze
+  - product_contract_and_machine_registry
+  - canonical_product_workflow_architecture_security_operations_integrations_docs
+  - older_non_conflicting_docs_and_implementation
+human_decision_required_for:
+  - v1_scope_expansion
+  - fundamental_workflow_change
+  - role_or_permission_catalog_change
+  - new_security_boundary
+  - destructive_data_semantics_outside_retention_contract
+  - paid_third_party_or_customer_financial_commitment
+  - production_credentials_or_high_risk_production_action
+  - pricing_or_customer_commercial_commitment
+  - new_legal_or_compliance_requirement
+technical_decisions_delegated:
+  - naming
+  - package_and_module_layout_within_architecture
+  - data_structures
+  - indexes_implied_by_queries_and_race_invariants
+  - equivalent_locking_strategy
+  - retry_and_backoff_implementation_within_contract
+  - test_design
+  - local_refactoring_required_by_ticket
+  - git_conflict_resolution
+  - compatible_vendor_sdk_or_patch_version
+  - equivalent_implementation_preserving_acceptance_criteria
+
+decisions:
+  - id: DEC-SCOPE-001
+    area: scope
+    status: frozen
+    source: [USI-6]
+    decision:
+      providers: [SLACK, MICROSOFT_TEAMS, TELEGRAM]
+      out_of_v1: [EMAIL_CHANNEL, AI_FEATURES]
+
+  - id: DEC-TENANCY-001
+    area: tenancy
+    status: frozen
+    source: [USI-40]
+    decision:
+      isolation: separate_deployment_database_object_storage_secrets_config_per_customer
+      runtime_tenant_id: false
+      cross_tenant_api: false
+      code_forks: false
+
+  - id: DEC-RBAC-001
+    area: authorization
+    status: frozen
+    source: [USI-32]
+    decision:
+      roles: [USER, ADMIN]
+      permissions: [manage_users, manage_integrations, manage_sla, manage_schedule, manage_notifications, view_global_statistics, reassign_cases, force_resolve, view_audit]
+      admin_capability_requires_admin_role: true
+      general_settings: ADMIN_ONLY
+      keep_at_least_one_active_admin_with_manage_users: true
+
+  - id: DEC-AUTH-001
+    area: authentication
+    status: frozen
+    source: [USI-33, E04]
+    decision:
+      primary: local_email_password
+      session_store: server_side_spring_session_jdbc
+      cookie: {name: USI_SESSION, http_only: true, secure_on_staging_and_prod: true, same_site: Lax, path: /}
+      idle_timeout_hours: 12
+      remember_me_v1: false
+      csrf: required
+      password: {hashing: Argon2id, min_chars: 12, max_chars: 128, unicode: true, forced_composition: false, periodic_rotation: false}
+      invitation_ttl_hours: 24
+      password_reset_ttl_minutes: 30
+      reset_invalidates_all_sessions: true
+
+  - id: DEC-WF-001
+    area: case_workflow
+    status: frozen
+    source: [USI-35]
+    decision:
+      statuses: [NEW, VERIFICATION, WAITING_FOR_CUSTOMER, PARTIALLY_IGNORED, IGNORED, RESOLVED]
+      owned_statuses: [VERIFICATION]
+      owner_count_in_verification: 1
+      terminal: [IGNORED, RESOLVED]
+      terminal_reopen: false
+      post_terminal_customer_message: create_exactly_one_linked_new_case
+      auto_assignment: false
+
+  - id: DEC-WF-CLAIM-001
+    area: case_workflow
+    status: frozen
+    source: [USI-35, E09]
+    decision:
+      from: [NEW, PARTIALLY_IGNORED]
+      to: VERIFICATION
+      owner: actor
+      lifetime_ignore_voter_eligible: false
+      clears_active_partial_ignore_votes: true
+      clears_stale_snoozes: true
+
+  - id: DEC-IGNORE-001
+    area: ignore
+    status: frozen
+    source: [USI-36, E09]
+    decision:
+      threshold_points: 2
+      default_user_weight: 1
+      temporary_weight: 2
+      temporary_weight_grant: ADMIN_PLUS_manage_users
+      vote_weight_snapshot_immutable: true
+      one_active_vote_per_user_case: true
+      duplicate_active_vote_command: idempotent_success
+      below_threshold_status: PARTIALLY_IGNORED
+      threshold_status: IGNORED
+      claim_or_customer_message_resets_active_partial_votes: true
+      reset_preserves_history: true
+      same_user_can_vote_after_reset: true
+      voter_lifetime_cannot_claim_or_reply_same_case: true
+
+  - id: DEC-ASK-001
+    area: ask_customer
+    status: frozen
+    source: [USI-37, E09]
+    decision:
+      actor: current_owner
+      allowed_from: [VERIFICATION]
+      outgoing_human_message_required: true
+      transition_to_waiting_when: provider_delivery_SENT
+      before_sent_status: VERIFICATION
+      before_sent_owner: unchanged
+      after_sent_status: WAITING_FOR_CUSTOMER
+      after_sent_owner: null
+      permanent_delivery_failure_status: VERIFICATION
+      permanent_delivery_failure_owner: unchanged
+      default_wait_hours: 24
+      min_wait_hours: 1
+      max_wait_days: 30
+      customer_reply_to: NEW
+      timeout_to: NEW
+      timeout_automatic_followup_v1: false
+
+  - id: DEC-RESOLVE-001
+    area: resolve
+    status: frozen
+    source: [USI-35, E09]
+    decision:
+      normal: {actor: current_owner, from: [VERIFICATION], to: RESOLVED}
+      force: {actor: ADMIN_PLUS_force_resolve, from: [NEW, VERIFICATION, WAITING_FOR_CUSTOMER, PARTIALLY_IGNORED], to: RESOLVED}
+      category: {required: false, free_text: false, values: [SOLVED, NO_ACTION_REQUIRED, DUPLICATE, OTHER]}
+      resolved_preserves_previous_owner_if_any: true
+      ignored_owner: null
+
+  - id: DEC-SNOOZE-001
+    area: personal_state
+    status: frozen
+    source: [USI-37, E09, E10]
+    decision:
+      scope: per_user
+      allowed_for_any_visible_nonterminal_case: true
+      min_minutes: 5
+      max_days: 30
+      changes_case_status: false
+      changes_owner: false
+      pauses_sla: false
+      marks_read_for_actor: true
+      wake_on_customer_message: true
+      clear_on_terminal: true
+      clear_on_claim: true
+
+  - id: DEC-READ-001
+    area: personal_state
+    status: frozen
+    source: [USI-37, E10]
+    decision:
+      per_user: true
+      sparse_state_with_user_baseline: true
+      new_user_historic_cases_unread: false
+      customer_new_message_sets_unread_for_all_eligible_users: true
+      customer_edit_sets_unread: true
+      support_or_system_outgoing_sets_unread_for_others: false
+      open_case_alone_marks_read: false
+      read_ack_after_actual_render: true
+      cursor_uses_stable_message_order_not_timestamp_only: true
+      other_users_read_state_visible_v1: false
+
+  - id: DEC-MESSAGE-001
+    area: messages
+    status: frozen
+    source: [E08]
+    decision:
+      conversation_authors: [CUSTOMER, SUPPORT, SYSTEM]
+      body_formats: [PLAIN_TEXT, MARKDOWN]
+      raw_executable_html: false
+      sent_means_provider_accepted: true
+      delivered_only_with_reliable_provider_ack: true
+      transient_retry_max_attempts: 8
+      transient_retry_window_hours: 24
+      honor_retry_after: true
+      retry_creates_new_logical_message: false
+
+  - id: DEC-ATTACHMENT-001
+    area: attachments
+    status: frozen
+    source: [E08, E20]
+    decision:
+      max_file_mib: 25
+      max_files_per_message: 10
+      max_total_mib_per_message: 50
+      lower_provider_limit_wins: true
+      scan_states: [PENDING, CLEAN, INFECTED, ERROR]
+      only_clean_normal_send_or_download: true
+      default_scanner: ClamAV
+      orphan_cleanup_hours: 24
+      authorized_backend_download_default: true
+      signed_url_max_ttl_minutes_if_used: 5
+      encrypted_archives_allowed: false
+      archive_max_nesting: 3
+      archive_max_entries: 1000
+      archive_max_expanded_mib: 250
+
+  - id: DEC-SLA-001
+    area: sla
+    status: frozen
+    source: [E13]
+    decision:
+      first_response: {warning_business_minutes: 12, breach_business_minutes: 15, starts_at: durable_usi_customer_intake, completes_at: human_support_or_ask_SENT}
+      unclaimed: {warning_business_minutes: 5, breach_business_minutes: 15, accumulates_in: [NEW, PARTIALLY_IGNORED]}
+      in_progress: {warning_business_minutes: 30, breach_business_minutes: 60, accumulates_in: [VERIFICATION]}
+      pause_waiting_default: true
+      snapshot_policy_schedule_timezone_on_case_creation: true
+      config_changes_retroactive: false
+      warning_and_breach_monotonic: true
+
+  - id: DEC-SCHEDULE-001
+    area: business_hours
+    status: frozen
+    source: [E14, FINAL_FREEZE]
+    decision:
+      timezone: one_iana_timezone_per_deployment
+      bootstrap_timezone: UTC
+      production_should_configure_explicitly: true
+      default_weekly: {MONDAY: ['09:00-17:00'], TUESDAY: ['09:00-17:00'], WEDNESDAY: ['09:00-17:00'], THURSDAY: ['09:00-17:00'], FRIDAY: ['09:00-17:00'], SATURDAY: [], SUNDAY: []}
+      ooo_default_enabled: false
+      date_exception_overrides_weekly_day: true
+      dst_aware: true
+      active_schedule_requires_weekly_open_interval: true
+      no_future_opening_error: NO_FUTURE_OPENING
+      ooo_max_once_per_case_per_closure_period: true
+
+  - id: DEC-NOTIFY-001
+    area: notifications
+    status: frozen
+    source: [E15, FINAL_FREEZE]
+    decision:
+      external_rules_or_destinations_enabled_by_default: false
+      default_content_excludes_full_message_body_and_attachment_content: true
+      dedup_key: [sourceEventId, ruleId, destinationId]
+      transient_retry_max_attempts: 8
+      transient_retry_window_hours: 24
+      dlq_replay: ADMIN_PLUS_manage_notifications
+      personal_snooze_reminder: user_scoped_in_app
+      suppress_pending_warning_if_case_terminal_before_first_send: true
+      send_real_breach_once_even_if_later_terminal: true
+      recheck_rule_and_destination_enabled_before_each_send: true
+      reenable_resurrects_old_cancelled: false
+
+  - id: DEC-STATS-001
+    area: statistics
+    status: frozen
+    source: [E16, USI-39]
+    decision:
+      own_stats_for_active_user: true
+      global_stats: ADMIN_PLUS_view_global_statistics
+      resolved_metric_counts_ignored: false
+      duration_percentiles: [p50, p90, p95]
+      default_range_days: 30
+      max_interactive_days: 366
+      current_work: {ui: /statistics#Aktualna-praca, api: GET_/api/v1/admin/current-cases, read_auth: ADMIN_ONLY, statuses: [NEW, VERIFICATION, WAITING_FOR_CUSTOMER, PARTIALLY_IGNORED]}
+
+  - id: DEC-CHANNEL-IGNORE-001
+    area: channels
+    status: frozen
+    source: [USI-80, E06]
+    decision:
+      scope: per_channel_record
+      applies_to_existing_cases: false
+      inbound_event_authenticated: true
+      inbound_event_deduplicated: true
+      inbound_event_outcome: IGNORED_BY_CHANNEL
+      creates_case: false
+      creates_message: false
+      creates_sla: false
+      changes_read_state: false
+      visible_as_inbox_message: false
+
+  - id: DEC-PROVIDER-SLACK-001
+    area: slack
+    status: frozen
+    source: [E12]
+    decision:
+      supported: [PUBLIC_CHANNEL, PRIVATE_CHANNEL, SLACK_CONNECT_CHANNEL]
+      unsupported_v1: [DM, GROUP_DM]
+      human_non_app_message_is_customer: true
+      unmapped_channel_creates_case: false
+      request_replay_window_minutes: 5
+      no_full_history_import: true
+      recovery_default_hours: 24
+      recovery_max_days: 7
+      health_check_minutes_approx: 15
+      outgoing_agent_signature_default: false
+
+  - id: DEC-PROVIDER-TEAMS-001
+    area: microsoft_teams
+    status: frozen
+    source: [E18]
+    decision:
+      supported: [STANDARD_CHANNELS, GROUP_CHATS]
+      unsupported_v1: [PRIVATE_CHANNELS, SHARED_CHANNELS]
+      permission_model: resource_specific_consent_least_privilege
+      standard_channel_grouping: root_post_thread
+      group_chat_grouping: one_active_case_per_chat
+      no_full_history_import: true
+      recovery_default_hours: 24
+      recovery_max_days_where_supported: 7
+
+  - id: DEC-PROVIDER-TELEGRAM-001
+    area: telegram
+    status: frozen
+    source: [E19]
+    decision:
+      supported: [PRIVATE_CHAT, GROUP, SUPERGROUP, FORUM_TOPIC]
+      unsupported_v1: [BROADCAST_CHANNEL]
+      topic_grouping: one_active_case_per_topic
+      non_topic_chat_grouping: one_active_case_per_chat
+      staging_and_prod_secret_token_required: true
+      no_history_import: true
+      own_bot_messages_are_customer: false
+      provider_parts_may_map_to_one_logical_usi_message: true
+
+  - id: DEC-RETENTION-001
+    area: retention
+    status: frozen
+    source: [USI-40]
+    decision:
+      messages_days_default: 730
+      messages_days_range: [30, 3650]
+      inbound_events_days_default: 30
+      inbound_events_days_range: [7, 365]
+      audit_events_days_default: 2555
+      audit_events_days_range: [365, 3650]
+      attachments_days_default: 730
+      attachments_days_range: [30, 3650]
+      backup_days_default: 35
+      backup_days_range: [7, 90]
+      legal_hold: deployment_level_ops_config
+      per_case_or_user_legal_hold_v1: false
+      restore_reapplies_retention_before_service: true
+
+  - id: DEC-OPS-001
+    area: deployment
+    status: frozen
+    source: [E21, E22, E23, E24, E25, FINAL_FREEZE]
+    decision:
+      hosting_initial: dedicated_linux_vm_per_customer
+      kubernetes_v1: false
+      recommended_provider: Hetzner_Cloud
+      region: EU
+      os: Ubuntu_24_04_LTS
+      initial_benchmark: {vcpus: 8, ram_gib: 32, disk: fast_nvme}
+      reverse_proxy_default: Caddy
+      registry: GHCR
+      mutable_latest_deploy: false
+      production_cutover_requires_human_approval: true
+      codex_has_production_credentials: false
+      postgres_rpo_minutes_max: 5
+      attachment_rpo_minutes_max: 60
+      full_deployment_rto_minutes_max: 120
+      availability_slo_percent_monthly: 99.9
+      concurrent_users_acceptance: 200
+      websocket_connections_acceptance: 200
+      cases_per_day_acceptance: 5000
+      burst_inbound_events_per_sec: 100
+      burst_duration_seconds: 60
+      soak_hours: 24
+      pilot_users_min: 5
+      pilot_users_max: 10
+      pilot_min_business_days: 5
+      first_go_live_hypercare_hours: 72
+
+technical_resolutions:
+  - id: TECH-VIEW-MAPPER-001
+    source: [USI-88]
+    rule: Use one explicit API DTO to stable frontend domain/view mapper; component fixtures are not backend contract.
+  - id: TECH-IDENTITY-MAPPER-001
+    source: [E04, E05]
+    rule: Canonical backend user ID is identity; frontend User/AdministrationUser are projections, not separate identities.
+  - id: TECH-ANALYTICS-DIM-001
+    source: [E16]
+    rule: Analytics reporting dimensions may be derived but must never extend the six canonical CaseStatus values.
+  - id: TECH-WORKFLOW-UI-001
+    source: [USI-113]
+    rule: Wire accepted workflow actions to server-calculated action availability and stable problem codes; no second client state machine.
