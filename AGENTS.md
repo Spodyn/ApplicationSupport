@@ -9,13 +9,15 @@ The product/architecture decision pre-flight for E00-E25 is complete. Do not reo
 Before implementing any ticket, resolve requirements in this order:
 
 1. **Current Jira ticket**, including later `FINAL DECISION FREEZE`, `CONTRACT OVERRIDE` and `USER_DECISION_RESOLVED` comments.
-2. `docs/PRODUCT_CONTRACT.md` - canonical frozen product/architecture rules.
-3. Relevant entries in `docs/decision-registry.yaml` - machine-readable frozen decisions.
+2. Frozen E00 decisions and approved parent-epic pre-flight decisions for E01-E25.
+3. `docs/PRODUCT_CONTRACT.md` and `docs/decision-registry.yaml`.
 4. `docs/PRODUCT_SPEC.md`, `docs/WORKFLOW_MATRIX.md`, `docs/ARCHITECTURE.md`, `docs/INTEGRATIONS.md`, `docs/SECURITY.md`, `docs/OPERATIONS.md`.
-5. Older focused documents such as `CASE_WORKFLOW.md`, `CASE_GROUPING.md`, `AUTHENTICATION.md`, `RETENTION.md`, `PERMISSION_MATRIX.md`, but only where they do not conflict with a later source above.
+5. Older focused documents such as `CASE_WORKFLOW.md`, `CASE_GROUPING.md`, `AUTHENTICATION.md`, `RETENTION.md`, `PERMISSION_MATRIX.md`, `CURRENT_STATE.md`, `DOMAIN_MODEL.md` and `TESTING.md`, but only where they do not conflict with a later source above.
 6. Current code/mock behavior only where it does not conflict with the frozen contract.
 
 `docs/OPEN_DECISIONS.md` is not a general ambiguity sink. As of the final decision freeze it contains no known unresolved product/architecture blocker. Create a new human blocker only when the hierarchy above cannot resolve a genuine contract change.
+
+For autonomous lifecycle/dependency/review/merge behavior, `docs/ORCHESTRATOR_CONTRACT.md` and `docs/orchestrator-policy.yaml` are mandatory operational inputs. They do not override product semantics and do not grant production authority.
 
 ## Delegated autonomy
 Codex may decide normal implementation details without asking the Product Owner, including naming, packages, internal data structures, indexes implied by query/race requirements, targeted locking, retry/backoff implementation, tests, local refactors required by a ticket, provider SDK details compatible with the current official API, and semantic Git-conflict resolution.
@@ -114,6 +116,8 @@ For every change run the relevant checks. Before completion of a code-bearing ti
 
 Do not report completion while a required gate is failing.
 
+Documentation-only changes still require diff review, link/source-precedence review, machine-readable YAML validation where applicable and repository CI configured for the PR.
+
 ## Change discipline
 - One coherent Jira task per branch/PR unless the ticket explicitly groups work.
 - No unrelated redesign or broad dependency upgrades.
@@ -135,7 +139,14 @@ Keep synchronized where relevant:
 - `docs/OPERATIONS.md`
 - `docs/DECISION_REGISTRY.md`
 - `docs/decision-registry.yaml`
+- `docs/ORCHESTRATOR_CONTRACT.md`
+- `docs/orchestrator-policy.yaml`
 - focused legacy/current-state docs affected by the ticket
+
+## Autonomous lifecycle discipline
+Developer workers do not merge and do not mark Jira `Gotowe`. Reviewer decisions are bound to the exact reviewed PR HEAD SHA. A changed SHA requires revalidation and re-review. Jira becomes `Gotowe` only after the reviewed change is actually merged to `main`.
+
+On restart, reconcile Jira/GitHub/worktree reality before creating duplicate branches, PRs, comments or transitions. Dependency scheduling, leases, conflict recovery and exact merge gates are defined in `docs/ORCHESTRATOR_CONTRACT.md`.
 
 ## Stop conditions
 Stop and create a clear blocker only if work would require an actual contract change under the human-decision boundary, production credentials/actions, an unresolved legal/compliance choice, or an irreconcilable conflict between equal/higher-precedence sources. Do not stop for ordinary implementation choices already delegated above.
