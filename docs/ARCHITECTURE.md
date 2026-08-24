@@ -1,104 +1,118 @@
-# Architektura
+# Architektura Unified Support Inbox
 
-Stan na 9 sierpnia 2026 r. Dokument rozdziela bieżącą architekturę frontendu od planowanej integracji backendowej.
+**Stan kontraktu: 24 sierpnia 2026 - FROZEN v1.** Dokument rozdziela aktualny frontend/mock od zamrożonego docelowego baseline produkcyjnego.
 
-## Stan obecny
+## 1. Aktualny frontend i granica danych
 
-Repozytorium zawiera frontend Next.js korzystający wyłącznie z lokalnych usług mock. Nie zawiera backendu, bazy danych ani prawdziwych adapterów Slacka, Microsoft Teams lub Telegrama.
+Frontend: Next.js 16, React 19, strict TypeScript, Tailwind, istniejący shadcn/base-ui style, TanStack Query, Recharts i PWA.
 
-Przepływ danych:
-
-```text
-komponent lub trasa
-        ↓
-hook TanStack Query — lib/services/queries.ts
-        ↓
-rejestr implementacji — lib/services/registry.ts
-        ↓
-obszarowy interfejs usługi — lib/services/*.ts
-        ↓
-lokalna implementacja mock
-        ↓
-dane początkowe — mocks/*.ts
-```
-
-Zasady bieżącej granicy:
-
-- komponenty nie importują z `mocks/`,
-- `lib/services/registry.ts` jest jedynym miejscem kompozycji implementacji,
-- TanStack Query odpowiada za odczyt, cache, mutacje i unieważnianie,
-- `lib/domain/inbox.ts` jest jedynym modelem workflow sprawy,
-- `lib/domain/shared.ts` zawiera współdzielone typy frontendu,
-- analityka i administracja pozostają osobnymi obszarami domenowymi.
-
-Aktywne kontrakty usług są definiowane obszarowo:
-
-- `lib/services/inbox.ts`,
-- `lib/services/analytics.ts`,
-- `lib/services/administration.ts`,
-- `lib/services/current-user.ts`.
-
-Nie istnieje wspólny, ogólny kontrakt `CaseRepository`. Został usunięty wraz z nieużywanym modelem legacy, aby nie został przypadkowo potraktowany jako projekt backendu.
-
-Kontrakt v1/GA zamraża listę providerów do Slacka, Microsoft Teams i Telegrama. E-mail jako kanał wsparcia oraz funkcje AI są poza v1. Pełną granicę wydania i przegląd powierzchni frontendu opisuje `docs/V1_SCOPE.md`.
-
-USI-32 zamraża kanoniczne role `USER` i `ADMIN` oraz dziewięć granularnych permissions. Funkcja administracyjna wymaga jednocześnie roli `ADMIN` i przypisanego permission; wyjątkiem są ustawienia Ogólne, wymagające samej roli `ADMIN`. Pełna matryca widoków, akcji i rodzin endpointów znajduje się w `docs/PERMISSION_MATRIX.md`.
-
-USI-33 zamraża v1 jako lokalny e-mail i hasło z sesją serwerową przekazywaną wyłącznie przez bezpieczne cookie `HttpOnly`. Przeglądarkowe mutacje wymagają CSRF, a identyfikator sesji nie może trafić do web storage ani cache PWA. Przyszłe OIDC ustanawia tę samą sesję i mapuje do kanonicznego użytkownika bez zaufania do claims roli/permissions. Pełny kontrakt znajduje się w `docs/AUTHENTICATION.md`.
-
-USI-34 zamraża provider-neutral grouping wykonywany przez inbound adapters przed utworzeniem lub odnalezieniem sprawy. Slack używa root+thread, Teams root+replies w kontekstach potwierdzonych capability matrix, Telegram topic albo jednej aktywnej sprawy na chat bez topics. Pełny kontrakt kluczy, terminal linking i idempotency znajduje się w `docs/CASE_GROUPING.md`.
-
-USI-35 zamraża sześć globalnych statusów Case, pełną macierz przejść i invariants ownership. `VERIFICATION` ma dokładnie jednego ownera, stany `NEW`/`WAITING_FOR_CUSTOMER`/`PARTIALLY_IGNORED`/`IGNORED` są nieprzypisane, a `RESOLVED` zachowuje ostatniego ownera, jeżeli istniał. Każda zmiana stanu ma dedykowany command, stany terminalne nie są reopenowane, a szczegóły kontraktu znajdują się w `docs/CASE_WORKFLOW.md`.
-
-USI-40 zamraża v1 jako model single-tenant: jeden klient ma osobny deployment, PostgreSQL, object storage, sekrety i konfigurację, ale korzysta z tego samego kodu. Runtime nie ma `tenant_id`, tenant selectora ani cross-tenant API. Retencja, kontrolowany purge, legal hold per deployment oraz rotacja backupów są kontraktem przyszłej infrastruktury opisanym w `docs/RETENTION.md`.
-
-## Planowana granica backendu
-
-Planowany kierunek, bez implementowania go w tym repozytorium:
-
-Docelowa infrastruktura wskazana dla następnej fazy to Spring Boot, PostgreSQL i RabbitMQ. Żaden z tych elementów nie jest obecnie częścią repozytorium.
+Obowiązująca granica:
 
 ```text
-Spring Boot REST/OpenAPI
-        ↓
-wygenerowany klient transportowy TypeScript
-        ↓
-adapter frontendu
-        ↓
-obszarowy interfejs usługi
-        ↓
-stabilne typy domenowe frontendu
-        ↓
-TanStack Query i UI
+UI
+ -> lib/services/queries.ts
+ -> lib/services/registry.ts
+ -> typed service interfaces
+ -> mock implementation teraz / OpenAPI adapter docelowo
 ```
 
-Odpowiedzialności warstw:
+Komponenty nie importują bezpośrednio z `mocks/`. `registry.ts` jest composition boundary. Generated DTO nie są typami domenowymi.
 
-1. Spring Boot publikuje uzgodniony kontrakt REST/OpenAPI.
-2. Generator tworzy DTO i kod transportowy w izolowanym katalogu, np. `lib/api/generated/`.
-3. Adapter wywołuje klienta, mapuje DTO na typy `lib/domain/` i normalizuje błędy.
-4. `lib/services/registry.ts` wybiera adapter zamiast implementacji mock.
-5. Hooki i komponenty pozostają zależne od stabilnych interfejsów usług, nie od DTO.
+## 2. Docelowy modularny monolit
 
-Adaptery providerów planowane dla v1 mogą dotyczyć wyłącznie Slacka, Microsoft Teams i Telegrama. E-mail nie może zostać dodany do `Channel`, OpenAPI ani warstwy adapterów w ramach v1. USI-6 nie implementuje żadnego z tych adapterów.
+```text
+Browser / PWA
+      |
+      | same origin HTTPS
+      v
+Caddy
+  |-- /      -> Next.js
+  |-- /api/* -> Spring Boot REST/OpenAPI
+  `-- /ws/*  -> Spring Boot WebSocket/STOMP
+                     |
+       +-------------+-------------+----------------+
+       |             |             |                |
+   PostgreSQL     RabbitMQ    S3/MinIO        Observability
+   + Flyway       async work  attachments     OTel/Micrometer
+       |             |                              |
+       `---- transactional inbox/outbox ------------'
 
-Adapter normalizuje providerowe ID do `external_conversation_id` i opcjonalnego `external_thread_key`; komponenty frontendu nigdy nie implementują logiki root/thread/topic. Strategia jest konfigurowana per Channel i walidowana względem capability providera.
+Slack / Teams / Telegram
+       -> authenticated provider adapters
+       -> durable inbound events
+       -> provider-neutral Case/Message core
+```
 
-Wygenerowane pliki nie powinny być ręcznie edytowane. Zamrożone reguły workflow i ownership muszą zostać odwzorowane przez dedykowane commandy z `docs/CASE_WORKFLOW.md`; szczegóły transportowe konfliktów, idempotencji i paginacji wymagają osobnego kontraktu OpenAPI i nie są implementowane na tym etapie.
+Backend baseline:
+- Java 25 LTS;
+- Spring Boot 4.1.x latest compatible stable patch;
+- Spring Modulith 2.1.x latest compatible stable patch;
+- Maven Wrapper;
+- PostgreSQL 18.x + Flyway;
+- RabbitMQ 4.3.x;
+- S3-compatible object storage / MinIO;
+- WebSocket/STOMP;
+- OpenTelemetry/Micrometer + Prometheus/Grafana.
 
-Przyszły backend jest jedyną granicą bezpieczeństwa: każda chroniona operacja powtarza kontrolę aktywnej sesji, literalnej roli i effective permissions niezależnie od widoczności elementu UI. Frontend mapuje `401`/`403` na stany aplikacji, ale nie jest źródłem decyzji autoryzacyjnej.
+No Kubernetes or microservice split in v1 without explicit later contract change.
 
-Spring Session JDBC przechowuje docelowy stan sesji w PostgreSQL. Login, logout i `auth/me` należą do kontraktu API, ale ich implementacja oraz trasa `/login` pozostają poza obecnym repozytorium.
+## 3. Same-origin and API boundary
 
-Każdy przyszły deployment backendu obsługuje dokładnie jednego klienta i korzysta z własnej bazy, object storage, sekretów oraz konfiguracji. Retention job działa w granicy tego deploymentu, respektuje legal hold i jawnie redaguje lub usuwa klasy danych bez przypadkowego cascade przez relacje zachowujące historię. Restore backupu nie otwiera ruchu, dopóki polityka retention/purge nie zostanie ponownie zastosowana.
+Public browser routing: `/` -> Next.js, `/api/*` -> Spring Boot, `/ws/*` -> WebSocket. CORS deny/off by default; no wildcard convenience.
 
-## Granice bezpieczeństwa
+OpenAPI is the transport contract. Generated TS client is isolated and mapped to stable frontend domain/view models. API errors use `application/problem+json` with stable problem codes.
 
-- Sekrety i poświadczenia dostawców nie mogą trafić do bundla klienta.
-- Testy nie wywołują prawdziwych komunikatorów ani produkcyjnej bazy.
-- Service worker pomija `/api`, żądania autoryzowane i metody inne niż GET.
-- Typy transportowe nie są typami domenowymi i nie powinny przeciekać do komponentów.
+Long feeds use signed opaque versioned cursor pagination: default 50, max100, TTL24h. Retryable commands use `Idempotency-Key` max128, scoped by user + command, retained24h. Same key/same canonical request replays same result; same key/different payload ->409.
 
-## Weryfikacja zmian
+Valid `X-Correlation-ID` max128 safe ASCII is preserved; malformed/missing input is replaced with UUIDv7 and propagated through request/outbox/jobs/provider calls.
 
-Pełną bramką repozytorium jest `pnpm check`: lint, typecheck, testy jednostkowe/komponentowe, produkcyjny build i Playwright E2E. Szczegóły znajdują się w `docs/TESTING.md`.
+## 4. Persistence and concurrency
+
+- PostgreSQL is authoritative source of truth.
+- UUID technical IDs; prefer UUIDv7 for new sortable IDs. Case also has immutable sequence-backed human reference `CASE-00000001` etc.
+- Absolute timestamps use timezone-aware semantics/`timestamptz`; DB names snake_case.
+- Default isolation `READ COMMITTED`.
+- Atomic conditional UPDATE/row locks for workflow races; `FOR UPDATE SKIP LOCKED` for schedulers/workers.
+- `SERIALIZABLE` only for a concrete tested invariant.
+- Provider HTTP never in an open DB transaction.
+- Transactional inbox/outbox protects asynchronous effects.
+- Flyway append-only; expand -> backfill/migrate -> switch -> cleanup later; N-1 application compatibility where rollback requires it; executed migrations never edited.
+
+## 5. Realtime
+
+Business commit -> transactional outbox -> RabbitMQ -> WebSocket/STOMP. Semantics are at-least-once and duplicate/out-of-order safe. DB/refetch is source of truth; WebSocket is a signal, not durable event store.
+
+Heartbeat10s, dead connection about30s. Reconnect roughly1/2/5/10/30s + jitter, followed by bounded list/counter/current-Case/message resync.
+
+Personal unread/Snooze events use backend-controlled user destinations; clients cannot subscribe to arbitrary user IDs.
+
+## 6. Provider adapters
+
+Adapters own authentication/signature mechanics, provider IDs, payload normalization, current vendor API calls/rate limits and provider-specific attachment access. They **do not** own Case workflow, authorization, SLA, read state, retention or audit semantics.
+
+Frozen provider scope:
+- Slack public/private/Connect channels, no DM/group DM;
+- Teams standard channels + group chats, no private/shared;
+- Telegram private chats/groups/supergroups/topics, no broadcast channels.
+
+Exact SDK/API patch details are technical choices based on current official vendor documentation and must not expand product scope.
+
+## 7. Security and secrets boundary
+
+Backend rechecks session, role/permission, active account, workflow state and ownership. Browser visibility is never authorization. Provider/customer content is untrusted and sanitized.
+
+Development uses dummy/dev env values and `.env.example`. Production uses runtime secret injection/deployment store and DB stores secret references rather than provider-secret plaintext. Codex/CI never receive production secrets or production DB/storage access.
+
+## 8. Single tenancy
+
+Each customer has separate deployment, PostgreSQL DB, object storage, secrets and config using one shared codebase. Runtime v1 has no `tenant_id`, tenant selector or cross-tenant API.
+
+## 9. Deployment baseline
+
+Initial production baseline is a dedicated EU Linux VM (recommended first provider Hetzner Cloud), Ubuntu24.04 LTS, Caddy, Docker/Compose and immutable GHCR digest. Initial benchmark 8vCPU/32GiB/NVMe; validated performance tests determine actual safe sizing.
+
+Staging may auto-deploy after gates. Production cutover requires protected human approval; Codex does not receive production credentials.
+
+## 10. Source hierarchy
+
+For implementation precedence use `AGENTS.md`: current Jira + later final overrides -> `PRODUCT_CONTRACT.md` -> `decision-registry.yaml` -> canonical area docs -> older historical/current-state docs -> code fixtures only where non-conflicting.
