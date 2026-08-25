@@ -52,6 +52,23 @@ pnpm dev
 Komendy uruchamia się z root repozytorium; `pnpm dev` deleguje do workspace
 `@usi/web`. Frontend jest dostępny na `http://localhost:3000`.
 
+## Lokalne usługi danych
+
+PostgreSQL 18, RabbitMQ 4.3 z management UI oraz MinIO uruchamia lokalny stack
+Docker Compose. Konfiguracja używa wyłącznie developmentowych credentials,
+prywatnej sieci i portów związanych z `127.0.0.1`.
+
+```bash
+cp infra/.env.example infra/.env
+docker compose --env-file infra/.env -f infra/compose.yaml config --quiet
+docker compose --env-file infra/.env -f infra/compose.yaml up --detach --wait --wait-timeout 180 postgres rabbitmq minio
+docker compose --env-file infra/.env -f infra/compose.yaml run --rm minio-init
+```
+
+Porty, healthchecki, komendy restart/reset oraz zasady trwałości volume są
+opisane w [`infra/README.md`](infra/README.md). Schema aplikacyjna nie jest
+bootstrapowana przez Compose; docelowo tworzy ją wyłącznie Flyway.
+
 ## Kontrola jakości frontendu
 
 ```bash

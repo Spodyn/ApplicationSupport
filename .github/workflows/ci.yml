@@ -12,6 +12,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  infrastructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate Docker Compose contract
+        run: |
+          docker compose --env-file infra/.env.example -f infra/compose.yaml config --format json \
+            | python3 infra/tests/assert-compose-config.py
+
+      - name: Verify clean start, health, persistence, and reset
+        run: infra/tests/verify-compose-lifecycle.sh
+
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
