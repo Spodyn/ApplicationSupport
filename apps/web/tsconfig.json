@@ -6,6 +6,7 @@
       "esnext"
     ],
     "allowJs": true,
+    "checkJs": true,
     "target": "ES6",
     "skipLibCheck": true,
     "strict": true,
@@ -32,6 +33,7 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    "config/**/*.mjs",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],

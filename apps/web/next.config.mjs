@@ -1,3 +1,7 @@
+import { parsePublicEnvironment } from "./config/public-environment.mjs"
+
+parsePublicEnvironment(process.env)
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {

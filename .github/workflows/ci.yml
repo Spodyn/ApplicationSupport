@@ -12,6 +12,27 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  configuration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Test environment and secret-handling contract
+        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+
+      - name: Validate checked-in development examples
+        run: |
+          python3 scripts/validate_environment.py api --env-file .env.example
+          python3 scripts/validate_environment.py web --env-file apps/web/.env.example
+
+      - name: Scan worktree and Git history for secrets
+        run: python3 scripts/secret_scan.py
+
   infrastructure:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -31,6 +52,9 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      NEXT_PUBLIC_API_BASE_URL: /api/v1
+      NEXT_PUBLIC_WS_BASE_URL: /ws
 
     steps:
       - name: Checkout
