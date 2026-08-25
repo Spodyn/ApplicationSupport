@@ -34,7 +34,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Install Playwright Chromium
-        run: pnpm exec playwright install --with-deps chromium
+        run: pnpm --filter @usi/web exec playwright install --with-deps chromium
 
       - name: Lint
         run: pnpm lint
@@ -57,7 +57,7 @@ jobs:
         with:
           name: playwright-artifacts
           path: |
-            playwright-report/
-            test-results/
+            apps/web/playwright-report/
+            apps/web/test-results/
           if-no-files-found: ignore
           retention-days: 7

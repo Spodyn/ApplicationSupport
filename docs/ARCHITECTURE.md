@@ -10,13 +10,19 @@ Obowiązująca granica:
 
 ```text
 UI
- -> lib/services/queries.ts
- -> lib/services/registry.ts
+ -> apps/web/lib/services/queries.ts
+ -> apps/web/lib/services/registry.ts
  -> typed service interfaces
  -> mock implementation teraz / OpenAPI adapter docelowo
 ```
 
-Komponenty nie importują bezpośrednio z `mocks/`. `registry.ts` jest composition boundary. Generated DTO nie są typami domenowymi.
+`apps/web/app` i `apps/web/components` nie importują bezpośrednio z `apps/web/mocks` ani `packages/api-client`. `apps/web/lib/services/registry.ts` jest composition boundary. Generated DTO w `packages/api-client/src/generated` nie są typami domenowymi.
+
+Układ produkcyjnego monorepo rozdziela odpowiedzialności: `apps/web` zawiera
+frontend, `apps/api` backend i backend-owned OpenAPI, `packages/api-client`
+wyłącznie generated transport client, a `infra` definicje deployment/IaC.
+Konfiguracje i testy specyficzne dla frontendu pozostają w `apps/web`; root
+utrzymuje wspólny pnpm workspace, lockfile i komendy jakości.
 
 ## 2. Docelowy modularny monolit
 

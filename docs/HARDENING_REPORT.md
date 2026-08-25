@@ -4,7 +4,7 @@
 
 ## Summary
 
-Repozytorium zostało uporządkowane i zweryfikowane jako frontend/mock gotowy do rozpoczęcia prac nad API i backend adapters. Zachowano granicę `UI -> queries -> registry -> service interfaces -> mocks`, kanoniczny model workflow z `lib/domain/inbox.ts` oraz zaakceptowany wygląd aplikacji.
+Repozytorium zostało uporządkowane i zweryfikowane jako frontend/mock gotowy do rozpoczęcia prac nad API i backend adapters. Zachowano granicę `UI -> queries -> registry -> service interfaces -> mocks`, kanoniczny model workflow (po relokacji w `apps/web/lib/domain/inbox.ts`) oraz zaakceptowany wygląd aplikacji.
 
 W ramach hardeningu:
 

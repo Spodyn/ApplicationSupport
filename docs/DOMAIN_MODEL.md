@@ -27,7 +27,7 @@ Obowiązująca granica:
 
 `OpenAPI DTO -> API adapter/mapper -> stable frontend domain/view model -> TanStack Query -> UI`
 
-`components/cases/cases-page.tsx` i lokalne fixture'y prezentacyjne nie są kontraktem backendu. USI-88 zamraża jeden jawny mapper; kierunek nie jest już otwartą decyzją.
+`apps/web/components/cases/cases-page.tsx` i lokalne fixture'y prezentacyjne nie są kontraktem backendu. USI-88 zamraża jeden jawny mapper; kierunek nie jest już otwartą decyzją.
 
 ## Messages i Activity
 
