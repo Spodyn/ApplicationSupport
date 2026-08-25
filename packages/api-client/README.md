@@ -10,4 +10,3 @@ OpenAPI contract.
 - `apps/web/app` and `apps/web/components` must not import this package directly.
   A future API implementation maps transport DTOs to stable frontend models
   behind `apps/web/lib/services/registry.ts`.
-

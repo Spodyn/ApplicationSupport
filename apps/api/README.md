@@ -10,4 +10,3 @@ introduced here.
 The backend owns authorization, workflow invariants, persistence, provider
 adapters, and the OpenAPI transport contract. API contract artifacts and their
 generation configuration belong in [`openapi/`](openapi/).
-
