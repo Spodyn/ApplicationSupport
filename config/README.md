@@ -81,15 +81,15 @@ The API receives URLs and identifiers through typed configuration properties:
 - an empty CORS origin list by default (same-origin, deny/off).
 
 Staging and production require HTTPS for public and object-storage URLs. Callback
-URLs require HTTPS in every profile. URLs containing user info, credential query
-parameters, wildcard CORS, or callback query data are rejected.
+URLs require HTTPS in every profile. URLs containing user info, wildcard CORS,
+or query data on object-storage/callback URLs are rejected.
 
 ## Staging and production secret injection
 
 Core service credentials are mounted into the directory named by
 `USI_CORE_SECRETS_DIRECTORY` (normally a Docker/deployment secret mount). The
 directory must be absolute, end in `/`, exist at startup, and contain these
-non-empty files:
+non-empty files and no other entries:
 
 ```text
 spring.datasource.username
@@ -100,6 +100,11 @@ usi.object-storage.access-key
 usi.object-storage.secret-key
 ```
 
+The core directory is imported wholesale into Spring's Environment, so its
+entry allowlist is exact. The core and integration secret directories must
+resolve to distinct, non-overlapping directory trees; nesting or aliasing one
+root to the other fails preflight.
+
 Before starting a staging/production process, the entrypoint must run the
 preflight against the actual environment and mounts:
 
@@ -109,7 +114,12 @@ python3 scripts/validate_environment.py api --check-secret-files
 
 The preflight reports property/file names only; it never prints values.
 Plaintext core credential environment aliases are rejected in staging and
-production to avoid ambiguous precedence over the config tree.
+production to avoid ambiguous precedence over the config tree. Every
+unreviewed `SPRING_*` input (including `SPRING_APPLICATION_JSON`, alternate
+config locations, and direct datasource/RabbitMQ properties) is rejected.
+Spring/USI application-property switches carried through common JVM option
+environment variables are rejected in staging/production as well; ordinary
+non-configuration JVM tuning flags remain allowed.
 
 Provider credentials use a separate directory/deployment secret-store boundary
 named by `USI_INTEGRATION_SECRETS_DIRECTORY`. They are intentionally not bulk

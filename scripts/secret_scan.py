@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import re
 import subprocess
@@ -15,6 +16,7 @@ from typing import Iterable
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+ENVIRONMENT_CONTRACT = REPOSITORY_ROOT / "config/environment-contract.json"
 MAX_TEXT_BYTES = 2 * 1024 * 1024
 SENSITIVE_PUBLIC_SUFFIXES = (
     "SECRET",
@@ -69,16 +71,59 @@ def _token_patterns() -> tuple[tuple[str, re.Pattern[str]], ...]:
 
 TOKEN_PATTERNS = _token_patterns()
 PUBLIC_NAME = re.compile(r"NEXT_PUBLIC_[A-Z0-9_]+")
-GENERIC_ASSIGNMENT = re.compile(
+ASSIGNMENT = re.compile(
     r"(?ix)"
     r"(?:^|[\s{,])"
     r"[\"']?"
-    r"(?P<key>[A-Za-z0-9_.-]*(?:password|passwd|client[_-]?secret|signing[_-]?secret|private[_-]?key|access[_-]?key|api[_-]?token|bot[_-]?token)[A-Za-z0-9_.-]*)"
+    r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)"
     r"[\"']?"
     r"\s*[=:]\s*"
     r"(?P<quote>[\"']?)"
     r"(?P<value>[^\s,}\"']{8,})"
 )
+NON_SECRET_LOCATOR_SUFFIXES = frozenset(
+    {
+        "backend",
+        "dir",
+        "directory",
+        "directories",
+        "environment_name",
+        "environment_names",
+        "file",
+        "files",
+        "id",
+        "location",
+        "name",
+        "names",
+        "path",
+        "profile",
+        "profiles",
+        "provider",
+        "ref",
+        "reference",
+        "references",
+        "store",
+    }
+)
+
+
+def _load_forbidden_provider_secret_names() -> frozenset[str]:
+    with ENVIRONMENT_CONTRACT.open(encoding="utf-8") as contract_file:
+        contract = json.load(contract_file)
+    names = contract.get("forbiddenProviderSecretEnvironmentNames")
+    if (
+        contract.get("version") != 1
+        or not isinstance(names, list)
+        or not names
+        or not all(isinstance(name, str) and name for name in names)
+    ):
+        raise ValueError(
+            "Environment contract must define forbidden provider secret names"
+        )
+    return frozenset(names)
+
+
+FORBIDDEN_PROVIDER_SECRET_NAMES = _load_forbidden_provider_secret_names()
 
 
 def _safe_placeholder(value: str) -> bool:
@@ -102,6 +147,39 @@ def _entropy(value: str) -> float:
     )
 
 
+def _normalized_assignment_name(name: str) -> str:
+    with_camel_case_boundaries = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name)
+    return re.sub(r"[.\-]+", "_", with_camel_case_boundaries).lower()
+
+
+def _is_sensitive_assignment_name(name: str) -> tuple[bool, bool]:
+    """Return whether a key is sensitive and whether the contract names it exactly."""
+
+    is_contract_name = name.upper() in FORBIDDEN_PROVIDER_SECRET_NAMES
+    if is_contract_name:
+        return True, True
+
+    normalized = _normalized_assignment_name(name)
+    if any(
+        normalized == suffix or normalized.endswith(f"_{suffix}")
+        for suffix in NON_SECRET_LOCATOR_SUFFIXES
+    ):
+        return False, False
+
+    parts = tuple(part for part in normalized.split("_") if part)
+    part_set = set(parts)
+    is_sensitive = (
+        bool(part_set.intersection({"password", "passwd", "credential", "credentials"}))
+        or "secret" in part_set
+        or (parts and parts[-1] == "token")
+        or {"api", "key"}.issubset(part_set)
+        or {"access", "key"}.issubset(part_set)
+        or {"private", "key"}.issubset(part_set)
+        or {"signing", "key"}.issubset(part_set)
+    )
+    return is_sensitive, False
+
+
 def scan_text(path: str, text: str) -> list[Finding]:
     findings: set[Finding] = set()
     for line_number, line in enumerate(text.splitlines(), start=1):
@@ -113,12 +191,24 @@ def scan_text(path: str, text: str) -> list[Finding]:
             if any(suffix in public_name for suffix in SENSITIVE_PUBLIC_SUFFIXES):
                 findings.add(Finding(path, line_number, "sensitive-next-public-name"))
 
-        for match in GENERIC_ASSIGNMENT.finditer(line):
+        for match in ASSIGNMENT.finditer(line):
+            is_sensitive_name, is_contract_name = _is_sensitive_assignment_name(
+                match.group("key")
+            )
+            if not is_sensitive_name:
+                continue
             value = match.group("value")
+            if (
+                not is_contract_name
+                and not match.group("quote")
+                and any(character in value for character in "()[]")
+            ):
+                # Source-code expressions are not literal assigned values.
+                continue
             if _safe_placeholder(value):
                 continue
             # Short, low-entropy labels such as enum names are not credentials.
-            if len(value) >= 12 and _entropy(value) >= 3.0:
+            if is_contract_name or (len(value) >= 12 and _entropy(value) >= 3.0):
                 findings.add(Finding(path, line_number, "literal-secret-assignment"))
 
     return sorted(findings)

@@ -24,6 +24,15 @@ HOSTNAME = re.compile(
 BUCKET_NAME = re.compile(r"[a-z0-9](?:[a-z0-9.-]{1,61}[a-z0-9])\Z")
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:@/-]{0,254}\Z")
 BOT_USERNAME = re.compile(r"[A-Za-z][A-Za-z0-9_]{4,63}\Z")
+JVM_CONFIGURATION_OVERRIDE = re.compile(
+    r"(?:-D|--)(?:spring|usi)[._-]", re.IGNORECASE
+)
+JVM_OPTION_ENVIRONMENT_NAMES = (
+    "JAVA_OPTS",
+    "JAVA_TOOL_OPTIONS",
+    "JDK_JAVA_OPTIONS",
+    "_JAVA_OPTIONS",
+)
 
 
 class EnvironmentValidationError(ValueError):
@@ -139,6 +148,8 @@ def _validate_url(
         parsed.path not in {"", "/"} or parsed.query
     ):
         return f"{name} must be an origin without path or query"
+    if variable_type == "web-url" and parsed.query:
+        return f"{name} must not contain a query string"
     if variable_type == "https-url":
         if parsed.query:
             return f"{name} must not put data in the callback query string"
@@ -147,7 +158,14 @@ def _validate_url(
         ):
             return f"{name} callback path must not contain encoded or traversal segments"
         path_prefix = specification.get("pathPrefix")
-        if path_prefix and not parsed.path.startswith(path_prefix):
+        normalized_prefix = path_prefix.rstrip("/") if path_prefix else ""
+        path_is_below_prefix = (
+            normalized_prefix == ""
+            or normalized_prefix == "/"
+            or parsed.path == normalized_prefix
+            or parsed.path.startswith(f"{normalized_prefix}/")
+        )
+        if not path_is_below_prefix:
             return f"{name} callback path must stay under {path_prefix}"
     return None
 
@@ -205,6 +223,14 @@ def _validate_origin_list(name: str, value: str, profile: str) -> str | None:
     return None
 
 
+def _normalized_environment_input_name(name: str) -> str:
+    return re.sub(r"[.\-]", "_", name).upper()
+
+
+def _reserved_environment_namespace(name: str, prefix: str) -> bool:
+    return _normalized_environment_input_name(name).startswith(prefix)
+
+
 def _validate_value(
     name: str,
     value: str,
@@ -256,28 +282,77 @@ def _validate_value(
     return f"{name} has unsupported contract type {variable_type}"
 
 
-def _validate_secret_files(values: Mapping[str, str], contract: Mapping[str, Any]) -> list[str]:
+def _directories_overlap(first: Path, second: Path) -> bool:
+    return first == second or first in second.parents or second in first.parents
+
+
+def _validate_secret_files(
+    values: Mapping[str, str], contract: Mapping[str, Any]
+) -> list[str]:
     errors: list[str] = []
     core_root_value = values.get("USI_CORE_SECRETS_DIRECTORY", "")
     integration_root_value = values.get("USI_INTEGRATION_SECRETS_DIRECTORY", "")
+    resolved_core_root: Path | None = None
+    resolved_integration_root: Path | None = None
+
     if core_root_value:
         core_root = Path(core_root_value)
         if not core_root.is_dir():
             errors.append("USI_CORE_SECRETS_DIRECTORY must exist at startup")
         else:
-            resolved_root = core_root.resolve()
-            for secret_name in contract["coreSecretFiles"]:
+            try:
+                resolved_core_root = core_root.resolve(strict=True)
+                actual_entries = {entry.name for entry in core_root.iterdir()}
+            except (OSError, RuntimeError):
+                errors.append("USI_CORE_SECRETS_DIRECTORY must be readable at startup")
+                actual_entries = set()
+
+            expected_entries = tuple(contract["coreSecretFiles"])
+            if resolved_core_root is not None and actual_entries - set(expected_entries):
+                errors.append(
+                    "USI_CORE_SECRETS_DIRECTORY contains entries outside the approved core secret allowlist"
+                )
+
+            for secret_name in expected_entries:
                 secret_file = core_root / secret_name
                 try:
-                    resolved_secret = secret_file.resolve(strict=True)
-                    resolved_secret.relative_to(resolved_root)
-                except (FileNotFoundError, ValueError):
+                    resolved_secret_file = secret_file.resolve(strict=True)
+                    if resolved_core_root is None:
+                        continue
+                    resolved_secret_file.relative_to(resolved_core_root)
+                except (FileNotFoundError, OSError, RuntimeError, ValueError):
                     errors.append(f"required core secret file is missing: {secret_name}")
                     continue
-                if not resolved_secret.is_file() or resolved_secret.stat().st_size == 0:
+                try:
+                    is_non_empty_file = (
+                        resolved_secret_file.is_file()
+                        and resolved_secret_file.stat().st_size > 0
+                    )
+                except OSError:
+                    is_non_empty_file = False
+                if not is_non_empty_file:
                     errors.append(f"required core secret file is empty: {secret_name}")
-    if integration_root_value and not Path(integration_root_value).is_dir():
-        errors.append("USI_INTEGRATION_SECRETS_DIRECTORY must exist at startup")
+
+    if integration_root_value:
+        integration_root = Path(integration_root_value)
+        if not integration_root.is_dir():
+            errors.append("USI_INTEGRATION_SECRETS_DIRECTORY must exist at startup")
+        else:
+            try:
+                resolved_integration_root = integration_root.resolve(strict=True)
+            except (OSError, RuntimeError):
+                errors.append(
+                    "USI_INTEGRATION_SECRETS_DIRECTORY must be readable at startup"
+                )
+
+    if (
+        resolved_core_root is not None
+        and resolved_integration_root is not None
+        and _directories_overlap(resolved_core_root, resolved_integration_root)
+    ):
+        errors.append(
+            "core and integration secret directories must be distinct, non-overlapping boundaries"
+        )
     return errors
 
 
@@ -333,7 +408,14 @@ def validate_environment(
         errors.extend(
             f"unreviewed USI environment variable is forbidden: {name}"
             for name in sorted(values)
-            if name.startswith("USI_") and name not in specifications
+            if _reserved_environment_namespace(name, "USI_")
+            and name not in specifications
+        )
+        errors.extend(
+            f"unreviewed Spring environment variable is forbidden: {name}"
+            for name in sorted(values)
+            if _reserved_environment_namespace(name, "SPRING_")
+            and name not in specifications
         )
 
         forbidden_provider_names = set(
@@ -341,7 +423,8 @@ def validate_environment(
         )
         errors.extend(
             f"provider secret must be resolved by secret_ref, not environment: {name}"
-            for name in sorted(forbidden_provider_names.intersection(values))
+            for name in sorted(values)
+            if _normalized_environment_input_name(name) in forbidden_provider_names
         )
 
         if profile in effective_contract["runtimeSecretProfiles"]:
@@ -350,7 +433,13 @@ def validate_environment(
             )
             errors.extend(
                 f"runtime secret must come from the config tree, not environment: {name}"
-                for name in sorted(forbidden_runtime_names.intersection(values))
+                for name in sorted(values)
+                if _normalized_environment_input_name(name) in forbidden_runtime_names
+            )
+            errors.extend(
+                f"application configuration override is forbidden in {name}"
+                for name in JVM_OPTION_ENVIRONMENT_NAMES
+                if JVM_CONFIGURATION_OVERRIDE.search(values.get(name, ""))
             )
 
         for name, specification in specifications.items():

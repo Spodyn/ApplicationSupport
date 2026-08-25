@@ -29,7 +29,8 @@ python3 scripts/secret_scan.py
 ```
 
 Testy chronią profile `local/test/staging/production`, brakujące i niepoprawne
-wartości, wymagane pliki config tree, redakcję błędów, allowlistę
+wartości, odrzucenie wyższych Spring override channels, dokładną allowlistę i
+izolację drzew sekretów, segmenty callback paths, redakcję błędów, allowlistę
 `NEXT_PUBLIC_*`, reguły `.gitignore` oraz brak sekretów w drzewie/historii.
 
 Obecne E2E korzystają z lokalnego Next.js/mock data, blokują zewnętrzne HTTP i wyłączają service worker dla deterministyczności.

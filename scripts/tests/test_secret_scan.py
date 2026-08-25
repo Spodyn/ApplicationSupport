@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import unittest
 
-from scripts.secret_scan import REPOSITORY_ROOT, scan_repository, scan_text
+from scripts.secret_scan import (
+    FORBIDDEN_PROVIDER_SECRET_NAMES,
+    REPOSITORY_ROOT,
+    scan_repository,
+    scan_text,
+)
 
 
 class SecretScanTest(unittest.TestCase):
@@ -30,12 +35,52 @@ class SecretScanTest(unittest.TestCase):
         self.assertIn("sensitive-next-public-name", {item.detector for item in findings})
         self.assertTrue(all("value-created" not in item.path for item in findings))
 
+    def test_detects_every_contract_forbidden_provider_secret_assignment(self) -> None:
+        generated_value = "".join(("N7qP2", "vR8mX", "4zL9s", "K6cD1"))
+        telegram_webhook_name = "_".join(
+            ("USI", "TELEGRAM", "WEBHOOK", "SECRET", "TOKEN")
+        )
+        self.assertIn(telegram_webhook_name, FORBIDDEN_PROVIDER_SECRET_NAMES)
+        assignment_templates = (
+            "{name}={value}",
+            "{name}: {value}",
+            '"{name}": "{value}"',
+        )
+
+        for name in sorted(FORBIDDEN_PROVIDER_SECRET_NAMES):
+            for template in assignment_templates:
+                with self.subTest(name=name, template=template):
+                    findings = scan_text(
+                        "generated-fixture",
+                        template.format(name=name, value=generated_value),
+                    )
+                    self.assertIn(
+                        "literal-secret-assignment",
+                        {finding.detector for finding in findings},
+                    )
+
+    def test_detects_general_api_key_and_secret_name_forms(self) -> None:
+        generated_value = "".join(("Q8mN4", "zR2pL", "7vX5c", "K9sD3"))
+
+        for name in ("service_api_key", "webhook_secret_token", "clientSecret"):
+            with self.subTest(name=name):
+                findings = scan_text(
+                    "generated-fixture", f"{name}={generated_value}"
+                )
+                self.assertIn(
+                    "literal-secret-assignment",
+                    {finding.detector for finding in findings},
+                )
+
     def test_allows_obvious_examples_and_indirect_secret_references(self) -> None:
         text = "\n".join(
             (
                 "DATABASE_PASSWORD=database_dev_only_change_me",
                 "spring.datasource.password=${USI_DATABASE_PASSWORD}",
                 "secret_location=configtree:${USI_CORE_SECRETS_DIRECTORY}",
+                "integration.secret_ref=providers/slack/generated-reference-123",
+                "USI_CORE_SECRETS_DIRECTORY=/run/secrets/usi-core",
+                "resolved_secret = secret_file.resolve(strict=True)",
             )
         )
 

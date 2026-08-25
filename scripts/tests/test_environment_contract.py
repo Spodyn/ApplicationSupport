@@ -4,7 +4,9 @@ import re
 import subprocess
 import tempfile
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from scripts.validate_environment import (
     DEFAULT_CONTRACT,
@@ -37,6 +39,16 @@ def valid_staging_environment(core_directory: Path, integration_directory: Path)
         "USI_CORE_SECRETS_DIRECTORY": f"{core_directory}/",
         "USI_INTEGRATION_SECRETS_DIRECTORY": f"{integration_directory}/",
     }
+
+
+def write_core_secret_files(
+    core_directory: Path, contract: Mapping[str, Any]
+) -> None:
+    core_directory.mkdir(parents=True, exist_ok=True)
+    for secret_name in contract["coreSecretFiles"]:
+        (core_directory / str(secret_name)).write_text(
+            "runtime-injected-test-value", encoding="utf-8"
+        )
 
 
 class EnvironmentContractTest(unittest.TestCase):
@@ -131,6 +143,83 @@ class EnvironmentContractTest(unittest.TestCase):
                 contract=self.contract,
             )
 
+    def test_production_rejects_every_unreviewed_spring_override_channel(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            environment = valid_staging_environment(
+                root / "core", root / "integrations"
+            )
+            environment["SPRING_PROFILES_ACTIVE"] = "production"
+            generated_marker = "generated-override-material"
+            override_channels = {
+                "SPRING_DATASOURCE_URL": (
+                    f"jdbc:postgresql://operator:{generated_marker}@db.internal/usi"
+                ),
+                "SPRING_APPLICATION_JSON": (
+                    '{"spring.datasource.password":"'
+                    + generated_marker
+                    + '"}'
+                ),
+                "SPRING_CONFIG_ADDITIONAL_LOCATION": (
+                    f"file:/tmp/{generated_marker}/"
+                ),
+                "spring.application.json": (
+                    '{"spring.rabbitmq.password":"'
+                    + generated_marker
+                    + '"}'
+                ),
+                ".".join(("usi", "object-storage", "secret-key")): generated_marker,
+                "JAVA_TOOL_OPTIONS": (
+                    f"-Xmx512m -Dspring.datasource.password={generated_marker}"
+                ),
+            }
+
+            for name, value in override_channels.items():
+                with self.subTest(name=name):
+                    candidate = dict(environment)
+                    candidate[name] = value
+                    with self.assertRaises(EnvironmentValidationError) as raised:
+                        validate_environment(
+                            "api", candidate, contract=self.contract
+                        )
+                    message = str(raised.exception)
+                    self.assertIn(name, message)
+                    self.assertNotIn(generated_marker, message)
+
+    def test_production_object_storage_endpoint_rejects_query_parameters(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            environment = valid_staging_environment(
+                root / "core", root / "integrations"
+            )
+            environment["SPRING_PROFILES_ACTIVE"] = "production"
+            generated_marker = "generated-credential-material"
+            environment["USI_OBJECT_STORAGE_ENDPOINT"] = (
+                f"https://objects.internal?access_key={generated_marker}"
+            )
+
+            with self.assertRaises(EnvironmentValidationError) as raised:
+                validate_environment("api", environment, contract=self.contract)
+
+            message = str(raised.exception)
+            self.assertIn("USI_OBJECT_STORAGE_ENDPOINT", message)
+            self.assertIn("query string", message)
+            self.assertNotIn(generated_marker, message)
+
+    def test_callback_prefix_requires_a_complete_path_segment(self) -> None:
+        environment = parse_env_file(REPOSITORY_ROOT / ".env.example")
+        environment["USI_SLACK_CALLBACK_URL"] = (
+            "https://callback.example.invalid/api/v10-not-v1"
+        )
+
+        with self.assertRaises(EnvironmentValidationError) as raised:
+            validate_environment("api", environment, contract=self.contract)
+
+        self.assertIn(
+            "USI_SLACK_CALLBACK_URL callback path must stay under /api/v1",
+            str(raised.exception),
+        )
+
     def test_staging_uses_non_optional_config_tree_and_checks_every_secret_file(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = Path(temporary_directory)
@@ -142,10 +231,7 @@ class EnvironmentContractTest(unittest.TestCase):
                 core_directory, integration_directory
             )
 
-            for secret_name in self.contract["coreSecretFiles"]:
-                (core_directory / secret_name).write_text(
-                    "runtime-injected-test-value", encoding="utf-8"
-                )
+            write_core_secret_files(core_directory, self.contract)
 
             validate_environment(
                 "api",
@@ -165,6 +251,100 @@ class EnvironmentContractTest(unittest.TestCase):
                 )
             self.assertIn(missing_name, str(raised.exception))
             self.assertNotIn("runtime-injected-test-value", str(raised.exception))
+
+    def test_runtime_secret_directories_must_not_overlap(self) -> None:
+        relationships = (
+            "same",
+            "integration-inside-core",
+            "core-inside-integration",
+        )
+        for relationship in relationships:
+            with (
+                self.subTest(relationship=relationship),
+                tempfile.TemporaryDirectory() as temporary_directory,
+            ):
+                root = Path(temporary_directory)
+                if relationship == "same":
+                    core_directory = root / "shared"
+                    integration_directory = core_directory
+                elif relationship == "integration-inside-core":
+                    core_directory = root / "core"
+                    integration_directory = core_directory / "integrations"
+                else:
+                    integration_directory = root / "integrations"
+                    core_directory = integration_directory / "core"
+
+                integration_directory.mkdir(parents=True, exist_ok=True)
+                write_core_secret_files(core_directory, self.contract)
+                environment = valid_staging_environment(
+                    core_directory, integration_directory
+                )
+
+                with self.assertRaises(EnvironmentValidationError) as raised:
+                    validate_environment(
+                        "api",
+                        environment,
+                        contract=self.contract,
+                        check_secret_files=True,
+                    )
+
+                message = str(raised.exception)
+                self.assertIn(
+                    "core and integration secret directories must be distinct, non-overlapping boundaries",
+                    message,
+                )
+                self.assertNotIn(str(root), message)
+
+    def test_runtime_secret_directory_aliases_must_not_resolve_together(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            core_directory = root / "core"
+            integration_directory = root / "integration-alias"
+            write_core_secret_files(core_directory, self.contract)
+            integration_directory.symlink_to(core_directory, target_is_directory=True)
+            environment = valid_staging_environment(
+                core_directory, integration_directory
+            )
+
+            with self.assertRaises(EnvironmentValidationError) as raised:
+                validate_environment(
+                    "api",
+                    environment,
+                    contract=self.contract,
+                    check_secret_files=True,
+                )
+
+            message = str(raised.exception)
+            self.assertIn(
+                "core and integration secret directories must be distinct, non-overlapping boundaries",
+                message,
+            )
+            self.assertNotIn(str(root), message)
+
+    def test_imported_core_secret_tree_rejects_unapproved_entries(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            core_directory = root / "core"
+            integration_directory = root / "integrations"
+            integration_directory.mkdir()
+            write_core_secret_files(core_directory, self.contract)
+            extra_entry = core_directory / "provider.secret"
+            extra_entry.write_text("runtime-injected-test-value", encoding="utf-8")
+            environment = valid_staging_environment(
+                core_directory, integration_directory
+            )
+
+            with self.assertRaises(EnvironmentValidationError) as raised:
+                validate_environment(
+                    "api",
+                    environment,
+                    contract=self.contract,
+                    check_secret_files=True,
+                )
+
+            message = str(raised.exception)
+            self.assertIn("outside the approved core secret allowlist", message)
+            self.assertNotIn(extra_entry.name, message)
 
     def test_staging_rejects_plaintext_core_and_provider_secret_environment_names(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
