@@ -69,27 +69,27 @@ usi_start() {
     --wait \
     --wait-timeout 180 \
     postgres rabbitmq minio
-  "${usi_compose[@]}" run --rm --no-deps --no-tty minio-init
+  "${usi_compose[@]}" run --rm --no-deps -T minio-init
 }
 
 usi_postgres_system_id() {
-  "${usi_compose[@]}" exec --no-tty postgres sh -ec \
+  "${usi_compose[@]}" exec -T postgres sh -ec \
     'psql --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --tuples-only --no-align --command "SELECT system_identifier FROM pg_control_system();"'
 }
 
 usi_rabbitmq_cookie_hash() {
-  "${usi_compose[@]}" exec --no-tty rabbitmq sh -ec \
+  "${usi_compose[@]}" exec -T rabbitmq sh -ec \
     'sha256sum /var/lib/rabbitmq/.erlang.cookie | cut -d " " -f 1'
 }
 
 usi_create_probe_object() {
   printf '%s\n' "volume persistence probe" | \
-    "${usi_compose[@]}" run --rm --no-deps --no-tty minio-init \
+    "${usi_compose[@]}" run --rm --no-deps -T minio-init \
       '/usr/bin/mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && /usr/bin/mc pipe "local/$MINIO_ATTACHMENTS_BUCKET/usi-volume-persistence-probe" >/dev/null'
 }
 
 usi_probe_object_exists() {
-  "${usi_compose[@]}" run --rm --no-deps --no-tty minio-init \
+  "${usi_compose[@]}" run --rm --no-deps -T minio-init \
     '/usr/bin/mc alias set local http://minio:9000 "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD" >/dev/null && /usr/bin/mc stat "local/$MINIO_ATTACHMENTS_BUCKET/usi-volume-persistence-probe" >/dev/null'
 }
 
@@ -125,7 +125,7 @@ usi_private_network_id="$(
 )" == "bridge" ]]
 
 usi_postgres_version="$(
-  "${usi_compose[@]}" exec --no-tty postgres \
+  "${usi_compose[@]}" exec -T postgres \
     psql --username application_support_dev \
       --dbname application_support_dev \
       --tuples-only --no-align \
@@ -134,23 +134,23 @@ usi_postgres_version="$(
 [[ "${usi_postgres_version}" == 18.* ]]
 
 usi_rabbitmq_version="$(
-  "${usi_compose[@]}" exec --no-tty rabbitmq rabbitmqctl version
+  "${usi_compose[@]}" exec -T rabbitmq rabbitmqctl version
 )"
 [[ "${usi_rabbitmq_version}" == 4.3.* ]]
 
 usi_rabbitmq_queues="$(
-  "${usi_compose[@]}" exec --no-tty rabbitmq \
+  "${usi_compose[@]}" exec -T rabbitmq \
     rabbitmqctl --silent list_queues -p application_support_dev name
 )"
 [[ -z "${usi_rabbitmq_queues}" ]]
 
 usi_minio_version="$(
-  "${usi_compose[@]}" exec --no-tty minio minio --version
+  "${usi_compose[@]}" exec -T minio minio --version
 )"
 [[ "${usi_minio_version}" == *"RELEASE.2025-09-07T16-13-09Z"* ]]
 
 usi_user_table_count="$(
-  "${usi_compose[@]}" exec --no-tty postgres \
+  "${usi_compose[@]}" exec -T postgres \
     psql --username application_support_dev \
       --dbname application_support_dev \
       --tuples-only --no-align \
