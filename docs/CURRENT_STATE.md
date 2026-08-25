@@ -10,6 +10,8 @@ Ten dokument opisuje **rzeczywiście istniejący frontend/mock** oraz jawnie odd
 - Next.js 16, React 19, strict TypeScript, Tailwind CSS, TanStack Query i Recharts.
 - Node.js 22.23.2 LTS (`.nvmrc`) i pnpm 11.18.0 (`packageManager`).
 - Jedyny lockfile: `pnpm-lock.yaml`.
+- Frontend wraz z konfiguracją i testami znajduje się w workspace `apps/web`; komendy root delegują do `@usi/web`.
+- `apps/api`, `apps/api/openapi`, `packages/api-client` i `infra` są jawnymi granicami produkcyjnego monorepo. Na etapie USI-41 nie zawierają jeszcze runtime backendu, schematu ani wygenerowanych DTO.
 - Aktualny frontend korzysta z lokalnych danych/mock services; repo nie zawiera jeszcze produkcyjnego Spring Boot backendu, PostgreSQL schema ani realnych adapterów Slack/Teams/Telegram.
 
 ## 2. Rzeczywiste trasy frontendu
@@ -37,17 +39,17 @@ E-mail jako kanał supportowy oraz funkcje AI są poza v1. E-mail widoczny w lok
 
 Aktualna granica pozostaje celowa:
 
-`UI -> lib/services/queries.ts -> lib/services/registry.ts -> typed service interfaces -> mock/API implementation`
+`UI -> apps/web/lib/services/queries.ts -> apps/web/lib/services/registry.ts -> typed service interfaces -> mock/API implementation`
 
 Zasady docelowe:
 
-- komponenty nie importują bezpośrednio z `mocks/`,
+- `apps/web/app` i `apps/web/components` nie importują bezpośrednio z `apps/web/mocks` ani `packages/api-client`,
 - `registry.ts` jest composition boundary,
 - generated OpenAPI DTO są typami transportowymi,
 - jeden jawny adapter/maper mapuje DTO na stabilne frontend domain/view models,
 - lokalny model prezentacyjny w komponencie nie jest drugim kontraktem backendu.
 
-`components/cases/cases-page.tsx` nadal zawiera część własnych fixture'ów/prezentacji. To **implementation debt**, a nie nierozstrzygnięta decyzja produktowa. Kierunek został zamrożony: realne dane mają pochodzić z API przez service boundary i mapper.
+`apps/web/components/cases/cases-page.tsx` nadal zawiera część własnych fixture'ów/prezentacji. To **implementation debt**, a nie nierozstrzygnięta decyzja produktowa. Kierunek został zamrożony: realne dane mają pochodzić z API przez service boundary i mapper.
 
 ## 5. Kanoniczny workflow
 

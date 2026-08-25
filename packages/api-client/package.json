@@ -1,0 +1,8 @@
+{
+  "name": "@usi/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Generated OpenAPI transport client for Unified Support Inbox"
+}
+

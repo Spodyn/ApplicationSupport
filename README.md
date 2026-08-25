@@ -15,6 +15,21 @@ Punktem wejścia jest [`docs/README.md`](docs/README.md). Najważniejsze źród�
 
 Starsze dokumenty focused/current-state pozostają pomocnicze i nie mogą nadpisywać późniejszych finalnych decyzji.
 
+## Układ monorepo
+
+| Ścieżka | Odpowiedzialność |
+| --- | --- |
+| `apps/web` | Istniejący frontend Next.js, jego konfiguracja, mock services i testy. |
+| `apps/api` | Backendowy modularny monolit Spring Boot; USI-41 rezerwuje miejsce bez schematu i runtime. |
+| `apps/api/openapi` | Backend-owned kontrakt OpenAPI i konfiguracja generacji, gdy zostaną dodane przez właściwy ticket. |
+| `packages/api-client` | Izolowany, generowany klient transportowy TypeScript; obecnie celowo bez eksportów. |
+| `infra` | Lokalne deployment support oraz przyszłe IaC; implementują je dedykowane tickety. |
+| `docs` | Zamrożony kontrakt produktu, architektury i operacji oraz baseline wizualny. |
+
+Konfiguracje Next.js/TypeScript/ESLint/Vitest/Playwright należą wyłącznie do
+`apps/web`. Root utrzymuje jeden lockfile, definicję pnpm workspace i stabilne
+komendy agregujące.
+
 ## Scope v1
 
 Kanały supportowe v1 to dokładnie:
@@ -34,16 +49,17 @@ pnpm install --frozen-lockfile
 pnpm dev
 ```
 
-Frontend jest dostępny na `http://localhost:3000`.
+Komendy uruchamia się z root repozytorium; `pnpm dev` deleguje do workspace
+`@usi/web`. Frontend jest dostępny na `http://localhost:3000`.
 
 ## Kontrola jakości frontendu
 
 ```bash
-pnpm exec playwright install chromium
+pnpm --filter @usi/web exec playwright install chromium
 pnpm check
 ```
 
-`pnpm check` obejmuje lint, typecheck, testy jednostkowe, production build i Playwright E2E. Docelowy full-stack gate zostanie rozszerzony o Java/Maven, Testcontainers, Spring Modulith, Flyway, OpenAPI i security checks zgodnie z [`docs/TESTING.md`](docs/TESTING.md).
+`pnpm check` obejmuje lint, typecheck, testy jednostkowe (w tym kontrakt układu workspace i hashy baseline), production build i Playwright E2E. Docelowy full-stack gate zostanie rozszerzony o Java/Maven, Testcontainers, Spring Modulith, Flyway, OpenAPI i security checks zgodnie z [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Trasy obecnego frontendu
 
@@ -61,14 +77,14 @@ Osobna top-level trasa `/current-cases` **nie należy do frozen v1**. Admin curr
 
 ```text
 UI
- -> lib/services/queries.ts
- -> lib/services/registry.ts
+ -> apps/web/lib/services/queries.ts
+ -> apps/web/lib/services/registry.ts
  -> typed service interfaces
  -> mock lub production API adapter
- -> generated transport client (za adapterem)
+ -> packages/api-client/src/generated (za adapterem)
 ```
 
-Generated OpenAPI DTO nie są frontend domain modelami. Obowiązuje jeden jawny DTO -> stable domain/view mapper. Komponenty nie importują bezpośrednio z `mocks/`.
+Generated OpenAPI DTO nie są frontend domain modelami. Obowiązuje jeden jawny DTO -> stable domain/view mapper. `apps/web/app` i `apps/web/components` nie importują bezpośrednio z `apps/web/mocks` ani `packages/api-client`.
 
 ## Backend baseline
 

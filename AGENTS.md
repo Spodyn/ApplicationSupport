@@ -24,7 +24,7 @@ Codex may decide normal implementation details without asking the Product Owner,
 
 A human decision is required only for a real contract change, including: v1 scope expansion, fundamental workflow semantics, new roles/permissions, a new security boundary, destructive data semantics outside the retention contract, a paid third-party service/commercial commitment, production credentials/actions, pricing/customer commitments, or new legal/compliance obligations.
 
-## Current frontend architecture
+## Current frontend architecture (`apps/web`)
 - Next.js 16
 - React 19
 - strict TypeScript
@@ -36,9 +36,11 @@ A human decision is required only for a real contract change, including: v1 scop
 
 Data boundary:
 
-`UI -> lib/services/queries.ts -> lib/services/registry.ts -> typed service interfaces -> mock/API implementations`
+`UI -> apps/web/lib/services/queries.ts -> apps/web/lib/services/registry.ts -> typed service interfaces -> mock/API implementations`
 
-Keep this boundary. Components must not import directly from `mocks/`. Generated OpenAPI DTOs are transport types and must be mapped to stable frontend domain/view models.
+Keep this boundary. `apps/web/app` and `apps/web/components` must not import directly from `apps/web/mocks` or `packages/api-client`. Generated OpenAPI DTOs are transport types and must be mapped to stable frontend domain/view models behind the service boundary.
+
+Next.js-specific managed agent instructions live at `apps/web/AGENTS.md`, the Next.js project root. Read that file and the relevant bundled Next.js guide before changing frontend code or configuration.
 
 ## Visual contract
 Treat the current UI as the accepted visual baseline unless the Jira ticket explicitly changes it.
@@ -150,13 +152,3 @@ On restart, reconcile Jira/GitHub/worktree reality before creating duplicate bra
 
 ## Stop conditions
 Stop and create a clear blocker only if work would require an actual contract change under the human-decision boundary, production credentials/actions, an unresolved legal/compliance choice, or an irreconcilable conflict between equal/higher-precedence sources. Do not stop for ordinary implementation choices already delegated above.
-
-<!-- BEGIN:nextjs-agent-rules -->
-
-# This is NOT the Next.js you know
-
-This version has breaking changes - APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` - verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
