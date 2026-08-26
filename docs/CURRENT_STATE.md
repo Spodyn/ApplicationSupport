@@ -11,7 +11,7 @@ Ten dokument opisuje **rzeczywiście istniejący frontend/mock** oraz jawnie odd
 - Node.js 22.23.2 LTS (`.nvmrc`) i pnpm 11.18.0 (`packageManager`).
 - Jedyny lockfile: `pnpm-lock.yaml`.
 - Frontend wraz z konfiguracją i testami znajduje się w workspace `apps/web`; komendy root delegują do `@usi/web`.
-- `apps/api`, `apps/api/openapi`, `packages/api-client` i `infra` są jawnymi granicami produkcyjnego monorepo. Na etapie USI-41 nie zawierają jeszcze runtime backendu, schematu ani wygenerowanych DTO.
+- `apps/api`, `apps/api/openapi`, `packages/api-client` i `infra` są jawnymi granicami produkcyjnego monorepo. `apps/api` zawiera już jawne profile i kontrakt konfiguracji USI-43, ale nadal nie zawiera executable backendu ani schematu; generated DTO także jeszcze nie istnieją.
 - Aktualny frontend korzysta z lokalnych danych/mock services; repo nie zawiera jeszcze produkcyjnego Spring Boot backendu, PostgreSQL schema ani realnych adapterów Slack/Teams/Telegram.
 
 ## 2. Rzeczywiste trasy frontendu
@@ -115,6 +115,10 @@ Repo posiada skrypty:
 - `build`,
 - `test:e2e`,
 - `check`.
+
+Root gate zawiera również testy/preflight kontraktu środowiska i skan sekretów
+bieżącego drzewa oraz dostępnej historii Git. Next startup/build waliduje ścisłą
+allowlistę bezpiecznych `NEXT_PUBLIC_*`.
 
 Istniejący frontend gate obejmuje lint, typecheck, Vitest, produkcyjny build i Playwright Chromium. Testy E2E korzystają z lokalnego serwera/mocków, blokują zewnętrzne HTTP i wyłączają service worker dla deterministyczności.
 

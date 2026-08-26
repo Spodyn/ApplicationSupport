@@ -1,0 +1,368 @@
+#!/usr/bin/env python3
+"""Fail when tracked repository content resembles credentials or private keys."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import re
+import subprocess
+import sys
+from collections import Counter
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Iterable
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+ENVIRONMENT_CONTRACT = REPOSITORY_ROOT / "config/environment-contract.json"
+MAX_TEXT_BYTES = 2 * 1024 * 1024
+SENSITIVE_PUBLIC_SUFFIXES = (
+    "SECRET",
+    "TOKEN",
+    "PASSWORD",
+    "PASSWD",
+    "CREDENTIAL",
+    "PRIVATE_KEY",
+    "SIGNING_KEY",
+    "ACCESS_KEY",
+)
+SAFE_EXAMPLE_VALUE = re.compile(
+    r"(?:[a-z][a-z0-9]*[-_])*"
+    r"(?:dummy|example|dev[-_]only|usi[-_]dev|test[-_]only|local[-_]only|"
+    r"change[-_]me|changeme|placeholder|redacted|fake|sample)"
+    r"(?:[-_][a-z0-9]+)*\Z"
+)
+ENVIRONMENT_REFERENCE = re.compile(
+    r"(?:\$\{[A-Za-z_][A-Za-z0-9_.-]*(?::[^{}]*)?\}|"
+    r"\$\{\{[^{}]+\}\}|"
+    r"process\.env(?:\.[A-Za-z_][A-Za-z0-9_]*|"
+    r"\[['\"][A-Za-z_][A-Za-z0-9_]*['\"]\])|"
+    r"configtree:\$\{[A-Za-z_][A-Za-z0-9_.-]*(?::[^{}]*)?\}|"
+    r"<[A-Za-z_][A-Za-z0-9_.-]*>)\Z"
+)
+
+
+@dataclass(frozen=True, order=True)
+class Finding:
+    path: str
+    line: int
+    detector: str
+
+
+def _token_patterns() -> tuple[tuple[str, re.Pattern[str]], ...]:
+    # Split recognizable prefixes so the scanner's own source is not a fixture.
+    patterns = (
+        ("private-key", "-----BEGIN " + r"(?:RSA |EC |OPENSSH |DSA )?PRIVATE KEY-----"),
+        ("aws-access-key", "A" + r"(?:KI|SI)A[0-9A-Z]{16}"),
+        ("github-token", "gh" + r"[pousr]_[A-Za-z0-9]{20,}"),
+        ("gitlab-token", "gl" + r"pat-[A-Za-z0-9_-]{20,}"),
+        ("google-api-key", "AI" + r"za[0-9A-Za-z_-]{30,}"),
+        ("slack-token", "xo" + r"x[baprs]-[A-Za-z0-9-]{10,}"),
+        ("telegram-bot-token", r"\b\d{8,12}:[A-Za-z0-9_-]{30,}\b"),
+    )
+    return tuple((name, re.compile(pattern)) for name, pattern in patterns)
+
+
+TOKEN_PATTERNS = _token_patterns()
+PUBLIC_NAME = re.compile(r"NEXT_PUBLIC_[A-Z0-9_]+")
+ASSIGNMENT = re.compile(
+    r"(?ix)"
+    r"(?:^|[\s{,])"
+    r"[\"']?"
+    r"(?P<key>[A-Za-z_][A-Za-z0-9_.-]*)"
+    r"[\"']?"
+    r"\s*[=:]\s*"
+    r"(?P<quote>[\"']?)"
+    r"(?P<value>[^\s,\"']*)"
+)
+NON_SECRET_LOCATOR_SUFFIXES = frozenset(
+    {
+        "backend",
+        "dir",
+        "directory",
+        "directories",
+        "environment_name",
+        "environment_names",
+        "file",
+        "files",
+        "id",
+        "location",
+        "name",
+        "names",
+        "path",
+        "profile",
+        "profiles",
+        "provider",
+        "ref",
+        "reference",
+        "references",
+        "store",
+    }
+)
+
+
+def _load_forbidden_provider_secret_names() -> frozenset[str]:
+    with ENVIRONMENT_CONTRACT.open(encoding="utf-8") as contract_file:
+        contract = json.load(contract_file)
+    names = contract.get("forbiddenProviderSecretEnvironmentNames")
+    if (
+        contract.get("version") != 1
+        or not isinstance(names, list)
+        or not names
+        or not all(isinstance(name, str) and name for name in names)
+    ):
+        raise ValueError(
+            "Environment contract must define forbidden provider secret names"
+        )
+    return frozenset(names)
+
+
+FORBIDDEN_PROVIDER_SECRET_NAMES = _load_forbidden_provider_secret_names()
+
+
+def _safe_placeholder(value: str) -> bool:
+    return (
+        SAFE_EXAMPLE_VALUE.fullmatch(value) is not None
+        or ENVIRONMENT_REFERENCE.fullmatch(value) is not None
+        or value in {"********", "xxxxxxxx"}
+    )
+
+
+def _entropy(value: str) -> float:
+    if not value:
+        return 0.0
+    counts = Counter(value)
+    return -sum(
+        (count / len(value)) * math.log2(count / len(value))
+        for count in counts.values()
+    )
+
+
+def _normalized_assignment_name(name: str) -> str:
+    with_camel_case_boundaries = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", name)
+    return re.sub(r"[.\-]+", "_", with_camel_case_boundaries).lower()
+
+
+def _is_sensitive_assignment_name(name: str) -> tuple[bool, bool]:
+    """Return whether a key is sensitive and whether the contract names it exactly."""
+
+    is_contract_name = name.upper() in FORBIDDEN_PROVIDER_SECRET_NAMES
+    if is_contract_name:
+        return True, True
+
+    normalized = _normalized_assignment_name(name)
+    if any(
+        normalized == suffix or normalized.endswith(f"_{suffix}")
+        for suffix in NON_SECRET_LOCATOR_SUFFIXES
+    ):
+        return False, False
+
+    parts = tuple(part for part in normalized.split("_") if part)
+    part_set = set(parts)
+    is_sensitive = (
+        bool(part_set.intersection({"password", "passwd", "credential", "credentials"}))
+        or "secret" in part_set
+        or (parts and parts[-1] == "token")
+        or {"api", "key"}.issubset(part_set)
+        or {"access", "key"}.issubset(part_set)
+        or {"private", "key"}.issubset(part_set)
+        or {"signing", "key"}.issubset(part_set)
+    )
+    return is_sensitive, False
+
+
+def _assignment_value(line: str, match: re.Match[str]) -> str:
+    """Return a complete same-line quoted value when the lexer truncated it."""
+
+    quote = match.group("quote")
+    if quote:
+        closing_quote = line.find(quote, match.start("value"))
+        if closing_quote != -1:
+            return line[match.start("value") : closing_quote]
+    return match.group("value")
+
+
+def scan_text(path: str, text: str) -> list[Finding]:
+    findings: set[Finding] = set()
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        for detector, pattern in TOKEN_PATTERNS:
+            if pattern.search(line):
+                findings.add(Finding(path, line_number, detector))
+
+        for public_name in PUBLIC_NAME.findall(line):
+            if any(suffix in public_name for suffix in SENSITIVE_PUBLIC_SUFFIXES):
+                findings.add(Finding(path, line_number, "sensitive-next-public-name"))
+
+        for match in ASSIGNMENT.finditer(line):
+            is_sensitive_name, is_contract_name = _is_sensitive_assignment_name(
+                match.group("key")
+            )
+            if not is_sensitive_name:
+                continue
+            value = _assignment_value(line, match)
+            if (
+                not is_contract_name
+                and not match.group("quote")
+                and any(character in value for character in "()[]")
+            ):
+                # Source-code expressions are not literal assigned values.
+                continue
+            # The contract forbids these exact provider-secret names in every
+            # repository artifact. A placeholder-looking value cannot make one
+            # acceptable: it could be a real credential containing that word.
+            if not is_contract_name and _safe_placeholder(value):
+                continue
+            # Short, low-entropy labels such as enum names are not credentials.
+            if is_contract_name or (len(value) >= 12 and _entropy(value) >= 3.0):
+                findings.add(Finding(path, line_number, "literal-secret-assignment"))
+
+    return sorted(findings)
+
+
+def _git(repository_root: Path, *arguments: str, input_text: str | None = None) -> str:
+    completed = subprocess.run(
+        ("git", "-C", str(repository_root), *arguments),
+        check=True,
+        input=input_text,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    return completed.stdout
+
+
+def _worktree_paths(repository_root: Path) -> list[str]:
+    output = _git(
+        repository_root,
+        "ls-files",
+        "-z",
+        "--cached",
+        "--others",
+        "--exclude-standard",
+    )
+    return sorted(path for path in output.split("\0") if path)
+
+
+def _tracked_paths(repository_root: Path) -> set[str]:
+    output = _git(repository_root, "ls-files", "-z", "--cached")
+    return {path for path in output.split("\0") if path}
+
+
+def _read_text(path: Path) -> str | None:
+    try:
+        if path.stat().st_size > MAX_TEXT_BYTES:
+            return None
+        content = path.read_bytes()
+    except (FileNotFoundError, OSError):
+        return None
+    if b"\0" in content:
+        return None
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _history_blobs(repository_root: Path) -> Iterable[tuple[str, str, int]]:
+    objects = _git(repository_root, "rev-list", "--objects", "--all").splitlines()
+    object_paths: dict[str, str] = {}
+    for line in objects:
+        object_id, separator, path = line.partition(" ")
+        if separator and path:
+            object_paths.setdefault(object_id, path)
+    if not object_paths:
+        return
+
+    checks = _git(
+        repository_root,
+        "cat-file",
+        "--batch-check=%(objectname) %(objecttype) %(objectsize)",
+        input_text="".join(f"{object_id}\n" for object_id in object_paths),
+    )
+    for line in checks.splitlines():
+        object_id, object_type, raw_size = line.split()
+        size = int(raw_size)
+        if object_type == "blob" and size <= MAX_TEXT_BYTES:
+            yield object_id, object_paths[object_id], size
+
+
+def _scan_history(repository_root: Path) -> list[Finding]:
+    findings: set[Finding] = set()
+    for object_id, path, _size in _history_blobs(repository_root):
+        content = subprocess.run(
+            ("git", "-C", str(repository_root), "cat-file", "blob", object_id),
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ).stdout
+        if b"\0" in content:
+            continue
+        try:
+            text = content.decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        history_path = f"{path}@{object_id[:12]}"
+        findings.update(scan_text(history_path, text))
+        if Path(path).name.startswith(".env") and Path(path).name != ".env.example":
+            findings.add(Finding(history_path, 0, "tracked-env-file"))
+    return sorted(findings)
+
+
+def scan_repository(
+    repository_root: Path = REPOSITORY_ROOT, *, include_history: bool = True
+) -> list[Finding]:
+    findings: set[Finding] = set()
+    tracked_paths = _tracked_paths(repository_root)
+    for relative_path in _worktree_paths(repository_root):
+        if (
+            relative_path in tracked_paths
+            and Path(relative_path).name.startswith(".env")
+            and Path(relative_path).name != ".env.example"
+        ):
+            findings.add(Finding(relative_path, 0, "tracked-env-file"))
+        text = _read_text(repository_root / relative_path)
+        if text is not None:
+            findings.update(scan_text(relative_path, text))
+    if include_history:
+        findings.update(_scan_history(repository_root))
+    return sorted(findings)
+
+
+def _arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Scan current and historical USI repository content for secrets."
+    )
+    parser.add_argument(
+        "--no-history",
+        action="store_true",
+        help="Scan only tracked/untracked non-ignored worktree files.",
+    )
+    return parser.parse_args()
+
+
+def main() -> int:
+    arguments = _arguments()
+    try:
+        findings = scan_repository(include_history=not arguments.no_history)
+    except (OSError, subprocess.CalledProcessError, ValueError) as error:
+        print(f"Secret scan could not complete: {error}", file=sys.stderr)
+        return 2
+
+    if findings:
+        print("Secret scan failed; values are intentionally redacted:", file=sys.stderr)
+        for finding in findings:
+            location = (
+                f"{finding.path}:{finding.line}" if finding.line else finding.path
+            )
+            print(f"- {location} [{finding.detector}]", file=sys.stderr)
+        return 1
+
+    scope = "worktree and available Git history" if not arguments.no_history else "worktree"
+    print(f"Secret scan passed for {scope}.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

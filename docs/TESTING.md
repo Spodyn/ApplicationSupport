@@ -19,6 +19,20 @@ Dostępne komendy:
 - `pnpm test:e2e`
 - `pnpm check`
 
+Kontrakt konfiguracji i secret hygiene mają niezależny gate bez zależności Node:
+
+```bash
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
+python3 scripts/validate_environment.py api --env-file .env.example
+python3 scripts/validate_environment.py web --env-file apps/web/.env.example
+python3 scripts/secret_scan.py
+```
+
+Testy chronią profile `local/test/staging/production`, brakujące i niepoprawne
+wartości, odrzucenie wyższych Spring override channels, dokładną allowlistę i
+izolację drzew sekretów, segmenty callback paths, redakcję błędów, allowlistę
+`NEXT_PUBLIC_*`, reguły `.gitignore` oraz brak sekretów w drzewie/historii.
+
 Obecne E2E korzystają z lokalnego Next.js/mock data, blokują zewnętrzne HTTP i wyłączają service worker dla deterministyczności.
 
 ## Zasada nadrzędna

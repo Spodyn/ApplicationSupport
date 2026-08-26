@@ -15,8 +15,9 @@ The stack is deliberately local-only:
 
 The pinned `minio/minio` image is the last upstream-published community
 container and is suitable only for this loopback development stack. It must not
-be promoted to staging or production. Production image selection and runtime
-secret injection are outside USI-42.
+be promoted to staging or production. The runtime secret/config-tree contract
+is documented in [`../config/README.md`](../config/README.md); production image
+selection and deployment remain outside this local Compose stack.
 
 ## Prerequisites
 

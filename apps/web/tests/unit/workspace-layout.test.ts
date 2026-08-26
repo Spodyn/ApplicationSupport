@@ -91,7 +91,12 @@ test("production workspace homes are explicit pnpm packages/directories", async 
   )
 
   expect(rootPackage.private).toBe(true)
-  expect(rootPackage.scripts.check).toBe("pnpm --filter @usi/web check")
+  expect(rootPackage.scripts.check).toBe(
+    "pnpm test:config && pnpm config:validate && pnpm security:secrets && pnpm --filter @usi/web check",
+  )
+  expect(rootPackage.scripts["security:secrets"]).toBe(
+    "python3 scripts/secret_scan.py",
+  )
   expect(rootPackage.scripts.build).toBe("pnpm --filter @usi/web build")
   expect(rootPackage.dependencies?.next).toBeUndefined()
   expect(rootPackage.devDependencies?.vitest).toBeUndefined()

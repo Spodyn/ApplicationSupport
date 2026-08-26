@@ -46,6 +46,7 @@ Wymagany jest Node.js 22.23.2 LTS (`.nvmrc`) i pnpm 11.18.0.
 
 ```bash
 pnpm install --frozen-lockfile
+cp apps/web/.env.example apps/web/.env.local
 pnpm dev
 ```
 
@@ -69,14 +70,37 @@ Porty, healthchecki, komendy restart/reset oraz zasady trwałości volume są
 opisane w [`infra/README.md`](infra/README.md). Schema aplikacyjna nie jest
 bootstrapowana przez Compose; docelowo tworzy ją wyłącznie Flyway.
 
+## Konfiguracja i sekrety
+
+Jawny kontrakt zmiennych, profile `local/test/staging/production`, walidacja
+startup, rozdzielenie browser-public/server-secret oraz układ config tree są
+opisane w [`config/README.md`](config/README.md). Lokalne wartości startowe są
+wyłącznie dummy/dev:
+
+```bash
+cp .env.example .env
+cp apps/web/.env.example apps/web/.env.local
+python3 scripts/validate_environment.py api --env-file .env
+python3 scripts/validate_environment.py web --env-file apps/web/.env.local
+```
+
+Staging/production pobierają core credentials z runtime config tree, a rekord
+integracji przechowuje tylko `secret_ref`. Provider credentials nie trafiają do
+`.env`, browser bundle, repo, testów ani Jiry.
+
 ## Kontrola jakości frontendu
 
 ```bash
 pnpm --filter @usi/web exec playwright install chromium
+python3 scripts/secret_scan.py
 pnpm check
 ```
 
-`pnpm check` obejmuje lint, typecheck, testy jednostkowe (w tym kontrakt układu workspace i hashy baseline), production build i Playwright E2E. Docelowy full-stack gate zostanie rozszerzony o Java/Maven, Testcontainers, Spring Modulith, Flyway, OpenAPI i security checks zgodnie z [`docs/TESTING.md`](docs/TESTING.md).
+`pnpm check` obejmuje kontrakt konfiguracji, secret scan, lint, typecheck, testy
+jednostkowe (w tym kontrakt układu workspace i hashy baseline), production build
+i Playwright E2E. Docelowy full-stack gate zostanie rozszerzony o Java/Maven,
+Testcontainers, Spring Modulith, Flyway, OpenAPI i dalsze security checks zgodnie
+z [`docs/TESTING.md`](docs/TESTING.md).
 
 ## Trasy obecnego frontendu
 

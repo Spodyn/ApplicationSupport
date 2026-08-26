@@ -12,7 +12,10 @@
     "test:unit:watch": "pnpm --filter @usi/web test:unit:watch",
     "test:e2e": "pnpm --filter @usi/web test:e2e",
     "build": "pnpm --filter @usi/web build",
-    "check": "pnpm --filter @usi/web check"
+    "test:config": "python3 -m unittest discover -s scripts/tests -p 'test_*.py'",
+    "config:validate": "python3 scripts/validate_environment.py api --env-file .env.example && python3 scripts/validate_environment.py web --env-file apps/web/.env.example",
+    "security:secrets": "python3 scripts/secret_scan.py",
+    "check": "pnpm test:config && pnpm config:validate && pnpm security:secrets && pnpm --filter @usi/web check"
   },
   "packageManager": "pnpm@11.18.0+sha512.33d83c77da82f49fba836925c6f1b841181ec3132b670639bd012f7075f5c7cf634c5f870147c19aae7478fac01df09d8892e880454896edd23ee9b33757563c"
 }
