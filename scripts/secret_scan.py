@@ -28,23 +28,19 @@ SENSITIVE_PUBLIC_SUFFIXES = (
     "SIGNING_KEY",
     "ACCESS_KEY",
 )
-SAFE_EXAMPLE_MARKERS = (
-    "dummy",
-    "example",
-    "dev_only",
-    "dev-only",
-    "usi-dev-",
-    "test_only",
-    "test-only",
-    "local_only",
-    "local-only",
-    "change_me",
-    "change-me",
-    "changeme",
-    "placeholder",
-    "redacted",
-    "fake",
-    "sample",
+SAFE_EXAMPLE_VALUE = re.compile(
+    r"(?:[a-z][a-z0-9]*[-_])*"
+    r"(?:dummy|example|dev[-_]only|usi[-_]dev|test[-_]only|local[-_]only|"
+    r"change[-_]me|changeme|placeholder|redacted|fake|sample)"
+    r"(?:[-_][a-z0-9]+)*\Z"
+)
+ENVIRONMENT_REFERENCE = re.compile(
+    r"(?:\$\{[A-Za-z_][A-Za-z0-9_.-]*(?::[^{}]*)?\}|"
+    r"\$\{\{[^{}]+\}\}|"
+    r"process\.env(?:\.[A-Za-z_][A-Za-z0-9_]*|"
+    r"\[['\"][A-Za-z_][A-Za-z0-9_]*['\"]\])|"
+    r"configtree:\$\{[A-Za-z_][A-Za-z0-9_.-]*(?::[^{}]*)?\}|"
+    r"<[A-Za-z_][A-Za-z0-9_.-]*>)\Z"
 )
 
 
@@ -79,7 +75,7 @@ ASSIGNMENT = re.compile(
     r"[\"']?"
     r"\s*[=:]\s*"
     r"(?P<quote>[\"']?)"
-    r"(?P<value>[^\s,}\"']{8,})"
+    r"(?P<value>[^\s,\"']*)"
 )
 NON_SECRET_LOCATOR_SUFFIXES = frozenset(
     {
@@ -127,12 +123,9 @@ FORBIDDEN_PROVIDER_SECRET_NAMES = _load_forbidden_provider_secret_names()
 
 
 def _safe_placeholder(value: str) -> bool:
-    lowered = value.lower()
-    if any(marker in lowered for marker in SAFE_EXAMPLE_MARKERS):
-        return True
     return (
-        value.startswith(("${", "$${", "${{", "<", "process.env", "configtree:"))
-        or value.endswith("}")
+        SAFE_EXAMPLE_VALUE.fullmatch(value) is not None
+        or ENVIRONMENT_REFERENCE.fullmatch(value) is not None
         or value in {"********", "xxxxxxxx"}
     )
 
@@ -180,6 +173,17 @@ def _is_sensitive_assignment_name(name: str) -> tuple[bool, bool]:
     return is_sensitive, False
 
 
+def _assignment_value(line: str, match: re.Match[str]) -> str:
+    """Return a complete same-line quoted value when the lexer truncated it."""
+
+    quote = match.group("quote")
+    if quote:
+        closing_quote = line.find(quote, match.start("value"))
+        if closing_quote != -1:
+            return line[match.start("value") : closing_quote]
+    return match.group("value")
+
+
 def scan_text(path: str, text: str) -> list[Finding]:
     findings: set[Finding] = set()
     for line_number, line in enumerate(text.splitlines(), start=1):
@@ -197,7 +201,7 @@ def scan_text(path: str, text: str) -> list[Finding]:
             )
             if not is_sensitive_name:
                 continue
-            value = match.group("value")
+            value = _assignment_value(line, match)
             if (
                 not is_contract_name
                 and not match.group("quote")
@@ -205,7 +209,10 @@ def scan_text(path: str, text: str) -> list[Finding]:
             ):
                 # Source-code expressions are not literal assigned values.
                 continue
-            if _safe_placeholder(value):
+            # The contract forbids these exact provider-secret names in every
+            # repository artifact. A placeholder-looking value cannot make one
+            # acceptable: it could be a real credential containing that word.
+            if not is_contract_name and _safe_placeholder(value):
                 continue
             # Short, low-entropy labels such as enum names are not credentials.
             if is_contract_name or (len(value) >= 12 and _entropy(value) >= 3.0):

@@ -59,6 +59,51 @@ class SecretScanTest(unittest.TestCase):
                         {finding.detector for finding in findings},
                     )
 
+    def test_forbidden_provider_secret_does_not_accept_placeholder_substrings(self) -> None:
+        telegram_webhook_name = "_".join(
+            ("USI", "TELEGRAM", "WEBHOOK", "SECRET", "TOKEN")
+        )
+        value_with_placeholder_substring = "".join(
+            ("N7qP2vR8mX4zL9sK", "fake", "6cD1")
+        )
+
+        findings = scan_text(
+            "generated-fixture",
+            f"{telegram_webhook_name}={value_with_placeholder_substring}",
+        )
+
+        self.assertIn(
+            "literal-secret-assignment",
+            {finding.detector for finding in findings},
+        )
+
+    def test_forbidden_provider_secret_assignment_fails_closed_when_empty(self) -> None:
+        telegram_webhook_name = "_".join(
+            ("USI", "TELEGRAM", "WEBHOOK", "SECRET", "TOKEN")
+        )
+
+        findings = scan_text("generated-fixture", f"{telegram_webhook_name}=")
+
+        self.assertIn(
+            "literal-secret-assignment",
+            {finding.detector for finding in findings},
+        )
+
+    def test_placeholder_markers_must_form_an_explicit_example_value(self) -> None:
+        value_with_embedded_marker = "".join(
+            ("N7qP2vR8mX4zL9sK", "fake", "6cD1")
+        )
+
+        findings = scan_text(
+            "generated-fixture",
+            f"webhook_secret_token={value_with_embedded_marker}",
+        )
+
+        self.assertIn(
+            "literal-secret-assignment",
+            {finding.detector for finding in findings},
+        )
+
     def test_detects_general_api_key_and_secret_name_forms(self) -> None:
         generated_value = "".join(("Q8mN4", "zR2pL", "7vX5c", "K9sD3"))
 
@@ -77,6 +122,11 @@ class SecretScanTest(unittest.TestCase):
             (
                 "DATABASE_PASSWORD=database_dev_only_change_me",
                 "spring.datasource.password=${USI_DATABASE_PASSWORD}",
+                (
+                    'POSTGRES_PASSWORD: "'
+                    + "$"
+                    + '{POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in infra/.env}"'
+                ),
                 "secret_location=configtree:${USI_CORE_SECRETS_DIRECTORY}",
                 "integration.secret_ref=providers/slack/generated-reference-123",
                 "USI_CORE_SECRETS_DIRECTORY=/run/secrets/usi-core",
