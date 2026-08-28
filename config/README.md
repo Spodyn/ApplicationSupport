@@ -4,28 +4,39 @@ USI configuration is deny-by-default and split by process boundary. The
 machine-readable source for variable names, types, profile requirements, and
 secret classifications is [`environment-contract.json`](environment-contract.json).
 The executable preflight is [`scripts/validate_environment.py`](../scripts/validate_environment.py).
+The Spring runtime additionally binds USI-owned settings through validated,
+typed `@ConfigurationProperties`.
 
 ## Profiles
 
-The API has exactly four explicit runtime profiles:
+The API has four canonical runtime profiles:
 
 | Profile | Intended use | Core credentials | Integration credentials |
 | --- | --- | --- | --- |
 | `local` | Disposable developer services only | Obvious dummy/dev values in ignored local environment | Dummy/dev values behind filesystem `secret_ref` |
 | `test` | Unit/integration/CI with fake providers | Supplied dynamically by the test harness/Testcontainers | In-memory fake secret resolver |
 | `staging` | Isolated production-like environment | Required runtime config tree | Required deployment secret store/config tree via `secret_ref` |
-| `production` | One dedicated customer deployment | Required runtime config tree | Required deployment secret store/config tree via `secret_ref` |
+| `prod` | One dedicated customer deployment | Required runtime config tree | Required deployment secret store/config tree via `secret_ref` |
+
+`production` remains a deprecated compatibility alias for deployments created
+before USI-50. New deployments use `prod`; the alias intentionally inherits the
+same fail-closed secret, datasource-pool, HTTPS, and Actuator policy.
 
 Spring-compatible profile resources live in
 [`apps/api/src/main/resources`](../apps/api/src/main/resources). There is no
 implicit production fallback. `SPRING_PROFILES_ACTIVE` must select exactly one
-profile, and the staging/production config-tree import is deliberately not
-`optional`, so a missing mount fails startup.
+supported profile, and the staging/production-like config-tree import is
+deliberately not `optional`, so a missing mount fails startup.
 
-The API runtime itself is introduced by its dedicated backend ticket. Until
-then, the repository preflight is the executable enforcement of the same
-property contract; the profile resources are already in the Spring-standard
-location and contain required placeholders rather than defaults for secrets.
+USI-owned runtime settings are bound through `UsiConfigurationProperties` and
+validated during Spring startup. Spring Boot's typed datasource and RabbitMQ
+configuration remains authoritative for those infrastructure clients. The test
+profile uses a deterministic small pool and Testcontainers integration tests
+override connection URL, credentials, and driver class with suite-owned
+PostgreSQL containers.
+
+Only `/actuator/health` is exposed. Health details/components are denied by
+default and enabled only for disposable `local` development.
 
 ## Local setup
 
@@ -80,11 +91,11 @@ The API receives URLs and identifiers through typed configuration properties:
 - optional provider client/tenant identifiers and Telegram bot username;
 - an empty CORS origin list by default (same-origin, deny/off).
 
-Staging and production require HTTPS for public and object-storage URLs. Callback
-URLs require HTTPS in every profile. URLs containing user info, wildcard CORS,
-or query data on object-storage/callback URLs are rejected.
+Staging and production-like profiles require HTTPS for public and object-storage
+URLs. Callback URLs require HTTPS in every profile. URLs containing user info,
+wildcard CORS, or query data on object-storage/callback URLs are rejected.
 
-## Staging and production secret injection
+## Staging and production-like secret injection
 
 Core service credentials are mounted into the directory named by
 `USI_CORE_SECRETS_DIRECTORY` (normally a Docker/deployment secret mount). The
@@ -105,7 +116,7 @@ entry allowlist is exact. The core and integration secret directories must
 resolve to distinct, non-overlapping directory trees; nesting or aliasing one
 root to the other fails preflight.
 
-Before starting a staging/production process, the entrypoint must run the
+Before starting a staging/production-like process, the entrypoint must run the
 preflight against the actual environment and mounts:
 
 ```bash
@@ -113,12 +124,12 @@ python3 scripts/validate_environment.py api --check-secret-files
 ```
 
 The preflight reports property/file names only; it never prints values.
-Plaintext core credential environment aliases are rejected in staging and
-production to avoid ambiguous precedence over the config tree. Every
-unreviewed `SPRING_*` input (including `SPRING_APPLICATION_JSON`, alternate
-config locations, and direct datasource/RabbitMQ properties) is rejected.
+Plaintext core credential environment aliases are rejected in runtime-secret
+profiles to avoid ambiguous precedence over the config tree. Every unreviewed
+`SPRING_*` input (including `SPRING_APPLICATION_JSON`, alternate config
+locations, and direct datasource/RabbitMQ properties) is rejected.
 Spring/USI application-property switches carried through common JVM option
-environment variables are rejected in staging/production as well; ordinary
+environment variables are rejected in runtime-secret profiles as well; ordinary
 non-configuration JVM tuning flags remain allowed.
 
 Provider credentials use a separate directory/deployment secret-store boundary

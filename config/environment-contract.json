@@ -4,6 +4,7 @@
     "local",
     "test",
     "staging",
+    "prod",
     "production"
   ],
   "publicVariables": {
@@ -24,30 +25,30 @@
     "SPRING_PROFILES_ACTIVE": {
       "classification": "server-non-secret",
       "type": "profile",
-      "requiredProfiles": ["local", "test", "staging", "production"]
+      "requiredProfiles": ["local", "test", "staging", "prod", "production"]
     },
     "USI_PUBLIC_BASE_URL": {
       "classification": "server-non-secret",
       "type": "origin",
-      "requiredProfiles": ["local", "test", "staging", "production"],
-      "httpsProfiles": ["staging", "production"]
+      "requiredProfiles": ["local", "test", "staging", "prod", "production"],
+      "httpsProfiles": ["staging", "prod", "production"]
     },
     "USI_SLACK_CALLBACK_URL": {
       "classification": "server-non-secret",
       "type": "https-url",
-      "requiredProfiles": ["local", "test", "staging", "production"],
+      "requiredProfiles": ["local", "test", "staging", "prod", "production"],
       "pathPrefix": "/api/v1"
     },
     "USI_TEAMS_CALLBACK_URL": {
       "classification": "server-non-secret",
       "type": "https-url",
-      "requiredProfiles": ["local", "test", "staging", "production"],
+      "requiredProfiles": ["local", "test", "staging", "prod", "production"],
       "pathPrefix": "/api/v1"
     },
     "USI_TELEGRAM_CALLBACK_URL": {
       "classification": "server-non-secret",
       "type": "https-url",
-      "requiredProfiles": ["local", "test", "staging", "production"],
+      "requiredProfiles": ["local", "test", "staging", "prod", "production"],
       "pathPrefix": "/api/v1"
     },
     "USI_CORS_ALLOWED_ORIGINS": {
@@ -58,43 +59,43 @@
     "USI_DATABASE_URL": {
       "classification": "server-non-secret",
       "type": "jdbc-postgresql-url",
-      "requiredProfiles": ["local", "staging", "production"]
+      "requiredProfiles": ["local", "staging", "prod", "production"]
     },
     "USI_RABBITMQ_HOST": {
       "classification": "server-non-secret",
       "type": "hostname",
-      "requiredProfiles": ["local", "staging", "production"]
+      "requiredProfiles": ["local", "staging", "prod", "production"]
     },
     "USI_RABBITMQ_PORT": {
       "classification": "server-non-secret",
       "type": "port",
-      "requiredProfiles": ["local", "staging", "production"]
+      "requiredProfiles": ["local", "staging", "prod", "production"]
     },
     "USI_RABBITMQ_VHOST": {
       "classification": "server-non-secret",
       "type": "non-empty",
-      "requiredProfiles": ["local", "staging", "production"]
+      "requiredProfiles": ["local", "staging", "prod", "production"]
     },
     "USI_OBJECT_STORAGE_ENDPOINT": {
       "classification": "server-non-secret",
       "type": "web-url",
-      "requiredProfiles": ["local", "staging", "production"],
-      "httpsProfiles": ["staging", "production"]
+      "requiredProfiles": ["local", "staging", "prod", "production"],
+      "httpsProfiles": ["staging", "prod", "production"]
     },
     "USI_OBJECT_STORAGE_REGION": {
       "classification": "server-non-secret",
       "type": "non-empty",
-      "requiredProfiles": ["local", "staging", "production"]
+      "requiredProfiles": ["local", "staging", "prod", "production"]
     },
     "USI_ATTACHMENTS_BUCKET": {
       "classification": "server-non-secret",
       "type": "bucket-name",
-      "requiredProfiles": ["local", "staging", "production"]
+      "requiredProfiles": ["local", "staging", "prod", "production"]
     },
     "USI_EXPORTS_BUCKET": {
       "classification": "server-non-secret",
       "type": "bucket-name",
-      "requiredProfiles": ["local", "staging", "production"]
+      "requiredProfiles": ["local", "staging", "prod", "production"]
     },
     "USI_SLACK_CLIENT_ID": {
       "classification": "server-non-secret",
@@ -155,17 +156,17 @@
     "USI_CORE_SECRETS_DIRECTORY": {
       "classification": "secret-location",
       "type": "absolute-directory",
-      "requiredProfiles": ["staging", "production"],
-      "allowedProfiles": ["staging", "production"]
+      "requiredProfiles": ["staging", "prod", "production"],
+      "allowedProfiles": ["staging", "prod", "production"]
     },
     "USI_INTEGRATION_SECRETS_DIRECTORY": {
       "classification": "secret-location",
       "type": "absolute-directory",
-      "requiredProfiles": ["local", "staging", "production"],
-      "allowedProfiles": ["local", "staging", "production"]
+      "requiredProfiles": ["local", "staging", "prod", "production"],
+      "allowedProfiles": ["local", "staging", "prod", "production"]
     }
   },
-  "runtimeSecretProfiles": ["staging", "production"],
+  "runtimeSecretProfiles": ["staging", "prod", "production"],
   "integrationSecretPersistence": {
     "storedField": "secret_ref",
     "resolvedValueStoredInDatabase": false,
