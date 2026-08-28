@@ -1,4 +1,4 @@
-package com.unifiedsupportinbox.foundation.security;
+package com.unifiedsupportinbox.identity.internal;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -8,7 +8,7 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * Temporary deny-by-default security boundary until USI-48's successors add
+ * Temporary deny-by-default security boundary until the identity module adds
  * the authenticated API and authorization rules.
  */
 @Configuration
