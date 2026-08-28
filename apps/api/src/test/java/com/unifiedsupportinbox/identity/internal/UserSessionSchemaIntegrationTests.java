@@ -20,7 +20,8 @@ import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.session.jdbc.JdbcIndexedSessionRepository;
+import org.springframework.session.Session;
+import org.springframework.session.SessionRepository;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Tag("integration")
@@ -31,7 +32,8 @@ class UserSessionSchemaIntegrationTests {
     private static ConfigurableApplicationContext context;
     private static UserAccountRepository users;
     private static UserSessionEligibilityPolicy sessionEligibility;
-    private static JdbcIndexedSessionRepository sessions;
+    @SuppressWarnings("rawtypes")
+    private static SessionRepository sessions;
     private static JdbcTemplate jdbc;
 
     @BeforeAll
@@ -51,7 +53,7 @@ class UserSessionSchemaIntegrationTests {
 
         users = context.getBean(UserAccountRepository.class);
         sessionEligibility = context.getBean(UserSessionEligibilityPolicy.class);
-        sessions = context.getBean(JdbcIndexedSessionRepository.class);
+        sessions = context.getBean(SessionRepository.class);
         jdbc = context.getBean(JdbcTemplate.class);
     }
 
@@ -189,9 +191,10 @@ class UserSessionSchemaIntegrationTests {
         assertThat(sessionEligibility.isSessionAllowed(expired.id(), now)).isFalse();
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     void springSessionRepositoryPersistsServerSideSessionWithTwelveHourTimeout() {
-        var session = sessions.createSession();
+        Session session = sessions.createSession();
         session.setMaxInactiveInterval(Duration.ofHours(12));
         session.setAttribute("userId", "00000000-0000-7000-8000-000000000001");
         sessions.save(session);
@@ -200,7 +203,7 @@ class UserSessionSchemaIntegrationTests {
         assertThat(queryInt("SELECT MAX_INACTIVE_INTERVAL FROM spring_session")).isEqualTo(43_200);
         assertThat(queryInt("SELECT COUNT(*) FROM spring_session_attributes")).isEqualTo(1);
 
-        var loaded = sessions.findById(session.getId());
+        Session loaded = (Session) sessions.findById(session.getId());
         assertThat(loaded).isNotNull();
         assertThat((String) loaded.getAttribute("userId"))
                 .isEqualTo("00000000-0000-7000-8000-000000000001");
