@@ -7,11 +7,11 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.http.converter.HttpMessageNotReadableException;
 
 @RestControllerAdvice
 public class ApiProblemControllerAdvice {
@@ -51,6 +51,20 @@ public class ApiProblemControllerAdvice {
                 ApiProblemCode.VALIDATION_FAILED,
                 "Validation failed",
                 "The request body is invalid or malformed.",
+                request,
+                List.of());
+        return response(problem);
+    }
+
+    @ExceptionHandler(InvalidCursorException.class)
+    public ResponseEntity<ApiProblem> handleInvalidCursor(
+            InvalidCursorException exception,
+            HttpServletRequest request) {
+        ApiProblem problem = problemFactory.create(
+                HttpStatus.BAD_REQUEST,
+                ApiProblemCode.INVALID_CURSOR,
+                "Invalid cursor",
+                exception.reason().publicDetail(),
                 request,
                 List.of());
         return response(problem);
