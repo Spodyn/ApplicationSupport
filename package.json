@@ -8,7 +8,7 @@
     "lint": "pnpm --filter @usi/web lint",
     "typecheck": "pnpm --filter @usi/web typecheck",
     "test": "pnpm test:unit",
-    "test:unit": "pnpm --filter @usi/web test:unit",
+    "test:unit": "pnpm test:dev-tools && pnpm --filter @usi/web test:unit",
     "test:unit:watch": "pnpm --filter @usi/web test:unit:watch",
     "test:e2e": "pnpm --filter @usi/web test:e2e",
     "build": "pnpm --filter @usi/web build",
