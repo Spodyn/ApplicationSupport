@@ -356,7 +356,7 @@ class InboundOutboxFoundationIntegrationTests {
     }
 
     private String declareQueue(String routingKey) {
-        Queue queue = new Queue("usi60-" + UUID.randomUUID(), false, false, false);
+        Queue queue = new Queue("usi60-" + UUID.randomUUID(), true, false, false);
         amqpAdmin.declareQueue(queue);
         amqpAdmin.declareBinding(BindingBuilder.bind(queue).to(usiOutboxExchange).with(routingKey));
         declaredQueues.add(queue.getName());
