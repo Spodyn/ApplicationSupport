@@ -135,8 +135,14 @@ public class OutboxEventStore {
         return List.copyOf(Objects.requireNonNull(claimed, "transaction returned no claimed rows"));
     }
 
-    public boolean markPublished(UUID id) {
+    /**
+     * Completes only the exact claim generation that performed the broker publish. The attempt
+     * counter is a fencing token: after lease expiry and reclaim, a stale worker can no longer
+     * checkpoint a newer worker's PROCESSING claim.
+     */
+    public boolean markPublished(UUID id, int claimAttempt) {
         Objects.requireNonNull(id, "id");
+        requireClaimAttempt(claimAttempt);
         Integer updated = transactionTemplate.execute(status -> jdbcTemplate.update("""
                 UPDATE outbox_events
                 SET status = 'PUBLISHED',
@@ -144,12 +150,18 @@ public class OutboxEventStore {
                     next_attempt_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                   AND status = 'PROCESSING'
-                """, id));
+                  AND attempts = ?
+                """, id, claimAttempt));
         return Objects.requireNonNull(updated, "transaction returned no update count") == 1;
     }
 
-    public boolean releaseForRetry(UUID id, Duration retryDelay) {
+    /**
+     * Releases only the exact failed claim generation. This prevents a slow stale publisher from
+     * moving a row back to PENDING after another worker has already reclaimed it.
+     */
+    public boolean releaseForRetry(UUID id, int claimAttempt, Duration retryDelay) {
         Objects.requireNonNull(id, "id");
+        requireClaimAttempt(claimAttempt);
         Objects.requireNonNull(retryDelay, "retryDelay");
         long retryMillis = Math.max(1L, retryDelay.toMillis());
         Integer updated = transactionTemplate.execute(status -> jdbcTemplate.update("""
@@ -159,7 +171,8 @@ public class OutboxEventStore {
                     next_attempt_at = CURRENT_TIMESTAMP + (? * INTERVAL '1 millisecond')
                 WHERE id = ?
                   AND status = 'PROCESSING'
-                """, retryMillis, id));
+                  AND attempts = ?
+                """, retryMillis, id, claimAttempt));
         return Objects.requireNonNull(updated, "transaction returned no update count") == 1;
     }
 
@@ -167,6 +180,12 @@ public class OutboxEventStore {
     public Optional<OutboxEvent> findById(UUID id) {
         Objects.requireNonNull(id, "id");
         return jdbcTemplate.query(SELECT_COLUMNS + " WHERE id = ?", ROW_MAPPER, id).stream().findFirst();
+    }
+
+    private static void requireClaimAttempt(int claimAttempt) {
+        if (claimAttempt < 1) {
+            throw new IllegalArgumentException("claimAttempt must be positive");
+        }
     }
 
     private static OutboxEvent mapOutboxEvent(ResultSet resultSet, int rowNumber) throws SQLException {
