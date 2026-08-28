@@ -1,5 +1,7 @@
 package com.unifiedsupportinbox.identity.internal;
 
+import com.unifiedsupportinbox.ApiProblemAccessDeniedHandler;
+import com.unifiedsupportinbox.ApiProblemAuthenticationEntryPoint;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -15,8 +17,14 @@ import org.springframework.security.web.SecurityFilterChain;
 class BootstrapSecurityConfiguration {
 
     @Bean
-    SecurityFilterChain bootstrapSecurityFilterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain bootstrapSecurityFilterChain(
+            HttpSecurity http,
+            ApiProblemAuthenticationEntryPoint authenticationEntryPoint,
+            ApiProblemAccessDeniedHandler accessDeniedHandler) throws Exception {
         return http
+                .exceptionHandling(exceptionHandling -> exceptionHandling
+                        .authenticationEntryPoint(authenticationEntryPoint)
+                        .accessDeniedHandler(accessDeniedHandler))
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/actuator/health").permitAll()
                         .anyRequest().denyAll())
