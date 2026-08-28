@@ -41,7 +41,8 @@ class UsiConfigurationValidationTests {
                         "usi.integration-secrets.backend=in-memory")
                 .run(context -> {
                     assertThat(context).hasFailed();
-                    assertThat(context.getStartupFailure()).hasMessageContaining("usi");
+                    assertThat(causeMessages(context.getStartupFailure()))
+                            .contains("publicBaseUrl");
                 });
     }
 
@@ -54,8 +55,8 @@ class UsiConfigurationValidationTests {
                         "usi.object-storage.endpoint=http://localhost:9000")
                 .run(context -> {
                     assertThat(context).hasFailed();
-                    assertThat(context.getStartupFailure())
-                            .hasMessageContaining("staging/prod require HTTPS");
+                    assertThat(causeMessages(context.getStartupFailure()))
+                            .contains("staging/prod require HTTPS");
                 });
     }
 
@@ -69,14 +70,24 @@ class UsiConfigurationValidationTests {
                         "usi.security.cors.allowed-origins=http://client.example.invalid")
                 .run(context -> {
                     assertThat(context).hasFailed();
-                    assertThat(context.getStartupFailure())
-                            .hasMessageContaining("CORS origins must use HTTPS");
+                    assertThat(causeMessages(context.getStartupFailure()))
+                            .contains("CORS origins must use HTTPS");
                 });
     }
 
     @Test
     void validatedLocalShapeStarts() {
         contextRunner.run(context -> assertThat(context).hasNotFailed());
+    }
+
+    private static String causeMessages(Throwable failure) {
+        StringBuilder messages = new StringBuilder();
+        for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+            if (cause.getMessage() != null) {
+                messages.append(cause.getMessage()).append('\n');
+            }
+        }
+        return messages.toString();
     }
 
     @Configuration(proxyBeanMethods = false)
