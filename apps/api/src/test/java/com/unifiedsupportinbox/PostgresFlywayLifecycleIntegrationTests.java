@@ -74,7 +74,8 @@ class PostgresFlywayLifecycleIntegrationTests {
                         "--spring.datasource.username=" + POSTGRES.getUsername(),
                         "--spring.datasource.password=" + POSTGRES.getPassword(),
                         "--spring.datasource.driver-class-name=" + POSTGRES.getDriverClassName(),
-                        "--spring.flyway.enabled=true");
+                        "--spring.flyway.enabled=true",
+                        "--spring.jpa.hibernate.ddl-auto=validate");
     }
 
     private static void cleanDatabase() {
