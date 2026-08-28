@@ -1,0 +1,36 @@
+#!/bin/sh
+# Minimal repository-local Maven Wrapper bootstrap. It downloads only the
+# pinned Maven distribution and verifies its SHA-512 before use.
+set -eu
+
+BASE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PROPERTIES_FILE="$BASE_DIR/.mvn/wrapper/maven-wrapper.properties"
+DIST_URL=$(sed -n 's/^distributionUrl=//p' "$PROPERTIES_FILE")
+DIST_SHA512=$(sed -n 's/^distributionSha512Sum=//p' "$PROPERTIES_FILE")
+DIST_NAME=$(basename "$DIST_URL" .zip)
+WRAPPER_CACHE="${MAVEN_USER_HOME:-$HOME/.m2}/wrapper/dists/$DIST_NAME"
+MAVEN_HOME="$WRAPPER_CACHE/$DIST_NAME"
+
+if [ ! -x "$MAVEN_HOME/bin/mvn" ]; then
+    mkdir -p "$WRAPPER_CACHE"
+    ARCHIVE="$WRAPPER_CACHE/$DIST_NAME.zip"
+    if [ ! -f "$ARCHIVE" ]; then
+        if command -v curl >/dev/null 2>&1; then
+            curl --fail --location --silent --show-error "$DIST_URL" --output "$ARCHIVE"
+        elif command -v wget >/dev/null 2>&1; then
+            wget --quiet --output-document="$ARCHIVE" "$DIST_URL"
+        else
+            echo "Maven Wrapper requires curl or wget to download Maven." >&2
+            exit 1
+        fi
+    fi
+    if command -v sha512sum >/dev/null 2>&1; then
+        echo "$DIST_SHA512  $ARCHIVE" | sha512sum --check --status
+    else
+        echo "Maven Wrapper requires sha512sum to verify Maven." >&2
+        exit 1
+    fi
+    unzip -q "$ARCHIVE" -d "$WRAPPER_CACHE"
+fi
+
+exec "$MAVEN_HOME/bin/mvn" "$@"
