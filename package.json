@@ -8,14 +8,23 @@
     "lint": "pnpm --filter @usi/web lint",
     "typecheck": "pnpm --filter @usi/web typecheck",
     "test": "pnpm test:unit",
-    "test:unit": "pnpm --filter @usi/web test:unit",
+    "test:unit": "pnpm test:dev-tools && pnpm --filter @usi/web test:unit",
     "test:unit:watch": "pnpm --filter @usi/web test:unit:watch",
     "test:e2e": "pnpm --filter @usi/web test:e2e",
     "build": "pnpm --filter @usi/web build",
+    "test:dev-tools": "node --test scripts/tests/dev.test.mjs",
     "test:config": "python3 -m unittest discover -s scripts/tests -p 'test_*.py'",
     "config:validate": "python3 scripts/validate_environment.py api --env-file .env.example && python3 scripts/validate_environment.py web --env-file apps/web/.env.example",
     "security:secrets": "python3 scripts/secret_scan.py",
-    "check": "pnpm test:config && pnpm config:validate && pnpm security:secrets && pnpm --filter @usi/web check"
+    "local:infra:up": "node scripts/dev.mjs infra-up",
+    "local:infra:down": "node scripts/dev.mjs infra-down",
+    "local:infra:reset": "node scripts/dev.mjs infra-reset --confirm-local-data-loss",
+    "local:infra:logs": "node scripts/dev.mjs infra-logs",
+    "local:web": "node scripts/dev.mjs web",
+    "local:api": "node scripts/dev.mjs api",
+    "local:health": "node scripts/dev.mjs health",
+    "local:check": "node scripts/dev.mjs check",
+    "check": "pnpm test:dev-tools && pnpm test:config && pnpm config:validate && pnpm security:secrets && pnpm --filter @usi/web check"
   },
   "packageManager": "pnpm@11.18.0+sha512.33d83c77da82f49fba836925c6f1b841181ec3132b670639bd012f7075f5c7cf634c5f870147c19aae7478fac01df09d8892e880454896edd23ee9b33757563c"
 }
