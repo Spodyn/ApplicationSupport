@@ -127,6 +127,7 @@ class InboundOutboxFoundationIntegrationTests {
         InboundEvent retry = inboundEventStore.persistAuthenticated(
                 "SLACK", integrationId, "Ev-123", "{\"event\":\"message\"}", "corr-inbound-1");
 
+        assertThat(first.id().version()).isEqualTo(7);
         assertThat(retry.id()).isEqualTo(first.id());
         assertThat(queryInt("SELECT COUNT(*) FROM inbound_events")).isEqualTo(1);
 
@@ -147,6 +148,28 @@ class InboundOutboxFoundationIntegrationTests {
         assertThat(stored.status()).isEqualTo("PROCESSED");
         assertThat(stored.attempts()).isEqualTo(1);
         assertThat(stored.processedAt()).isNotNull();
+    }
+
+    @Test
+    void persistedInboundSurvivesRestartBeforeProcessing() {
+        InboundEvent event = inboundEventStore.persistAuthenticated(
+                "TELEGRAM",
+                UUID.randomUUID(),
+                "telegram-event-before-processing",
+                "{\"kind\":\"message\"}",
+                "corr-inbound-restart");
+
+        assertThat(event.status()).isEqualTo("RECEIVED");
+        InboundEventProcessor restartedProcessor = new InboundEventProcessor(inboundEventStore, transactionManager);
+        assertThat(restartedProcessor.process(event.id(), inbound ->
+                jdbcTemplate.update(
+                        "INSERT INTO business_effect_probe(event_id, value) VALUES (?, ?)",
+                        inbound.id(),
+                        "after-restart-before-processing")))
+                .isEqualTo(ProcessingResult.PROCESSED);
+
+        assertThat(queryInt("SELECT COUNT(*) FROM business_effect_probe")).isEqualTo(1);
+        assertThat(inboundEventStore.findById(event.id()).orElseThrow().status()).isEqualTo("PROCESSED");
     }
 
     @Test
@@ -228,6 +251,7 @@ class InboundOutboxFoundationIntegrationTests {
                     "corr-outbox-1");
         });
         assertThat(event).isNotNull();
+        assertThat(event.id().version()).isEqualTo(7);
         assertThat(queryString("SELECT status FROM outbox_events WHERE id = ?", event.id()))
                 .isEqualTo("PENDING");
 
@@ -360,10 +384,10 @@ class InboundOutboxFoundationIntegrationTests {
         assertThat(message).isNotNull();
         assertThat(message.getMessageProperties().getMessageId()).isEqualTo(event.id().toString());
         assertThat(message.getMessageProperties().getCorrelationId()).isEqualTo(event.correlationId());
-        assertThat(message.getMessageProperties().getHeader(RabbitMqOutboxTransport.EVENT_ID_HEADER))
-                .isEqualTo(event.id().toString());
-        assertThat(message.getMessageProperties().getHeader(RabbitMqOutboxTransport.EVENT_TYPE_HEADER))
-                .isEqualTo(event.type());
+        String eventIdHeader = message.getMessageProperties().getHeader(RabbitMqOutboxTransport.EVENT_ID_HEADER);
+        String eventTypeHeader = message.getMessageProperties().getHeader(RabbitMqOutboxTransport.EVENT_TYPE_HEADER);
+        assertThat(eventIdHeader).isEqualTo(event.id().toString());
+        assertThat(eventTypeHeader).isEqualTo(event.type());
         assertThat(new String(message.getBody(), StandardCharsets.UTF_8)).isEqualTo(event.payloadJson());
     }
 
