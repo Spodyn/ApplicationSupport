@@ -1,0 +1,61 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Unified Support Inbox API",
+    "version": "1.0.0",
+    "description": "Frozen v1 transport contract for Unified Support Inbox."
+  },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "Channel": {
+        "type": "string",
+        "enum": ["SLACK", "TEAMS", "TELEGRAM"]
+      },
+      "CursorDirection": {
+        "type": "string",
+        "enum": ["ASC", "DESC"]
+      },
+      "ApiProblemCode": {
+        "type": "string",
+        "enum": [
+          "VALIDATION_FAILED",
+          "INVALID_CURSOR",
+          "AUTHENTICATION_REQUIRED",
+          "ACCESS_DENIED",
+          "RESOURCE_NOT_FOUND",
+          "CONFLICT",
+          "RATE_LIMITED",
+          "PROVIDER_FAILURE",
+          "APPLICATION_FAILURE",
+          "INTERNAL_ERROR"
+        ]
+      },
+      "FieldError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["field", "message"],
+        "properties": {
+          "field": {"type": "string"},
+          "message": {"type": "string"}
+        }
+      },
+      "ApiProblem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "title", "status", "detail", "correlationId"],
+        "properties": {
+          "code": {"$ref": "#/components/schemas/ApiProblemCode"},
+          "title": {"type": "string"},
+          "status": {"type": "integer", "minimum": 400, "maximum": 599},
+          "detail": {"type": "string"},
+          "correlationId": {"type": "string", "maxLength": 128},
+          "fieldErrors": {
+            "type": "array",
+            "items": {"$ref": "#/components/schemas/FieldError"}
+          }
+        }
+      }
+    }
+  }
+}

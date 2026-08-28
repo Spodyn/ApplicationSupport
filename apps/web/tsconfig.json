@@ -26,6 +26,9 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@usi/api-client/*": [
+        "../../packages/api-client/src/*"
       ]
     }
   },
