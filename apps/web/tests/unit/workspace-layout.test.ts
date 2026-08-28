@@ -92,8 +92,21 @@ test("production workspace homes are explicit pnpm packages/directories", async 
 
   expect(rootPackage.private).toBe(true)
   expect(rootPackage.scripts.check).toBe(
-    "pnpm test:config && pnpm config:validate && pnpm security:secrets && pnpm --filter @usi/web check",
+    "pnpm test:dev-tools && pnpm test:config && pnpm config:validate && pnpm security:secrets && pnpm --filter @usi/web check",
   )
+  expect(rootPackage.scripts["test:dev-tools"]).toBe(
+    "node --test scripts/tests/dev.test.mjs",
+  )
+  expect(rootPackage.scripts["local:infra:up"]).toBe(
+    "node scripts/dev.mjs infra-up",
+  )
+  expect(rootPackage.scripts["local:infra:reset"]).toBe(
+    "node scripts/dev.mjs infra-reset --confirm-local-data-loss",
+  )
+  expect(rootPackage.scripts["local:web"]).toBe("node scripts/dev.mjs web")
+  expect(rootPackage.scripts["local:api"]).toBe("node scripts/dev.mjs api")
+  expect(rootPackage.scripts["local:health"]).toBe("node scripts/dev.mjs health")
+  expect(rootPackage.scripts["local:check"]).toBe("node scripts/dev.mjs check")
   expect(rootPackage.scripts["security:secrets"]).toBe(
     "python3 scripts/secret_scan.py",
   )
