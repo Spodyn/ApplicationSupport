@@ -21,6 +21,7 @@
         <java.version>25</java.version>
         <spring-modulith.version>2.1.1</spring-modulith.version>
         <testcontainers.version>2.0.5</testcontainers.version>
+        <password4j.version>1.8.4</password4j.version>
     </properties>
 
     <dependencyManagement>
@@ -62,6 +63,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.password4j</groupId>
+            <artifactId>password4j</artifactId>
+            <version>${password4j.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

@@ -140,6 +140,38 @@ secret/bot token, Teams client secret, Telegram bot token, or Telegram webhook
 secret token. API responses, logs, audit, diagnostics, tests, Jira, and browser
 bundles must not contain resolved values.
 
+## One-time bootstrap administrator
+
+No administrator password is seeded in source code or Flyway. The first
+`ADMIN` can be created only by the server-side one-time startup action. The
+operator supplies these reviewed environment variables only for that controlled
+startup:
+
+- `USI_BOOTSTRAP_ADMIN_ENABLED` — set to `true` for the one-time invocation;
+- `USI_BOOTSTRAP_ADMIN_EMAIL` — canonical administrator email input;
+- `USI_BOOTSTRAP_ADMIN_DISPLAY_NAME` — administrator display name;
+- `USI_BOOTSTRAP_ADMIN_PASSWORD_FILE` — absolute normalized path to a mounted
+  plaintext secret file outside the repository.
+
+The password itself must never be put in an environment variable, JVM option,
+application argument, shell history, Jira, or repository file. The secret file
+must be a non-symlink regular UTF-8 file containing exactly one password line
+(12–128 Unicode characters). A single final newline is accepted. Bootstrap
+hashes the password with Argon2id before the user row is written and never logs
+the password or file contents.
+
+The database contains a singleton bootstrap state row locked inside the same
+transaction as user creation. A successful bootstrap permanently consumes that
+state. A second invocation is rejected even if the original administrator is
+later deactivated, and concurrent bootstrap attempts can produce at most one
+administrator. If configuration, secret input, hashing, or persistence fails,
+the transaction does not consume the state.
+
+After the successful startup, remove the four bootstrap variables, remove the
+secret file, and restart normally. Leaving the trigger enabled intentionally
+causes the next startup to fail closed because the durable bootstrap state is
+already consumed.
+
 ## Repository protection
 
 `.gitignore` ignores `.env*` at every depth and permits only files named exactly

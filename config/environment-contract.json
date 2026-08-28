@@ -117,6 +117,26 @@
       "type": "optional-bot-username",
       "requiredProfiles": []
     },
+    "USI_BOOTSTRAP_ADMIN_ENABLED": {
+      "classification": "server-non-secret",
+      "type": "non-empty",
+      "requiredProfiles": []
+    },
+    "USI_BOOTSTRAP_ADMIN_EMAIL": {
+      "classification": "server-non-secret",
+      "type": "non-empty",
+      "requiredProfiles": []
+    },
+    "USI_BOOTSTRAP_ADMIN_DISPLAY_NAME": {
+      "classification": "server-non-secret",
+      "type": "non-empty",
+      "requiredProfiles": []
+    },
+    "USI_BOOTSTRAP_ADMIN_PASSWORD_FILE": {
+      "classification": "secret-location",
+      "type": "non-empty",
+      "requiredProfiles": []
+    },
     "USI_DATABASE_USERNAME": {
       "classification": "local-secret",
       "type": "non-empty",
