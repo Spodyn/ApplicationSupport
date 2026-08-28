@@ -76,7 +76,9 @@ pnpm local:infra:logs -- minio
 | Component | URL / address |
 | --- | --- |
 | Web | <http://localhost:3000> |
-| API (after E02-T01) | <http://127.0.0.1:8080> |
+| Browser API path | <http://localhost:3000/api/v1> |
+| Browser WebSocket path | `ws://localhost:3000/ws` |
+| API process (after E02-T01) | <http://127.0.0.1:8080> |
 | API health (after E02-T01) | <http://127.0.0.1:8080/actuator/health> |
 | PostgreSQL | `127.0.0.1:5432` |
 | RabbitMQ AMQP | `127.0.0.1:5672` |
@@ -86,6 +88,85 @@ pnpm local:infra:logs -- minio
 
 Ports can be overridden in the ignored `infra/.env`. The API health URL can be
 overridden for local development with `USI_API_HEALTH_URL`.
+
+## Same-origin API and WebSocket routing
+
+The browser always uses the reviewed relative paths `NEXT_PUBLIC_API_BASE_URL=/api/v1`
+and `NEXT_PUBLIC_WS_BASE_URL=/ws`. It never receives the backend process origin.
+This keeps `USI_SESSION` cookies, future CSRF handling and WebSocket handshakes on
+the same browser origin instead of solving local development with permissive
+CORS.
+
+During `next dev`, Next.js proxies both `/api/:path*` and `/ws/:path*` to the
+local Spring Boot process. The default target is `http://127.0.0.1:8080`. A
+developer who intentionally runs the API on another local port may set the
+server-only process variable before starting the web app:
+
+```bash
+USI_DEV_BACKEND_ORIGIN=http://127.0.0.1:9080 pnpm local:web
+```
+
+PowerShell equivalent:
+
+```powershell
+$env:USI_DEV_BACKEND_ORIGIN = "http://127.0.0.1:9080"
+pnpm local:web
+```
+
+`USI_DEV_BACKEND_ORIGIN` is local Next.js tooling, not browser-public
+configuration and not a production deployment variable. It accepts only a
+loopback HTTP origin (`127.0.0.1` or `localhost`) without credentials, path,
+query or fragment. Remote targets fail Next configuration instead of turning the
+web process into an arbitrary forwarding proxy. Production `/api` and `/ws`
+routing remains owned by Caddy as defined in `docs/ARCHITECTURE.md`.
+
+The Next `proxy.ts` guard runs only for `/api/*` and `/ws/*`. A browser `Origin`
+header must match the incoming web origin exactly. Cross-origin or malformed
+Origins receive `403` with no `Access-Control-Allow-Origin` header, including
+cross-origin `OPTIONS` preflights and WebSocket requests. Requests with no
+`Origin` header remain possible for server-to-server traffic such as provider
+callbacks. The Spring backend remains authoritative for session validation,
+authorization and CSRF; the web ingress guard is defense in depth, not a
+replacement for backend checks.
+
+## CORS strategy
+
+Normal browser traffic is same-origin, so `USI_CORS_ALLOWED_ORIGINS` is empty by
+default and CORS is deny/off. Never use `*` as a development workaround. If an
+explicit cross-origin client is deliberately enabled by a deployment within the
+frozen contract, origins must be listed exactly as comma-separated origins;
+paths, queries, credentials and wildcards are invalid, and staging/production
+entries must use HTTPS.
+
+The backend implementation must preserve the same rule: only an exact configured
+Origin may receive CORS allow headers, blocked preflights must not receive
+`Access-Control-Allow-Origin`, and credentialed browser access must never be
+combined with wildcard CORS. CORS does not replace CSRF protection for
+state-changing authenticated commands.
+
+## Provider callback tunnel and trusted proxy rule
+
+For Slack, Teams or Telegram callback development, expose the **web ingress**
+through a public HTTPS tunnel and configure provider callback URLs below that
+origin, for example:
+
+```text
+https://<dev-tunnel-host>/api/v1/provider-callbacks/slack
+https://<dev-tunnel-host>/api/v1/provider-callbacks/teams
+https://<dev-tunnel-host>/api/v1/provider-callbacks/telegram
+```
+
+The tunnel should forward to the local web port; the same `/api` rewrite then
+reaches Spring Boot. Do not expose provider credentials to the browser and do not
+add direct Slack/Teams/Telegram API calls from UI code.
+
+Forwarded client identity is trusted only from explicitly configured ingress
+proxies. Application code must not treat arbitrary `Forwarded` or
+`X-Forwarded-*` headers supplied by a direct client as authoritative identity,
+IP, scheme or authorization input. The local Next hop is only a transport hop;
+production trusted-proxy handling belongs to the Caddy/Spring deployment
+boundary and must use an explicit proxy allowlist/configuration rather than
+blanket forwarded-header trust.
 
 ## Full local verification
 
@@ -102,4 +183,6 @@ repository `pnpm check` gate. Once a Maven backend exists it also runs
 running developer stack.
 
 The developer-command contract itself is covered by Node's built-in test runner
-(`pnpm test:dev-tools`) and is part of the normal `pnpm check` gate.
+(`pnpm test:dev-tools`) and is part of the normal `pnpm check` gate. Same-origin
+proxy/origin behavior is covered by frontend unit tests, while the API
+environment suite verifies explicit CORS origin-list validation.
