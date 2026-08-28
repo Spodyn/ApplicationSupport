@@ -92,7 +92,7 @@ test("production workspace homes are explicit pnpm packages/directories", async 
 
   expect(rootPackage.private).toBe(true)
   expect(rootPackage.scripts.check).toBe(
-    "pnpm test:dev-tools && pnpm test:config && pnpm config:validate && pnpm security:secrets && pnpm --filter @usi/web check",
+    "pnpm test:dev-tools && pnpm test:config && pnpm config:validate && pnpm security:secrets && pnpm openapi:check && pnpm --filter @usi/web check",
   )
   expect(rootPackage.scripts["test:dev-tools"]).toBe(
     "node --test scripts/tests/dev.test.mjs",
