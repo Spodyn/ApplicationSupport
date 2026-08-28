@@ -84,6 +84,79 @@ Valid `X-Correlation-ID` max128 safe ASCII is preserved; malformed/missing input
 - Transactional inbox/outbox protects asynchronous effects.
 - Flyway append-only; expand -> backfill/migrate -> switch -> cleanup later; N-1 application compatibility where rollback requires it; executed migrations never edited.
 
+### 4.1 Transaction boundary
+
+The application/service command owns the database transaction. Controllers, provider adapters and message consumers enter a command boundary; they do not keep a transaction open around network I/O. A transaction contains only the reads/locks needed to validate the invariant, the authoritative domain writes and any inbox/outbox/audit rows that must commit atomically with them.
+
+Provider HTTP, RabbitMQ publish and object-storage calls happen after the database transaction commits. When an external effect must follow a domain write, commit an outbox row in the same transaction and let a worker perform the external call outside that transaction. The worker records delivery success/failure in a separate short transaction.
+
+Do not set a global isolation level above PostgreSQL `READ COMMITTED`. A use case that genuinely requires stronger isolation must declare it at that transaction boundary, document the invariant that requires it and include deterministic retry/concurrency tests. `SERIALIZABLE` failures (`SQLSTATE 40001`) may only be retried with a bounded policy around an idempotent command.
+
+### 4.2 Single-row command races
+
+Prefer one atomic conditional statement over read-then-write locking for claim-like state transitions. The predicate contains every state/ownership condition that makes the command legal and the update returns the changed row, for example:
+
+```sql
+UPDATE cases
+SET owner_user_id = :user_id,
+    status = 'VERIFICATION',
+    claimed_at = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = :case_id
+  AND owner_user_id IS NULL
+  AND status IN ('NEW', 'PARTIALLY_IGNORED')
+RETURNING id, owner_user_id, status, claimed_at, updated_at;
+```
+
+Exactly one concurrent caller can win. Zero returned rows means the caller lost the race or the precondition is no longer true: refetch authoritative state and return HTTP `409` using the stable conflict problem contract (`CONFLICT` until an owning workflow ticket defines a more specific stable code). Never convert a lost race into last-write-wins and never blindly retry a business command that changed eligibility.
+
+Use explicit row locks only when one atomic statement cannot protect a multi-row invariant. Lock the smallest possible row set in a deterministic order and keep the transaction free of provider/network calls.
+
+### 4.3 Durable scheduler and worker claims
+
+Workers that claim due rows use `FOR UPDATE SKIP LOCKED` at `READ COMMITTED` so multiple workers can make progress without waiting on the same row. Selection has a deterministic tie-breaker and the claimed state is persisted before any external effect. A representative batch claim is:
+
+```sql
+WITH picked AS (
+    SELECT id
+    FROM outbox_events
+    WHERE status = :ready_status
+      AND next_attempt_at <= CURRENT_TIMESTAMP
+    ORDER BY next_attempt_at, id
+    FOR UPDATE SKIP LOCKED
+    LIMIT :batch_size
+)
+UPDATE outbox_events AS event
+SET status = :claimed_status
+FROM picked
+WHERE event.id = picked.id
+RETURNING event.*;
+```
+
+The concrete ready/claimed states belong to the outbox implementation ticket; the invariant here is atomic, non-blocking ownership of a due row before external I/O. Commit the claim promptly. Publishing to RabbitMQ/provider HTTP happens after commit; completion/retry metadata is persisted in a later transaction. Crash recovery relies on durable status/attempt timestamps and idempotent effects, not on holding a database lock during I/O.
+
+### 4.4 Isolation policy by use case
+
+| Use case | Isolation / locking | Conflict/retry rule |
+| --- | --- | --- |
+| Normal CRUD and projections | `READ COMMITTED` | No implicit retry of business commands |
+| Claim or single-row state command | `READ COMMITTED` + atomic conditional `UPDATE ... RETURNING` | zero rows -> refetch + stable `409` |
+| Multi-row invariant | `READ COMMITTED` + targeted row locks in deterministic order | conflict handled by owning command |
+| Due scheduler/outbox worker | `READ COMMITTED` + `FOR UPDATE SKIP LOCKED` | another worker owning a row is normal, not an error |
+| Proven invariant impossible to protect above | explicitly scoped `SERIALIZABLE` only | bounded retry on `40001`, only for idempotent work |
+
+Do not use a global `REPEATABLE READ`/`SERIALIZABLE` setting as a substitute for modeling the race at the query/transaction boundary.
+
+### 4.5 Query-shaped indexes
+
+The migration that introduces a table owns the indexes required by its concurrency/query pattern. Do not create placeholder production tables or indexes ahead of the owning domain ticket. At minimum, later migrations must provide query-shaped indexes equivalent to:
+
+- unowned claim candidates: leading status/eligibility fields plus stable `id`, normally with a partial predicate for `owner_user_id IS NULL`;
+- due timers: due timestamp followed by stable `id`, with status/active predicates matching the worker query;
+- outbox polling: `(status, next_attempt_at, id)` (or an equivalent partial index over unpublished/due rows) matching the exact `SKIP LOCKED` predicate and order.
+
+Index names, UNIQUE constraints and CHECK constraints are explicit in the owning Flyway migration. Concurrency tests must run against PostgreSQL/Testcontainers and must not depend on sleeps for correctness.
+
 ## 5. Realtime
 
 Business commit -> transactional outbox -> RabbitMQ -> WebSocket/STOMP. Semantics are at-least-once and duplicate/out-of-order safe. DB/refetch is source of truth; WebSocket is a signal, not durable event store.
