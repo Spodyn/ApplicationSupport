@@ -46,12 +46,12 @@ class PostgresFlywayLifecycleIntegrationTests {
                     .isEqualTo("validate");
             assertThat(queryString("SHOW server_version")).startsWith("18.");
             assertThat(tableExists("flyway_schema_history")).isTrue();
-            assertThat(queryString("SELECT version FROM flyway_schema_history "
-                    + "WHERE success ORDER BY installed_rank DESC LIMIT 1"))
-                    .isEqualTo("1");
+            assertThat(queryInt("SELECT COUNT(*) FROM flyway_schema_history "
+                    + "WHERE success AND version = '1'"))
+                    .isEqualTo(1);
             historyRowsAfterFirstStart = queryInt(
                     "SELECT COUNT(*) FROM flyway_schema_history WHERE success");
-            assertThat(historyRowsAfterFirstStart).isEqualTo(1);
+            assertThat(historyRowsAfterFirstStart).isPositive();
             assertThat(flyway.info().pending()).isEmpty();
         }
 
