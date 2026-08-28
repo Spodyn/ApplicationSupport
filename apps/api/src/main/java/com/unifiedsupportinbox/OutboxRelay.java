@@ -35,13 +35,14 @@ public class OutboxRelay {
         for (OutboxEvent event : claimed) {
             try {
                 transport.publish(event);
-                if (!store.markPublished(event.id())) {
+                if (!store.markPublished(event.id(), event.attempts())) {
                     throw new IllegalStateException(
                             "outbox event lost PROCESSING ownership before publish checkpoint: " + event.id());
                 }
                 published++;
             } catch (RuntimeException publishFailure) {
-                boolean released = store.releaseForRetry(event.id(), properties.retryDelay());
+                boolean released = store.releaseForRetry(
+                        event.id(), event.attempts(), properties.retryDelay());
                 retryScheduled += released ? 1 : 0;
                 LOGGER.warn(
                         "Outbox publish failed; eventId={}, type={}, attempt={}, retryScheduled={}",
