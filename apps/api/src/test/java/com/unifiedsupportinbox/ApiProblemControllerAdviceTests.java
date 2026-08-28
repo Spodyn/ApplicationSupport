@@ -47,6 +47,15 @@ class ApiProblemControllerAdviceTests {
     }
 
     @Test
+    void invalidCursorUsesStable400CodeAndSafeDetail() throws Exception {
+        mockMvc.perform(get("/test/invalid-cursor"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.code").value("INVALID_CURSOR"))
+                .andExpect(jsonPath("$.detail").value("The pagination cursor has expired."));
+    }
+
+    @Test
     void authenticationUsesStable401Code() throws Exception {
         assertControlled("/test/auth", 401, "AUTHENTICATION_REQUIRED");
     }
@@ -109,6 +118,11 @@ class ApiProblemControllerAdviceTests {
 
         @PostMapping("/test/validation")
         void validation(@Valid @RequestBody ValidationRequest request) {
+        }
+
+        @GetMapping("/test/invalid-cursor")
+        void invalidCursor() {
+            throw new InvalidCursorException(InvalidCursorException.Reason.EXPIRED);
         }
 
         @GetMapping("/test/auth")

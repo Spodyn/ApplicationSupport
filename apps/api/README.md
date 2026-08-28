@@ -19,6 +19,34 @@ The backend owns authorization, workflow invariants, persistence, provider
 adapters, and the OpenAPI transport contract. API contract artifacts and their
 generation configuration belong in [`openapi/`](openapi/).
 
+## REST v1 conventions
+
+REST endpoints live under `/api/v1`. Technical identifiers use UUID in canonical
+lower-case text form. Absolute timestamps are emitted and accepted as RFC3339
+UTC (`Z`) instants. Public enum names are transport contract values and must not
+be renamed casually after publication.
+
+Collection endpoints use stable query parameter names: `cursor` for the opaque
+continuation token, `limit` for page size, and `sort` for an endpoint-defined
+stable sort enum. Endpoint-specific filters use explicit stable query names;
+adding or renaming a public filter/sort value is an API-contract change.
+
+Long feeds use signed, opaque, versioned cursor pagination: default page size
+50, maximum 100, cursor TTL 24 hours. `CursorPage<T>` contains `items` and
+`nextCursor`; a null `nextCursor` means the last page. Repository ordering uses
+an indexed stable sort field plus UUID `id` as the deterministic tie-breaker;
+no offset pagination is used for long message/case history.
+
+`CursorCodec` uses HMAC-SHA256 and requires signing key material to be supplied
+by protected runtime configuration when a paginated endpoint is wired. Cursor
+payloads bind to a caller-provided canonical scope string. Endpoint adapters
+must include endpoint identity, normalized filters, and sort in that scope so a
+cursor cannot be reused with a different query. Clients treat the resulting
+cursor as an opaque string and never parse or construct it.
+
+Malformed, tampered, expired, unsupported-version, or query-mismatched cursors
+fail closed and map to the stable `INVALID_CURSOR` problem code.
+
 ## REST error contract
 
 API failures use `application/problem+json`. Every problem response contains a
