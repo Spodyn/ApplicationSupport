@@ -55,6 +55,7 @@ class InfrastructureSmokeIntegrationTests {
         registry.add("spring.rabbitmq.username", RABBITMQ::getAdminUsername);
         registry.add("spring.rabbitmq.password", RABBITMQ::getAdminPassword);
         registry.add("spring.rabbitmq.virtual-host", () -> "/");
+        registry.add("management.health.rabbit.enabled", () -> true);
     }
 
     @AfterAll
