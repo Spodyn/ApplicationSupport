@@ -7,13 +7,15 @@ BASE_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PROPERTIES_FILE="$BASE_DIR/.mvn/wrapper/maven-wrapper.properties"
 DIST_URL=$(sed -n 's/^distributionUrl=//p' "$PROPERTIES_FILE")
 DIST_SHA512=$(sed -n 's/^distributionSha512Sum=//p' "$PROPERTIES_FILE")
-DIST_NAME=$(basename "$DIST_URL" .zip)
-WRAPPER_CACHE="${MAVEN_USER_HOME:-$HOME/.m2}/wrapper/dists/$DIST_NAME"
-MAVEN_HOME="$WRAPPER_CACHE/$DIST_NAME"
+DIST_ARCHIVE_NAME=$(basename "$DIST_URL" .zip)
+WRAPPER_CACHE="${MAVEN_USER_HOME:-$HOME/.m2}/wrapper/dists/$DIST_ARCHIVE_NAME"
+# Apache Maven binary archives are named apache-maven-<version>-bin.zip while
+# their top-level directory omits the -bin suffix.
+MAVEN_HOME="$WRAPPER_CACHE/${DIST_ARCHIVE_NAME%-bin}"
 
 if [ ! -x "$MAVEN_HOME/bin/mvn" ]; then
     mkdir -p "$WRAPPER_CACHE"
-    ARCHIVE="$WRAPPER_CACHE/$DIST_NAME.zip"
+    ARCHIVE="$WRAPPER_CACHE/$DIST_ARCHIVE_NAME.zip"
     if [ ! -f "$ARCHIVE" ]; then
         if command -v curl >/dev/null 2>&1; then
             curl --fail --location --silent --show-error "$DIST_URL" --output "$ARCHIVE"
