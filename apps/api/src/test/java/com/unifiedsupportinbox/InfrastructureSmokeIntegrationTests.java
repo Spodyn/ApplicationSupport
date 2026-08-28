@@ -50,6 +50,12 @@ class InfrastructureSmokeIntegrationTests {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.datasource.driver-class-name", POSTGRES::getDriverClassName);
         registry.add("spring.flyway.enabled", () -> true);
+        registry.add("spring.rabbitmq.host", RABBITMQ::getHost);
+        registry.add("spring.rabbitmq.port", RABBITMQ::getAmqpPort);
+        registry.add("spring.rabbitmq.username", RABBITMQ::getAdminUsername);
+        registry.add("spring.rabbitmq.password", RABBITMQ::getAdminPassword);
+        registry.add("spring.rabbitmq.virtual-host", () -> "/");
+        registry.add("management.health.rabbit.enabled", () -> true);
     }
 
     @AfterAll
@@ -91,6 +97,8 @@ class InfrastructureSmokeIntegrationTests {
 
         assertThat(queryBoolean("SELECT to_regclass('public.isolation_probe') IS NULL")).isTrue();
         assertThat(queryBoolean("SELECT to_regclass('public.flyway_schema_history') IS NOT NULL")).isTrue();
+        assertThat(queryBoolean("SELECT to_regclass('public.inbound_events') IS NOT NULL")).isTrue();
+        assertThat(queryBoolean("SELECT to_regclass('public.outbox_events') IS NOT NULL")).isTrue();
     }
 
     private HttpResponse<String> get(String url) throws IOException, InterruptedException {
