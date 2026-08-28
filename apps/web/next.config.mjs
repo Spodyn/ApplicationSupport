@@ -1,3 +1,4 @@
+import { developmentProxyRewrites } from "./config/development-proxy.mjs"
 import { parsePublicEnvironment } from "./config/public-environment.mjs"
 
 parsePublicEnvironment(process.env)
@@ -6,6 +7,9 @@ parsePublicEnvironment(process.env)
 const nextConfig = {
   images: {
     unoptimized: true,
+  },
+  async rewrites() {
+    return developmentProxyRewrites(process.env, process.env.NODE_ENV)
   },
   async headers() {
     return [
