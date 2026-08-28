@@ -13,9 +13,17 @@
     "test:e2e": "pnpm --filter @usi/web test:e2e",
     "build": "pnpm --filter @usi/web build",
     "test:dev-tools": "node --test scripts/tests/dev.test.mjs",
+    "test:openapi": "node --test scripts/openapi/openapi.test.mjs",
     "test:config": "python3 -m unittest discover -s scripts/tests -p 'test_*.py'",
     "config:validate": "python3 scripts/validate_environment.py api --env-file .env.example && python3 scripts/validate_environment.py web --env-file apps/web/.env.example",
     "security:secrets": "python3 scripts/secret_scan.py",
+    "openapi:lint": "node scripts/openapi/lint.mjs",
+    "openapi:generate": "node scripts/openapi/generate.mjs",
+    "openapi:generated:check": "node scripts/openapi/generate.mjs --check",
+    "openapi:compat": "node scripts/openapi/compat.mjs",
+    "api-client:typecheck": "pnpm --dir apps/web exec tsc --project ../../packages/api-client/tsconfig.json",
+    "openapi:adapter-smoke": "pnpm --dir apps/web exec vitest run tests/unit/api-channel-adapter.test.ts",
+    "openapi:check": "pnpm test:openapi && pnpm openapi:lint && pnpm openapi:generated:check && pnpm api-client:typecheck && pnpm openapi:adapter-smoke",
     "local:infra:up": "node scripts/dev.mjs infra-up",
     "local:infra:down": "node scripts/dev.mjs infra-down",
     "local:infra:reset": "node scripts/dev.mjs infra-reset --confirm-local-data-loss",
@@ -24,7 +32,7 @@
     "local:api": "node scripts/dev.mjs api",
     "local:health": "node scripts/dev.mjs health",
     "local:check": "node scripts/dev.mjs check",
-    "check": "pnpm test:dev-tools && pnpm test:config && pnpm config:validate && pnpm security:secrets && pnpm --filter @usi/web check"
+    "check": "pnpm test:dev-tools && pnpm test:config && pnpm config:validate && pnpm security:secrets && pnpm openapi:check && pnpm --filter @usi/web check"
   },
   "packageManager": "pnpm@11.18.0+sha512.33d83c77da82f49fba836925c6f1b841181ec3132b670639bd012f7075f5c7cf634c5f870147c19aae7478fac01df09d8892e880454896edd23ee9b33757563c"
 }

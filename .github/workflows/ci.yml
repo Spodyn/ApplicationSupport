@@ -107,6 +107,46 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  openapi:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout complete history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Enable pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify OpenAPI source, deterministic generation, TypeScript and adapter smoke
+        run: pnpm openapi:check
+
+      - name: Reject breaking v1 contract changes
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE_SHA="$(git rev-parse HEAD^ 2>/dev/null || true)"
+          fi
+          if [[ -z "$BASE_SHA" ]]; then
+            echo "Could not resolve an exact compatibility base SHA." >&2
+            exit 1
+          fi
+          pnpm openapi:compat -- --base-ref "$BASE_SHA"
+
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -149,6 +189,3 @@ jobs:
             apps/web/test-results/
           if-no-files-found: ignore
           retention-days: 7
-
-# The canonical OpenAPI generation/compatibility job becomes required when the
-# API contract ticket introduces the versioned specification and generated client.
