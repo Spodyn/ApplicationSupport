@@ -25,6 +25,10 @@ class TeamsDevelopmentContractTests(unittest.TestCase):
         self.assertEqual(template["$schema"], module.EXPECTED_SCHEMA)
         self.assertEqual(template["manifestVersion"], "1.21")
         self.assertEqual(template["id"], "__TEAMS_APP_ID__")
+        self.assertLessEqual(len(template["developer"]["name"]), 32)
+        self.assertLessEqual(len(template["name"]["short"]), 30)
+        self.assertLessEqual(len(template["description"]["short"]), 80)
+        self.assertLessEqual(len(template["description"]["full"]), 4000)
         self.assertEqual(template["bots"][0]["botId"], "__TEAMS_BOT_CLIENT_ID__")
         self.assertEqual(set(template["bots"][0]["scopes"]), {"team", "groupChat"})
         self.assertNotIn("groupchat", template["bots"][0]["scopes"])
@@ -45,15 +49,23 @@ class TeamsDevelopmentContractTests(unittest.TestCase):
         self.assertNotIn("__TEAMS_", serialized)
         self.assertNotIn("secret", serialized.lower())
 
-    def test_renderer_rejects_invalid_ids_insecure_urls_and_scope_drift(self):
+    def test_renderer_rejects_invalid_ids_insecure_or_non_origin_urls_and_scope_drift(self):
         with self.assertRaisesRegex(ValueError, "GUID"):
             module.render(TEMPLATE, "not-a-guid", GUID_BOT, "https://sandbox.example.test")
         with self.assertRaisesRegex(ValueError, "HTTPS"):
             module.render(TEMPLATE, GUID_APP, GUID_BOT, "http://sandbox.example.test")
+        with self.assertRaisesRegex(ValueError, "without a path"):
+            module.render(TEMPLATE, GUID_APP, GUID_BOT, "https://sandbox.example.test/tunnel/path")
 
         manifest = module.render(TEMPLATE, GUID_APP, GUID_BOT, "https://sandbox.example.test")
         manifest["bots"][0]["scopes"].append("personal")
         with self.assertRaisesRegex(ValueError, "scopes"):
+            module.validate_manifest(manifest)
+
+    def test_renderer_rejects_schema_length_drift(self):
+        manifest = module.render(TEMPLATE, GUID_APP, GUID_BOT, "https://sandbox.example.test")
+        manifest["developer"]["name"] = "x" * 33
+        with self.assertRaisesRegex(ValueError, "32-character"):
             module.validate_manifest(manifest)
 
     def test_renderer_cli_writes_only_rendered_manifest(self):
