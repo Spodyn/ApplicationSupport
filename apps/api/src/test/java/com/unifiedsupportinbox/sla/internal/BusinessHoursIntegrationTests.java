@@ -137,7 +137,7 @@ class BusinessHoursIntegrationTests {
         assertThat(updated.statusCode()).isEqualTo(200);
         assertThat(updated.body())
                 .contains("\"timezone\":\"Europe/Warsaw\"")
-                .contains("\"updatedBy\":\"schedule-admin@example.com\"")
+                .contains("\"updatedBy\":\"" + delegatedId + "\"")
                 .contains("\"dayOfWeek\":3")
                 .doesNotContain("\"dayOfWeek\":2");
         assertThat(queryInt("SELECT count(*) FROM business_hours WHERE active = TRUE")).isEqualTo(1);
@@ -145,7 +145,7 @@ class BusinessHoursIntegrationTests {
         assertThat(jdbc.queryForObject(
                         "SELECT updated_by FROM business_hours WHERE active = TRUE",
                         String.class))
-                .isEqualTo("schedule-admin@example.com");
+                .isEqualTo(delegatedId.toString());
     }
 
     @Test
