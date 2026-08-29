@@ -13,9 +13,12 @@ public final class ApiV1Conventions {
     public static final String CURSOR_QUERY_PARAMETER = "cursor";
     public static final String LIMIT_QUERY_PARAMETER = "limit";
     public static final String SORT_QUERY_PARAMETER = "sort";
+    public static final String IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
     public static final int DEFAULT_PAGE_SIZE = 50;
     public static final int MAX_PAGE_SIZE = 100;
+    public static final int MAX_IDEMPOTENCY_KEY_LENGTH = 128;
     public static final Duration CURSOR_TTL = Duration.ofHours(24);
+    public static final Duration IDEMPOTENCY_RETENTION = Duration.ofHours(24);
 
     private ApiV1Conventions() {
     }

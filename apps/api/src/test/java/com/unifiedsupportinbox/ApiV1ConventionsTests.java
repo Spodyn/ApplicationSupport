@@ -3,6 +3,7 @@ package com.unifiedsupportinbox;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -11,11 +12,14 @@ import org.junit.jupiter.api.Test;
 class ApiV1ConventionsTests {
 
     @Test
-    void freezesApiV1PathQueryNamesPageSizesAndUtcTimestampFormat() {
+    void freezesApiV1PathQueryNamesPageSizesUtcAndIdempotencyConventions() {
         assertThat(ApiV1Conventions.BASE_PATH).isEqualTo("/api/v1");
         assertThat(ApiV1Conventions.CURSOR_QUERY_PARAMETER).isEqualTo("cursor");
         assertThat(ApiV1Conventions.LIMIT_QUERY_PARAMETER).isEqualTo("limit");
         assertThat(ApiV1Conventions.SORT_QUERY_PARAMETER).isEqualTo("sort");
+        assertThat(ApiV1Conventions.IDEMPOTENCY_KEY_HEADER).isEqualTo("Idempotency-Key");
+        assertThat(ApiV1Conventions.MAX_IDEMPOTENCY_KEY_LENGTH).isEqualTo(128);
+        assertThat(ApiV1Conventions.IDEMPOTENCY_RETENTION).isEqualTo(Duration.ofHours(24));
         assertThat(ApiV1Conventions.pageSize(null)).isEqualTo(50);
         assertThat(ApiV1Conventions.pageSize(100)).isEqualTo(100);
         assertThatThrownBy(() -> ApiV1Conventions.pageSize(0)).isInstanceOf(IllegalArgumentException.class);
