@@ -1,9 +1,10 @@
 # Slack development sandbox setup
 
 This guide is the development-only setup contract for the Unified Support Inbox
-Slack integration (`E12-T01`). It explains how to create an isolated Slack app,
-which permissions and Events API subscriptions are required, how to expose the
-local callback through HTTPS, and where credentials may be stored.
+Slack integration (`E12-T01` / `E12-T02`). It explains how to create an isolated
+Slack app, which permissions and Events API subscriptions are required, how to
+expose the local callback through HTTPS, and how the runtime resolves the Slack
+signing secret without storing credentials in application configuration.
 
 Do **not** use a production Slack workspace, production credentials, or a shared
 production integration while following this guide.
@@ -23,13 +24,8 @@ directly to a browser-only endpoint and do not introduce a second callback path.
 
 The same URL belongs in the ignored local `.env` as
 `USI_SLACK_CALLBACK_URL`. The checked-in `.env.example` contains only an inert
-`.invalid` placeholder.
-
-`E12-T01` documents this contract. The actual request handler, URL verification,
-signature verification, durable ingest and fast acknowledgement are implemented
-by `E12-T02` (`USI-128`). Until that endpoint exists on the branch/environment
-you are running, Slack Request URL verification is expected to fail. Do not work
-around that by adding a temporary unauthenticated endpoint.
+`.invalid` placeholder. Runtime configuration rejects retired pre-E12 Slack
+callback routes.
 
 ## 1. Create an isolated Slack app
 
@@ -120,31 +116,47 @@ A valid public TLS certificate is required. If the tunnel hostname changes,
 update both the Slack Events API Request URL and `USI_SLACK_CALLBACK_URL` so they
 stay identical.
 
-## 5. Install the app and capture credentials safely
+## 5. Install the app and configure `secret_ref`
 
 Install/reinstall the Slack app to the development workspace after the scopes
 are correct.
 
-Two sensitive values are needed by the provider implementation:
+Two sensitive values are associated with the Slack integration:
 
 - **Signing Secret** from the app's Basic Information/App Credentials area.
 - **Bot User OAuth Token** from OAuth & Permissions after installation.
 
-Treat both as secrets. For local development, keep them outside the repository
-under the permission-restricted integration-secret root configured by
-`USI_INTEGRATION_SECRETS_DIRECTORY`. A developer may use a private subdirectory
-such as `slack-dev/` with separate secret files, but the file names and
-`secret_ref` resolver syntax are intentionally not invented by this guide.
+`E12-T02` currently consumes only the signing secret. The bot token is needed by
+later outbound Slack work and must follow the same external-secret boundary.
 
-`Integration.secret_ref` is the only persisted credential locator. The database
-must never store the resolved signing secret or bot token in `secret_ref`,
-`config_json`, workspace fields, errors, audit events, or raw payloads. The
-future resolver/provider adapter owns how the opaque reference maps to the local
-files or deployment secret store.
+`Integration.secret_ref` is an opaque **relative directory reference** below the
+root configured by `USI_INTEGRATION_SECRETS_DIRECTORY`. For example, an
+integration may persist the non-secret locator:
 
-Use filesystem permissions equivalent to owner-only access for local secret
-material. Avoid shell commands that embed the secret value directly, because
-shell history is also plaintext storage.
+```text
+slack/development-workspace
+```
+
+The runtime then resolves the signing secret from:
+
+```text
+<USI_INTEGRATION_SECRETS_DIRECTORY>/<secret_ref>/slack-signing-secret
+```
+
+The reference must be relative, may not contain traversal/backslash segments,
+and the resolved file must remain physically below the configured secret root.
+The resolver follows the same mounted-file model for `filesystem` and
+`configtree` backends and does not bulk-import provider secrets into Spring's
+Environment.
+
+Create the directory/file using a method that does not put the secret value in
+shell history. The signing-secret file must contain one non-empty value (an
+ordinary trailing newline is accepted) and should have owner-only filesystem
+permissions. Never commit that file or place it below the repository tree.
+
+The database must never store the resolved signing secret or bot token in
+`secret_ref`, `config_json`, workspace fields, errors, audit events, or raw
+payloads. `secret_ref` stores the locator only.
 
 ## 6. Add the bot to monitored conversations
 
@@ -159,27 +171,33 @@ access. After installation:
 Use test content only. Do not connect the development app to customer support
 channels.
 
-## 7. Request verification contract for `USI-128`
+## 7. Request verification and acknowledgement contract
 
-The implementation in the next ticket must preserve these Slack HTTP rules:
+The implemented Slack HTTP boundary preserves these rules:
 
 1. Read the **raw request body before JSON parsing**.
 2. Read `X-Slack-Request-Timestamp` and `X-Slack-Signature`.
-3. Reject stale requests outside the replay window (Slack's documented example
-   uses five minutes).
+3. Reject timestamps outside the five-minute replay window.
 4. Build the Slack v0 signature base string from the version, timestamp and
    exact raw body; verify HMAC-SHA256 with the signing secret using a
    timing-safe comparison.
-5. Handle `type=url_verification` only after the request authenticity check and
+5. Resolve candidate signing secrets only from non-disabled Slack Integrations;
+   after signature verification, use the payload `team_id` to select the exact
+   configured workspace (or one not-yet-bound configuring integration).
+6. Handle `type=url_verification` only after request authenticity succeeds and
    return the supplied challenge in the required response shape.
-6. For normal event callbacks, durably accept/deduplicate the inbound event and
-   acknowledge with HTTP 2xx quickly. Heavy business processing must not run in
-   the request thread; Slack expects an acknowledgement within three seconds.
-7. Never log the signing secret, bot token, complete authorization headers, or a
+7. For `event_callback`, require `event_id`, durably write/deduplicate the
+   authenticated delivery in `inbound_events`, and only then return HTTP 2xx.
+8. Heavy normalization/case processing does not run in the request thread; later
+   tickets consume the durable inbound row asynchronously/idempotently.
+9. Never log the signing secret, bot token, complete authorization headers, or a
    secret-bearing diagnostic dump.
 
 The deprecated verification token from a URL verification payload is not a
-replacement for signing-secret verification.
+replacement for signing-secret verification. The webhook endpoint is exempt
+from browser CSRF because Slack cannot supply a browser CSRF token, but only the
+exact POST callback route is anonymous/CSRF-exempt; authenticity is enforced by
+the Slack HMAC boundary itself.
 
 ## 8. Application-side metadata
 
@@ -206,13 +224,15 @@ Before considering the development Slack app ready for provider work, confirm:
   `/api/v1/providers/slack/events` and use the same public HTTPS tunnel origin;
 - the tunnel forwards to local web port `3000`;
 - `.env` is ignored by Git and contains no Slack secrets;
-- signing secret and bot token exist only in an approved local/deployment secret
-  store outside the repository;
+- the Integration row has a relative `secret_ref` and the corresponding
+  `slack-signing-secret` file exists only below the approved external
+  integration-secret root;
 - no token/signing-secret value is present in `git diff`, logs, Jira, screenshots
   committed to the repo, or browser-visible configuration;
-- after `USI-128` is available, Slack shows the Request URL as verified and a
-  test message produces a valid signed event without requiring production
-  credentials.
+- Slack shows the Request URL as verified after the Integration/secret reference
+  is configured;
+- a signed test event receives HTTP 2xx and produces one durable `inbound_events`
+  row even when Slack retries the same `event_id`.
 
 ## Cleanup and rotation
 

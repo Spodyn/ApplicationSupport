@@ -76,6 +76,18 @@ class UsiConfigurationValidationTests {
     }
 
     @Test
+    void legacySlackCallbackPathIsRejected() {
+        contextRunner
+                .withPropertyValues(
+                        "usi.provider-callbacks.slack=https://example.invalid/api/v1/provider-callbacks/slack")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(causeMessages(context.getStartupFailure()))
+                            .contains("Slack must use its reviewed events path");
+                });
+    }
+
+    @Test
     void validatedLocalShapeStarts() {
         contextRunner.run(context -> assertThat(context).hasNotFailed());
     }
