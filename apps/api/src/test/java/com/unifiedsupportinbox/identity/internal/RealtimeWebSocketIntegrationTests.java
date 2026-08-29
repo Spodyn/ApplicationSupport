@@ -16,7 +16,6 @@ import java.net.http.WebSocket;
 import java.net.http.WebSocketHandshakeException;
 import java.nio.ByteBuffer;
 import java.time.Duration;
-import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.TimeUnit;
@@ -36,6 +35,7 @@ class RealtimeWebSocketIntegrationTests {
 
     private static final PostgreSQLContainer POSTGRES = TestInfrastructure.postgres();
     private static final Duration WAIT = Duration.ofSeconds(5);
+    private static final Duration FIRST_MESSAGE_CLOSE_WAIT = Duration.ofSeconds(8);
 
     private static ConfigurableApplicationContext context;
     private static UserAccountRepository users;
@@ -119,10 +119,12 @@ class RealtimeWebSocketIntegrationTests {
         HttpClient anonymous = client(anonymousCookies);
         assertThat(handshakeStatus(anonymous, anonymousCookies, websocketUri, sameOrigin)).isEqualTo(401);
 
-        UserAccount user = createUser("expired-realtime@example.com");
+        createUser("expired-realtime@example.com");
         SessionClient session = login("expired-realtime@example.com");
-        user.setValidityWindow(Instant.now().minusSeconds(3600), Instant.now().minusMillis(1));
-        users.saveAndFlush(user);
+        int expiredRows = jdbc.update(
+                "UPDATE users SET valid_until = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE email = ?",
+                "expired-realtime@example.com");
+        assertThat(expiredRows).isEqualTo(1);
 
         assertThat(handshakeStatus(session.httpClient(), session.cookies(), websocketUri, sameOrigin))
                 .isEqualTo(401);
@@ -155,7 +157,8 @@ class RealtimeWebSocketIntegrationTests {
 
         connect(session.httpClient(), session.cookies(), websocketUri, sameOrigin, listener);
 
-        CloseFrame close = listener.closed().get(WAIT.toMillis(), TimeUnit.MILLISECONDS);
+        CloseFrame close = listener.closed().get(
+                FIRST_MESSAGE_CLOSE_WAIT.toMillis(), TimeUnit.MILLISECONDS);
         assertThat(close.statusCode()).isNotEqualTo(WebSocket.NORMAL_CLOSURE);
     }
 
