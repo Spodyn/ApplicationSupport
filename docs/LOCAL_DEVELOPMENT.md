@@ -151,10 +151,14 @@ through a public HTTPS tunnel and configure provider callback URLs below that
 origin, for example:
 
 ```text
-https://<dev-tunnel-host>/api/v1/provider-callbacks/slack
+https://<dev-tunnel-host>/api/v1/providers/slack/events
 https://<dev-tunnel-host>/api/v1/provider-callbacks/teams
 https://<dev-tunnel-host>/api/v1/provider-callbacks/telegram
 ```
+
+Slack's exact scopes, Events API subscriptions, credential boundary, install
+steps and URL-verification expectations are documented in
+[`SLACK_DEVELOPMENT.md`](SLACK_DEVELOPMENT.md).
 
 The tunnel should forward to the local web port; the same `/api` rewrite then
 reaches Spring Boot. Do not expose provider credentials to the browser and do not

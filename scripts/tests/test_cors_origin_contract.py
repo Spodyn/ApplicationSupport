@@ -24,7 +24,7 @@ class CorsOriginContractTest(unittest.TestCase):
         return {
             "SPRING_PROFILES_ACTIVE": "staging",
             "USI_PUBLIC_BASE_URL": "https://staging.example.invalid",
-            "USI_SLACK_CALLBACK_URL": "https://staging.example.invalid/api/v1/provider-callbacks/slack",
+            "USI_SLACK_CALLBACK_URL": "https://staging.example.invalid/api/v1/providers/slack/events",
             "USI_TEAMS_CALLBACK_URL": "https://staging.example.invalid/api/v1/provider-callbacks/teams",
             "USI_TELEGRAM_CALLBACK_URL": "https://staging.example.invalid/api/v1/provider-callbacks/telegram",
             "USI_CORS_ALLOWED_ORIGINS": cors_origins,
