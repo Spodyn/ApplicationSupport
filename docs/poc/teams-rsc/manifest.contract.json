@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "ticket": "USI-179",
+  "reviewedOn": "2026-08-29",
+  "productScopeDecision": "DEC-TEAMS-001",
+  "manifest": {
+    "minimumManifestVersion": "1.12",
+    "botScopes": [
+      "team",
+      "groupchat"
+    ],
+    "resourceSpecificPermissions": [
+      {
+        "name": "ChannelMessage.Read.Group",
+        "type": "Application",
+        "resource": "team"
+      },
+      {
+        "name": "ChatMessage.Read.Chat",
+        "type": "Application",
+        "resource": "chat"
+      }
+    ],
+    "forbiddenTenantWideMessagePermissions": [
+      "ChannelMessage.Read.All",
+      "Chat.Read.All",
+      "Chat.ReadWrite.All"
+    ],
+    "requiresWebApplicationInfo": true,
+    "credentialsCommitted": false
+  },
+  "contexts": [
+    {
+      "id": "standard_channel",
+      "vendorAppCapability": "SUPPORTED",
+      "v1Disposition": "SUPPORTED",
+      "installScope": "team",
+      "rscPermission": "ChannelMessage.Read.Group",
+      "receiveWithoutMention": true,
+      "liveSandboxSmokeOwner": "USI-180"
+    },
+    {
+      "id": "group_chat",
+      "vendorAppCapability": "SUPPORTED",
+      "v1Disposition": "SUPPORTED",
+      "installScope": "groupchat",
+      "rscPermission": "ChatMessage.Read.Chat",
+      "receiveWithoutMention": true,
+      "requiresNewOrReinstallationAfterReceiveAllPermission": true,
+      "liveSandboxSmokeOwner": "USI-180"
+    },
+    {
+      "id": "private_channel",
+      "vendorAppCapability": "SUPPORTED_WITH_CHANNEL_ENABLEMENT",
+      "v1Disposition": "DEFERRED",
+      "installScope": "channel_specific_after_host_team_install",
+      "receiveWithoutMention": null,
+      "requiredBeforeFutureEnablement": [
+        "explicit product scope decision",
+        "channel membership isolation test",
+        "channel add/remove lifecycle test",
+        "attachment and storage boundary test",
+        "non-mention inbound delivery test"
+      ]
+    },
+    {
+      "id": "shared_channel",
+      "vendorAppCapability": "SUPPORTED_WITH_CHANNEL_ENABLEMENT",
+      "v1Disposition": "DEFERRED",
+      "installScope": "channel_specific_after_host_team_install",
+      "receiveWithoutMention": null,
+      "requiredBeforeFutureEnablement": [
+        "explicit product scope decision",
+        "same-tenant membership test",
+        "cross-tenant identity and membership test",
+        "host-team and host-tenant context test",
+        "channel add/remove lifecycle test",
+        "attachment and storage boundary test",
+        "non-mention inbound delivery test"
+      ]
+    },
+    {
+      "id": "personal_chat",
+      "vendorAppCapability": "SUPPORTED_BY_TEAMS_PLATFORM",
+      "v1Disposition": "OUT_OF_SCOPE",
+      "installScope": "personal",
+      "receiveWithoutMention": null
+    }
+  ],
+  "sources": [
+    "https://learn.microsoft.com/en-us/microsoftteams/platform/bots/how-to/conversations/channel-messages-for-bots-and-agents",
+    "https://learn.microsoft.com/en-us/microsoftteams/platform/graph-api/rsc/grant-resource-specific-consent",
+    "https://learn.microsoft.com/en-us/microsoftteams/platform/graph-api/rsc/resource-specific-consent",
+    "https://learn.microsoft.com/en-us/microsoftteams/platform/build-apps-for-shared-private-channels",
+    "https://learn.microsoft.com/en-us/graph/teams-changenotifications-chatmessage"
+  ]
+}
