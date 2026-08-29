@@ -2,21 +2,18 @@ package com.unifiedsupportinbox.identity.internal;
 
 import com.password4j.Argon2Function;
 import com.password4j.types.Argon2;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.crypto.password4j.Argon2Password4jPasswordEncoder;
 
 final class Argon2CredentialEncoder implements PasswordEncoder {
 
-    private static final int CURRENT_ARGON2_VERSION = 19;
-    private static final Pattern PHC_PATTERN = Pattern.compile(
-            "^\\$argon2id\\$v=(\\d+)\\$m=(\\d+),t=(\\d+),p=(\\d+)\\$[^$]+\\$[^$]+$");
+    private static final int CURRENT_ARGON2_VERSION = Argon2Function.ARGON2_VERSION_13;
 
     private final PasswordEncoder delegate;
     private final int memoryKib;
     private final int iterations;
     private final int parallelism;
+    private final int hashLengthBytes;
 
     Argon2CredentialEncoder(
             int memoryKib,
@@ -29,6 +26,7 @@ final class Argon2CredentialEncoder implements PasswordEncoder {
         this.memoryKib = memoryKib;
         this.iterations = iterations;
         this.parallelism = parallelism;
+        this.hashLengthBytes = hashLengthBytes;
         this.delegate = new Argon2Password4jPasswordEncoder(
                 Argon2Function.getInstance(
                         memoryKib,
@@ -45,7 +43,16 @@ final class Argon2CredentialEncoder implements PasswordEncoder {
 
     @Override
     public boolean matches(CharSequence rawPassword, String encodedPassword) {
-        return delegate.matches(rawPassword, encodedPassword);
+        if (rawPassword == null || encodedPassword == null || encodedPassword.isBlank()) {
+            return false;
+        }
+
+        try {
+            Argon2Function storedFunction = Argon2Function.getInstanceFromHash(encodedPassword);
+            return storedFunction.check(rawPassword, encodedPassword);
+        } catch (RuntimeException malformedEncoding) {
+            return false;
+        }
     }
 
     @Override
@@ -54,25 +61,21 @@ final class Argon2CredentialEncoder implements PasswordEncoder {
             return false;
         }
 
-        Matcher matcher = PHC_PATTERN.matcher(encodedPassword);
-        if (!matcher.matches()) {
-            return true;
-        }
-
         try {
-            int version = Integer.parseInt(matcher.group(1));
-            if (version > CURRENT_ARGON2_VERSION) {
+            Argon2Function storedFunction = Argon2Function.getInstanceFromHash(encodedPassword);
+            if (storedFunction.getVariant() != Argon2.ID) {
+                return true;
+            }
+            if (storedFunction.getVersion() > CURRENT_ARGON2_VERSION) {
                 return false;
             }
-            int storedMemory = Integer.parseInt(matcher.group(2));
-            int storedIterations = Integer.parseInt(matcher.group(3));
-            int storedParallelism = Integer.parseInt(matcher.group(4));
 
-            return version < CURRENT_ARGON2_VERSION
-                    || storedMemory < memoryKib
-                    || storedIterations < iterations
-                    || storedParallelism < parallelism;
-        } catch (NumberFormatException invalidEncoding) {
+            return storedFunction.getVersion() < CURRENT_ARGON2_VERSION
+                    || storedFunction.getMemory() < memoryKib
+                    || storedFunction.getIterations() < iterations
+                    || storedFunction.getParallelism() < parallelism
+                    || storedFunction.getOutputLength() < hashLengthBytes;
+        } catch (RuntimeException malformedEncoding) {
             return true;
         }
     }
