@@ -59,6 +59,7 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers(
                                 "/api/v1/auth/logout",
                                 "/api/v1/auth/me").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/users/*/permissions").authenticated()
                         .anyRequest().denyAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")

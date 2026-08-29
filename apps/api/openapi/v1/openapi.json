@@ -133,6 +133,90 @@
           }
         }
       }
+    },
+    "/api/v1/users/{userId}/permissions": {
+      "put": {
+        "operationId": "updateUserPermissions",
+        "summary": "Replace a user's explicit permission assignments",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PermissionUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated permission assignments",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPermissions"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid permission code",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Administrator role required or CSRF validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "User not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -230,7 +314,21 @@
       "EffectivePermission": {
         "type": "string",
         "maxLength": 128,
-        "description": "Stable effective permission key. Empty until the permission catalog is introduced by E04-T07."
+        "description": "Stable effective permission key from the deployment permission catalog."
+      },
+      "PermissionCode": {
+        "type": "string",
+        "enum": [
+          "manage_users",
+          "manage_integrations",
+          "manage_sla",
+          "manage_schedule",
+          "manage_notifications",
+          "view_global_statistics",
+          "reassign_cases",
+          "force_resolve",
+          "view_audit"
+        ]
       },
       "CurrentSession": {
         "type": "object",
@@ -292,6 +390,51 @@
             "minLength": 1,
             "maxLength": 128,
             "writeOnly": true
+          }
+        }
+      },
+      "PermissionUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/PermissionCode"
+            }
+          }
+        }
+      },
+      "UserPermissions": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "userId",
+          "explicitPermissions",
+          "effectivePermissions"
+        ],
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "explicitPermissions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/PermissionCode"
+            }
+          },
+          "effectivePermissions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/EffectivePermission"
+            }
           }
         }
       }
