@@ -47,7 +47,7 @@ final class CanonicalRequestHasher {
             ObjectNode object = objectMapper.createObjectNode();
             List<String> properties = new ArrayList<>(node.propertyNames());
             Collections.sort(properties);
-            properties.forEach(property -> object.set(property, canonicalize(node.get(property))));
+            properties.forEach(property -> object.replace(property, canonicalize(node.get(property))));
             return object;
         }
         throw new IllegalArgumentException("unsupported JSON node for idempotency hashing");
