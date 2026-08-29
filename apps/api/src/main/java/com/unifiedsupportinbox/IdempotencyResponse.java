@@ -1,7 +1,7 @@
 package com.unifiedsupportinbox;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.NullNode;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.NullNode;
 
 /** Response persisted for deterministic replay after the business transaction commits. */
 public record IdempotencyResponse(int status, JsonNode body) {

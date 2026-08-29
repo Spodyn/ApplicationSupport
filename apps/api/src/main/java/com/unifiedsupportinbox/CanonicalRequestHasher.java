@@ -7,12 +7,12 @@ import java.util.Collections;
 import java.util.HexFormat;
 import java.util.List;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.ObjectNode;
 
 @Component
 final class CanonicalRequestHasher {
@@ -29,7 +29,7 @@ final class CanonicalRequestHasher {
         try {
             byte[] encoded = objectMapper.writeValueAsBytes(canonical);
             return HexFormat.of().formatHex(sha256().digest(encoded));
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalArgumentException("request cannot be canonicalized for idempotency", exception);
         }
     }
@@ -45,10 +45,9 @@ final class CanonicalRequestHasher {
         }
         if (node.isObject()) {
             ObjectNode object = objectMapper.createObjectNode();
-            List<String> fields = new ArrayList<>();
-            node.fieldNames().forEachRemaining(fields::add);
-            Collections.sort(fields);
-            fields.forEach(field -> object.set(field, canonicalize(node.get(field))));
+            List<String> properties = new ArrayList<>(node.propertyNames());
+            Collections.sort(properties);
+            properties.forEach(property -> object.set(property, canonicalize(node.get(property))));
             return object;
         }
         throw new IllegalArgumentException("unsupported JSON node for idempotency hashing");
