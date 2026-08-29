@@ -4,10 +4,11 @@
   "reviewedOn": "2026-08-29",
   "productScopeDecision": "DEC-TEAMS-001",
   "manifest": {
-    "minimumManifestVersion": "1.12",
+    "manifestVersion": "1.21",
+    "schemaUrl": "https://developer.microsoft.com/json-schemas/teams/v1.21/MicrosoftTeams.schema.json",
     "botScopes": [
       "team",
-      "groupchat"
+      "groupChat"
     ],
     "resourceSpecificPermissions": [
       {
@@ -43,7 +44,7 @@
       "id": "group_chat",
       "vendorAppCapability": "SUPPORTED",
       "v1Disposition": "SUPPORTED",
-      "installScope": "groupchat",
+      "installScope": "groupChat",
       "rscPermission": "ChatMessage.Read.Chat",
       "receiveWithoutMention": true,
       "requiresNewOrReinstallationAfterReceiveAllPermission": true,
@@ -92,6 +93,7 @@
     "https://learn.microsoft.com/en-us/microsoftteams/platform/graph-api/rsc/grant-resource-specific-consent",
     "https://learn.microsoft.com/en-us/microsoftteams/platform/graph-api/rsc/resource-specific-consent",
     "https://learn.microsoft.com/en-us/microsoftteams/platform/build-apps-for-shared-private-channels",
-    "https://learn.microsoft.com/en-us/graph/teams-changenotifications-chatmessage"
+    "https://learn.microsoft.com/en-us/graph/teams-changenotifications-chatmessage",
+    "https://developer.microsoft.com/json-schemas/teams/v1.21/MicrosoftTeams.schema.json"
   ]
 }
