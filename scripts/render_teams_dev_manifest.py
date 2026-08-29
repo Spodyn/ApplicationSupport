@@ -40,6 +40,14 @@ def https_url(value: str, label: str) -> str:
     return value.rstrip("/")
 
 
+def https_origin(value: str, label: str) -> str:
+    value = https_url(value, label)
+    parsed = urlparse(value)
+    if parsed.path not in ("", "/") or parsed.params:
+        raise ValueError(f"{label} must be an HTTPS origin without a path")
+    return value.rstrip("/")
+
+
 def replace(value, replacements: dict[str, str]):
     if isinstance(value, str):
         for key, replacement in replacements.items():
@@ -55,6 +63,18 @@ def replace(value, replacements: dict[str, str]):
 def validate_manifest(manifest: dict) -> None:
     if manifest.get("$schema") != EXPECTED_SCHEMA or manifest.get("manifestVersion") != "1.21":
         raise ValueError("Teams manifest must use the reviewed v1.21 schema")
+
+    developer = manifest.get("developer") or {}
+    if not developer.get("name") or len(developer["name"]) > 32:
+        raise ValueError("developer.name must satisfy the Teams manifest 32-character limit")
+    short_name = (manifest.get("name") or {}).get("short", "")
+    if not short_name or len(short_name) > 30:
+        raise ValueError("name.short must satisfy the Teams manifest 30-character limit")
+    description = manifest.get("description") or {}
+    if not description.get("short") or len(description["short"]) > 80:
+        raise ValueError("description.short must satisfy the Teams manifest 80-character limit")
+    if not description.get("full") or len(description["full"]) > 4000:
+        raise ValueError("description.full must satisfy the Teams manifest 4000-character limit")
 
     serialized = json.dumps(manifest, sort_keys=True)
     if any(marker in serialized for marker in PLACEHOLDERS):
@@ -93,7 +113,7 @@ def validate_manifest(manifest: dict) -> None:
         raise ValueError("tenant-wide message-read permissions are forbidden")
 
     for field in ("websiteUrl", "privacyUrl", "termsOfUseUrl"):
-        https_url(manifest.get("developer", {}).get(field, ""), f"developer.{field}")
+        https_url(developer.get(field, ""), f"developer.{field}")
     if app_id == bot_id:
         # Supported, but make the relationship explicit rather than accidentally depending on it.
         pass
@@ -102,7 +122,7 @@ def validate_manifest(manifest: dict) -> None:
 def render(template_path: Path, app_id: str, bot_client_id: str, public_base_url: str) -> dict:
     app_id = guid(app_id, "Teams app id")
     bot_client_id = guid(bot_client_id, "Teams bot/Entra client id")
-    public_base_url = https_url(public_base_url, "public base URL")
+    public_base_url = https_origin(public_base_url, "public base URL")
     manifest = json.loads(template_path.read_text(encoding="utf-8"))
     manifest = replace(
         manifest,
