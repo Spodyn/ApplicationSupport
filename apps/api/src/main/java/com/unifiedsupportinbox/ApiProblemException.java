@@ -33,6 +33,15 @@ public final class ApiProblemException extends RuntimeException {
                 null);
     }
 
+    public static ApiProblemException invalidCredentials() {
+        return new ApiProblemException(
+                ApiProblemCode.AUTHENTICATION_REQUIRED,
+                HttpStatus.UNAUTHORIZED,
+                "Authentication failed",
+                "Invalid email or password.",
+                null);
+    }
+
     public static ApiProblemException accessDenied() {
         return new ApiProblemException(
                 ApiProblemCode.ACCESS_DENIED,

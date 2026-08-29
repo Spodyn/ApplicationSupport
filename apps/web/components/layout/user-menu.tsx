@@ -27,6 +27,7 @@ import {
 import { UserAvatar } from "@/components/design-system/user-avatar"
 import { notify } from "@/components/design-system/notify"
 import { userRoleLabels } from "@/lib/domain/labels"
+import { useLogout } from "@/lib/services/auth-queries"
 import { useCurrentUser } from "@/lib/services/queries"
 
 const subscribe = () => () => {}
@@ -42,6 +43,7 @@ export function UserMenu({
 }) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const logout = useLogout()
   const { resolvedTheme, setTheme } = useTheme()
   const { data: user } = useCurrentUser()
   const mounted = useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot)
@@ -57,6 +59,17 @@ export function UserMenu({
       notify.success("Dane odświeżone", "Widok pokazuje najnowsze dostępne informacje.")
     } finally {
       setRefreshing(false)
+    }
+  }
+
+  const signOut = async () => {
+    try {
+      await logout.mutateAsync()
+      queryClient.clear()
+      router.replace("/login")
+      notify.message("Wylogowano", "Sesja została zakończona.")
+    } catch {
+      notify.message("Nie udało się wylogować", "Spróbuj ponownie.")
     }
   }
 
@@ -170,10 +183,11 @@ export function UserMenu({
         <DropdownMenuItem
           variant="destructive"
           className="min-h-9 px-2"
-          onClick={() => notify.message("Wylogowano", "To makieta — sesja nie jest zarządzana.")}
+          disabled={logout.isPending}
+          onClick={() => void signOut()}
         >
           <LogOut />
-          Wyloguj się
+          {logout.isPending ? "Wylogowywanie…" : "Wyloguj się"}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

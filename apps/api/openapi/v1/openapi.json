@@ -5,16 +5,152 @@
     "version": "1.0.0",
     "description": "Frozen v1 transport contract for Unified Support Inbox."
   },
-  "paths": {},
+  "paths": {
+    "/api/v1/auth/login": {
+      "post": {
+        "operationId": "login",
+        "summary": "Create an authenticated server-side session",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid credentials",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "Invalidate the current server-side session",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session invalidated"
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "CSRF validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/auth/me": {
+      "get": {
+        "operationId": "getCurrentSession",
+        "summary": "Read the current authenticated user and effective permissions",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current authenticated session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CurrentSession"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
   "components": {
     "schemas": {
       "Channel": {
         "type": "string",
-        "enum": ["SLACK", "TEAMS", "TELEGRAM"]
+        "enum": [
+          "SLACK",
+          "TEAMS",
+          "TELEGRAM"
+        ]
       },
       "CursorDirection": {
         "type": "string",
-        "enum": ["ASC", "DESC"]
+        "enum": [
+          "ASC",
+          "DESC"
+        ]
       },
       "ApiProblemCode": {
         "type": "string",
@@ -34,27 +170,138 @@
       "FieldError": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["field", "message"],
+        "required": [
+          "field",
+          "message"
+        ],
         "properties": {
-          "field": {"type": "string"},
-          "message": {"type": "string"}
+          "field": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
         }
       },
       "ApiProblem": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["code", "title", "status", "detail", "correlationId"],
+        "required": [
+          "code",
+          "title",
+          "status",
+          "detail",
+          "correlationId"
+        ],
         "properties": {
-          "code": {"$ref": "#/components/schemas/ApiProblemCode"},
-          "title": {"type": "string"},
-          "status": {"type": "integer", "minimum": 400, "maximum": 599},
-          "detail": {"type": "string"},
-          "correlationId": {"type": "string", "maxLength": 128},
+          "code": {
+            "$ref": "#/components/schemas/ApiProblemCode"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 400,
+            "maximum": 599
+          },
+          "detail": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string",
+            "maxLength": 128
+          },
           "fieldErrors": {
             "type": "array",
-            "items": {"$ref": "#/components/schemas/FieldError"}
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            }
           }
         }
+      },
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "USER",
+          "ADMIN"
+        ]
+      },
+      "EffectivePermission": {
+        "type": "string",
+        "maxLength": 128,
+        "description": "Stable effective permission key. Empty until the permission catalog is introduced by E04-T07."
+      },
+      "CurrentSession": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "email",
+          "displayName",
+          "role",
+          "createdAt",
+          "effectivePermissions"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 320
+          },
+          "displayName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "effectivePermissions": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "$ref": "#/components/schemas/EffectivePermission"
+            }
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "email",
+          "password"
+        ],
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 320
+          },
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "writeOnly": true
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "USI_SESSION",
+        "description": "Server-side Spring Session identifier."
       }
     }
   }
