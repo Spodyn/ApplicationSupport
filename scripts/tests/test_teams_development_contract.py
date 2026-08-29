@@ -25,6 +25,7 @@ class TeamsDevelopmentContractTests(unittest.TestCase):
         self.assertEqual(template["$schema"], module.EXPECTED_SCHEMA)
         self.assertEqual(template["manifestVersion"], "1.21")
         self.assertEqual(template["id"], "__TEAMS_APP_ID__")
+        self.assertNotIn("packageName", template)
         self.assertLessEqual(len(template["developer"]["name"]), 32)
         self.assertLessEqual(len(template["name"]["short"]), 30)
         self.assertLessEqual(len(template["description"]["short"]), 80)
@@ -60,6 +61,11 @@ class TeamsDevelopmentContractTests(unittest.TestCase):
         manifest = module.render(TEMPLATE, GUID_APP, GUID_BOT, "https://sandbox.example.test")
         manifest["bots"][0]["scopes"].append("personal")
         with self.assertRaisesRegex(ValueError, "scopes"):
+            module.validate_manifest(manifest)
+
+        manifest = module.render(TEMPLATE, GUID_APP, GUID_BOT, "https://sandbox.example.test")
+        manifest["packageName"] = "com.unifiedsupportinbox.dev"
+        with self.assertRaisesRegex(ValueError, "packageName"):
             module.validate_manifest(manifest)
 
     def test_renderer_rejects_schema_length_drift(self):

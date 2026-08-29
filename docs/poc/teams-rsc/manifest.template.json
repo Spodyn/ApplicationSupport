@@ -3,7 +3,6 @@
   "manifestVersion": "1.21",
   "version": "0.1.0",
   "id": "__TEAMS_APP_ID__",
-  "packageName": "com.unifiedsupportinbox.dev",
   "developer": {
     "name": "Unified Support Inbox Dev",
     "websiteUrl": "https://example.invalid",

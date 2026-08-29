@@ -63,6 +63,8 @@ def replace(value, replacements: dict[str, str]):
 def validate_manifest(manifest: dict) -> None:
     if manifest.get("$schema") != EXPECTED_SCHEMA or manifest.get("manifestVersion") != "1.21":
         raise ValueError("Teams manifest must use the reviewed v1.21 schema")
+    if "packageName" in manifest:
+        raise ValueError("packageName is not accepted by the current Teams v1.21 manifest validator")
 
     developer = manifest.get("developer") or {}
     if not developer.get("name") or len(developer["name"]) > 32:
