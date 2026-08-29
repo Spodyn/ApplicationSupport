@@ -12,6 +12,7 @@ cycles and references into another module's internal packages.
 - `customer` — customer/company domain and projections.
 - `integration` — provider installation/configuration model and health.
 - `channel` — provider-neutral monitored channel/conversation discovery, mapping and operational state.
+- `realtime` — authenticated WebSocket/STOMP transport and realtime delivery boundary.
 - `inbox` — inbox queries, user-specific read/snooze projections and views.
 - `messaging` — messages, conversation history and delivery lifecycle.
 - `workflow` — case commands and workflow state transitions.
@@ -41,3 +42,5 @@ must not depend on Slack, Teams or Telegram SDK types.
 Database table ownership is introduced by the domain persistence tickets; the
 `channel` module owns provider-neutral discovered Channel persistence while
 provider adapters supply only normalized discovery data through its public API.
+Realtime keeps connection state in memory only; PostgreSQL remains the source
+of truth and later E11 tickets publish minimal post-commit signals through this boundary.
