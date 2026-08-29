@@ -277,8 +277,8 @@ class SlackInboundWorkerIntegrationTests {
 
     private void assertWake(Message message, UUID eventId) {
         assertThat(message).isNotNull();
-        assertThat(new String(message.getBody(), StandardCharsets.UTF_8))
-                .contains("\"inboundEventId\":\"" + eventId + "\"");
+        String body = new String(message.getBody(), StandardCharsets.UTF_8).replace(" ", "");
+        assertThat(body).contains("\"inboundEventId\":\"" + eventId + "\"");
     }
 
     private InboundEvent current(UUID id) {
