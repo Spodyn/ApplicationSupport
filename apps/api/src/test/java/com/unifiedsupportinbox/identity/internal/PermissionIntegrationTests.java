@@ -130,8 +130,9 @@ class PermissionIntegrationTests {
         jdbc.update(
                 "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'view_audit')",
                 user.id());
-        user.setActive(false);
-        users.saveAndFlush(user);
+        UserAccount currentUser = users.findById(user.id()).orElseThrow();
+        currentUser.setActive(false);
+        users.saveAndFlush(currentUser);
         assertThat(permissions.effectivePermissions(user.id())).isEmpty();
     }
 
