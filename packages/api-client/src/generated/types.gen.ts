@@ -13,9 +13,27 @@ export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTIC
 
 export type Channel = "SLACK" | "TEAMS" | "TELEGRAM"
 
+export type CurrentSession = {
+  "id": string
+  "email": string
+  "displayName": string
+  "role": UserRole
+  "createdAt": string
+  "effectivePermissions": Array<EffectivePermission>
+}
+
 export type CursorDirection = "ASC" | "DESC"
+
+export type EffectivePermission = string
 
 export type FieldError = {
   "field": string
   "message": string
 }
+
+export type LoginRequest = {
+  "email": string
+  "password": string
+}
+
+export type UserRole = "USER" | "ADMIN"

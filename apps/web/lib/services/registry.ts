@@ -1,4 +1,4 @@
-import { mockCurrentUserRepository } from "./current-user"
+import { apiCurrentUserRepository } from "./api/auth-adapter"
 import { mockInboxRepository } from "./inbox"
 import { mockAdministrationSettingsRepository, mockAdministrationUserRepository } from "./administration"
 import { mockAnalyticsRepository } from "./analytics"
@@ -9,7 +9,7 @@ import { mockAnalyticsRepository } from "./analytics"
  * implementacje w tym rejestrze; komponenty i hooki zapytań pozostają bez zmian.
  */
 export const serviceRegistry = {
-  currentUser: mockCurrentUserRepository,
+  currentUser: apiCurrentUserRepository,
   inbox: mockInboxRepository,
   administrationUsers: mockAdministrationUserRepository,
   administrationSettings: mockAdministrationSettingsRepository,

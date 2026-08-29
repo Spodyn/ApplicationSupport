@@ -119,6 +119,10 @@ class UserAccount {
         return lastLoginAt;
     }
 
+    Instant createdAt() {
+        return createdAt;
+    }
+
     long version() {
         return version;
     }

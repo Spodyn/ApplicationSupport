@@ -1,14 +1,16 @@
-import type { User } from "@/lib/domain/shared"
-import { mockCurrentUser } from "@/mocks/users"
+import type { AuthenticatedUser, LoginCredentials } from "@/lib/domain/auth"
 
-export interface CurrentUserRepository {
-  get(): Promise<User>
+export const currentUserQueryKey = ["current-user"] as const
+
+export class AuthenticationRequiredError extends Error {
+  constructor() {
+    super("Authentication required")
+    this.name = "AuthenticationRequiredError"
+  }
 }
 
-export const mockCurrentUserRepository: CurrentUserRepository = {
-  async get() {
-    return new Promise((resolve) =>
-      setTimeout(() => resolve(structuredClone(mockCurrentUser)), 100),
-    )
-  },
+export interface CurrentUserRepository {
+  get(): Promise<AuthenticatedUser>
+  login(credentials: LoginCredentials): Promise<AuthenticatedUser>
+  logout(): Promise<void>
 }
