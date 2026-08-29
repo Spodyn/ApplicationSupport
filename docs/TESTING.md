@@ -68,6 +68,8 @@ Docelowy CI rozszerza frontend gate o:
 8. required security checks.
 
 Testy nigdy nie korzystają z production DB, storage ani provider credentials.
+The exact schema-change procedure and required clean/prior-snapshot upgrade
+evidence are defined in [MIGRATION_POLICY.md](MIGRATION_POLICY.md).
 
 ## Workflow i concurrency
 

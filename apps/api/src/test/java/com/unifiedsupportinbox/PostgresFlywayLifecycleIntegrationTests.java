@@ -6,6 +6,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.Objects;
 
 import com.unifiedsupportinbox.testing.TestInfrastructure;
 import org.flywaydb.core.Flyway;
@@ -65,6 +69,44 @@ class PostgresFlywayLifecycleIntegrationTests {
                 .isEqualTo(historyRowsAfterFirstStart);
     }
 
+    @Test
+    void upgradesAPreviousCommittedMigrationSnapshotWithoutChecksumOrPendingMigrations()
+            throws Exception {
+        cleanDatabase();
+        Path snapshot = Files.createTempDirectory("usi-flyway-v1-snapshot-");
+        try {
+            Path baseline = Path.of(Objects.requireNonNull(
+                    PostgresFlywayLifecycleIntegrationTests.class
+                            .getClassLoader()
+                            .getResource("db/migration/V1__baseline.sql"))
+                    .toURI());
+            Files.copy(baseline, snapshot.resolve("V1__baseline.sql"));
+
+            Flyway.configure()
+                    .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                    .locations("filesystem:" + snapshot.toAbsolutePath())
+                    .load()
+                    .migrate();
+            assertThat(queryInt("SELECT COUNT(*) FROM flyway_schema_history "
+                    + "WHERE success AND version = '1'"))
+                    .isEqualTo(1);
+
+            Flyway current = Flyway.configure()
+                    .dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                    .locations("classpath:db/migration")
+                    .load();
+            current.migrate();
+            current.validate();
+
+            assertThat(current.info().pending()).isEmpty();
+            assertThat(queryInt("SELECT COUNT(*) FROM flyway_schema_history WHERE success"))
+                    .isGreaterThan(1);
+            assertThat(tableExists("inbound_events")).isTrue();
+        } finally {
+            deleteRecursively(snapshot);
+        }
+    }
+
     private static ConfigurableApplicationContext startApplication() {
         return new SpringApplicationBuilder(UsiApiApplication.class)
                 .profiles("test")
@@ -120,5 +162,17 @@ class PostgresFlywayLifecycleIntegrationTests {
     private static Connection connection() throws SQLException {
         return DriverManager.getConnection(
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+    }
+
+    private static void deleteRecursively(Path directory) throws Exception {
+        try (var paths = Files.walk(directory)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(path -> {
+                try {
+                    Files.deleteIfExists(path);
+                } catch (Exception exception) {
+                    throw new IllegalStateException(exception);
+                }
+            });
+        }
     }
 }

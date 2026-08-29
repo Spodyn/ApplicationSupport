@@ -59,6 +59,10 @@ Readiness/smoke failure supports controlled rollback to the previous compatible 
 - Default PostgreSQL isolation: READ COMMITTED.
 - Provider HTTP calls are outside DB transactions.
 
+Every schema change follows the [migration safety policy](MIGRATION_POLICY.md). The
+policy's clean and prior-snapshot upgrade checks are release gates, not optional
+operator steps.
+
 ## 6. Observability
 
 ### Logs
