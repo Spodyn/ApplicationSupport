@@ -4,7 +4,6 @@ import com.unifiedsupportinbox.identity.UserRole;
 import java.nio.CharBuffer;
 import java.util.Objects;
 import java.util.UUID;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +18,7 @@ class BootstrapAdminService {
     BootstrapAdminService(
             UserAccountRepository users,
             BootstrapAdminStateRepository bootstrapState,
-            @Qualifier("bootstrapAdminPasswordEncoder") PasswordEncoder encoder) {
+            PasswordEncoder encoder) {
         this.users = users;
         this.bootstrapState = bootstrapState;
         this.encoder = encoder;
@@ -28,7 +27,13 @@ class BootstrapAdminService {
     @Transactional
     UUID bootstrap(String email, String displayName, char[] password) {
         Objects.requireNonNull(password, "password");
-        validatePassword(password);
+        try {
+            PasswordPolicy.validateForStorage(password);
+        } catch (IllegalArgumentException violation) {
+            throw new BootstrapAdminException(
+                    "bootstrap administrator " + violation.getMessage(),
+                    violation);
+        }
 
         BootstrapAdminStateRepository.State state = bootstrapState.lockSingleton();
         if (state.consumed()) {
@@ -49,19 +54,5 @@ class BootstrapAdminService {
                 null));
         bootstrapState.markConsumed(administrator.id());
         return administrator.id();
-    }
-
-    private static void validatePassword(char[] password) {
-        int characterCount = Character.codePointCount(password, 0, password.length);
-        if (characterCount < 12 || characterCount > 128) {
-            throw new BootstrapAdminException(
-                    "bootstrap administrator password must contain 12 to 128 Unicode characters");
-        }
-        for (char character : password) {
-            if (character == '\n' || character == '\r' || character == '\0') {
-                throw new BootstrapAdminException(
-                        "bootstrap administrator password must contain exactly one text line");
-            }
-        }
     }
 }

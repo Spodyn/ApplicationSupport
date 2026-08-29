@@ -3,7 +3,6 @@ package com.unifiedsupportinbox.identity.internal;
 import com.unifiedsupportinbox.ApiProblemException;
 import java.time.Instant;
 import java.util.Locale;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,7 +15,7 @@ class SessionAuthenticationService {
 
     SessionAuthenticationService(
             UserAccountRepository users,
-            @Qualifier("bootstrapAdminPasswordEncoder") PasswordEncoder encoder) {
+            PasswordEncoder encoder) {
         this.users = users;
         this.encoder = encoder;
     }
@@ -24,22 +23,25 @@ class SessionAuthenticationService {
     @Transactional
     UsiSessionPrincipal authenticate(String suppliedEmail, String suppliedPassword) {
         String email = normalizeEmail(suppliedEmail);
-        if (email == null || !isSupportedPasswordLength(suppliedPassword)) {
+        if (email == null || !PasswordPolicy.acceptsAuthenticationInput(suppliedPassword)) {
             throw ApiProblemException.invalidCredentials();
         }
 
         UserAccount user = users.findByEmailIgnoreCase(email)
                 .orElseThrow(ApiProblemException::invalidCredentials);
 
-        String storedCredential = user.passwordHash();
-        boolean matches = storedCredential != null
-                && encoder.matches(suppliedPassword, storedCredential);
+        String storedHash = user.passwordHash();
+        boolean matches = storedHash != null
+                && encoder.matches(suppliedPassword, storedHash);
         Instant now = Instant.now();
 
         if (!matches || !user.isSessionEligibleAt(now)) {
             throw ApiProblemException.invalidCredentials();
         }
 
+        if (encoder.upgradeEncoding(storedHash)) {
+            user.setPasswordHash(encoder.encode(suppliedPassword));
+        }
         user.recordSuccessfulLogin(now);
         return UsiSessionPrincipal.from(user);
     }
@@ -50,13 +52,5 @@ class SessionAuthenticationService {
         }
         String normalized = value.strip().toLowerCase(Locale.ROOT);
         return normalized.length() >= 3 && normalized.length() <= 320 ? normalized : null;
-    }
-
-    private static boolean isSupportedPasswordLength(String value) {
-        if (value == null || value.isEmpty()) {
-            return false;
-        }
-        int characters = value.codePointCount(0, value.length());
-        return characters <= 128;
     }
 }
