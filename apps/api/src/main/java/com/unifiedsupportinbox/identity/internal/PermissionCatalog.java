@@ -6,8 +6,10 @@ import java.util.Set;
 
 final class PermissionCatalog {
 
+    static final String MANAGE_USERS = "manage_users";
+
     static final List<String> ALL = List.of(
-            "manage_users",
+            MANAGE_USERS,
             "manage_integrations",
             "manage_sla",
             "manage_schedule",

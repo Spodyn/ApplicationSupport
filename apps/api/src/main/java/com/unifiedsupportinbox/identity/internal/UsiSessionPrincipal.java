@@ -5,6 +5,7 @@ import java.io.Serial;
 import java.io.Serializable;
 import java.security.Principal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.security.core.GrantedAuthority;
@@ -34,7 +35,12 @@ record UsiSessionPrincipal(
         return userId.toString();
     }
 
-    List<? extends GrantedAuthority> authorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
+    List<? extends GrantedAuthority> authorities(List<String> effectivePermissions) {
+        ArrayList<GrantedAuthority> authorities = new ArrayList<>();
+        authorities.add(new SimpleGrantedAuthority("ROLE_" + role.name()));
+        effectivePermissions.stream()
+                .map(SimpleGrantedAuthority::new)
+                .forEach(authorities::add);
+        return List.copyOf(authorities);
     }
 }

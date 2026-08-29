@@ -107,10 +107,13 @@ class AuthSessionIntegrationTests {
                 .contains("\"email\":\"agent@example.com\"")
                 .contains("\"displayName\":\"Agent Testowy\"")
                 .contains("\"role\":\"ADMIN\"")
-                .contains("\"effectivePermissions\":[]")
+                .contains("\"effectivePermissions\":[")
                 .contains("\"createdAt\":")
                 .doesNotContain("passwordHash")
                 .doesNotContain("password_hash");
+        for (String permission : PermissionCatalog.ALL) {
+            assertThat(login.body()).contains("\"" + permission + "\"");
+        }
 
         String setCookie = String.join("\n", login.headers().allValues("set-cookie"));
         assertThat(setCookie)

@@ -26,14 +26,24 @@ class PermissionService {
         return effectivePermissions(user);
     }
 
+    @Transactional(readOnly = true)
+    boolean hasPermission(UsiSessionPrincipal actor, String permission) {
+        return actor != null && effectivePermissions(actor.userId()).contains(permission);
+    }
+
+    @Transactional(readOnly = true)
+    void requirePermission(UsiSessionPrincipal actor, String permission) {
+        if (!hasPermission(actor, permission)) {
+            throw ApiProblemException.accessDenied();
+        }
+    }
+
     @Transactional
     PermissionSnapshot replaceExplicitPermissions(
             UsiSessionPrincipal actor,
             UUID userId,
             List<String> requestedPermissions) {
-        if (actor == null || actor.role() != UserRole.ADMIN) {
-            throw ApiProblemException.accessDenied();
-        }
+        requirePermission(actor, PermissionCatalog.MANAGE_USERS);
 
         UserAccount target = users.findById(userId)
                 .orElseThrow(() -> ApiProblemException.notFound("User was not found."));
@@ -52,7 +62,7 @@ class PermissionService {
                 effectivePermissions(target));
     }
 
-    private List<String> effectivePermissions(UserAccount user) {
+    List<String> effectivePermissions(UserAccount user) {
         if (!user.isSessionEligibleAt(Instant.now())) {
             return List.of();
         }

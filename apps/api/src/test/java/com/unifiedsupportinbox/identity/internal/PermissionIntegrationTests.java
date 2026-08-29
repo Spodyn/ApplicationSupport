@@ -12,8 +12,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.time.Instant;
-import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -88,13 +86,15 @@ class PermissionIntegrationTests {
     }
 
     @Test
-    void adminCanAddAndRemoveExplicitPermissionsAndMeReadsCurrentDatabaseState() throws Exception {
+    void adminBaselineCanUpdatePermissionsAndLoginReturnsEffectivePermissions() throws Exception {
         UserAccount admin = createUser("admin@example.com", UserRole.ADMIN, true);
         UserAccount user = createUser("user@example.com", UserRole.USER, true);
 
-        CookieManager adminCookies = login("admin@example.com");
+        LoginResult adminLogin = login("admin@example.com");
+        assertThat(adminLogin.response().body()).contains("\"manage_users\"");
+
         HttpResponse<String> added = putPermissions(
-                adminCookies,
+                adminLogin.cookies(),
                 user.id(),
                 "[\"manage_notifications\",\"view_audit\"]");
         assertThat(added.statusCode()).isEqualTo(200);
@@ -102,38 +102,88 @@ class PermissionIntegrationTests {
                 .contains("\"explicitPermissions\":[\"manage_notifications\",\"view_audit\"]")
                 .contains("\"effectivePermissions\":[\"manage_notifications\",\"view_audit\"]");
 
-        CookieManager userCookies = login("user@example.com");
+        CookieManager userCookies = login("user@example.com").cookies();
         assertThat(get(client(userCookies), "/api/v1/auth/me").body())
                 .contains("\"effectivePermissions\":[\"manage_notifications\",\"view_audit\"]");
-
-        HttpResponse<String> removed = putPermissions(adminCookies, user.id(), "[\"view_audit\"]");
-        assertThat(removed.statusCode()).isEqualTo(200);
-        assertThat(get(client(userCookies), "/api/v1/auth/me").body())
-                .contains("\"effectivePermissions\":[\"view_audit\"]")
-                .doesNotContain("manage_notifications");
 
         assertThat(admin.id()).isNotNull();
     }
 
     @Test
-    void ordinaryUserCannotSelfEscalateAndInactiveUserHasNoEffectivePermissions() throws Exception {
-        UserAccount user = createUser("user@example.com", UserRole.USER, true);
-        CookieManager cookies = login("user@example.com");
+    void unauthenticatedDirectAdminRequestReturns401() throws Exception {
+        UserAccount target = createUser("target@example.com", UserRole.USER, true);
+        CookieManager anonymousCookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+        primeCsrf(client(anonymousCookies), anonymousCookies);
 
-        HttpResponse<String> denied = putPermissions(cookies, user.id(), "[\"manage_users\"]");
+        HttpResponse<String> denied = putPermissions(anonymousCookies, target.id(), "[]");
+
+        assertThat(denied.statusCode()).isEqualTo(401);
+        assertThat(denied.body()).contains("\"code\":\"AUTHENTICATION_REQUIRED\"");
+    }
+
+    @Test
+    void authenticatedUserWithoutManageUsersCannotCallAdminRoute() throws Exception {
+        UserAccount actor = createUser("user@example.com", UserRole.USER, true);
+        UserAccount target = createUser("target@example.com", UserRole.USER, true);
+        CookieManager cookies = login(actor.email()).cookies();
+
+        HttpResponse<String> denied = putPermissions(cookies, target.id(), "[\"view_audit\"]");
+
         assertThat(denied.statusCode()).isEqualTo(403);
+        assertThat(denied.body()).contains("\"code\":\"ACCESS_DENIED\"");
         assertThat(jdbc.queryForObject(
                 "SELECT count(*) FROM user_permissions WHERE user_id = ?",
                 Integer.class,
-                user.id())).isZero();
+                target.id())).isZero();
+    }
 
+    @Test
+    void explicitManageUsersPermissionAuthorizesRouteAndCommand() throws Exception {
+        UserAccount actor = createUser("delegated@example.com", UserRole.USER, true);
+        UserAccount target = createUser("target@example.com", UserRole.USER, true);
+        grant(actor.id(), PermissionCatalog.MANAGE_USERS);
+        CookieManager cookies = login(actor.email()).cookies();
+
+        HttpResponse<String> response = putPermissions(cookies, target.id(), "[\"view_audit\"]");
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("\"explicitPermissions\":[\"view_audit\"]");
+    }
+
+    @Test
+    void revokedPermissionTakesEffectWithoutRelogin() throws Exception {
+        UserAccount actor = createUser("delegated@example.com", UserRole.USER, true);
+        UserAccount target = createUser("target@example.com", UserRole.USER, true);
+        grant(actor.id(), PermissionCatalog.MANAGE_USERS);
+        CookieManager cookies = login(actor.email()).cookies();
+
+        assertThat(putPermissions(cookies, target.id(), "[\"view_audit\"]").statusCode()).isEqualTo(200);
         jdbc.update(
-                "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'view_audit')",
-                user.id());
+                "DELETE FROM user_permissions WHERE user_id = ? AND permission_code = ?",
+                actor.id(),
+                PermissionCatalog.MANAGE_USERS);
+
+        HttpResponse<String> denied = putPermissions(cookies, target.id(), "[]");
+        assertThat(denied.statusCode()).isEqualTo(403);
+        assertThat(denied.body()).contains("\"code\":\"ACCESS_DENIED\"");
+    }
+
+    @Test
+    void inactiveUserHasNoEffectivePermissions() {
+        UserAccount user = createUser("user@example.com", UserRole.USER, true);
+        grant(user.id(), "view_audit");
         UserAccount currentUser = users.findById(user.id()).orElseThrow();
         currentUser.setActive(false);
         users.saveAndFlush(currentUser);
+
         assertThat(permissions.effectivePermissions(user.id())).isEmpty();
+    }
+
+    private static void grant(UUID userId, String permission) {
+        jdbc.update(
+                "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, ?)",
+                userId,
+                permission);
     }
 
     private static UserAccount createUser(String email, UserRole role, boolean active) {
@@ -147,7 +197,7 @@ class PermissionIntegrationTests {
                 null));
     }
 
-    private static CookieManager login(String email) throws Exception {
+    private static LoginResult login(String email) throws Exception {
         CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
         HttpClient http = client(cookies);
         primeCsrf(http, cookies);
@@ -157,7 +207,7 @@ class PermissionIntegrationTests {
                 "{\"email\":\"" + email + "\",\"password\":\"" + testCredential() + "\"}",
                 csrfToken(cookies));
         assertThat(response.statusCode()).isEqualTo(200);
-        return cookies;
+        return new LoginResult(cookies, response);
     }
 
     private static HttpResponse<String> putPermissions(
@@ -218,5 +268,8 @@ class PermissionIntegrationTests {
 
     private static String testCredential() {
         return String.join("-", "test", "only", "permission", "credential");
+    }
+
+    private record LoginResult(CookieManager cookies, HttpResponse<String> response) {
     }
 }

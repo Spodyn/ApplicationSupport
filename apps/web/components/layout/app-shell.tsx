@@ -8,6 +8,7 @@ import { AppRail } from "@/components/layout/app-rail"
 import { ShellProvider } from "@/components/layout/shell-context"
 import { MobileNavigation } from "@/components/layout/mobile-navigation"
 import { ConnectionStatusBanner } from "@/components/layout/connection-status-banner"
+import { API_AUTHENTICATION_REQUIRED_EVENT } from "@/lib/services/api/http-transport"
 import { AuthenticationRequiredError } from "@/lib/services/current-user"
 import { useCurrentUser } from "@/lib/services/queries"
 
@@ -35,6 +36,12 @@ function AuthenticatedAppShell({ children }: AppShellProps) {
       router.replace("/login")
     }
   }, [currentUser.error, router])
+
+  useEffect(() => {
+    const handleAuthenticationRequired = () => router.replace("/login")
+    window.addEventListener(API_AUTHENTICATION_REQUIRED_EVENT, handleAuthenticationRequired)
+    return () => window.removeEventListener(API_AUTHENTICATION_REQUIRED_EVENT, handleAuthenticationRequired)
+  }, [router])
 
   if (currentUser.isPending || currentUser.error instanceof AuthenticationRequiredError) {
     return (

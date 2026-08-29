@@ -27,8 +27,9 @@ class BootstrapSecurityConfiguration {
     @Bean
     SessionUserRefreshFilter sessionUserRefreshFilter(
             UserAccountRepository users,
+            PermissionService permissions,
             SecurityContextRepository securityContexts) {
-        return new SessionUserRefreshFilter(users, securityContexts);
+        return new SessionUserRefreshFilter(users, permissions, securityContexts);
     }
 
     @Bean
@@ -59,7 +60,8 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers(
                                 "/api/v1/auth/logout",
                                 "/api/v1/auth/me").authenticated()
-                        .requestMatchers(HttpMethod.PUT, "/api/v1/users/*/permissions").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/users/*/permissions")
+                                .hasAuthority(PermissionCatalog.MANAGE_USERS)
                         .anyRequest().denyAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")

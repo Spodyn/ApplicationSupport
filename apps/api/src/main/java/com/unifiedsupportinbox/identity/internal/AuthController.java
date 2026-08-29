@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -41,6 +42,7 @@ class AuthController {
             HttpServletRequest request,
             HttpServletResponse response) {
         UsiSessionPrincipal principal = authentication.authenticate(input.email(), input.password());
+        List<String> effectivePermissions = permissions.effectivePermissions(principal.userId());
 
         HttpSession existingSession = request.getSession(false);
         if (existingSession == null) {
@@ -53,13 +55,13 @@ class AuthController {
                 new UsernamePasswordAuthenticationToken(
                         principal,
                         null,
-                        principal.authorities());
+                        principal.authorities(effectivePermissions));
         SecurityContext context = SecurityContextHolder.createEmptyContext();
         context.setAuthentication(authenticated);
         SecurityContextHolder.setContext(context);
         securityContexts.saveContext(context, request, response);
 
-        return ResponseEntity.ok(CurrentSessionResponse.from(principal));
+        return ResponseEntity.ok(CurrentSessionResponse.from(principal, effectivePermissions));
     }
 
     @GetMapping("/me")
