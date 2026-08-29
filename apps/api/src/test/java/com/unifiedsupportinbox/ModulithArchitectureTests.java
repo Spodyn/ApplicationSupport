@@ -14,6 +14,7 @@ class ModulithArchitectureTests {
             "administration",
             "customer",
             "integration",
+            "channel",
             "inbox",
             "messaging",
             "workflow",
