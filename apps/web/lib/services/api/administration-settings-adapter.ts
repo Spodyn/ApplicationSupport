@@ -2,18 +2,23 @@ import type {
   AdministrationSettings,
   ChannelGroupingStrategy,
   ManagedChannel,
+  NotificationDestination,
+  NotificationType,
   ScheduleException,
   WorkScheduleSettings,
 } from "@/lib/domain/administration"
+import type { Channel } from "@/lib/domain/shared"
 import type { AdministrationSettingsRepository } from "@/lib/services/administration"
 import { mockAdministrationSettingsRepository } from "@/lib/services/administration"
 import { mapApiChannel } from "./channel-adapter"
 import { browserApiTransport } from "./http-transport"
 
+type ApiProvider = "SLACK" | "TEAMS" | "TELEGRAM"
+
 type ApiChannelRecord = {
   id: string
   integrationId: string
-  provider: "SLACK" | "TEAMS" | "TELEGRAM"
+  provider: ApiProvider
   externalChannelId: string
   name: string
   customerId?: string | null
@@ -39,6 +44,32 @@ export type ApiBusinessHoursSchedule = {
   updatedAt: string
 }
 
+type ApiNotificationDestination = {
+  id: string
+  name: string
+  provider: ApiProvider
+  integrationId: string
+  targetRef: string
+  enabled: boolean
+  secretConfigured: boolean
+  configConfigured: boolean
+  version: number
+  createdAt: string
+  updatedAt: string
+}
+
+type ApiNotificationRule = {
+  id: string
+  destinationId: string
+  name: string
+  enabled: boolean
+  eventTypes: string[]
+  severityFilters: string[]
+  version: number
+  createdAt: string
+  updatedAt: string
+}
+
 const scheduleDays = [
   { dayOfWeek: 1, key: "mon", label: "Poniedziałek" },
   { dayOfWeek: 2, key: "tue", label: "Wtorek" },
@@ -48,6 +79,16 @@ const scheduleDays = [
   { dayOfWeek: 6, key: "sat", label: "Sobota" },
   { dayOfWeek: 7, key: "sun", label: "Niedziela" },
 ] as const
+
+const supportedNotificationTypes = new Set<NotificationType>([
+  "unclaimed_too_long",
+  "in_progress_too_long",
+  "sla_warning",
+  "sla_breached",
+  "integration_disconnected",
+])
+
+const notificationDestinationVersions = new Map<string, number>()
 
 function mapChannel(channel: ApiChannelRecord): ManagedChannel {
   const activity = channel.active ? "Aktywny" : "Nieaktywny"
@@ -62,6 +103,12 @@ function mapChannel(channel: ApiChannelRecord): ManagedChannel {
     active: channel.active,
     lastMessageAt: channel.lastMessageAt ?? undefined,
   }
+}
+
+function apiProvider(channel: Channel): ApiProvider {
+  if (channel === "slack") return "SLACK"
+  if (channel === "teams") return "TEAMS"
+  return "TELEGRAM"
 }
 
 function wallClock(value: string): string {
@@ -173,17 +220,146 @@ async function saveBusinessHours(
   })
 }
 
+async function readNotificationConfiguration() {
+  const [destinations, rules] = await Promise.all([
+    browserApiTransport.request<ApiNotificationDestination[]>({
+      method: "GET",
+      path: "/api/v1/admin/notifications/destinations",
+    }),
+    browserApiTransport.request<ApiNotificationRule[]>({
+      method: "GET",
+      path: "/api/v1/admin/notifications/rules",
+    }),
+  ])
+  notificationDestinationVersions.clear()
+  for (const destination of destinations) {
+    notificationDestinationVersions.set(destination.id, destination.version)
+  }
+  return { destinations, rules }
+}
+
+function mapNotifications(
+  destinations: ApiNotificationDestination[],
+  rules: ApiNotificationRule[],
+): NotificationDestination[] {
+  return destinations.map((destination) => {
+    const types = [...new Set(
+      rules
+        .filter((rule) => rule.destinationId === destination.id && rule.enabled)
+        .flatMap((rule) => rule.eventTypes)
+        .filter((type): type is NotificationType =>
+          supportedNotificationTypes.has(type as NotificationType),
+        ),
+    )]
+    return {
+      id: destination.id,
+      name: destination.name,
+      provider: mapApiChannel(destination.provider),
+      integrationId: destination.integrationId,
+      channelName: destination.targetRef,
+      types,
+      enabled: destination.enabled,
+    }
+  })
+}
+
+async function listNotifications(): Promise<NotificationDestination[]> {
+  const configuration = await readNotificationConfiguration()
+  return mapNotifications(configuration.destinations, configuration.rules)
+}
+
+function destinationBody(item: NotificationDestination) {
+  return {
+    name: item.name,
+    provider: apiProvider(item.provider),
+    integrationId: item.integrationId,
+    targetRef: item.channelName,
+    enabled: item.enabled,
+  }
+}
+
+async function saveNotifications(
+  desired: NotificationDestination[],
+): Promise<NotificationDestination[]> {
+  const current = await readNotificationConfiguration()
+  const currentById = new Map(current.destinations.map((item) => [item.id, item]))
+  const desiredExistingIds = new Set(
+    desired.filter((item) => currentById.has(item.id)).map((item) => item.id),
+  )
+
+  for (const destination of current.destinations) {
+    if (!desiredExistingIds.has(destination.id)) {
+      await browserApiTransport.request<void>({
+        method: "DELETE",
+        path: `/api/v1/admin/notifications/destinations/${encodeURIComponent(destination.id)}?version=${destination.version}`,
+      })
+    }
+  }
+
+  for (const item of desired) {
+    const existing = currentById.get(item.id)
+    let savedDestination: ApiNotificationDestination
+    if (existing) {
+      savedDestination = await browserApiTransport.request<ApiNotificationDestination>({
+        method: "PUT",
+        path: `/api/v1/admin/notifications/destinations/${encodeURIComponent(existing.id)}`,
+        body: { version: existing.version, destination: destinationBody(item) },
+      })
+    } else {
+      savedDestination = await browserApiTransport.request<ApiNotificationDestination>({
+        method: "POST",
+        path: "/api/v1/admin/notifications/destinations",
+        body: destinationBody(item),
+      })
+    }
+
+    const existingRules = current.rules.filter(
+      (rule) => rule.destinationId === existing?.id,
+    )
+    if (existingRules.length > 1) {
+      throw new Error(
+        "Ten cel ma wiele zaawansowanych reguł i nie może być edytowany w uproszczonym widoku Settings.",
+      )
+    }
+    const existingRule = existingRules[0]
+    const ruleBody = {
+      destinationId: savedDestination.id,
+      name: existingRule?.name ?? "Settings routing",
+      enabled: existingRule?.enabled ?? true,
+      eventTypes: item.types,
+      severityFilters: existingRule?.severityFilters ?? [],
+    }
+    if (existingRule) {
+      await browserApiTransport.request<ApiNotificationRule>({
+        method: "PUT",
+        path: `/api/v1/admin/notifications/rules/${encodeURIComponent(existingRule.id)}`,
+        body: { version: existingRule.version, rule: ruleBody },
+      })
+    } else {
+      await browserApiTransport.request<ApiNotificationRule>({
+        method: "POST",
+        path: "/api/v1/admin/notifications/rules",
+        body: ruleBody,
+      })
+    }
+  }
+
+  return listNotifications()
+}
+
 export const apiAdministrationSettingsRepository: AdministrationSettingsRepository = {
   async get() {
-    const [settings, channels, businessHours] = await Promise.all([
+    const [settings, channels, businessHours, notifications] = await Promise.all([
       mockAdministrationSettingsRepository.get(),
       listChannels(),
       getBusinessHours(),
+      listNotifications(),
     ])
     return {
       ...settings,
       schedule: mapApiBusinessHours(businessHours, settings.schedule.exceptions),
       channels,
+      notifications,
     }
   },
 
@@ -197,6 +373,9 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
       const mapped = mapApiBusinessHours(saved, schedule.exceptions)
       await mockAdministrationSettingsRepository.saveSection("schedule", mapped)
       return mapped as AdministrationSettings[K]
+    }
+    if (key === "notifications") {
+      return (await saveNotifications(value as NotificationDestination[])) as AdministrationSettings[K]
     }
     return mockAdministrationSettingsRepository.saveSection(key, value)
   },
@@ -221,7 +400,18 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     })
   },
 
-  toggleNotification(id, enabled) {
-    return mockAdministrationSettingsRepository.toggleNotification(id, enabled)
+  async toggleNotification(id, enabled) {
+    let version = notificationDestinationVersions.get(id)
+    if (version === undefined) {
+      await readNotificationConfiguration()
+      version = notificationDestinationVersions.get(id)
+    }
+    if (version === undefined) throw new Error("Nie znaleziono celu powiadomień.")
+    const saved = await browserApiTransport.request<ApiNotificationDestination>({
+      method: "PATCH",
+      path: `/api/v1/admin/notifications/destinations/${encodeURIComponent(id)}/enabled`,
+      body: { version, enabled },
+    })
+    notificationDestinationVersions.set(id, saved.version)
   },
 }
