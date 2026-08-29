@@ -54,6 +54,10 @@ class RealtimeWebSocketConfiguration implements WebSocketMessageBrokerConfigurer
     public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
         registration
                 .setMessageSizeLimit(properties.messageSizeLimit())
-                .setTimeToFirstMessage(properties.timeToFirstMessageMillis());
+                .setTimeToFirstMessage(properties.timeToFirstMessageMillis())
+                .addDecoratorFactory(handler -> new FirstMessageTimeoutWebSocketHandlerDecorator(
+                        handler,
+                        taskScheduler,
+                        properties.timeToFirstMessage()));
     }
 }
