@@ -2,8 +2,8 @@
 
 import type { CreateCustomerRequest, CurrentSession, Customer, LoginRequest, PermissionUpdateRequest, UpdateCustomerRequest, UserPermissions } from './types.gen'
 
-export interface DeactivateCustomerInput {
-  "customerId": string
+export interface CreateCustomerInput {
+  "body": CreateCustomerRequest
 }
 
 export interface GetCustomerInput {
@@ -15,8 +15,8 @@ export interface UpdateCustomerInput {
   "body": UpdateCustomerRequest
 }
 
-export interface CreateCustomerInput {
-  "body": CreateCustomerRequest
+export interface DeactivateCustomerInput {
+  "customerId": string
 }
 
 export interface LoginInput {
@@ -41,11 +41,11 @@ export interface ApiTransport {
 
 export function createApiClient(transport: ApiTransport) {
   return {
-  deactivateCustomer: (input: DeactivateCustomerInput) => transport.request<Customer>({ method: "POST", path: interpolatePath("/api/v1/admin/customers/{customerId}/deactivate", { "customerId": input["customerId"] }) }),
-  getCustomer: (input: GetCustomerInput) => transport.request<Customer>({ method: "GET", path: interpolatePath("/api/v1/admin/customers/{customerId}", { "customerId": input["customerId"] }) }),
-  updateCustomer: (input: UpdateCustomerInput) => transport.request<Customer>({ method: "PUT", path: interpolatePath("/api/v1/admin/customers/{customerId}", { "customerId": input["customerId"] }), body: input.body }),
   listCustomers: () => transport.request<Array<Customer>>({ method: "GET", path: "/api/v1/admin/customers" }),
   createCustomer: (input: CreateCustomerInput) => transport.request<Customer>({ method: "POST", path: "/api/v1/admin/customers", body: input.body }),
+  getCustomer: (input: GetCustomerInput) => transport.request<Customer>({ method: "GET", path: interpolatePath("/api/v1/admin/customers/{customerId}", { "customerId": input["customerId"] }) }),
+  updateCustomer: (input: UpdateCustomerInput) => transport.request<Customer>({ method: "PUT", path: interpolatePath("/api/v1/admin/customers/{customerId}", { "customerId": input["customerId"] }), body: input.body }),
+  deactivateCustomer: (input: DeactivateCustomerInput) => transport.request<Customer>({ method: "POST", path: interpolatePath("/api/v1/admin/customers/{customerId}/deactivate", { "customerId": input["customerId"] }) }),
   login: (input: LoginInput) => transport.request<CurrentSession>({ method: "POST", path: "/api/v1/auth/login", body: input.body }),
   logout: () => transport.request<void>({ method: "POST", path: "/api/v1/auth/logout" }),
   getCurrentSession: () => transport.request<CurrentSession>({ method: "GET", path: "/api/v1/auth/me" }),
