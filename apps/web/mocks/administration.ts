@@ -133,11 +133,11 @@ export const mockAdministrationSettings: AdministrationSettings = {
     { id: "int-telegram", platform: "telegram", status: "disabled", workspace: "@firma_support_bot", lastEventAt: "2026-07-28T14:10:00.000Z", health: "unavailable" },
   ],
   channels: [
-    { id: "ch-1", platform: "slack", channelName: "#help-produkcja", customer: "Allegro Retail", ignored: false, lastMessageAt: "2026-08-03T10:49:00.000Z" },
-    { id: "ch-2", platform: "teams", channelName: "Obsługa / Ogólny", customer: "Nova Logistics", ignored: false, lastMessageAt: "2026-08-03T10:37:00.000Z" },
-    { id: "ch-3", platform: "telegram", channelName: "@acme_support", customer: "ACME Polska", ignored: true, lastMessageAt: "2026-07-28T14:10:00.000Z" },
-    { id: "ch-4", platform: "slack", channelName: "#partner-support", customer: "Baltic Energy", ignored: false, lastMessageAt: "2026-08-03T09:58:00.000Z" },
-    { id: "ch-5", platform: "teams", channelName: "Projekt Orion", customer: "Orion Bank", ignored: false, lastMessageAt: "2026-08-03T09:41:00.000Z" },
+    { id: "ch-1", platform: "slack", externalChannelId: "C01HELP", channelName: "#help-produkcja", customer: "Allegro Retail", ignored: false, groupingStrategy: "SLACK_ROOT_THREAD", active: true, lastMessageAt: "2026-08-03T10:49:00.000Z" },
+    { id: "ch-2", platform: "teams", externalChannelId: "19:ops-general", channelName: "Obsługa / Ogólny", customer: "Nova Logistics", ignored: false, groupingStrategy: "TEAMS_ROOT_REPLIES", active: true, lastMessageAt: "2026-08-03T10:37:00.000Z" },
+    { id: "ch-3", platform: "telegram", externalChannelId: "-1001830001", channelName: "@acme_support", customer: "ACME Polska", ignored: true, groupingStrategy: "TELEGRAM_CHAT_ACTIVE_CASE", active: false, lastMessageAt: "2026-07-28T14:10:00.000Z" },
+    { id: "ch-4", platform: "slack", externalChannelId: "C04PARTNER", channelName: "#partner-support", customer: "Baltic Energy", ignored: false, groupingStrategy: "SLACK_ROOT_THREAD", active: true, lastMessageAt: "2026-08-03T09:58:00.000Z" },
+    { id: "ch-5", platform: "teams", externalChannelId: "19:orion", channelName: "Projekt Orion", customer: "Orion Bank", ignored: false, groupingStrategy: "TEAMS_ROOT_REPLIES", active: true, lastMessageAt: "2026-08-03T09:41:00.000Z" },
   ],
   notifications: [
     { id: "not-1", name: "Dyżur L1", provider: "slack", integrationId: "int-slack", channelName: "#support-alerts", types: ["unclaimed_too_long", "sla_warning", "sla_breached"], enabled: true },

@@ -97,12 +97,21 @@ export interface ManagedIntegration {
   health: IntegrationHealth
 }
 
+export type ChannelGroupingStrategy =
+  | "SLACK_ROOT_THREAD"
+  | "TEAMS_ROOT_REPLIES"
+  | "TELEGRAM_TOPIC"
+  | "TELEGRAM_CHAT_ACTIVE_CASE"
+
 export interface ManagedChannel {
   id: string
   platform: Channel
+  externalChannelId: string
   channelName: string
   customer: string
   ignored: boolean
+  groupingStrategy: ChannelGroupingStrategy
+  active: boolean
   lastMessageAt?: string
 }
 

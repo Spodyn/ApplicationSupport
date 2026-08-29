@@ -11,6 +11,7 @@ cycles and references into another module's internal packages.
 - `administration` — administrative application use cases.
 - `customer` — customer/company domain and projections.
 - `integration` — provider installation/configuration model and health.
+- `channel` — provider-neutral monitored channel/conversation discovery, mapping and operational state.
 - `inbox` — inbox queries, user-specific read/snooze projections and views.
 - `messaging` — messages, conversation history and delivery lifecycle.
 - `workflow` — case commands and workflow state transitions.
@@ -37,5 +38,6 @@ Provider-specific code belongs below the `provider` boundary and calls the rest
 of the system only through provider-neutral public contracts. Business modules
 must not depend on Slack, Teams or Telegram SDK types.
 
-Database table ownership will be assigned by the persistence tickets; this
-boundary ticket intentionally introduces no schema changes.
+Database table ownership is introduced by the domain persistence tickets; the
+`channel` module owns provider-neutral discovered Channel persistence while
+provider adapters supply only normalized discovery data through its public API.
