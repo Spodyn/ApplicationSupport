@@ -24,6 +24,15 @@ public final class ApiProblemException extends RuntimeException {
         this.title = title;
     }
 
+    public static ApiProblemException validationFailed(String safeDetail) {
+        return new ApiProblemException(
+                ApiProblemCode.VALIDATION_FAILED,
+                HttpStatus.BAD_REQUEST,
+                "Validation failed",
+                safeDetail(safeDetail, "The request is invalid."),
+                null);
+    }
+
     public static ApiProblemException authenticationRequired() {
         return new ApiProblemException(
                 ApiProblemCode.AUTHENTICATION_REQUIRED,
