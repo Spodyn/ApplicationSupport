@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.time.Instant;
+import java.util.List;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContext;
@@ -17,12 +18,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 final class SessionUserRefreshFilter extends OncePerRequestFilter {
 
     private final UserAccountRepository users;
+    private final PermissionService permissions;
     private final SecurityContextRepository securityContexts;
 
     SessionUserRefreshFilter(
             UserAccountRepository users,
+            PermissionService permissions,
             SecurityContextRepository securityContexts) {
         this.users = users;
+        this.permissions = permissions;
         this.securityContexts = securityContexts;
     }
 
@@ -51,11 +55,12 @@ final class SessionUserRefreshFilter extends OncePerRequestFilter {
         }
 
         UsiSessionPrincipal refreshedPrincipal = UsiSessionPrincipal.from(user);
+        List<String> effectivePermissions = permissions.effectivePermissions(user);
         UsernamePasswordAuthenticationToken refreshedAuthentication =
                 new UsernamePasswordAuthenticationToken(
                         refreshedPrincipal,
                         null,
-                        refreshedPrincipal.authorities());
+                        refreshedPrincipal.authorities(effectivePermissions));
         refreshedAuthentication.setDetails(existing.getDetails());
 
         SecurityContext context = SecurityContextHolder.getContext();

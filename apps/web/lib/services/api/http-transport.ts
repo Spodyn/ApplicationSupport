@@ -4,6 +4,8 @@ import type {
   ApiTransportRequest,
 } from "@usi/api-client/generated"
 
+export const API_AUTHENTICATION_REQUIRED_EVENT = "usi:api-authentication-required"
+
 export class ApiHttpError extends Error {
   readonly status: number
   readonly problem?: ApiProblem
@@ -18,6 +20,10 @@ export class ApiHttpError extends Error {
 
 export function isUnauthorizedApiError(error: unknown): error is ApiHttpError {
   return error instanceof ApiHttpError && error.status === 401
+}
+
+export function isForbiddenApiError(error: unknown): error is ApiHttpError {
+  return error instanceof ApiHttpError && error.status === 403
 }
 
 function readCookie(name: string): string | undefined {
@@ -54,6 +60,11 @@ async function readProblem(response: Response): Promise<ApiProblem | undefined> 
   }
 }
 
+function notifyAuthenticationRequired(): void {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new Event(API_AUTHENTICATION_REQUIRED_EVENT))
+}
+
 export const browserApiTransport: ApiTransport = {
   async request<TResponse>(request: ApiTransportRequest): Promise<TResponse> {
     const headers = new Headers({ Accept: "application/json" })
@@ -73,7 +84,9 @@ export const browserApiTransport: ApiTransport = {
     })
 
     if (!response.ok) {
-      throw new ApiHttpError(response.status, await readProblem(response))
+      const error = new ApiHttpError(response.status, await readProblem(response))
+      if (error.status === 401) notifyAuthenticationRequired()
+      throw error
     }
 
     if (response.status === 204) return undefined as TResponse
