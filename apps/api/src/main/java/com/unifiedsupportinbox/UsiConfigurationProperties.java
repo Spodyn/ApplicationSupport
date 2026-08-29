@@ -21,6 +21,8 @@ public record UsiConfigurationProperties(
         @Valid @NotNull ObjectStorage objectStorage,
         @Valid @NotNull IntegrationSecrets integrationSecrets) {
 
+    private static final String SLACK_EVENTS_PATH = "/api/v1/providers/slack/events";
+
     public enum DeploymentProfile {
         LOCAL,
         TEST,
@@ -43,9 +45,12 @@ public record UsiConfigurationProperties(
             @NotNull URI teams,
             @NotNull URI telegram) {
 
-        @AssertTrue(message = "provider callback URLs must use HTTPS and stay under /api/v1")
+        @AssertTrue(message = "provider callback URLs must use HTTPS under /api/v1 and Slack must use its reviewed events path")
         public boolean isValidCallbacks() {
-            return validCallback(slack) && validCallback(teams) && validCallback(telegram);
+            return validCallback(slack)
+                    && SLACK_EVENTS_PATH.equals(slack.getPath())
+                    && validCallback(teams)
+                    && validCallback(telegram);
         }
 
         private static boolean validCallback(URI uri) {

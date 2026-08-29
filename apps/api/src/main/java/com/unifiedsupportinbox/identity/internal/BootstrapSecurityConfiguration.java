@@ -19,6 +19,8 @@ import org.springframework.security.web.csrf.CsrfFilter;
 @Configuration
 class BootstrapSecurityConfiguration {
 
+    private static final String SLACK_EVENTS_PATH = "/api/v1/providers/slack/events";
+
     @Bean
     SecurityContextRepository securityContextRepository() {
         return new HttpSessionSecurityContextRepository();
@@ -49,7 +51,10 @@ class BootstrapSecurityConfiguration {
                 .securityContext(securityContext -> securityContext
                         .securityContextRepository(securityContexts)
                         .requireExplicitSave(true))
-                .csrf(csrf -> csrf.spa())
+                .csrf(csrf -> {
+                    csrf.spa();
+                    csrf.ignoringRequestMatchers(SLACK_EVENTS_PATH);
+                })
                 .requestCache(requestCache -> requestCache.disable())
                 .exceptionHandling(exceptionHandling -> exceptionHandling
                         .authenticationEntryPoint(authenticationEntryPoint)
@@ -57,6 +62,7 @@ class BootstrapSecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST, SLACK_EVENTS_PATH).permitAll()
                         .requestMatchers(
                                 "/api/v1/auth/logout",
                                 "/api/v1/auth/me").authenticated()

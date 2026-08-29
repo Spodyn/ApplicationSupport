@@ -53,13 +53,14 @@ class SlackDevelopmentContractTest(unittest.TestCase):
             with self.subTest(event=event):
                 self.assertIn(f"`{event}`", guide)
 
-    def test_guide_preserves_secret_ref_boundary(self) -> None:
+    def test_guide_preserves_secret_ref_boundary_and_runtime_signing_secret_layout(self) -> None:
         guide = (REPOSITORY_ROOT / "docs" / "SLACK_DEVELOPMENT.md").read_text(
             encoding="utf-8"
         )
 
         self.assertIn("Integration.secret_ref", guide)
         self.assertIn("USI_INTEGRATION_SECRETS_DIRECTORY", guide)
+        self.assertIn("slack-signing-secret", guide)
         self.assertIn("raw request body before JSON parsing", guide)
         self.assertNotIn("xoxb-", guide)
 
