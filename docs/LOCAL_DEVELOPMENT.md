@@ -158,7 +158,9 @@ https://<dev-tunnel-host>/api/v1/provider-callbacks/telegram
 
 Slack's exact scopes, Events API subscriptions, credential boundary, install
 steps and URL-verification expectations are documented in
-[`SLACK_DEVELOPMENT.md`](SLACK_DEVELOPMENT.md).
+[`SLACK_DEVELOPMENT.md`](SLACK_DEVELOPMENT.md). Telegram's development bot,
+webhook, secret-reference and test-chat setup is documented in
+[`TELEGRAM_DEVELOPMENT.md`](TELEGRAM_DEVELOPMENT.md).
 
 The tunnel should forward to the local web port; the same `/api` rewrite then
 reaches Spring Boot. Do not expose provider credentials to the browser and do not
