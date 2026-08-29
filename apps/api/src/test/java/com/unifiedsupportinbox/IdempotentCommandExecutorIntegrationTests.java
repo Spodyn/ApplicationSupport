@@ -189,7 +189,7 @@ class IdempotentCommandExecutorIntegrationTests {
                 "expiring-key",
                 Map.of("caseId", "case-1"),
                 () -> response(effects.incrementAndGet()));
-        jdbc.update("UPDATE idempotency_keys SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'");
+        expireAllKeys();
 
         IdempotencyResult afterExpiry = commandExecutor.execute(
                 userId,
@@ -202,7 +202,7 @@ class IdempotentCommandExecutorIntegrationTests {
         assertThat(effects).hasValue(2);
         assertThat(countRows()).isEqualTo(1);
 
-        jdbc.update("UPDATE idempotency_keys SET expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second'");
+        expireAllKeys();
         assertThat(cleanup.cleanupExpiredNow()).isEqualTo(1);
         assertThat(countRows()).isZero();
     }
@@ -258,6 +258,13 @@ class IdempotentCommandExecutorIntegrationTests {
                 () -> response(1)))
                 .isInstanceOf(ApiProblemException.class);
         assertThat(countRows()).isZero();
+    }
+
+    private void expireAllKeys() {
+        jdbc.update(
+                "UPDATE idempotency_keys "
+                        + "SET created_at = CURRENT_TIMESTAMP - INTERVAL '25 hours', "
+                        + "expires_at = CURRENT_TIMESTAMP - INTERVAL '1 hour'");
     }
 
     private IdempotencyResponse response(int sequence) {
