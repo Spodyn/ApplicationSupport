@@ -124,7 +124,7 @@ describe("browser Origin guard", () => {
 
   test("provider/server callbacks without a browser Origin remain reachable", () => {
     expect(
-      proxy(request("/api/v1/provider-callbacks/slack", { method: "POST" })).status,
+      proxy(request("/api/v1/providers/slack/events", { method: "POST" })).status,
     ).toBe(200)
   })
 

@@ -18,7 +18,7 @@ class BootstrapAdminEnvironmentContractTest(unittest.TestCase):
         return {
             "SPRING_PROFILES_ACTIVE": "test",
             "USI_PUBLIC_BASE_URL": "http://localhost:3000",
-            "USI_SLACK_CALLBACK_URL": "https://test.example.invalid/api/v1/provider-callbacks/slack",
+            "USI_SLACK_CALLBACK_URL": "https://test.example.invalid/api/v1/providers/slack/events",
             "USI_TEAMS_CALLBACK_URL": "https://test.example.invalid/api/v1/provider-callbacks/teams",
             "USI_TELEGRAM_CALLBACK_URL": "https://test.example.invalid/api/v1/provider-callbacks/telegram",
         }

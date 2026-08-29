@@ -14,7 +14,7 @@ class UsiConfigurationValidationTests {
             .withPropertyValues(
                     "usi.deployment.profile=local",
                     "usi.public-base-url=http://localhost:3000",
-                    "usi.provider-callbacks.slack=https://example.invalid/api/v1/provider-callbacks/slack",
+                    "usi.provider-callbacks.slack=https://example.invalid/api/v1/providers/slack/events",
                     "usi.provider-callbacks.teams=https://example.invalid/api/v1/provider-callbacks/teams",
                     "usi.provider-callbacks.telegram=https://example.invalid/api/v1/provider-callbacks/telegram",
                     "usi.security.cors.allowed-origins=",
@@ -30,7 +30,7 @@ class UsiConfigurationValidationTests {
                 .withUserConfiguration(ConfigurationUnderTest.class)
                 .withPropertyValues(
                         "usi.deployment.profile=local",
-                        "usi.provider-callbacks.slack=https://example.invalid/api/v1/provider-callbacks/slack",
+                        "usi.provider-callbacks.slack=https://example.invalid/api/v1/providers/slack/events",
                         "usi.provider-callbacks.teams=https://example.invalid/api/v1/provider-callbacks/teams",
                         "usi.provider-callbacks.telegram=https://example.invalid/api/v1/provider-callbacks/telegram",
                         "usi.security.cors.allowed-origins=",
