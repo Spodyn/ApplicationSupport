@@ -11,7 +11,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @Repository
-final class IdempotencyStore {
+class IdempotencyStore {
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper objectMapper;
