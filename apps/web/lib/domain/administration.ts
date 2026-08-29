@@ -85,8 +85,8 @@ export interface OutOfOfficeSettings {
   sendOncePerClosure: boolean
 }
 
-export type IntegrationStatus = "connected" | "disconnected" | "reauthorization"
-export type IntegrationHealth = "healthy" | "degraded" | "unavailable"
+export type IntegrationStatus = "configuring" | "enabled" | "disabled"
+export type IntegrationHealth = "unknown" | "healthy" | "degraded" | "unavailable"
 
 export interface ManagedIntegration {
   id: string

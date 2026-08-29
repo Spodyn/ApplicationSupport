@@ -214,9 +214,8 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     const integration = settingsState.integrations.find((item) => item.id === id)
     if (!integration) throw new Error("Nie znaleziono integracji.")
     integration.workspace = workspace.trim()
-    integration.status = "connected"
-    integration.health = "healthy"
-    integration.lastEventAt = new Date().toISOString()
+    integration.status = "configuring"
+    integration.health = "unknown"
     return delay(integration)
   },
 
@@ -225,7 +224,6 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     const integration = settingsState.integrations.find((item) => item.id === id)
     if (!integration) throw new Error("Nie znaleziono integracji.")
     integration.status = status
-    integration.health = status === "connected" ? "healthy" : "unavailable"
     return delay(integration)
   },
 
@@ -233,11 +231,11 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     requireCurrentAdministrationPermission("manage_integrations")
     const integration = settingsState.integrations.find((item) => item.id === id)
     if (!integration) throw new Error("Nie znaleziono integracji.")
-    if (integration.status === "disconnected") {
-      throw new Error("Najpierw skonfiguruj integrację.")
+    if (integration.status === "disabled") {
+      throw new Error("Najpierw włącz integrację.")
     }
-    if (integration.status === "reauthorization") {
-      throw new Error("Najpierw odnów autoryzację integracji.")
+    if (integration.status === "configuring") {
+      throw new Error("Najpierw dokończ konfigurację integracji.")
     }
     integration.health = "healthy"
     integration.lastEventAt = new Date().toISOString()
