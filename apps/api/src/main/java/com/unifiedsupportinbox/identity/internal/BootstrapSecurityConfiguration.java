@@ -20,6 +20,7 @@ import org.springframework.security.web.csrf.CsrfFilter;
 class BootstrapSecurityConfiguration {
 
     private static final String SLACK_EVENTS_PATH = "/api/v1/providers/slack/events";
+    private static final String TELEGRAM_CALLBACK_PATH = "/api/v1/provider-callbacks/telegram";
 
     @Bean
     SecurityContextRepository securityContextRepository() {
@@ -53,7 +54,7 @@ class BootstrapSecurityConfiguration {
                         .requireExplicitSave(true))
                 .csrf(csrf -> {
                     csrf.spa();
-                    csrf.ignoringRequestMatchers(SLACK_EVENTS_PATH);
+                    csrf.ignoringRequestMatchers(SLACK_EVENTS_PATH, TELEGRAM_CALLBACK_PATH);
                 })
                 .requestCache(requestCache -> requestCache.disable())
                 .exceptionHandling(exceptionHandling -> exceptionHandling
@@ -63,6 +64,7 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                         .requestMatchers(HttpMethod.POST, SLACK_EVENTS_PATH).permitAll()
+                        .requestMatchers(HttpMethod.POST, TELEGRAM_CALLBACK_PATH).permitAll()
                         .requestMatchers(
                                 "/api/v1/auth/logout",
                                 "/api/v1/auth/me").authenticated()
