@@ -14,12 +14,18 @@ record CurrentSessionResponse(
         List<String> effectivePermissions) {
 
     static CurrentSessionResponse from(UsiSessionPrincipal principal) {
+        return from(principal, List.of());
+    }
+
+    static CurrentSessionResponse from(
+            UsiSessionPrincipal principal,
+            List<String> effectivePermissions) {
         return new CurrentSessionResponse(
                 principal.userId(),
                 principal.email(),
                 principal.displayName(),
                 principal.role(),
                 principal.createdAt(),
-                List.of());
+                List.copyOf(effectivePermissions));
     }
 }

@@ -24,12 +24,15 @@ class AuthController {
 
     private final SessionAuthenticationService authentication;
     private final SecurityContextRepository securityContexts;
+    private final PermissionService permissions;
 
     AuthController(
             SessionAuthenticationService authentication,
-            SecurityContextRepository securityContexts) {
+            SecurityContextRepository securityContexts,
+            PermissionService permissions) {
         this.authentication = authentication;
         this.securityContexts = securityContexts;
+        this.permissions = permissions;
     }
 
     @PostMapping("/login")
@@ -66,7 +69,9 @@ class AuthController {
                 || !(currentAuthentication.getPrincipal() instanceof UsiSessionPrincipal principal)) {
             throw ApiProblemException.authenticationRequired();
         }
-        return CurrentSessionResponse.from(principal);
+        return CurrentSessionResponse.from(
+                principal,
+                permissions.effectivePermissions(principal.userId()));
     }
 
     record LoginRequest(@NotNull String email, @NotNull String password) {
