@@ -2,8 +2,6 @@ package com.unifiedsupportinbox.customer.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unifiedsupportinbox.UsiApiApplication;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
 import java.net.CookieManager;
@@ -32,7 +30,6 @@ class CustomerIntegrationTests {
     private static ConfigurableApplicationContext context;
     private static JdbcTemplate jdbc;
     private static PasswordEncoder encoder;
-    private static ObjectMapper json;
     private static URI baseUri;
 
     @BeforeAll
@@ -52,7 +49,6 @@ class CustomerIntegrationTests {
                         "--usi.bootstrap-admin.enabled=false");
         jdbc = context.getBean(JdbcTemplate.class);
         encoder = context.getBean("bootstrapAdminPasswordEncoder", PasswordEncoder.class);
-        json = context.getBean(ObjectMapper.class);
         Integer port = context.getEnvironment().getProperty("local.server.port", Integer.class);
         baseUri = URI.create("http://127.0.0.1:" + port);
     }
@@ -83,10 +79,9 @@ class CustomerIntegrationTests {
         HttpResponse<String> created = mutate(cookies, "POST", "/api/v1/admin/customers",
                 "{\"name\":\"Acme Corp\",\"externalRef\":\" CRM-42 \"}");
         assertThat(created.statusCode()).isEqualTo(201);
-        JsonNode createdJson = json.readTree(created.body());
-        UUID customerId = UUID.fromString(createdJson.get("id").asText());
+        UUID customerId = UUID.fromString(jsonString(created.body(), "id"));
         assertThat(customerId.version()).isEqualTo(7);
-        assertThat(createdJson.get("externalRef").asText()).isEqualTo("CRM-42");
+        assertThat(jsonString(created.body(), "externalRef")).isEqualTo("CRM-42");
 
         HttpResponse<String> updated = mutate(cookies, "PUT", "/api/v1/admin/customers/" + customerId,
                 "{\"name\":\"Acme International\",\"externalRef\":\"CRM-42\"}");
@@ -103,7 +98,7 @@ class CustomerIntegrationTests {
         HttpResponse<String> deactivated = mutate(cookies, "POST",
                 "/api/v1/admin/customers/" + customerId + "/deactivate", null);
         assertThat(deactivated.statusCode()).isEqualTo(200);
-        assertThat(json.readTree(deactivated.body()).get("active").asBoolean()).isFalse();
+        assertThat(deactivated.body()).contains("\"active\":false");
         assertThat(jdbc.queryForObject("SELECT customer_id FROM customer_reference_probe WHERE id = 1", UUID.class))
                 .isEqualTo(customerId);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM customers WHERE id = ?", Integer.class, customerId)).isEqualTo(1);
@@ -176,6 +171,16 @@ class CustomerIntegrationTests {
                 : HttpRequest.BodyPublishers.ofString(body);
         builder.method(method, publisher);
         return client(cookies).send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private static String jsonString(String body, String field) {
+        String marker = "\"" + field + "\":\"";
+        int start = body.indexOf(marker);
+        if (start < 0) throw new AssertionError("Missing JSON string field: " + field);
+        start += marker.length();
+        int end = body.indexOf('"', start);
+        if (end < 0) throw new AssertionError("Unterminated JSON string field: " + field);
+        return body.substring(start, end);
     }
 
     private static String csrfToken(CookieManager cookies) {
