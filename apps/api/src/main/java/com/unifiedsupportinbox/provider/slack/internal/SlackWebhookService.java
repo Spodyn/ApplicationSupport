@@ -1,7 +1,6 @@
 package com.unifiedsupportinbox.provider.slack.internal;
 
 import com.unifiedsupportinbox.ApiProblemException;
-import com.unifiedsupportinbox.InboundEventStore;
 import com.unifiedsupportinbox.integration.ProviderIntegrationCredentialLookup.CredentialReference;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -16,12 +15,12 @@ import tools.jackson.databind.ObjectMapper;
 class SlackWebhookService {
 
     private final SlackRequestAuthenticator authenticator;
-    private final InboundEventStore inboundEvents;
+    private final SlackInboundDeliveryService inboundEvents;
     private final ObjectMapper objectMapper;
 
     SlackWebhookService(
             SlackRequestAuthenticator authenticator,
-            InboundEventStore inboundEvents,
+            SlackInboundDeliveryService inboundEvents,
             ObjectMapper objectMapper) {
         this.authenticator = authenticator;
         this.inboundEvents = inboundEvents;
@@ -43,8 +42,7 @@ class SlackWebhookService {
 
         String eventId = requiredText(payload, "event_id", "Slack event_id is required.");
         String payloadJson = new String(rawBody, StandardCharsets.UTF_8);
-        inboundEvents.persistAuthenticated(
-                "SLACK",
+        inboundEvents.persistAndWake(
                 integration.integrationId(),
                 eventId,
                 payloadJson,
