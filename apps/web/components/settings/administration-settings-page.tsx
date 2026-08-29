@@ -99,7 +99,8 @@ const tabItems = [
 export function AdministrationSettingsPage() {
   const settingsQuery = useAdministrationSettings()
   const actions = useAdministrationSettingsActions()
-  const unavailableIntegrations = settingsQuery.data?.integrations.filter((item) => item.status !== "connected") ?? []
+  const unavailableIntegrations =
+    settingsQuery.data?.integrations.filter((item) => item.status !== "enabled") ?? []
 
   return (
     <>
@@ -132,7 +133,7 @@ export function AdministrationSettingsPage() {
           {unavailableIntegrations.length > 0 && (
             <Alert className="border-warning/30 bg-warning/10 text-warning-foreground">
               <Unplug />
-              <AlertTitle>Nie wszystkie integracje są połączone</AlertTitle>
+              <AlertTitle>Nie wszystkie integracje są włączone</AlertTitle>
               <AlertDescription>
                 {unavailableIntegrations.map((item) => channelLabels[item.platform]).join(", ")} — sprawdź status w zakładce Integracje. Odbiór nowych wiadomości z tych źródeł może być ograniczony.
               </AlertDescription>
@@ -331,12 +332,13 @@ function OutOfOfficePanel({ data, actions }: { data: OutOfOfficeSettings; action
 }
 
 const integrationStatusLabels: Record<ManagedIntegration["status"], string> = {
-  connected: "Połączona",
-  disconnected: "Rozłączona",
-  reauthorization: "Wymaga ponownej autoryzacji",
+  configuring: "Konfigurowana",
+  enabled: "Włączona",
+  disabled: "Wyłączona",
 }
 
 const integrationHealthLabels: Record<ManagedIntegration["health"], string> = {
+  unknown: "Nie sprawdzono",
   healthy: "Połączenie sprawne",
   degraded: "Wymaga uwagi",
   unavailable: "Brak połączenia",
@@ -345,7 +347,7 @@ const integrationHealthLabels: Record<ManagedIntegration["health"], string> = {
 function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; actions: SettingsActions }) {
   const [configured, setConfigured] = useState<ManagedIntegration | null>(null)
   const [workspace, setWorkspace] = useState("")
-  const [disconnected, setDisconnected] = useState<ManagedIntegration | null>(null)
+  const [disabledIntegration, setDisabledIntegration] = useState<ManagedIntegration | null>(null)
 
   const openConfiguration = (integration: ManagedIntegration) => {
     setWorkspace(integration.workspace)
@@ -361,12 +363,12 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
     }
   }
 
-  const reauthorize = async (integration: ManagedIntegration) => {
+  const completeConfiguration = async (integration: ManagedIntegration) => {
     try {
-      await actions.setIntegrationStatus.mutateAsync({ id: integration.id, status: "connected" })
-      notify.success("Autoryzacja została odnowiona", channelLabels[integration.platform])
+      await actions.setIntegrationStatus.mutateAsync({ id: integration.id, status: "enabled" })
+      notify.success("Integracja została włączona", channelLabels[integration.platform])
     } catch (error) {
-      notify.error("Nie udało się odnowić autoryzacji", getErrorMessage(error))
+      notify.error("Nie udało się włączyć integracji", getErrorMessage(error))
     }
   }
 
@@ -393,14 +395,14 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                 <Badge
                   variant="secondary"
                   className={
-                    integration.status === "connected"
+                    integration.status === "enabled"
                       ? "bg-success/10 text-success"
-                      : integration.status === "reauthorization"
+                      : integration.status === "configuring"
                         ? "bg-warning/15 text-warning-foreground"
                         : "text-muted-foreground"
                   }
                 >
-                  {integration.status === "connected" ? <CheckCircle2 /> : integration.status === "reauthorization" ? <TriangleAlert /> : <Unplug />}
+                  {integration.status === "enabled" ? <CheckCircle2 /> : integration.status === "configuring" ? <TriangleAlert /> : <Unplug />}
                   {integrationStatusLabels[integration.status]}
                 </Badge>
               </div>
@@ -409,13 +411,25 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
               <dl className="grid gap-3 text-xs">
                 <div className="flex items-start justify-between gap-3"><dt className="text-muted-foreground">Obszar roboczy / dzierżawa</dt><dd className="max-w-48 truncate text-right font-mono">{integration.workspace || "—"}</dd></div>
                 <div className="flex items-start justify-between gap-3"><dt className="text-muted-foreground">Ostatnie zdarzenie</dt><dd className="text-right">{integration.lastEventAt ? formatDateTime(integration.lastEventAt) : "Brak"}</dd></div>
-                <div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">Health check</dt><dd className="flex items-center gap-1.5">{integration.health === "healthy" ? <CheckCircle2 className="size-3.5 text-success" /> : integration.health === "degraded" ? <TriangleAlert className="size-3.5 text-warning-foreground" /> : <Unplug className="size-3.5 text-destructive" />}{integrationHealthLabels[integration.health]}</dd></div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-muted-foreground">Health check</dt>
+                  <dd className="flex items-center gap-1.5">
+                    {integration.health === "healthy"
+                      ? <CheckCircle2 className="size-3.5 text-success" />
+                      : integration.health === "degraded"
+                        ? <TriangleAlert className="size-3.5 text-warning-foreground" />
+                        : integration.health === "unknown"
+                          ? <Info className="size-3.5 text-muted-foreground" />
+                          : <Unplug className="size-3.5 text-destructive" />}
+                    {integrationHealthLabels[integration.health]}
+                  </dd>
+                </div>
               </dl>
               <div className="flex flex-wrap gap-2 border-t pt-3">
                 <Button variant="outline" size="sm" onClick={() => openConfiguration(integration)}><Settings2 /> Konfiguruj</Button>
-                <Button variant="outline" size="sm" disabled={integration.status !== "connected" || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> Testuj</Button>
-                {integration.status === "reauthorization" && <Button size="sm" onClick={() => void reauthorize(integration)}><RefreshCw /> Autoryzuj ponownie</Button>}
-                {integration.status !== "disconnected" && <Button variant="destructive" size="sm" onClick={() => setDisconnected(integration)}><Unplug /> Rozłącz</Button>}
+                <Button variant="outline" size="sm" disabled={integration.status !== "enabled" || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> Testuj</Button>
+                {integration.status === "configuring" && <Button size="sm" onClick={() => void completeConfiguration(integration)}><RefreshCw /> Dokończ konfigurację</Button>}
+                {integration.status !== "disabled" && <Button variant="destructive" size="sm" onClick={() => setDisabledIntegration(integration)}><Unplug /> Wyłącz</Button>}
               </div>
             </CardContent>
           </Card>
@@ -442,19 +456,19 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
       </Dialog>
 
       <ConfirmDialog
-        open={Boolean(disconnected)}
-        onOpenChange={(open) => !open && setDisconnected(null)}
-        title="Rozłączyć integrację?"
-        description={disconnected ? `Nowe zdarzenia z ${channelLabels[disconnected.platform]} przestaną trafiać do skrzynki. Istniejące case’y pozostaną dostępne.` : undefined}
-        confirmLabel="Rozłącz"
+        open={Boolean(disabledIntegration)}
+        onOpenChange={(open) => !open && setDisabledIntegration(null)}
+        title="Wyłączyć integrację?"
+        description={disabledIntegration ? `Nowe zdarzenia z ${channelLabels[disabledIntegration.platform]} nie będą tworzyły nowych spraw. Istniejące case’y pozostaną dostępne.` : undefined}
+        confirmLabel="Wyłącz"
         destructive
         onConfirm={() => {
-          if (!disconnected) return
-          const integration = disconnected
-          void actions.setIntegrationStatus.mutateAsync({ id: integration.id, status: "disconnected" }).then(() => {
-            notify.success("Integracja została rozłączona", channelLabels[integration.platform])
-            setDisconnected(null)
-          }).catch((error) => notify.error("Nie udało się rozłączyć integracji", getErrorMessage(error)))
+          if (!disabledIntegration) return
+          const integration = disabledIntegration
+          void actions.setIntegrationStatus.mutateAsync({ id: integration.id, status: "disabled" }).then(() => {
+            notify.success("Integracja została wyłączona", channelLabels[integration.platform])
+            setDisabledIntegration(null)
+          }).catch((error) => notify.error("Nie udało się wyłączyć integracji", getErrorMessage(error)))
         }}
       />
     </div>

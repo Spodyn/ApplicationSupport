@@ -128,9 +128,9 @@ export const mockAdministrationSettings: AdministrationSettings = {
     sendOncePerClosure: true,
   },
   integrations: [
-    { id: "int-slack", platform: "slack", status: "connected", workspace: "firma.slack.com", lastEventAt: "2026-08-03T10:51:00.000Z", health: "healthy" },
-    { id: "int-teams", platform: "teams", status: "reauthorization", workspace: "firma.onmicrosoft.com", lastEventAt: "2026-08-03T10:43:00.000Z", health: "degraded" },
-    { id: "int-telegram", platform: "telegram", status: "disconnected", workspace: "@firma_support_bot", lastEventAt: "2026-07-28T14:10:00.000Z", health: "unavailable" },
+    { id: "int-slack", platform: "slack", status: "enabled", workspace: "firma.slack.com", lastEventAt: "2026-08-03T10:51:00.000Z", health: "healthy" },
+    { id: "int-teams", platform: "teams", status: "configuring", workspace: "firma.onmicrosoft.com", lastEventAt: "2026-08-03T10:43:00.000Z", health: "degraded" },
+    { id: "int-telegram", platform: "telegram", status: "disabled", workspace: "@firma_support_bot", lastEventAt: "2026-07-28T14:10:00.000Z", health: "unavailable" },
   ],
   channels: [
     { id: "ch-1", platform: "slack", channelName: "#help-produkcja", customer: "Allegro Retail", ignored: false, lastMessageAt: "2026-08-03T10:49:00.000Z" },

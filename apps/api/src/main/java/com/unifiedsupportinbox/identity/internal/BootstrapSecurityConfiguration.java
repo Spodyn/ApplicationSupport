@@ -63,6 +63,7 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers(HttpMethod.PUT, "/api/v1/users/*/permissions")
                                 .hasAuthority(PermissionCatalog.MANAGE_USERS)
                         .requestMatchers("/api/v1/admin/customers/**").hasRole("ADMIN")
+                        .requestMatchers("/api/v1/admin/integrations/**").hasAuthority("manage_integrations")
                         .anyRequest().denyAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")
