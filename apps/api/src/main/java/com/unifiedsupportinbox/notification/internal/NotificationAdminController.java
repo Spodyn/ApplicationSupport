@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.notification.internal;
 
 import com.unifiedsupportinbox.integration.IntegrationProvider;
+import com.unifiedsupportinbox.notification.NotificationDeliveryView;
 import com.unifiedsupportinbox.notification.NotificationDestinationView;
 import com.unifiedsupportinbox.notification.NotificationRuleView;
 import java.util.List;
@@ -24,9 +25,13 @@ import org.springframework.web.bind.annotation.RestController;
 class NotificationAdminController {
 
     private final NotificationService notifications;
+    private final NotificationDeliveryService deliveries;
 
-    NotificationAdminController(NotificationService notifications) {
+    NotificationAdminController(
+            NotificationService notifications,
+            NotificationDeliveryService deliveries) {
         this.notifications = notifications;
+        this.deliveries = deliveries;
     }
 
     @GetMapping("/destinations")
@@ -104,6 +109,16 @@ class NotificationAdminController {
             @RequestParam long version,
             Authentication actor) {
         notifications.deleteRule(actor, id, version);
+    }
+
+    @GetMapping("/deliveries")
+    List<NotificationDeliveryView> listDeliveries(Authentication actor) {
+        return deliveries.listRecent(actor);
+    }
+
+    @PostMapping("/deliveries/{id}/replay")
+    NotificationDeliveryView replayDelivery(@PathVariable UUID id, Authentication actor) {
+        return deliveries.replayDlq(actor, id);
     }
 
     private static NotificationService.DestinationInput destinationInput(DestinationRequest input) {

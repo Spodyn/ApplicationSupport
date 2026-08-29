@@ -2,6 +2,7 @@ package com.unifiedsupportinbox.notification.internal;
 
 import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
+import com.unifiedsupportinbox.notification.NotificationDeliveryStatus;
 import com.unifiedsupportinbox.notification.NotificationDestinationView;
 import com.unifiedsupportinbox.notification.NotificationRouteView;
 import com.unifiedsupportinbox.notification.NotificationRoutingCatalog;
@@ -22,13 +23,18 @@ import org.springframework.transaction.annotation.Transactional;
 class NotificationService implements NotificationRoutingCatalog {
 
     private static final String MANAGE_NOTIFICATIONS = "manage_notifications";
+    private static final String CONFIG_DISABLED = "SUPPRESSED_CONFIG_DISABLED";
     private static final Pattern FILTER_IDENTIFIER = Pattern.compile("[A-Za-z][A-Za-z0-9_.:-]{0,63}");
     private static final int MAX_FILTERS = 64;
 
     private final NotificationRepository notifications;
+    private final NotificationDeliveryRepository deliveries;
 
-    NotificationService(NotificationRepository notifications) {
+    NotificationService(
+            NotificationRepository notifications,
+            NotificationDeliveryRepository deliveries) {
         this.notifications = notifications;
+        this.deliveries = deliveries;
     }
 
     @Transactional(readOnly = true)
@@ -74,6 +80,9 @@ class NotificationService implements NotificationRoutingCatalog {
                     .orElseThrow(() -> ApiProblemException.conflict(
                             "Notification destination changed since it was loaded."));
             auditDestination(updated, "UPDATED", actor.getName());
+            if (current.enabled() && !updated.enabled()) {
+                cancelUnsentForDestination(updated.id(), actor.getName());
+            }
             return updated.toView();
         } catch (DataIntegrityViolationException exception) {
             throw ApiProblemException.conflict("A notification destination already uses this provider target.");
@@ -132,9 +141,8 @@ class NotificationService implements NotificationRoutingCatalog {
     NotificationRuleView updateRule(Authentication actor, UUID id, long expectedVersion, RuleInput input) {
         requireManageNotifications(actor);
         requireVersion(expectedVersion);
-        if (notifications.findRule(id).isEmpty()) {
-            throw ApiProblemException.notFound("Notification rule was not found.");
-        }
+        RuleRecord current = notifications.findRule(id)
+                .orElseThrow(() -> ApiProblemException.notFound("Notification rule was not found."));
         NormalizedRule normalized = normalizeRule(input);
         requireDestination(normalized.destinationId());
         try {
@@ -144,6 +152,9 @@ class NotificationService implements NotificationRoutingCatalog {
                     .orElseThrow(() -> ApiProblemException.conflict(
                             "Notification rule changed since it was loaded."));
             auditRule(updated, "UPDATED", actor.getName());
+            if (current.enabled() && !updated.enabled()) {
+                cancelUnsentForRule(updated.id(), actor.getName());
+            }
             return updated.toView();
         } catch (DataIntegrityViolationException exception) {
             throw ApiProblemException.conflict("A notification rule with this name already exists for the destination.");
@@ -253,6 +264,22 @@ class NotificationService implements NotificationRoutingCatalog {
                 && actor.getAuthorities().stream()
                         .anyMatch(authority -> MANAGE_NOTIFICATIONS.equals(authority.getAuthority()));
         if (!allowed) throw ApiProblemException.accessDenied();
+    }
+
+    private void cancelUnsentForDestination(UUID destinationId, String actor) {
+        for (DeliveryRecord cancelled : deliveries.cancelUnsentForDestination(destinationId, CONFIG_DISABLED)) {
+            deliveries.appendHistory(
+                    cancelled.id(), NotificationDeliveryStatus.CANCELLED, cancelled.attempts(),
+                    CONFIG_DISABLED, null, null, actor);
+        }
+    }
+
+    private void cancelUnsentForRule(UUID ruleId, String actor) {
+        for (DeliveryRecord cancelled : deliveries.cancelUnsentForRule(ruleId, CONFIG_DISABLED)) {
+            deliveries.appendHistory(
+                    cancelled.id(), NotificationDeliveryStatus.CANCELLED, cancelled.attempts(),
+                    CONFIG_DISABLED, null, null, actor);
+        }
     }
 
     private void auditDestination(DestinationRecord record, String action, String actor) {
