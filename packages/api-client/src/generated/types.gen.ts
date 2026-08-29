@@ -13,6 +13,11 @@ export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTIC
 
 export type Channel = "SLACK" | "TEAMS" | "TELEGRAM"
 
+export type CreateCustomerRequest = {
+  "name": string
+  "externalRef"?: string | null
+}
+
 export type CurrentSession = {
   "id": string
   "email": string
@@ -23,6 +28,15 @@ export type CurrentSession = {
 }
 
 export type CursorDirection = "ASC" | "DESC"
+
+export type Customer = {
+  "id": string
+  "name": string
+  "externalRef"?: string | null
+  "active": boolean
+  "createdAt": string
+  "updatedAt": string
+}
 
 export type EffectivePermission = string
 
@@ -40,6 +54,11 @@ export type PermissionCode = "manage_users" | "manage_integrations" | "manage_sl
 
 export type PermissionUpdateRequest = {
   "permissions": Array<PermissionCode>
+}
+
+export type UpdateCustomerRequest = {
+  "name": string
+  "externalRef"?: string | null
 }
 
 export type UserPermissions = {
