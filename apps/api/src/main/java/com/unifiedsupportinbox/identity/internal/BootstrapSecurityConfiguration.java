@@ -2,6 +2,7 @@ package com.unifiedsupportinbox.identity.internal;
 
 import com.unifiedsupportinbox.ApiProblemAccessDeniedHandler;
 import com.unifiedsupportinbox.ApiProblemAuthenticationEntryPoint;
+import com.unifiedsupportinbox.CorrelationIdFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -41,13 +42,19 @@ class BootstrapSecurityConfiguration {
     }
 
     @Bean
+    CorrelationIdFilter correlationIdFilter() {
+        return new CorrelationIdFilter();
+    }
+
+    @Bean
     SecurityFilterChain bootstrapSecurityFilterChain(
             HttpSecurity http,
             ApiProblemAuthenticationEntryPoint authenticationEntryPoint,
             ApiProblemAccessDeniedHandler accessDeniedHandler,
             SecurityContextRepository securityContexts,
             SessionUserRefreshFilter sessionUserRefreshFilter,
-            CsrfCookieExposureFilter csrfCookieExposureFilter) throws Exception {
+            CsrfCookieExposureFilter csrfCookieExposureFilter,
+            CorrelationIdFilter correlationIdFilter) throws Exception {
         return http
                 .securityContext(securityContext -> securityContext
                         .securityContextRepository(securityContexts)
@@ -86,6 +93,7 @@ class BootstrapSecurityConfiguration {
                                 new HttpStatusReturningLogoutSuccessHandler(HttpStatus.NO_CONTENT)))
                 .addFilterAfter(csrfCookieExposureFilter, CsrfFilter.class)
                 .addFilterAfter(sessionUserRefreshFilter, AnonymousAuthenticationFilter.class)
+                .addFilterBefore(correlationIdFilter, CsrfFilter.class)
                 .build();
     }
 
