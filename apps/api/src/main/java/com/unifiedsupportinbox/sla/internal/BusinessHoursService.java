@@ -4,6 +4,7 @@ import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.sla.BusinessHoursScheduleView;
 import java.time.DateTimeException;
 import java.time.LocalTime;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -42,6 +43,27 @@ class BusinessHoursService {
         String normalizedTimezone = normalizeTimezone(timezone);
         List<BusinessHoursIntervalValue> intervals = normalizeIntervals(intervalInputs);
         return schedules.replaceActive(normalizedTimezone, intervals, actor.getName());
+    }
+
+    @Transactional
+    BusinessHoursScheduleView replaceExceptions(Authentication actor, List<ExceptionInput> inputs) {
+        requireManageSchedule(actor);
+        BusinessHoursScheduleView active = schedules.findActive()
+                .orElseThrow(() -> new IllegalStateException("Active business-hours schedule is missing."));
+        List<ScheduleExceptionValue> values = new ArrayList<>();
+        if (inputs != null) for (ExceptionInput input : inputs) {
+            if (input == null || input.date() == null || input.type() == null) throw ApiProblemException.validationFailed("Schedule exception date and type are required.");
+            LocalDate date;
+            try { date = LocalDate.parse(input.date()); } catch (DateTimeException exception) { throw ApiProblemException.validationFailed("Schedule exception date must use ISO-8601 format."); }
+            String type = input.type().strip().toUpperCase(java.util.Locale.ROOT);
+            if (!List.of("CLOSED", "OPEN", "OVERRIDE").contains(type)) throw ApiProblemException.validationFailed("Schedule exception type must be CLOSED, OPEN or OVERRIDE.");
+            LocalTime start = input.start() == null ? null : parseWallClock(input.start(), "exception start");
+            LocalTime end = input.end() == null ? null : parseWallClock(input.end(), "exception end");
+            if ("CLOSED".equals(type) ? start != null || end != null : start == null || end == null || !start.isBefore(end)) throw ApiProblemException.validationFailed("Schedule exception interval is invalid.");
+            values.add(new ScheduleExceptionValue(date, type, start, end, input.note()));
+        }
+        schedules.replaceExceptions(active.id(), List.copyOf(values));
+        return schedules.findActive().orElseThrow();
     }
 
     private static String normalizeTimezone(String timezone) {
@@ -121,7 +143,12 @@ class BusinessHoursService {
 
     record IntervalInput(Integer dayOfWeek, String start, String end) {
     }
+    record ExceptionInput(String date, String type, String start, String end, String note) {
+    }
 }
 
 record BusinessHoursIntervalValue(int dayOfWeek, LocalTime start, LocalTime end) {
+}
+
+record ScheduleExceptionValue(LocalDate date, String type, LocalTime start, LocalTime end, String note) {
 }

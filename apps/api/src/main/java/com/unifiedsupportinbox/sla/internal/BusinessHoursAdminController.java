@@ -42,9 +42,18 @@ class BusinessHoursAdminController {
                 intervals);
     }
 
+    @PutMapping("/exceptions")
+    BusinessHoursScheduleView replaceExceptions(@RequestBody List<ExceptionRequest> input, Authentication actor) {
+        return businessHours.replaceExceptions(actor, input == null ? null : input.stream()
+                .map(value -> value == null ? null : new BusinessHoursService.ExceptionInput(value.date(), value.type(), value.start(), value.end(), value.note()))
+                .toList());
+    }
+
     record UpdateBusinessHoursRequest(String timezone, List<IntervalRequest> intervals) {
     }
 
     record IntervalRequest(Integer dayOfWeek, String start, String end) {
+    }
+    record ExceptionRequest(String date, String type, String start, String end, String note) {
     }
 }

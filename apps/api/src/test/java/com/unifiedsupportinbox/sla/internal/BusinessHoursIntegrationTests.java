@@ -189,6 +189,22 @@ class BusinessHoursIntegrationTests {
     }
 
     @Test
+    void manageScheduleCanReplaceDateSpecificClosedAndOpenExceptions() throws Exception {
+        UUID delegatedId = createUser("exceptions@example.com");
+        jdbc.update("INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_schedule')", delegatedId);
+        CookieManager session = login("exceptions@example.com");
+
+        HttpResponse<String> updated = mutate(session, "PUT", "/api/v1/admin/business-hours/exceptions", """
+                [{"date":"2026-12-25","type":"CLOSED","note":"holiday"},
+                 {"date":"2026-12-27","type":"OPEN","start":"10:00","end":"14:00","note":"weekend support"}]
+                """);
+
+        assertThat(updated.statusCode()).isEqualTo(200);
+        assertThat(updated.body()).contains("2026-12-25").contains("CLOSED").contains("2026-12-27").contains("OPEN");
+        assertThat(queryInt("SELECT count(*) FROM schedule_exceptions")).isEqualTo(2);
+    }
+
+    @Test
     void businessHoursRoutesRequireAuthenticationAndManageSchedulePermission() throws Exception {
         CookieManager anonymous = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
         assertThat(get(client(anonymous), "/api/v1/admin/business-hours").statusCode()).isEqualTo(401);
