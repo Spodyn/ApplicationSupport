@@ -4,6 +4,7 @@ import com.unifiedsupportinbox.sla.BusinessHoursScheduleView;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.LocalTime;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -92,11 +93,23 @@ class BusinessHoursRepository {
                         resultSet.getInt("day_of_week"),
                         formatTime(resultSet.getObject("start_time", LocalTime.class)),
                         formatTime(resultSet.getObject("end_time", LocalTime.class))), row.id());
+        List<BusinessHoursScheduleView.ScheduleException> exceptions = jdbc.query("""
+                SELECT exception_date, type, start_time, end_time, note
+                FROM schedule_exceptions
+                WHERE business_hours_id = ?
+                ORDER BY exception_date, type, start_time NULLS FIRST, end_time NULLS FIRST, id
+                """, (resultSet, rowNumber) -> new BusinessHoursScheduleView.ScheduleException(
+                        resultSet.getObject("exception_date", LocalDate.class),
+                        resultSet.getString("type"),
+                        nullableTime(resultSet.getObject("start_time", LocalTime.class)),
+                        nullableTime(resultSet.getObject("end_time", LocalTime.class)),
+                        resultSet.getString("note")), row.id());
         return new BusinessHoursScheduleView(
                 row.id(),
                 row.timezone(),
                 row.active(),
                 List.copyOf(intervals),
+                List.copyOf(exceptions),
                 row.updatedBy(),
                 row.updatedAt().toInstant());
     }
@@ -112,6 +125,21 @@ class BusinessHoursRepository {
 
     private static String formatTime(LocalTime value) {
         return value.format(TIME_FORMAT);
+    }
+
+    void replaceExceptions(UUID scheduleId, List<ScheduleExceptionValue> exceptions) {
+        jdbc.update("DELETE FROM schedule_exceptions WHERE business_hours_id = ?", scheduleId);
+        for (ScheduleExceptionValue exception : exceptions) {
+            jdbc.update("""
+                    INSERT INTO schedule_exceptions (
+                        business_hours_id, exception_date, type, start_time, end_time, note
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """, scheduleId, exception.date(), exception.type(), exception.start(), exception.end(), exception.note());
+        }
+    }
+
+    private static String nullableTime(LocalTime value) {
+        return value == null ? null : formatTime(value);
     }
 
     private record ScheduleRow(
