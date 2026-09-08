@@ -1,0 +1,55 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/teams/v1.21/MicrosoftTeams.schema.json",
+  "manifestVersion": "1.21",
+  "version": "0.1.0",
+  "id": "__TEAMS_APP_ID__",
+  "developer": {
+    "name": "Unified Support Inbox Dev",
+    "websiteUrl": "https://example.invalid",
+    "privacyUrl": "https://example.invalid/privacy",
+    "termsOfUseUrl": "https://example.invalid/terms"
+  },
+  "icons": {
+    "outline": "outline.png",
+    "color": "color.png"
+  },
+  "name": {
+    "short": "USI Dev",
+    "full": "Unified Support Inbox Development"
+  },
+  "description": {
+    "short": "Development-only Teams integration for Unified Support Inbox.",
+    "full": "Development-only Teams integration used to validate resource-specific consent for standard channels and group chats. The app reads only conversation data required by the Unified Support Inbox development sandbox."
+  },
+  "accentColor": "#FFFFFF",
+  "webApplicationInfo": {
+    "id": "__TEAMS_BOT_CLIENT_ID__",
+    "resource": "api://botid-__TEAMS_BOT_CLIENT_ID__"
+  },
+  "authorization": {
+    "permissions": {
+      "resourceSpecific": [
+        {
+          "type": "Application",
+          "name": "ChannelMessage.Read.Group"
+        },
+        {
+          "type": "Application",
+          "name": "ChatMessage.Read.Chat"
+        }
+      ]
+    }
+  },
+  "bots": [
+    {
+      "botId": "__TEAMS_BOT_CLIENT_ID__",
+      "scopes": [
+        "team",
+        "groupChat"
+      ],
+      "supportsFiles": false,
+      "isNotificationOnly": false
+    }
+  ],
+  "validDomains": []
+}

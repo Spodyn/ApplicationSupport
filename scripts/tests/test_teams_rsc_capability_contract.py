@@ -29,6 +29,17 @@ class TeamsRscCapabilityContractTests(unittest.TestCase):
         self.assertIn("- private channels;", self.integrations)
         self.assertIn("- shared channels.", self.integrations)
 
+    def test_manifest_contract_uses_published_v121_bot_scope_casing(self):
+        manifest = self.contract["manifest"]
+        self.assertEqual(manifest["manifestVersion"], "1.21")
+        self.assertEqual(
+            manifest["schemaUrl"],
+            "https://developer.microsoft.com/json-schemas/teams/v1.21/MicrosoftTeams.schema.json",
+        )
+        self.assertEqual(set(manifest["botScopes"]), {"team", "groupChat"})
+        self.assertNotIn("groupchat", manifest["botScopes"])
+        self.assertNotIn("personal", manifest["botScopes"])
+
     def test_manifest_requests_only_least_privilege_receive_all_rsc_permissions(self):
         manifest = self.contract["manifest"]
         permissions = manifest["resourceSpecificPermissions"]
@@ -40,8 +51,6 @@ class TeamsRscCapabilityContractTests(unittest.TestCase):
                 ("ChatMessage.Read.Chat", "Application", "chat"),
             },
         )
-        self.assertEqual(set(manifest["botScopes"]), {"team", "groupchat"})
-        self.assertNotIn("personal", manifest["botScopes"])
         self.assertTrue(manifest["requiresWebApplicationInfo"])
         self.assertFalse(manifest["credentialsCommitted"])
 
@@ -60,7 +69,7 @@ class TeamsRscCapabilityContractTests(unittest.TestCase):
 
         group_chat = self.contexts["group_chat"]
         self.assertEqual(group_chat["v1Disposition"], "SUPPORTED")
-        self.assertEqual(group_chat["installScope"], "groupchat")
+        self.assertEqual(group_chat["installScope"], "groupChat")
         self.assertEqual(group_chat["rscPermission"], "ChatMessage.Read.Chat")
         self.assertIs(group_chat["receiveWithoutMention"], True)
         self.assertIs(group_chat["requiresNewOrReinstallationAfterReceiveAllPermission"], True)
@@ -86,7 +95,7 @@ class TeamsRscCapabilityContractTests(unittest.TestCase):
             "`ChannelMessage.Read.Group`",
             "`ChatMessage.Read.Chat`",
             "`team`",
-            "`groupchat`",
+            "`groupChat`",
             "Private channels and shared channels remain **deferred/out of v1**",
             "No tenant credentials or production Microsoft 365 credentials are introduced",
             "E18-T02 / USI-180",
@@ -95,10 +104,16 @@ class TeamsRscCapabilityContractTests(unittest.TestCase):
         for fragment in required_fragments:
             self.assertIn(fragment, self.adr)
 
-    def test_vendor_evidence_is_official_microsoft_learn_only(self):
+    def test_vendor_evidence_is_authoritative_microsoft_only(self):
         sources = self.contract["sources"]
-        self.assertGreaterEqual(len(sources), 4)
-        self.assertTrue(all(source.startswith("https://learn.microsoft.com/") for source in sources))
+        self.assertGreaterEqual(len(sources), 5)
+        self.assertTrue(
+            all(
+                source.startswith("https://learn.microsoft.com/")
+                or source.startswith("https://developer.microsoft.com/json-schemas/")
+                for source in sources
+            )
+        )
         for source in sources:
             self.assertIn(source, self.adr)
 
