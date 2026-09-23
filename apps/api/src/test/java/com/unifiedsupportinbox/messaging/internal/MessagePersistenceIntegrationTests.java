@@ -181,7 +181,7 @@ class MessagePersistenceIntegrationTests {
     }
 
     @Test
-    void databaseEnforcesAuthorshipDirectionDeliveryAndForeignKeys() {
+    void databaseEnforcesAuthorshipDirectionProviderIdentityAndForeignKeys() {
         Fixture fixture = fixture();
         UUID supportUserId = createUser();
 
@@ -193,7 +193,32 @@ class MessagePersistenceIntegrationTests {
                         null,
                         "U-customer",
                         null,
+                        true,
                         "corr-bad-1"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> rawInsert(
+                        fixture.caseId(),
+                        null,
+                        "CUSTOMER",
+                        true,
+                        null,
+                        "U-customer",
+                        null,
+                        true,
+                        "corr-bad-provider-id"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThatThrownBy(() -> rawInsert(
+                        fixture.caseId(),
+                        "missing-provider-time",
+                        "CUSTOMER",
+                        true,
+                        null,
+                        "U-customer",
+                        null,
+                        false,
+                        "corr-bad-provider-time"))
                 .isInstanceOf(DataIntegrityViolationException.class);
 
         assertThatThrownBy(() -> rawInsert(
@@ -204,6 +229,7 @@ class MessagePersistenceIntegrationTests {
                         null,
                         null,
                         "QUEUED",
+                        true,
                         "corr-bad-2"))
                 .isInstanceOf(DataIntegrityViolationException.class);
 
@@ -215,6 +241,7 @@ class MessagePersistenceIntegrationTests {
                         supportUserId,
                         null,
                         null,
+                        true,
                         "corr-bad-3"))
                 .isInstanceOf(DataIntegrityViolationException.class);
 
@@ -226,6 +253,7 @@ class MessagePersistenceIntegrationTests {
                         null,
                         "U-customer",
                         null,
+                        true,
                         "corr-bad-4"))
                 .isInstanceOf(DataIntegrityViolationException.class);
 
@@ -237,6 +265,7 @@ class MessagePersistenceIntegrationTests {
                         UUID.randomUUID(),
                         null,
                         "QUEUED",
+                        true,
                         "corr-bad-5"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }
@@ -335,13 +364,15 @@ class MessagePersistenceIntegrationTests {
             UUID authorUserId,
             String authorExternalId,
             String deliveryStatus,
+            boolean includeProviderCreatedAt,
             String correlationId) {
         jdbc.update("""
                 INSERT INTO messages (
                     case_id, external_message_id, external_thread_key, kind,
                     author_user_id, author_external_id, author_name, body, body_format,
                     inbound, delivery_status, provider_created_at, correlation_id
-                ) VALUES (?, ?, 'raw-thread', ?, ?, ?, ?, 'body', 'PLAIN_TEXT', ?, ?, CURRENT_TIMESTAMP, ?)
+                ) VALUES (?, ?, 'raw-thread', ?, ?, ?, ?, 'body', 'PLAIN_TEXT', ?, ?,
+                          CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END, ?)
                 """,
                 caseId,
                 externalMessageId,
@@ -351,6 +382,7 @@ class MessagePersistenceIntegrationTests {
                 authorExternalId == null ? null : "External Author",
                 inbound,
                 deliveryStatus,
+                includeProviderCreatedAt,
                 correlationId);
     }
 
