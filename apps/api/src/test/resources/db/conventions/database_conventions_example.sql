@@ -17,7 +17,16 @@ CREATE TABLE case_record_example (
     CONSTRAINT fk_case_record_example_customer
         FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
     CONSTRAINT uq_case_record_example_reference UNIQUE (reference),
-    CONSTRAINT ck_case_record_example_status CHECK (status IN ('NEW', 'ACTIVE', 'RESOLVED')),
+    CONSTRAINT ck_case_record_example_status CHECK (
+        status IN (
+            'NEW',
+            'VERIFICATION',
+            'WAITING_FOR_CUSTOMER',
+            'PARTIALLY_IGNORED',
+            'IGNORED',
+            'RESOLVED'
+        )
+    ),
     CONSTRAINT ck_case_record_example_version CHECK (version >= 0)
 );
 
