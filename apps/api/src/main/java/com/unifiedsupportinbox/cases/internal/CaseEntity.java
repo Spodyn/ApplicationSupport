@@ -28,6 +28,8 @@ class CaseEntity {
     @Column(name = "id", nullable = false, updatable = false)
     private UUID id;
 
+    @Generated
+    @ColumnDefault("('CASE-' || lpad(nextval('case_reference_seq')::text, 8, '0'))")
     @Column(name = "reference", nullable = false, length = 32, updatable = false)
     private String reference;
 
@@ -93,7 +95,6 @@ class CaseEntity {
     }
 
     CaseEntity(
-            String reference,
             UUID customerId,
             UUID integrationId,
             UUID channelId,
@@ -101,7 +102,6 @@ class CaseEntity {
             String externalConversationId,
             String externalThreadKey,
             UUID relatedCaseId) {
-        this.reference = requiredText(reference, "reference", 32);
         this.customerId = Objects.requireNonNull(customerId, "customerId");
         this.integrationId = Objects.requireNonNull(integrationId, "integrationId");
         this.channelId = Objects.requireNonNull(channelId, "channelId");
@@ -135,7 +135,6 @@ class CaseEntity {
 
     @PrePersist
     void beforeInsert() {
-        reference = requiredText(reference, "reference", 32);
         externalConversationId = requiredText(externalConversationId, "externalConversationId", 255);
         externalThreadKey = optionalText(externalThreadKey, "externalThreadKey", 255);
         Instant now = Instant.now();
