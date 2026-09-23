@@ -1,9 +1,11 @@
 package com.unifiedsupportinbox.provider.slack.internal;
 
+import com.unifiedsupportinbox.InboundEventOutcomeStore;
 import com.unifiedsupportinbox.InboundEventProcessor;
 import com.unifiedsupportinbox.InboundEventProcessor.ProcessingResult;
 import com.unifiedsupportinbox.InboundEventStore;
 import com.unifiedsupportinbox.InboundEventStore.InboundEvent;
+import com.unifiedsupportinbox.channel.ChannelIngestionPolicy;
 import com.unifiedsupportinbox.provider.slack.internal.SlackInboundEventHandler.SlackInboundEvent;
 import java.time.Duration;
 import java.util.UUID;
@@ -22,6 +24,8 @@ class SlackInboundWorker {
 
     private final InboundEventProcessor processor;
     private final InboundEventStore inboundEvents;
+    private final InboundEventOutcomeStore outcomes;
+    private final ChannelIngestionPolicy channelPolicy;
     private final ObjectProvider<SlackInboundEventHandler> handlers;
     private final ObjectMapper json;
     private final SlackInboundWorkerProperties properties;
@@ -29,11 +33,15 @@ class SlackInboundWorker {
     SlackInboundWorker(
             InboundEventProcessor processor,
             InboundEventStore inboundEvents,
+            InboundEventOutcomeStore outcomes,
+            ChannelIngestionPolicy channelPolicy,
             ObjectProvider<SlackInboundEventHandler> handlers,
             ObjectMapper json,
             SlackInboundWorkerProperties properties) {
         this.processor = processor;
         this.inboundEvents = inboundEvents;
+        this.outcomes = outcomes;
+        this.channelPolicy = channelPolicy;
         this.handlers = handlers;
         this.json = json;
         this.properties = properties;
@@ -49,6 +57,10 @@ class SlackInboundWorker {
         try {
             ProcessingResult result = processor.process(eventId, "SLACK_PROCESSING_FAILED", inbound -> {
                 SlackInboundEvent decoded = decode(inbound);
+                if (isIgnoredChannel(decoded)) {
+                    outcomes.markIgnoredByChannel(decoded.inboundEventId());
+                    return;
+                }
                 if (handler == null) {
                     throw SlackInboundProcessingException.transientFailure(
                             "HANDLER_UNAVAILABLE",
@@ -92,6 +104,16 @@ class SlackInboundWorker {
                     disposition.errorCode());
             return AttemptResult.RETRY_SCHEDULED;
         }
+    }
+
+    private boolean isIgnoredChannel(SlackInboundEvent inbound) {
+        JsonNode channel = inbound.event().get("channel");
+        if (channel == null || !channel.isTextual() || channel.stringValue().isBlank()) {
+            return false;
+        }
+        return channelPolicy.resolve(inbound.integrationId(), channel.stringValue())
+                .map(ChannelIngestionPolicy.Decision::ignoredForInbound)
+                .orElse(false);
     }
 
     private SlackInboundEvent decode(InboundEvent inbound) {

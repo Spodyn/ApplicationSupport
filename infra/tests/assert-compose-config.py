@@ -34,8 +34,8 @@ def main() -> None:
     expected_images = {
         "postgres": "postgres:18.6",
         "rabbitmq": "rabbitmq:4.3.5-management",
-        "minio": "minio/minio:RELEASE.2025-09-07T16-13-09Z",
-        "minio-init": "minio/mc:RELEASE.2025-08-13T08-35-41Z",
+        "minio": "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z",
+        "minio-init": "quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z",
     }
     for service_name, image in expected_images.items():
         require(

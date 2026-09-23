@@ -18,7 +18,7 @@ public final class TestInfrastructure {
 
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName.parse("postgres:18.6");
     private static final DockerImageName RABBITMQ_IMAGE = DockerImageName.parse("rabbitmq:4.3.5-management");
-    private static final DockerImageName MINIO_IMAGE = DockerImageName.parse("minio/minio:RELEASE.2025-09-07T16-13-09Z");
+    private static final DockerImageName MINIO_IMAGE = DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z");
 
     private TestInfrastructure() {
     }
