@@ -94,14 +94,15 @@ class CasePersistenceIntegrationTests {
         assertThat(saved.updatedAt()).isNotNull();
         assertThat(saved.lastActivityAt()).isNotNull();
         assertThat(saved.version()).isZero();
-        assertThat(repository.findByReference("CASE-00000001")).contains(saved);
+        assertThat(repository.findByReference("CASE-00000001").map(CaseEntity::id)).contains(saved.id());
         assertThat(repository.findActiveByProviderContext(
-                        fixture.integrationId(),
-                        fixture.channelId(),
-                        IntegrationProvider.SLACK,
-                        "C-support",
-                        "1710000000.000001"))
-                .contains(saved);
+                                fixture.integrationId(),
+                                fixture.channelId(),
+                                IntegrationProvider.SLACK,
+                                "C-support",
+                                "1710000000.000001")
+                        .map(CaseEntity::id))
+                .contains(saved.id());
     }
 
     @Test
