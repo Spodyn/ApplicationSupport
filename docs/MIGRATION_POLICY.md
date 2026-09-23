@@ -8,6 +8,10 @@ applied anywhere outside a disposable local database, its filename and contents
 must never change. A correction is a new migration, never an edit, delete,
 rename, or baseline rewrite of an existing migration.
 
+Schema naming, UUID, timestamp, constraint/index naming, optimistic-locking and
+human-readable Case reference conventions are frozen separately in
+`DATABASE_CONVENTIONS.md`. New migrations must satisfy both policies.
+
 ## Expand-contract lifecycle
 
 Potentially incompatible schema changes use these independently deployable
