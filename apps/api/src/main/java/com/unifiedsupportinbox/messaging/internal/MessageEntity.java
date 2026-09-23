@@ -160,6 +160,8 @@ class MessageEntity {
     private void validateAuthorship() {
         boolean valid = switch (kind) {
             case CUSTOMER -> inbound
+                    && externalMessageId != null
+                    && providerCreatedAt != null
                     && authorUserId == null
                     && authorExternalId != null
                     && deliveryStatus == null;
