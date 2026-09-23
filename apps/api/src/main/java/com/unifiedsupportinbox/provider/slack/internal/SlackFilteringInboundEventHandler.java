@@ -14,14 +14,12 @@ import com.unifiedsupportinbox.provider.slack.internal.SlackNormalizer.FilterRea
 import com.unifiedsupportinbox.provider.slack.internal.SlackNormalizer.Filtered;
 import java.util.Optional;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 
 /**
  * Applies configured-channel policy before handing normalized Slack semantics to the provider-neutral
  * inbound boundary.
  */
-@Component
 class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
 
     private final ChannelIngestionPolicy channelPolicy;
