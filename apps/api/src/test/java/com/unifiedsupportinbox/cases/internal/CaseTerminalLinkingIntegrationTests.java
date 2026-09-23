@@ -99,7 +99,7 @@ class CaseTerminalLinkingIntegrationTests {
         Fixture fixture = fixture();
         Result original = service.create(command(fixture, "thread-ignored"));
         jdbc.update(
-                "UPDATE cases SET status = 'IGNORED', ignored_at = CURRENT_TIMESTAMP, resolution_category = 'NOT_ACTIONABLE' WHERE id = ?",
+                "UPDATE cases SET status = 'IGNORED', ignored_at = CURRENT_TIMESTAMP WHERE id = ?",
                 original.caseId());
 
         Result successor = service.create(command(fixture, "thread-ignored"));
