@@ -40,7 +40,18 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
 
     @Override
     public void handle(SlackInboundEvent inbound) {
-        String externalChannelId = requiredChannel(inbound.event());
+        JsonNode event = inbound.event();
+        JsonNode eventType = event.get("type");
+        if (eventType == null || !eventType.isTextual() || eventType.stringValue().isBlank()) {
+            throw SlackInboundProcessingException.malformed(
+                    "MALFORMED_SLACK_MESSAGE", "Slack event type is required.");
+        }
+        if (!"message".equals(eventType.stringValue())) {
+            outcomes.mark(inbound.inboundEventId(), UNSUPPORTED_PROVIDER_EVENT);
+            return;
+        }
+
+        String externalChannelId = requiredChannel(event);
         Optional<Decision> resolved = channelPolicy.resolve(inbound.integrationId(), externalChannelId);
         if (resolved.isEmpty()) {
             outcomes.mark(inbound.inboundEventId(), UNMAPPED_CHANNEL);
