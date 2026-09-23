@@ -69,6 +69,11 @@ class CaseCreationDomainService implements CaseCreationService {
             return result(existing.orElseThrow(), false);
         }
 
+        UUID relatedCaseId = findLatestTerminal(
+                        integrationId, channelId, provider, externalConversationId, externalThreadKey)
+                .map(PersistedCase::id)
+                .orElse(null);
+
         List<PersistedCase> inserted = jdbc.query("""
                 INSERT INTO cases (
                     customer_id,
@@ -77,9 +82,10 @@ class CaseCreationDomainService implements CaseCreationService {
                     provider,
                     external_conversation_id,
                     external_thread_key,
-                    status
+                    status,
+                    related_case_id
                 )
-                VALUES (?, ?, ?, ?, ?, ?, 'NEW')
+                VALUES (?, ?, ?, ?, ?, ?, 'NEW', ?)
                 ON CONFLICT DO NOTHING
                 RETURNING id,
                           reference,
@@ -90,6 +96,7 @@ class CaseCreationDomainService implements CaseCreationService {
                           external_conversation_id,
                           external_thread_key,
                           status,
+                          related_case_id,
                           created_at
                 """, preparedStatement -> {
             preparedStatement.setObject(1, channel.customerId());
@@ -98,6 +105,7 @@ class CaseCreationDomainService implements CaseCreationService {
             preparedStatement.setString(4, provider.name());
             preparedStatement.setString(5, externalConversationId);
             preparedStatement.setString(6, externalThreadKey);
+            preparedStatement.setObject(7, relatedCaseId);
         }, ROW_MAPPER);
 
         if (inserted.isEmpty()) {
@@ -142,18 +150,7 @@ class CaseCreationDomainService implements CaseCreationService {
             IntegrationProvider provider,
             String externalConversationId,
             String externalThreadKey) {
-        return jdbc.query("""
-                SELECT id,
-                       reference,
-                       customer_id,
-                       integration_id,
-                       channel_id,
-                       provider,
-                       external_conversation_id,
-                       external_thread_key,
-                       status,
-                       created_at
-                FROM cases
+        return jdbc.query(selectCaseSql() + """
                 WHERE integration_id = ?
                   AND channel_id = ?
                   AND provider = ?
@@ -169,6 +166,47 @@ class CaseCreationDomainService implements CaseCreationService {
                 externalThreadKey).stream().findFirst();
     }
 
+    private Optional<PersistedCase> findLatestTerminal(
+            UUID integrationId,
+            UUID channelId,
+            IntegrationProvider provider,
+            String externalConversationId,
+            String externalThreadKey) {
+        return jdbc.query(selectCaseSql() + """
+                WHERE integration_id = ?
+                  AND channel_id = ?
+                  AND provider = ?
+                  AND external_conversation_id = ?
+                  AND COALESCE(external_thread_key, '') = COALESCE(?, '')
+                  AND status IN ('IGNORED', 'RESOLVED')
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1
+                """,
+                ROW_MAPPER,
+                integrationId,
+                channelId,
+                provider.name(),
+                externalConversationId,
+                externalThreadKey).stream().findFirst();
+    }
+
+    private static String selectCaseSql() {
+        return """
+                SELECT id,
+                       reference,
+                       customer_id,
+                       integration_id,
+                       channel_id,
+                       provider,
+                       external_conversation_id,
+                       external_thread_key,
+                       status,
+                       related_case_id,
+                       created_at
+                FROM cases
+                """;
+    }
+
     private String caseCreatedPayload(PersistedCase created, UUID sourceInboundEventId) {
         ObjectNode payload = json.createObjectNode();
         payload.put("caseId", created.id().toString());
@@ -180,6 +218,8 @@ class CaseCreationDomainService implements CaseCreationService {
         payload.put("externalConversationId", created.externalConversationId());
         if (created.externalThreadKey() == null) payload.putNull("externalThreadKey");
         else payload.put("externalThreadKey", created.externalThreadKey());
+        if (created.relatedCaseId() == null) payload.putNull("relatedCaseId");
+        else payload.put("relatedCaseId", created.relatedCaseId().toString());
         payload.put("sourceInboundEventId", sourceInboundEventId.toString());
         payload.put("createdAt", created.createdAt().toString());
         return payload.toString();
@@ -211,6 +251,7 @@ class CaseCreationDomainService implements CaseCreationService {
                 resultSet.getString("external_conversation_id"),
                 resultSet.getString("external_thread_key"),
                 CaseStatus.valueOf(resultSet.getString("status")),
+                resultSet.getObject("related_case_id", UUID.class),
                 resultSet.getObject("created_at", OffsetDateTime.class).toInstant());
     }
 
@@ -249,6 +290,7 @@ class CaseCreationDomainService implements CaseCreationService {
             String externalConversationId,
             String externalThreadKey,
             CaseStatus status,
+            UUID relatedCaseId,
             Instant createdAt) {
     }
 }
