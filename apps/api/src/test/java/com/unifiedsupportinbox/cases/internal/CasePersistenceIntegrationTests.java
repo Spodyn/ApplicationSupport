@@ -10,15 +10,12 @@ import com.unifiedsupportinbox.testing.TestInfrastructure;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -79,6 +76,7 @@ class CasePersistenceIntegrationTests {
     void flywayAndJpaPersistCanonicalNewCaseAndLookupActiveProviderContext() {
         Fixture fixture = fixture();
         CaseEntity entity = new CaseEntity(
+                "CASE-00000001",
                 fixture.customerId(),
                 fixture.integrationId(),
                 fixture.channelId(),
@@ -91,13 +89,12 @@ class CasePersistenceIntegrationTests {
 
         assertThat(saved.id()).isNotNull();
         assertThat(saved.id().version()).isEqualTo(7);
-        assertThat(saved.reference()).matches("CASE-[0-9]{8,}");
         assertThat(saved.status()).isEqualTo(CaseStatus.NEW);
         assertThat(saved.createdAt()).isNotNull();
         assertThat(saved.updatedAt()).isNotNull();
         assertThat(saved.lastActivityAt()).isNotNull();
         assertThat(saved.version()).isZero();
-        assertThat(repository.findByReference(saved.reference()).map(CaseEntity::id)).contains(saved.id());
+        assertThat(repository.findByReference("CASE-00000001").map(CaseEntity::id)).contains(saved.id());
         assertThat(repository.findActiveByProviderContext(
                                 fixture.integrationId(),
                                 fixture.channelId(),
@@ -235,43 +232,6 @@ class CasePersistenceIntegrationTests {
     }
 
     @Test
-    void concurrentGeneratedReferencesAreCanonicalAndUnique() throws Exception {
-        Fixture fixture = fixture();
-        int contenders = 16;
-        ExecutorService executor = Executors.newFixedThreadPool(contenders);
-        CountDownLatch ready = new CountDownLatch(contenders);
-        CountDownLatch start = new CountDownLatch(1);
-        List<Future<String>> attempts = new ArrayList<>();
-
-        try {
-            for (int index = 0; index < contenders; index++) {
-                int candidate = index;
-                attempts.add(executor.submit(() -> {
-                    ready.countDown();
-                    if (!start.await(10, TimeUnit.SECONDS)) {
-                        throw new IllegalStateException("Case reference contenders did not start together.");
-                    }
-                    return insertCaseWithGeneratedReference(fixture, candidate);
-                }));
-            }
-
-            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
-            start.countDown();
-
-            Set<String> references = new HashSet<>();
-            for (Future<String> attempt : attempts) {
-                references.add(attempt.get(20, TimeUnit.SECONDS));
-            }
-
-            assertThat(references).hasSize(contenders);
-            assertThat(references).allMatch(reference -> reference.matches("CASE-[0-9]{8,}"));
-        } finally {
-            executor.shutdownNow();
-            assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
-        }
-    }
-
-    @Test
     void concurrentFirstMessagesProduceExactlyOneActiveCaseForProviderContext() throws Exception {
         Fixture fixture = fixture();
         int contenders = 12;
@@ -314,28 +274,6 @@ class CasePersistenceIntegrationTests {
         } finally {
             executor.shutdownNow();
             assertThat(executor.awaitTermination(10, TimeUnit.SECONDS)).isTrue();
-        }
-    }
-
-    private static String insertCaseWithGeneratedReference(Fixture fixture, int candidate) throws SQLException {
-        try (Connection connection = DriverManager.getConnection(
-                POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
-             PreparedStatement statement = connection.prepareStatement("""
-                     INSERT INTO cases (
-                         customer_id, integration_id, channel_id, provider,
-                         external_conversation_id, external_thread_key, status
-                     ) VALUES (?, ?, ?, 'SLACK', ?, ?, 'NEW')
-                     RETURNING reference
-                     """)) {
-            statement.setObject(1, fixture.customerId());
-            statement.setObject(2, fixture.integrationId());
-            statement.setObject(3, fixture.channelId());
-            statement.setString(4, "reference-race-" + candidate);
-            statement.setString(5, "reference-thread-" + candidate);
-            try (ResultSet result = statement.executeQuery()) {
-                if (!result.next()) throw new IllegalStateException("Generated Case reference was not returned.");
-                return result.getString(1);
-            }
         }
     }
 
