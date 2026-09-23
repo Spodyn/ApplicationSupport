@@ -3,9 +3,11 @@ package com.unifiedsupportinbox.messaging.internal;
 import com.unifiedsupportinbox.cases.CaseCreationService;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.messaging.InboundMessageCommandHandler;
+import com.unifiedsupportinbox.readstate.CustomerMessageUnreadService;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -20,10 +22,15 @@ import org.springframework.transaction.annotation.Transactional;
 class InboundRootMessageCommandService implements InboundMessageCommandHandler {
 
     private final CaseCreationService cases;
+    private final CustomerMessageUnreadService unread;
     private final JdbcTemplate jdbc;
 
-    InboundRootMessageCommandService(CaseCreationService cases, JdbcTemplate jdbc) {
+    InboundRootMessageCommandService(
+            CaseCreationService cases,
+            CustomerMessageUnreadService unread,
+            JdbcTemplate jdbc) {
         this.cases = cases;
+        this.unread = unread;
         this.jdbc = jdbc;
     }
 
@@ -42,7 +49,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                 command.externalThreadKey(),
                 command.correlationId()));
 
-        int inserted = jdbc.update("""
+        List<UUID> insertedMessageIds = jdbc.query("""
                 INSERT INTO messages (
                     case_id,
                     external_message_id,
@@ -62,18 +69,34 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                 ON CONFLICT (case_id, external_message_id)
                     WHERE external_message_id IS NOT NULL
                 DO NOTHING
+                RETURNING id
                 """,
-                caseResult.caseId(),
-                command.externalMessageId(),
-                command.externalThreadKey(),
-                command.authorExternalId(),
-                command.body(),
-                utc(command.providerOccurredAt()),
-                command.correlationId());
+                preparedStatement -> {
+                    preparedStatement.setObject(1, caseResult.caseId());
+                    preparedStatement.setString(2, command.externalMessageId());
+                    preparedStatement.setString(3, command.externalThreadKey());
+                    preparedStatement.setString(4, command.authorExternalId());
+                    preparedStatement.setString(5, command.body());
+                    preparedStatement.setObject(6, utc(command.providerOccurredAt()));
+                    preparedStatement.setString(7, command.correlationId());
+                },
+                (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class));
 
-        if (inserted == 0 && !messageExists(caseResult.caseId(), command.externalMessageId())) {
-            throw new IllegalStateException("Inbound Message insert conflicted but no persisted Message exists.");
+        if (insertedMessageIds.isEmpty()) {
+            if (!messageExists(caseResult.caseId(), command.externalMessageId())) {
+                throw new IllegalStateException("Inbound Message insert conflicted but no persisted Message exists.");
+            }
+            return;
         }
+
+        if (insertedMessageIds.size() != 1) {
+            throw new IllegalStateException("Inbound Message insert returned an unexpected number of rows.");
+        }
+
+        unread.customerMessageCreated(
+                caseResult.caseId(),
+                insertedMessageIds.getFirst(),
+                command.correlationId());
     }
 
     private boolean messageExists(UUID caseId, String externalMessageId) {
