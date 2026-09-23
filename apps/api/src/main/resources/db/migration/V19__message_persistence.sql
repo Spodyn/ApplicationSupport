@@ -44,7 +44,7 @@ CREATE TABLE messages (
     CONSTRAINT ck_messages_body_format CHECK (body_format IN ('PLAIN_TEXT', 'MARKDOWN')),
     CONSTRAINT ck_messages_delivery_status CHECK (
         delivery_status IS NULL
-        OR delivery_status IN ('QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'READ', 'FAILED')
+        OR delivery_status IN ('QUEUED', 'SENDING', 'SENT', 'DELIVERED', 'FAILED')
     ),
     CONSTRAINT ck_messages_author_external_id CHECK (
         author_external_id IS NULL
@@ -68,6 +68,8 @@ CREATE TABLE messages (
         (
             kind = 'CUSTOMER'
             AND inbound = TRUE
+            AND external_message_id IS NOT NULL
+            AND provider_created_at IS NOT NULL
             AND author_user_id IS NULL
             AND author_external_id IS NOT NULL
             AND delivery_status IS NULL
