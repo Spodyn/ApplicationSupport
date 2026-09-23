@@ -15,6 +15,7 @@ class ModulithArchitectureTests {
             "customer",
             "integration",
             "channel",
+            "cases",
             "realtime",
             "inbox",
             "messaging",
