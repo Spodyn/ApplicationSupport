@@ -1,8 +1,6 @@
 package com.unifiedsupportinbox.readstate.internal;
 
 import java.util.UUID;
-
-import com.unifiedsupportinbox.OutboxProperties;
 import org.springframework.amqp.AmqpRejectAndDontRequeueException;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
