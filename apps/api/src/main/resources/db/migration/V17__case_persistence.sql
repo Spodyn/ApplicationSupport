@@ -1,16 +1,9 @@
 -- USI-84 / E07-T01
 -- Canonical Case persistence model and provider/grouping concurrency constraints.
 
-CREATE SEQUENCE case_reference_seq
-    AS bigint
-    START WITH 1
-    INCREMENT BY 1;
-
 CREATE TABLE cases (
     id uuid NOT NULL DEFAULT uuidv7(),
-    reference varchar(32) NOT NULL DEFAULT (
-        'CASE-' || lpad(nextval('case_reference_seq')::text, 8, '0')
-    ),
+    reference varchar(32) NOT NULL,
     customer_id uuid NOT NULL,
     integration_id uuid NOT NULL,
     channel_id uuid NOT NULL,
@@ -101,8 +94,6 @@ CREATE TABLE cases (
     ),
     CONSTRAINT ck_cases_version CHECK (version >= 0)
 );
-
-ALTER SEQUENCE case_reference_seq OWNED BY cases.reference;
 
 CREATE INDEX idx_cases_status_activity
     ON cases (status, last_activity_at DESC, id DESC);
