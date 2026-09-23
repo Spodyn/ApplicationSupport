@@ -76,7 +76,6 @@ class CasePersistenceIntegrationTests {
     void flywayAndJpaPersistCanonicalNewCaseAndLookupActiveProviderContext() {
         Fixture fixture = fixture();
         CaseEntity entity = new CaseEntity(
-                "CASE-00000001",
                 fixture.customerId(),
                 fixture.integrationId(),
                 fixture.channelId(),
@@ -89,12 +88,13 @@ class CasePersistenceIntegrationTests {
 
         assertThat(saved.id()).isNotNull();
         assertThat(saved.id().version()).isEqualTo(7);
+        assertThat(saved.reference()).matches("CASE-[0-9]{8,}");
         assertThat(saved.status()).isEqualTo(CaseStatus.NEW);
         assertThat(saved.createdAt()).isNotNull();
         assertThat(saved.updatedAt()).isNotNull();
         assertThat(saved.lastActivityAt()).isNotNull();
         assertThat(saved.version()).isZero();
-        assertThat(repository.findByReference("CASE-00000001").map(CaseEntity::id)).contains(saved.id());
+        assertThat(repository.findByReference(saved.reference()).map(CaseEntity::id)).contains(saved.id());
         assertThat(repository.findActiveByProviderContext(
                                 fixture.integrationId(),
                                 fixture.channelId(),
