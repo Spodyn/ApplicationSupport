@@ -5,6 +5,5 @@ public enum MessageDeliveryStatus {
     SENDING,
     SENT,
     DELIVERED,
-    READ,
     FAILED
 }
