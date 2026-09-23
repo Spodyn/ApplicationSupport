@@ -56,6 +56,18 @@ class ChannelRepository {
         return jdbc.query(SELECT_COLUMNS + " WHERE c.id = ?", ROW_MAPPER, id).stream().findFirst();
     }
 
+    Optional<ChannelRecord> findByIntegrationAndExternalChannel(UUID integrationId, String externalChannelId) {
+        Objects.requireNonNull(integrationId, "integrationId");
+        String normalizedExternalChannelId = requiredText(externalChannelId, "externalChannelId", 255);
+        return jdbc.query(
+                        SELECT_COLUMNS + " WHERE c.integration_id = ? AND c.external_channel_id = ?",
+                        ROW_MAPPER,
+                        integrationId,
+                        normalizedExternalChannelId)
+                .stream()
+                .findFirst();
+    }
+
     ChannelRecord upsertDiscovery(DiscoveredChannel discovered) {
         Objects.requireNonNull(discovered, "discovered");
         Objects.requireNonNull(discovered.integrationId(), "integrationId");
