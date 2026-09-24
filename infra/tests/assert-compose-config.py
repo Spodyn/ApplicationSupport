@@ -34,13 +34,29 @@ def main() -> None:
     expected_images = {
         "postgres": "postgres:18.6",
         "rabbitmq": "rabbitmq:4.3.5-management",
-        "minio": "quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z",
-        "minio-init": "quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z",
+        "minio": "usi/minio:RELEASE.2025-09-07T16-13-09Z",
+        "minio-init": "usi/minio-mc:RELEASE.2025-08-13T08-35-41Z",
     }
     for service_name, image in expected_images.items():
         require(
             services[service_name].get("image") == image,
             f"{service_name} must use the reviewed pinned image",
+        )
+
+    for service_name, dockerfile in {
+        "minio": "Dockerfile.server",
+        "minio-init": "Dockerfile.mc",
+    }.items():
+        service = services[service_name]
+        build = service.get("build")
+        require(isinstance(build, dict), f"{service_name} must be built from reviewed source")
+        require(
+            build.get("dockerfile") == dockerfile,
+            f"{service_name} must use the reviewed source-build Dockerfile",
+        )
+        require(
+            service.get("pull_policy") == "never",
+            f"{service_name} must never fall back to a remote prebuilt image",
         )
 
     expected_ports = {
