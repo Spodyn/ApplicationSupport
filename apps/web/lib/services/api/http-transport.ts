@@ -67,7 +67,11 @@ function notifyAuthenticationRequired(): void {
 
 export const browserApiTransport: ApiTransport = {
   async request<TResponse>(request: ApiTransportRequest): Promise<TResponse> {
-    const headers = new Headers({ Accept: "application/json" })
+    const headers = new Headers()
+    for (const [name, value] of Object.entries(request.headers ?? {})) {
+      if (value !== undefined && value !== null) headers.set(name, String(value))
+    }
+    headers.set("Accept", "application/json")
     if (request.body !== undefined) headers.set("Content-Type", "application/json")
 
     if (!["GET"].includes(request.method)) {

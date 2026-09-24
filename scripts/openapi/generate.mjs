@@ -111,6 +111,7 @@ function generatedOperation(route, method, operation, pathItem, imports, inputBl
   const inputType = inputBlock ? `${pascalCase(operation.operationId)}Input` : null
   const pathParameters = parameters.filter((parameter) => parameter.in === 'path')
   const queryParameters = parameters.filter((parameter) => parameter.in === 'query')
+  const headerParameters = parameters.filter((parameter) => parameter.in === 'header')
   const requestFields = [`method: ${tsString(method)}`]
   if (pathParameters.length) {
     const values = pathParameters.map((parameter) => `${tsString(parameter.name)}: input[${tsString(parameter.name)}]`).join(', ')
@@ -121,6 +122,10 @@ function generatedOperation(route, method, operation, pathItem, imports, inputBl
   if (queryParameters.length) {
     const values = queryParameters.map((parameter) => `${tsString(parameter.name)}: input[${tsString(parameter.name)}]`).join(', ')
     requestFields.push(`query: { ${values} }`)
+  }
+  if (headerParameters.length) {
+    const values = headerParameters.map((parameter) => `${tsString(parameter.name)}: input[${tsString(parameter.name)}]`).join(', ')
+    requestFields.push(`headers: { ${values} }`)
   }
   if (bodySchema) requestFields.push('body: input.body')
 
@@ -143,7 +148,7 @@ function generateClient(contract) {
   const interpolate = operationLines.some((line) => line.includes('interpolatePath'))
     ? `\nfunction interpolatePath(template: string, parameters: Record<string, unknown>): string {\n  return template.replace(/\\{([^}]+)\\}/g, (_, name: string) => {\n    const value = parameters[name]\n    if (value === undefined || value === null) throw new Error(\`Missing path parameter: \${name}\`)\n    return encodeURIComponent(String(value))\n  })\n}\n`
     : ''
-  return `${HEADER}${importLine}${inputs}export interface ApiTransportRequest {\n  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'\n  path: string\n  query?: Record<string, unknown>\n  body?: unknown\n}\n\nexport interface ApiTransport {\n  request<TResponse>(request: ApiTransportRequest): Promise<TResponse>\n}\n\nexport function createApiClient(transport: ApiTransport) {\n  return {${body}} as const\n}\n${interpolate}`
+  return `${HEADER}${importLine}${inputs}export interface ApiTransportRequest {\n  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'\n  path: string\n  query?: Record<string, unknown>\n  headers?: Record<string, unknown>\n  body?: unknown\n}\n\nexport interface ApiTransport {\n  request<TResponse>(request: ApiTransportRequest): Promise<TResponse>\n}\n\nexport function createApiClient(transport: ApiTransport) {\n  return {${body}} as const\n}\n${interpolate}`
 }
 
 function generateIndex() {
