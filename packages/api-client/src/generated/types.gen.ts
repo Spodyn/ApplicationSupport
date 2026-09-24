@@ -50,10 +50,24 @@ export type LoginRequest = {
   "password": string
 }
 
+export type MessageBodyFormat = "PLAIN_TEXT" | "MARKDOWN"
+
+export type MessageDeliveryStatus = "QUEUED" | "SENDING" | "SENT" | "DELIVERED" | "FAILED"
+
 export type PermissionCode = "manage_users" | "manage_integrations" | "manage_sla" | "manage_schedule" | "manage_notifications" | "view_global_statistics" | "reassign_cases" | "force_resolve" | "view_audit"
 
 export type PermissionUpdateRequest = {
   "permissions": Array<PermissionCode>
+}
+
+export type SendMessageRequest = {
+  "body": string
+  "bodyFormat"?: MessageBodyFormat
+}
+
+export type SendMessageResponse = {
+  "messageId": string
+  "deliveryStatus": MessageDeliveryStatus
 }
 
 export type UpdateCustomerRequest = {
