@@ -123,6 +123,42 @@ class MessageDeliveryWorkerIntegrationTests {
     }
 
     @Test
+    void eighthTransientFailureExhaustsAutomaticAttempts() {
+        Fixture fixture = createFixture("ENABLED");
+        UUID messageId = createMessage(fixture, "attempt-limit");
+        for (int attempt = 1; attempt <= 7; attempt++) {
+            seedFinishedTransientAttempt(messageId, attempt, "PREVIOUS_TRANSIENT", "1 minute");
+        }
+        provider.steps(DeliveryResult.transientFailure("STILL_TRANSIENT", null));
+
+        assertThat(worker.process(messageId)).isEqualTo(MessageDeliveryWorker.AttemptResult.FAILED);
+        assertThat(status(messageId)).isEqualTo("FAILED");
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM delivery_attempts WHERE message_id = ?",
+                Integer.class, messageId)).isEqualTo(8);
+        assertThat(jdbc.queryForObject(
+                "SELECT next_retry_at IS NULL FROM delivery_attempts WHERE message_id = ? AND attempt_no = 8",
+                Boolean.class, messageId)).isTrue();
+    }
+
+    @Test
+    void retryWindowOlderThanTwentyFourHoursStopsAutomaticRetry() {
+        Fixture fixture = createFixture("ENABLED");
+        UUID messageId = createMessage(fixture, "retry-window");
+        seedFinishedTransientAttempt(messageId, 1, "OLD_TRANSIENT", "25 hours");
+        provider.steps(DeliveryResult.transientFailure("TRANSIENT_AFTER_WINDOW", Duration.ofMillis(50)));
+
+        assertThat(worker.process(messageId)).isEqualTo(MessageDeliveryWorker.AttemptResult.FAILED);
+        assertThat(status(messageId)).isEqualTo("FAILED");
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM delivery_attempts WHERE message_id = ?",
+                Integer.class, messageId)).isEqualTo(2);
+        assertThat(jdbc.queryForObject(
+                "SELECT next_retry_at IS NULL FROM delivery_attempts WHERE message_id = ? AND attempt_no = 2",
+                Boolean.class, messageId)).isTrue();
+    }
+
+    @Test
     void expiredSendingLeaseRecoversAfterWorkerCrash() {
         Fixture fixture = createFixture("ENABLED");
         UUID messageId = createMessage(fixture, "crash");
@@ -244,6 +280,23 @@ class MessageDeliveryWorkerIntegrationTests {
                 SET next_retry_at = CURRENT_TIMESTAMP - INTERVAL '1 second'
                 WHERE message_id = ? AND finished_at IS NOT NULL
                 """, messageId);
+    }
+
+    private void seedFinishedTransientAttempt(
+            UUID messageId,
+            int attemptNo,
+            String errorCode,
+            String age) {
+        jdbc.update("""
+                INSERT INTO delivery_attempts (
+                    message_id, attempt_no, started_at, finished_at,
+                    error_category, error_code, next_retry_at, provider_response_ref
+                ) VALUES (
+                    ?, ?, CURRENT_TIMESTAMP - CAST(? AS interval),
+                    CURRENT_TIMESTAMP - CAST(? AS interval) + INTERVAL '1 second',
+                    'TRANSIENT', ?, NULL, NULL
+                )
+                """, messageId, attemptNo, age, age, errorCode);
     }
 
     private record Fixture(UUID ownerId, UUID integrationId, UUID caseId) {
