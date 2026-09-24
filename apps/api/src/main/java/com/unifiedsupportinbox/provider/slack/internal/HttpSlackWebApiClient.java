@@ -18,21 +18,23 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 class HttpSlackWebApiClient implements SlackWebApiClient {
 
-    private static final URI CHAT_POST_MESSAGE = URI.create("https://slack.com/api/chat.postMessage");
+    private static final URI DEFAULT_CHAT_POST_MESSAGE = URI.create("https://slack.com/api/chat.postMessage");
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(10);
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
+    private final URI chatPostMessageEndpoint;
 
     HttpSlackWebApiClient(ObjectMapper objectMapper) {
         this(HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
-                .build(), objectMapper);
+                .build(), objectMapper, DEFAULT_CHAT_POST_MESSAGE);
     }
 
-    HttpSlackWebApiClient(HttpClient httpClient, ObjectMapper objectMapper) {
+    HttpSlackWebApiClient(HttpClient httpClient, ObjectMapper objectMapper, URI chatPostMessageEndpoint) {
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
+        this.chatPostMessageEndpoint = chatPostMessageEndpoint;
     }
 
     @Override
@@ -61,7 +63,7 @@ class HttpSlackWebApiClient implements SlackWebApiClient {
             System.arraycopy("Bearer ".getBytes(StandardCharsets.US_ASCII), 0, authorization, 0, "Bearer ".length());
             System.arraycopy(botToken, 0, authorization, "Bearer ".length(), botToken.length);
 
-            HttpRequest request = HttpRequest.newBuilder(CHAT_POST_MESSAGE)
+            HttpRequest request = HttpRequest.newBuilder(chatPostMessageEndpoint)
                     .timeout(REQUEST_TIMEOUT)
                     .header("Authorization", new String(authorization, StandardCharsets.US_ASCII))
                     .header("Content-Type", "application/json; charset=utf-8")
@@ -83,7 +85,7 @@ class HttpSlackWebApiClient implements SlackWebApiClient {
             String error = text(json, "error");
             return new PostMessageResponse(response.statusCode(), ok, ts, error, retryAfter);
         } catch (JacksonException exception) {
-            throw new IllegalStateException("Slack Web API payload could not be serialized.", exception);
+            throw new IllegalStateException("Slack Web API JSON could not be processed.", exception);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Slack Web API call was interrupted.", exception);
