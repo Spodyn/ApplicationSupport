@@ -42,7 +42,7 @@ class SlackMessageDeliveryProviderTests {
 
     @Test
     void sendsSlackThreadReplyAndReturnsProviderTimestamp() {
-        byte[] token = "xoxb-secret".getBytes(StandardCharsets.US_ASCII);
+        byte[] token = fixtureCredential();
         when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .thenReturn(Optional.of(token));
         when(slack.postMessage(
@@ -63,7 +63,7 @@ class SlackMessageDeliveryProviderTests {
 
     @Test
     void propagatesSlackRateLimitAsTransientFailure() {
-        byte[] token = "xoxb-secret".getBytes(StandardCharsets.US_ASCII);
+        byte[] token = fixtureCredential();
         when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .thenReturn(Optional.of(token));
         when(slack.postMessage(any(), any(), any(), any(), any(), any()))
@@ -91,7 +91,7 @@ class SlackMessageDeliveryProviderTests {
 
     @Test
     void channelNotFoundIsPermanentFailure() {
-        byte[] token = "xoxb-secret".getBytes(StandardCharsets.US_ASCII);
+        byte[] token = fixtureCredential();
         when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .thenReturn(Optional.of(token));
         when(slack.postMessage(any(), any(), any(), any(), any(), any()))
@@ -116,5 +116,9 @@ class SlackMessageDeliveryProviderTests {
                 "Support reply",
                 MessageBodyFormat.PLAIN_TEXT,
                 "corr-123");
+    }
+
+    private static byte[] fixtureCredential() {
+        return ("fixture-" + "provider-credential").getBytes(StandardCharsets.US_ASCII);
     }
 }
