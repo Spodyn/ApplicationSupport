@@ -29,6 +29,11 @@ export interface SendCaseMessageInput {
   "body": SendMessageRequest
 }
 
+export interface RetryMessageDeliveryInput {
+  "messageId": string
+  "Idempotency-Key": string
+}
+
 export interface UpdateUserPermissionsInput {
   "userId": string
   "body": PermissionUpdateRequest
@@ -57,6 +62,7 @@ export function createApiClient(transport: ApiTransport) {
   logout: () => transport.request<void>({ method: "POST", path: "/api/v1/auth/logout" }),
   getCurrentSession: () => transport.request<CurrentSession>({ method: "GET", path: "/api/v1/auth/me" }),
   sendCaseMessage: (input: SendCaseMessageInput) => transport.request<SendMessageResponse>({ method: "POST", path: interpolatePath("/api/v1/cases/{caseId}/messages", { "caseId": input["caseId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] }, body: input.body }),
+  retryMessageDelivery: (input: RetryMessageDeliveryInput) => transport.request<SendMessageResponse>({ method: "POST", path: interpolatePath("/api/v1/messages/{messageId}/retry", { "messageId": input["messageId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] } }),
   updateUserPermissions: (input: UpdateUserPermissionsInput) => transport.request<UserPermissions>({ method: "PUT", path: interpolatePath("/api/v1/users/{userId}/permissions", { "userId": input["userId"] }), body: input.body }),
 } as const
 }
