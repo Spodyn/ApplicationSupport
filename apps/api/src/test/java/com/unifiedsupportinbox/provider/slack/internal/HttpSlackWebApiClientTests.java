@@ -39,7 +39,7 @@ class HttpSlackWebApiClientTests {
 
         HttpSlackWebApiClient client = client();
         SlackWebApiClient.PostMessageResponse response = client.postMessage(
-                "xoxb-test-token".getBytes(StandardCharsets.US_ASCII),
+                fixtureCredential(),
                 "C123",
                 "1712000000.000001",
                 "Support *reply*",
@@ -48,7 +48,7 @@ class HttpSlackWebApiClientTests {
 
         assertThat(response.ok()).isTrue();
         assertThat(response.messageTs()).isEqualTo("1712345678.123456");
-        assertThat(authorization.get()).isEqualTo("Bearer xoxb-test-token");
+        assertThat(authorization.get()).isEqualTo("Bearer fixture-provider-credential");
         assertThat(requestJson.get().path("channel").asText()).isEqualTo("C123");
         assertThat(requestJson.get().path("thread_ts").asText()).isEqualTo("1712000000.000001");
         assertThat(requestJson.get().path("text").asText()).isEqualTo("Support *reply*");
@@ -65,7 +65,7 @@ class HttpSlackWebApiClientTests {
         });
 
         SlackWebApiClient.PostMessageResponse response = client().postMessage(
-                "xoxb-test-token".getBytes(StandardCharsets.US_ASCII),
+                fixtureCredential(),
                 "C123",
                 null,
                 "Plain reply",
@@ -84,7 +84,7 @@ class HttpSlackWebApiClientTests {
                 exchange, 200, "{\"ok\":false,\"error\":\"channel_not_found\"}"));
 
         SlackWebApiClient.PostMessageResponse response = client().postMessage(
-                "xoxb-test-token".getBytes(StandardCharsets.US_ASCII),
+                fixtureCredential(),
                 "C-missing",
                 null,
                 "Reply",
@@ -122,6 +122,10 @@ class HttpSlackWebApiClientTests {
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, body.length);
         exchange.getResponseBody().write(body);
+    }
+
+    private static byte[] fixtureCredential() {
+        return ("fixture-" + "provider-credential").getBytes(StandardCharsets.US_ASCII);
     }
 
     @FunctionalInterface
