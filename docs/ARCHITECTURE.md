@@ -92,6 +92,27 @@ Provider HTTP, RabbitMQ publish and object-storage calls happen after the databa
 
 Do not set a global isolation level above PostgreSQL `READ COMMITTED`. A use case that genuinely requires stronger isolation must declare it at that transaction boundary, document the invariant that requires it and include deterministic retry/concurrency tests. `SERIALIZABLE` failures (`SQLSTATE 40001`) may only be retried with a bounded policy around an idempotent command.
 
+### Workflow policy and command boundary (USI-101)
+
+`workflow.CaseTransitionPolicy` owns the frozen transition matrix and derives action
+availability from the same eligibility rules used for execution. It is a pure
+policy: decisions contain the next state and the required effects; provider I/O,
+message delivery, vote storage, SLA and audit effects remain in their dedicated
+command handlers. Ask remains owned until provider `SENT`; terminal inbound
+activity requests a linked successor rather than a reopen.
+
+`CaseWorkflowTransactions.execute` is an internal application boundary for
+human commands. It locks the Case, rejects an outdated version with the existing
+`CONFLICT` problem, loads trusted actor/vote/target facts inside that transaction,
+applies the policy, and writes state/timestamps/version. The required effect
+callback must persist every effect in that same transaction; a failure rolls back
+both state and effects. Callbacks must never make provider/network calls. Browser
+payloads must not supply policy facts such as permissions or effective vote weight.
+Dedicated retryable endpoints must additionally use the existing idempotency
+executor. This foundation exposes no generic HTTP status setter or new endpoint.
+Individual command endpoints/effects and frontend wiring remain in their owning
+E09 tickets; they must consume this policy rather than duplicate its decisions.
+
 ### 4.2 Single-row command races
 
 Prefer one atomic conditional statement over read-then-write locking for claim-like state transitions. The predicate contains every state/ownership condition that makes the command legal and the update returns the changed row, for example:
