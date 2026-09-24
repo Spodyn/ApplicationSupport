@@ -68,6 +68,28 @@ test('generated client carries operation inputs and response types', () => {
   assert.match(client, /request<Example>/)
 })
 
+test('generated client carries header parameters into transport requests', () => {
+  const next = structuredClone(base)
+  next.paths['/api/v1/examples'].post = {
+    operationId: 'createExample',
+    parameters: [
+      { in: 'header', name: 'Idempotency-Key', required: true, schema: { type: 'string' } },
+    ],
+    requestBody: {
+      required: true,
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/Example' } } },
+    },
+    responses: {
+      202: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Example' } } } },
+    },
+  }
+  const client = generatedFiles(next).get('client.gen.ts')
+  assert.match(client, /"Idempotency-Key": string/)
+  assert.match(client, /headers: \{ "Idempotency-Key": input\["Idempotency-Key"\] \}/)
+  assert.match(client, /headers\?: Record<string, unknown>/)
+  assert.deepEqual(lintContract(next), [])
+})
+
 test('generated client recursively imports component refs from container schemas', () => {
   const next = structuredClone(base)
   next.paths['/api/v1/examples'].get.responses[200].content['application/json'].schema = {
@@ -86,7 +108,7 @@ test('lint accepts the supported deterministic subset', () => {
 test('lint fails closed for generator-unsupported contract features', () => {
   const next = structuredClone(base)
   next.paths['/api/v1/examples'].get.operationId = 'list-examples'
-  next.paths['/api/v1/examples'].get.parameters.push({ in: 'header', name: 'X-Test', schema: { type: 'string' } })
+  next.paths['/api/v1/examples'].get.parameters.push({ in: 'cookie', name: 'test', schema: { type: 'string' } })
   next.paths['/api/v1/examples'].post = {
     operationId: 'createExample',
     requestBody: { content: { 'application/xml': { schema: { $ref: '#/components/schemas/Example' } } } },
@@ -94,6 +116,6 @@ test('lint fails closed for generator-unsupported contract features', () => {
   }
   const errors = lintContract(next).join('\n')
   assert.match(errors, /operationId must be a valid TypeScript identifier/)
-  assert.match(errors, /parameter location header is not supported/)
+  assert.match(errors, /parameter location cookie is not supported/)
   assert.match(errors, /media type application\/xml is not supported/)
 })
