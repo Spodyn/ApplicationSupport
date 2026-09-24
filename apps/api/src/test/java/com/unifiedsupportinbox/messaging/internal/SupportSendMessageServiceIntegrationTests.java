@@ -174,14 +174,18 @@ class SupportSendMessageServiceIntegrationTests {
                 INSERT INTO cases (
                     customer_id, integration_id, channel_id, provider,
                     external_conversation_id, external_thread_key, status,
-                    owner_user_id, claimed_at
-                ) VALUES (?, ?, ?, 'SLACK', 'C-support', 'thread-1', ?, ?, CURRENT_TIMESTAMP)
+                    owner_user_id, claimed_at, resolved_at
+                ) VALUES (
+                    ?, ?, ?, 'SLACK', 'C-support', 'thread-1', ?, ?, CURRENT_TIMESTAMP,
+                    CASE WHEN ? = 'RESOLVED' THEN CURRENT_TIMESTAMP ELSE NULL END
+                )
                 RETURNING id
                 """, UUID.class,
                 customerId,
                 integrationId,
                 channelId,
                 status,
-                ownerId);
+                ownerId,
+                status);
     }
 }
