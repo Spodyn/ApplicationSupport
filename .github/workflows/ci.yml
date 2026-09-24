@@ -94,6 +94,9 @@ jobs:
           cache: maven
           cache-dependency-path: apps/api/pom.xml
 
+      - name: Build pinned MinIO test image from official source
+        run: bash infra/minio/build-source-images.sh server
+
       - name: Verify Testcontainers integration tests
         working-directory: apps/api
         run: ./mvnw --batch-mode test -Dgroups=integration
