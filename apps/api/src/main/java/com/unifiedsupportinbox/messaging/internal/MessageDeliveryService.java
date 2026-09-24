@@ -64,9 +64,6 @@ class MessageDeliveryService {
         if (latest != null && latest.finishedAt() == null) {
             return null;
         }
-        if (message.provider() != message.integrationProvider()) {
-            return null;
-        }
 
         int attemptNo = message.attemptCount() + 1;
         DeliveryAttemptRecord attempt = repository.insertAttempt(
