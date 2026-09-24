@@ -8,9 +8,14 @@ import com.unifiedsupportinbox.provider.internal.ConfiguredProviderSecretResolve
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
+@ConditionalOnProperty(
+        name = "usi.providers.slack.outbound.enabled",
+        havingValue = "true",
+        matchIfMissing = true)
 class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
 
     static final String BOT_TOKEN_CREDENTIAL_FILE = "slack-bot-token";
