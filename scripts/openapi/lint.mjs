@@ -1,7 +1,7 @@
 import { operationEntries, readContract, resolveSchema } from './model.mjs'
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/
-const SUPPORTED_PARAMETER_LOCATIONS = new Set(['path', 'query'])
+const SUPPORTED_PARAMETER_LOCATIONS = new Set(['path', 'query', 'header'])
 const SUPPORTED_MEDIA_TYPES = new Set(['application/json', 'application/problem+json'])
 const SUPPORTED_SCHEMA_TYPES = new Set(['string', 'integer', 'number', 'boolean', 'array', 'object', 'null'])
 const UNSUPPORTED_HTTP_METHODS = new Set(['head', 'options', 'trace'])
@@ -62,7 +62,7 @@ function validateParameter(contract, parameter, location, push) {
     return
   }
   if (!SUPPORTED_PARAMETER_LOCATIONS.has(parameter.in)) {
-    push(`${location}: parameter location ${parameter.in} is not supported; only path and query are generated`)
+    push(`${location}: parameter location ${parameter.in} is not supported; only path, query and header are generated`)
   }
   if (parameter.in === 'path' && parameter.required !== true) push(`${location}: path parameters must be required`)
   validateSchema(contract, parameter.schema, `${location} schema`, push)
