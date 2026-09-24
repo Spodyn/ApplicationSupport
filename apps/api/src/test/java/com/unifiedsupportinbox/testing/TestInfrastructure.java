@@ -13,12 +13,17 @@ import org.testcontainers.utility.DockerImageName;
  * <p>Each test suite owns the containers it creates from this class. There are
  * deliberately no process-wide singleton containers, so suites can execute in
  * parallel without sharing databases, queues, object storage, or host ports.</p>
+ *
+ * <p>The MinIO test image is built from the reviewed upstream source revision by
+ * {@code infra/minio/build-source-images.sh server}. CI runs that preparation
+ * step before integration tests; local integration runs must do the same once
+ * per clean Docker image cache.</p>
  */
 public final class TestInfrastructure {
 
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName.parse("postgres:18.6");
     private static final DockerImageName RABBITMQ_IMAGE = DockerImageName.parse("rabbitmq:4.3.5-management");
-    private static final DockerImageName MINIO_IMAGE = DockerImageName.parse("quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z");
+    private static final DockerImageName MINIO_IMAGE = DockerImageName.parse("usi/minio:RELEASE.2025-09-07T16-13-09Z");
 
     private TestInfrastructure() {
     }
