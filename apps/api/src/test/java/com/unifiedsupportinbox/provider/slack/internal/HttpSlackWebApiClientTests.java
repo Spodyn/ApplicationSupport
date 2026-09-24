@@ -106,6 +106,10 @@ class HttpSlackWebApiClientTests {
         server.createContext("/api/chat.postMessage", exchange -> {
             try {
                 handler.handle(exchange);
+            } catch (IOException exception) {
+                throw exception;
+            } catch (Exception exception) {
+                throw new IOException("Slack test handler failed", exception);
             } finally {
                 exchange.close();
             }
