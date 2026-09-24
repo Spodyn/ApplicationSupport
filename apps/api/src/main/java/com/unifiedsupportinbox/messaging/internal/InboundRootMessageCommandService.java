@@ -15,8 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Provider-neutral first-message consumer. USI-131 activates Slack root-message ingestion while
- * deliberately leaving thread replies and mutations retryable for their dedicated follow-up tasks.
+ * Provider-neutral inbound customer-message consumer. Slack root messages and thread replies use the
+ * same thread identity so CaseCreationService can route activity to the current Case generation.
  */
 @Service
 class InboundRootMessageCommandService implements InboundMessageCommandHandler {
@@ -38,7 +38,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
     @Transactional
     public void handle(Command command) {
         Objects.requireNonNull(command, "command");
-        validateRootCreate(command);
+        validateSlackCreate(command);
 
         CaseCreationService.Result caseResult = cases.create(new CaseCreationService.Command(
                 command.inboundEventId(),
@@ -108,13 +108,13 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         return count != null && count == 1;
     }
 
-    private static void validateRootCreate(Command command) {
+    private static void validateSlackCreate(Command command) {
         Objects.requireNonNull(command.inboundEventId(), "inboundEventId");
         Objects.requireNonNull(command.integrationId(), "integrationId");
         Objects.requireNonNull(command.channelId(), "channelId");
         IntegrationProvider provider = Objects.requireNonNull(command.provider(), "provider");
-        String externalMessageId = requiredText(command.externalMessageId(), "externalMessageId", 255);
-        String externalThreadKey = requiredText(command.externalThreadKey(), "externalThreadKey", 255);
+        requiredText(command.externalMessageId(), "externalMessageId", 255);
+        requiredText(command.externalThreadKey(), "externalThreadKey", 255);
         requiredText(command.externalChannelId(), "externalChannelId", 255);
         requiredText(command.authorExternalId(), "authorExternalId", 255);
         Objects.requireNonNull(command.body(), "body");
@@ -125,10 +125,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
             throw notReady("Inbound message mutations are handled by a later messaging task.");
         }
         if (provider != IntegrationProvider.SLACK) {
-            throw notReady("Only Slack root-message mapping is active in the current Slack-first phase.");
-        }
-        if (!externalMessageId.equals(externalThreadKey)) {
-            throw notReady("Inbound thread replies are handled by USI-132.");
+            throw notReady("Only Slack inbound message mapping is active in the current Slack-first phase.");
         }
     }
 
