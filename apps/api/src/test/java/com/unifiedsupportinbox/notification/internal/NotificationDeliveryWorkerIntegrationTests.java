@@ -6,6 +6,8 @@ import com.unifiedsupportinbox.OutboxEventStore;
 import com.unifiedsupportinbox.OutboxRelay;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.notification.NotificationDeliveryGateway;
+import com.unifiedsupportinbox.notification.NotificationProviderClient;
+import com.unifiedsupportinbox.notification.NotificationProviderException;
 import com.unifiedsupportinbox.notification.NotificationDeliveryQueue;
 import com.unifiedsupportinbox.notification.NotificationDeliveryQueue.NotificationIntent;
 import com.unifiedsupportinbox.notification.NotificationDeliveryStatus;
@@ -71,6 +73,7 @@ class NotificationDeliveryWorkerIntegrationTests {
     @Autowired private NotificationDeliveryService deliveries;
     @Autowired private NotificationDeliveryRepository repository;
     @Autowired private NotificationDeliveryWorker worker;
+    @Autowired private NotificationDeliveryGateway deliveryGateway;
     @Autowired private OutboxRelay outboxRelay;
     @Autowired private OutboxEventStore outboxStore;
     @Autowired private FakeGateway gateway;
@@ -308,6 +311,31 @@ class NotificationDeliveryWorkerIntegrationTests {
         assertThat(gateway.calls()).isEqualTo(3);
     }
 
+    @Test
+    void commonGatewayValidatesTargetsClassifiesProviderFailuresAndPropagatesCorrelation() {
+        NotificationDeliveryGateway.DeliveryCommand valid = new NotificationDeliveryGateway.DeliveryCommand(
+                UUID.randomUUID(), "idempotency-159", UUID.randomUUID(), IntegrationProvider.TEAMS,
+                UUID.randomUUID(), "target-teams-alerts", "sla_breached", "critical", "{}", "corr-159");
+
+        assertThat(deliveryGateway.deliver(valid).outcome())
+                .isEqualTo(NotificationDeliveryGateway.Outcome.SENT);
+        assertThat(gateway.lastNotification().correlationId()).isEqualTo("corr-159");
+
+        NotificationDeliveryGateway.DeliveryCommand invalidTarget = new NotificationDeliveryGateway.DeliveryCommand(
+                UUID.randomUUID(), "idempotency-invalid", UUID.randomUUID(), IntegrationProvider.SLACK,
+                UUID.randomUUID(), "not-a-target", "sla_warning", "warning", "{}", "corr-invalid");
+        assertThat(deliveryGateway.deliver(invalidTarget).errorCode()).isEqualTo("INVALID_TARGET");
+
+        gateway.steps(FakeGateway.Step.transientFailure("PROVIDER_TIMEOUT", Duration.ofSeconds(3)));
+        NotificationDeliveryGateway.DeliveryResult timedOut = deliveryGateway.deliver(valid);
+        assertThat(timedOut.outcome()).isEqualTo(NotificationDeliveryGateway.Outcome.TRANSIENT_FAILURE);
+        assertThat(timedOut.errorCode()).isEqualTo("PROVIDER_TIMEOUT");
+        assertThat(timedOut.retryAfter()).isEqualTo(Duration.ofSeconds(3));
+
+        gateway.steps(FakeGateway.Step.permanentFailure("AUTH_FAILED"));
+        assertThat(deliveryGateway.deliver(valid).errorCode()).isEqualTo("AUTH_FAILED");
+    }
+
     private Route createRoute(String providerName, String eventType, boolean enabled) {
         IntegrationProvider provider = IntegrationProvider.valueOf(providerName);
         UUID integrationId = jdbc.queryForObject("""
@@ -406,18 +434,19 @@ class NotificationDeliveryWorkerIntegrationTests {
     @TestConfiguration(proxyBeanMethods = false)
     static class FakeGatewayConfiguration {
         @Bean
-        FakeGateway fakeNotificationDeliveryGateway() {
+        FakeGateway fakeNotificationProviderClient() {
             return new FakeGateway();
         }
     }
 
-    static final class FakeGateway implements NotificationDeliveryGateway {
+    static final class FakeGateway implements NotificationProviderClient {
         private final ArrayDeque<Step> steps = new ArrayDeque<>();
         private final Map<String, String> externalByKey = new ConcurrentHashMap<>();
         private final java.util.Set<String> idempotencyKeys = ConcurrentHashMap.newKeySet();
         private final AtomicInteger calls = new AtomicInteger();
         private final AtomicInteger externalEffects = new AtomicInteger();
         private final AtomicBoolean transactionObserved = new AtomicBoolean();
+        private volatile ProviderNotification lastNotification;
 
         synchronized void steps(Step... configured) {
             steps.clear();
@@ -433,6 +462,7 @@ class NotificationDeliveryWorkerIntegrationTests {
             calls.set(0);
             externalEffects.set(0);
             transactionObserved.set(false);
+            lastNotification = null;
         }
 
         int calls() {
@@ -451,9 +481,24 @@ class NotificationDeliveryWorkerIntegrationTests {
             return java.util.Set.copyOf(idempotencyKeys);
         }
 
+        ProviderNotification lastNotification() {
+            return lastNotification;
+        }
+
         @Override
-        public DeliveryResult deliver(DeliveryCommand command) {
+        public boolean supports(IntegrationProvider provider) {
+            return true;
+        }
+
+        @Override
+        public boolean supportsTarget(String targetRef) {
+            return targetRef.startsWith("target-");
+        }
+
+        @Override
+        public ProviderMessageRef send(ProviderNotification command) {
             calls.incrementAndGet();
+            lastNotification = command;
             transactionObserved.compareAndSet(
                     false, TransactionSynchronizationManager.isActualTransactionActive());
             idempotencyKeys.add(command.idempotencyKey());
@@ -462,9 +507,9 @@ class NotificationDeliveryWorkerIntegrationTests {
                 step = steps.isEmpty() ? Step.success() : steps.removeFirst();
             }
             return switch (step.kind()) {
-                case SUCCESS -> DeliveryResult.sent(externalEffect(command.idempotencyKey()));
-                case TRANSIENT -> DeliveryResult.transientFailure(step.errorCode(), step.retryAfter());
-                case PERMANENT -> DeliveryResult.permanentFailure(step.errorCode());
+                case SUCCESS -> new ProviderMessageRef(externalEffect(command.idempotencyKey()));
+                case TRANSIENT -> throw NotificationProviderException.transientFailure(step.errorCode(), step.retryAfter());
+                case PERMANENT -> throw NotificationProviderException.permanentFailure(step.errorCode());
                 case EFFECT_THEN_THROW -> {
                     externalEffect(command.idempotencyKey());
                     throw new IllegalStateException("simulated unknown provider outcome after side effect");
