@@ -28,8 +28,11 @@ class MessageDeliveryRepository {
                 SELECT m.id AS message_id,
                        m.case_id,
                        m.author_user_id,
+                       c.owner_user_id AS case_owner_user_id,
+                       c.status AS case_status,
                        c.provider,
                        c.integration_id,
+                       i.provider AS integration_provider,
                        i.status AS integration_status,
                        c.external_conversation_id,
                        COALESCE(m.external_thread_key, c.external_thread_key) AS external_thread_key,
@@ -144,7 +147,8 @@ class MessageDeliveryRepository {
                 WHERE message_id = ?
                   AND attempt_no = ?
                   AND finished_at IS NULL
-                """, errorCategory, errorCode, nextRetryAt == null ? null : OffsetDateTime.ofInstant(nextRetryAt, java.time.ZoneOffset.UTC),
+                """, errorCategory, errorCode,
+                nextRetryAt == null ? null : OffsetDateTime.ofInstant(nextRetryAt, java.time.ZoneOffset.UTC),
                 messageId, attemptNo) == 1;
     }
 
@@ -258,8 +262,11 @@ class MessageDeliveryRepository {
                 rs.getObject("message_id", UUID.class),
                 rs.getObject("case_id", UUID.class),
                 rs.getObject("author_user_id", UUID.class),
+                rs.getObject("case_owner_user_id", UUID.class),
+                rs.getString("case_status"),
                 IntegrationProvider.valueOf(rs.getString("provider")),
                 rs.getObject("integration_id", UUID.class),
+                IntegrationProvider.valueOf(rs.getString("integration_provider")),
                 rs.getString("integration_status"),
                 rs.getString("external_conversation_id"),
                 rs.getString("external_thread_key"),
@@ -310,8 +317,11 @@ class MessageDeliveryRepository {
             UUID messageId,
             UUID caseId,
             UUID authorUserId,
+            UUID caseOwnerUserId,
+            String caseStatus,
             IntegrationProvider provider,
             UUID integrationId,
+            IntegrationProvider integrationProvider,
             String integrationStatus,
             String externalConversationId,
             String externalThreadKey,
