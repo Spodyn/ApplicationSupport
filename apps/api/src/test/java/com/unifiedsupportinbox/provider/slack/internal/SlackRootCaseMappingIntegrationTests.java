@@ -167,9 +167,16 @@ class SlackRootCaseMappingIntegrationTests {
     }
 
     @Test
-    void threadReplyIsNotMarkedProcessedBeforeThreadMappingTaskExists() {
-        Fixture fixture = mappedFixture("C-thread-not-ready");
-        InboundEvent event = persist(
+    void threadReplyRoutesToExistingCaseAndCreatesOnlyOneAdditionalMessage() {
+        Fixture fixture = mappedFixture("C-thread-existing");
+        String rootTs = "1720000400.1";
+        String replyTs = "1720000400.2";
+
+        InboundEvent root = persist(
+                fixture.integrationId(),
+                "Ev-thread-root",
+                rootMessage("Ev-thread-root", fixture.externalChannelId(), "U-customer", "root", rootTs));
+        InboundEvent reply = persist(
                 fixture.integrationId(),
                 "Ev-thread-reply",
                 threadReply(
@@ -177,12 +184,63 @@ class SlackRootCaseMappingIntegrationTests {
                         fixture.externalChannelId(),
                         "U-customer",
                         "reply",
-                        "1720000400.2",
-                        "1720000400.1"));
+                        replyTs,
+                        rootTs));
 
-        assertThat(worker.process(event.id())).isEqualTo(SlackInboundWorker.AttemptResult.RETRY_SCHEDULED);
-        assertThat(count("cases")).isZero();
-        assertThat(count("messages")).isZero();
+        assertThat(worker.process(root.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        UUID caseId = jdbc.queryForObject("SELECT id FROM cases", UUID.class);
+
+        assertThat(worker.process(reply.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+
+        assertThat(count("cases")).isEqualTo(1);
+        assertThat(count("messages")).isEqualTo(2);
+        assertThat(countOutbox("case.created")).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT case_id FROM messages WHERE external_message_id = ?", UUID.class, replyTs))
+                .isEqualTo(caseId);
+        assertThat(jdbc.queryForObject(
+                "SELECT external_thread_key FROM messages WHERE external_message_id = ?", String.class, replyTs))
+                .isEqualTo(rootTs);
+    }
+
+    @Test
+    void duplicateThreadReplyDoesNotCreateDuplicateMessageOrCase() {
+        Fixture fixture = mappedFixture("C-thread-dedup");
+        String rootTs = "1720000500.1";
+        String replyTs = "1720000500.2";
+
+        InboundEvent root = persist(
+                fixture.integrationId(),
+                "Ev-thread-root-dedup",
+                rootMessage("Ev-thread-root-dedup", fixture.externalChannelId(), "U-customer", "root", rootTs));
+        InboundEvent reply = persist(
+                fixture.integrationId(),
+                "Ev-thread-reply-a",
+                threadReply(
+                        "Ev-thread-reply-a",
+                        fixture.externalChannelId(),
+                        "U-customer",
+                        "reply",
+                        replyTs,
+                        rootTs));
+        InboundEvent duplicate = persist(
+                fixture.integrationId(),
+                "Ev-thread-reply-b",
+                threadReply(
+                        "Ev-thread-reply-b",
+                        fixture.externalChannelId(),
+                        "U-customer",
+                        "reply",
+                        replyTs,
+                        rootTs));
+
+        assertThat(worker.process(root.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        assertThat(worker.process(reply.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        assertThat(worker.process(duplicate.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+
+        assertThat(count("cases")).isEqualTo(1);
+        assertThat(count("messages")).isEqualTo(2);
+        assertThat(countOutbox("case.created")).isEqualTo(1);
     }
 
     private Fixture mappedFixture(String externalChannelId) {
