@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -25,6 +26,7 @@ class HttpSlackWebApiClient implements SlackWebApiClient {
     private final ObjectMapper objectMapper;
     private final URI chatPostMessageEndpoint;
 
+    @Autowired
     HttpSlackWebApiClient(ObjectMapper objectMapper) {
         this(HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
