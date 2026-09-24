@@ -97,6 +97,9 @@ trap usi_cleanup EXIT INT TERM
 usi_cleanup
 
 "${usi_compose[@]}" config --quiet
+# MinIO Community images are source-built locally from immutable official tags;
+# pull_policy=never prevents fallback to withdrawn or unofficial prebuilt images.
+"${usi_compose[@]}" build minio minio-init
 
 usi_start
 

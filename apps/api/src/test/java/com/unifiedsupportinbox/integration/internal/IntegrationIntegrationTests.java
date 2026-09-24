@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.unifiedsupportinbox.UsiApiApplication;
 import com.unifiedsupportinbox.integration.IntegrationHealth;
+import com.unifiedsupportinbox.integration.IntegrationConnectionTester;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.integration.IntegrationStatus;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
@@ -17,6 +18,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,6 +26,8 @@ import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.annotation.Bean;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -37,12 +41,13 @@ class IntegrationIntegrationTests {
     private static JdbcTemplate jdbc;
     private static PasswordEncoder encoder;
     private static IntegrationRepository integrations;
+    private static FakeConnectionTester connectionTester;
     private static URI baseUri;
 
     @BeforeAll
     static void startApplication() {
         POSTGRES.start();
-        context = new SpringApplicationBuilder(UsiApiApplication.class)
+        context = new SpringApplicationBuilder(UsiApiApplication.class, FakeConnectionTesterConfiguration.class)
                 .profiles("test")
                 .run(
                         "--server.port=0",
@@ -57,6 +62,7 @@ class IntegrationIntegrationTests {
         jdbc = context.getBean(JdbcTemplate.class);
         encoder = context.getBean("bootstrapAdminPasswordEncoder", PasswordEncoder.class);
         integrations = context.getBean(IntegrationRepository.class);
+        connectionTester = context.getBean(FakeConnectionTester.class);
         Integer port = context.getEnvironment().getProperty("local.server.port", Integer.class);
         baseUri = URI.create("http://127.0.0.1:" + port);
     }
@@ -76,6 +82,7 @@ class IntegrationIntegrationTests {
         jdbc.update("DELETE FROM idempotency_keys");
         jdbc.update("UPDATE bootstrap_admin_state SET consumed = FALSE, consumed_at = NULL, admin_user_id = NULL WHERE id = 1");
         jdbc.update("DELETE FROM users");
+        connectionTester.reset();
     }
 
     @Test
@@ -216,6 +223,54 @@ class IntegrationIntegrationTests {
         createUser("admin@example.com", "ADMIN");
         CookieManager admin = login("admin@example.com");
         assertThat(get(client(admin), "/api/v1/admin/integrations").statusCode()).isEqualTo(200);
+    }
+
+    @Test
+    void testConnectionUpdatesOnlySanitizedHealthAndPreservesLastEvent() throws Exception {
+        Instant eventAt = Instant.parse("2026-09-24T20:00:00Z");
+        IntegrationRecord integration = integrations.create(
+                IntegrationProvider.SLACK, "Acme Slack", IntegrationStatus.ENABLED, IntegrationHealth.UNKNOWN,
+                "T123", "Acme", "test-secret", "{}");
+        integrations.updateHealth(integration.id(), IntegrationHealth.DEGRADED, eventAt, "OLD_ERROR");
+        createUser("admin@example.com", "ADMIN");
+        CookieManager cookies = login("admin@example.com");
+
+        connectionTester.result(IntegrationConnectionTester.Result.success());
+        HttpResponse<String> success = mutate(cookies, "POST", "/api/v1/admin/integrations/" + integration.id() + "/test", null);
+        assertThat(success.statusCode()).isEqualTo(200);
+        assertThat(success.body()).contains("\"outcome\":\"SUCCESS\"").contains("\"health\":\"HEALTHY\"");
+        assertThat(integrations.findById(integration.id()).orElseThrow().lastEventAt()).isEqualTo(eventAt);
+
+        connectionTester.result(IntegrationConnectionTester.Result.timeout());
+        assertThat(mutate(cookies, "POST", "/api/v1/admin/integrations/" + integration.id() + "/test", null).body())
+                .contains("\"outcome\":\"TIMEOUT\"").contains("\"health\":\"DEGRADED\"")
+                .contains("TEST_CONNECTION_TIMEOUT");
+
+        connectionTester.result(IntegrationConnectionTester.Result.unauthorized());
+        assertThat(mutate(cookies, "POST", "/api/v1/admin/integrations/" + integration.id() + "/test", null).body())
+                .contains("\"outcome\":\"UNAUTHORIZED\"").contains("\"health\":\"UNAVAILABLE\"")
+                .contains("PROVIDER_UNAUTHORIZED").doesNotContain("test-secret");
+
+        connectionTester.result(new IntegrationConnectionTester.Result(
+                IntegrationConnectionTester.Outcome.UNAVAILABLE, "token-should-not-persist"));
+        assertThat(mutate(cookies, "POST", "/api/v1/admin/integrations/" + integration.id() + "/test", null).body())
+                .contains("\"outcome\":\"UNAVAILABLE\"").contains("PROVIDER_UNAVAILABLE")
+                .doesNotContain("token-should-not-persist");
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class FakeConnectionTesterConfiguration {
+        @Bean
+        FakeConnectionTester fakeConnectionTester() { return new FakeConnectionTester(); }
+    }
+
+    static final class FakeConnectionTester implements IntegrationConnectionTester {
+        private final AtomicReference<Result> result = new AtomicReference<>(Result.success());
+
+        void reset() { result.set(Result.success()); }
+        void result(Result value) { result.set(value); }
+        @Override public boolean supports(IntegrationProvider provider) { return true; }
+        @Override public Result test(Request request) { return result.get(); }
     }
 
     private static UUID createUser(String email, String role) {

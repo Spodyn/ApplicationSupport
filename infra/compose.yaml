@@ -48,7 +48,11 @@ services:
       start_period: 20s
 
   minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+    image: usi/minio:RELEASE.2025-09-07T16-13-09Z
+    pull_policy: never
+    build:
+      context: minio
+      dockerfile: Dockerfile.server
     restart: unless-stopped
     command: [server, /data, --console-address, ":9001"]
     environment:
@@ -74,7 +78,11 @@ services:
       start_period: 10s
 
   minio-init:
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: usi/minio-mc:RELEASE.2025-08-13T08-35-41Z
+    pull_policy: never
+    build:
+      context: minio
+      dockerfile: Dockerfile.mc
     restart: "no"
     depends_on:
       minio:
