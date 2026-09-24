@@ -129,11 +129,11 @@ class SupportSendMessageServiceIntegrationTests {
 
     @Test
     void ownerCannotSendOutsideVerification() {
-        UUID ownerId = createUser("owner-waiting");
-        UUID caseId = createCase(ownerId, "WAITING_FOR_CUSTOMER");
+        UUID ownerId = createUser("owner-resolved");
+        UUID caseId = createCase(ownerId, "RESOLVED");
 
         assertThatThrownBy(() -> service.send(
-                caseId, ownerId, "waiting-key", "Nope", null, "corr-waiting"))
+                caseId, ownerId, "resolved-key", "Nope", null, "corr-resolved"))
                 .isInstanceOfSatisfying(ApiProblemException.class, problem ->
                         assertThat(problem.status()).isEqualTo(HttpStatus.CONFLICT));
 
