@@ -7,7 +7,7 @@ FROM ${GO_IMAGE} AS build
 ARG MC_TAG=RELEASE.2025-08-13T08-35-41Z
 ARG MC_COMMIT=7394ce0dd2a80935aded936b09fa12cbb3cb8096
 
-RUN apk add --no-cache bash curl git make
+RUN apk add --no-cache bash curl git make perl
 WORKDIR /src/mc
 RUN git init \
     && git remote add origin https://github.com/minio/mc.git \
