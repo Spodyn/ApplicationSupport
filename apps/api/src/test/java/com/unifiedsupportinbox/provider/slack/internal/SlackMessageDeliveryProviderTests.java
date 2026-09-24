@@ -79,6 +79,38 @@ class SlackMessageDeliveryProviderTests {
     }
 
     @Test
+    void workspaceMigrationIsTransientFailure() {
+        byte[] token = fixtureCredential();
+        when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
+                .thenReturn(Optional.of(token));
+        when(slack.postMessage(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new SlackWebApiClient.PostMessageResponse(
+                        200, false, null, "team_added_to_org", null));
+
+        MessageDeliveryProvider.DeliveryResult result = provider.deliver(command());
+
+        assertThat(result.outcome()).isEqualTo(MessageDeliveryProvider.Outcome.TRANSIENT_FAILURE);
+        assertThat(result.errorCode()).isEqualTo("SLACK_TEAM_ADDED_TO_ORG");
+        assertThat(result.retryAfter()).isNull();
+    }
+
+    @Test
+    void gatewayTimeoutIsTransientFailure() {
+        byte[] token = fixtureCredential();
+        when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
+                .thenReturn(Optional.of(token));
+        when(slack.postMessage(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new SlackWebApiClient.PostMessageResponse(
+                        408, false, null, "http_408", Duration.ofSeconds(3)));
+
+        MessageDeliveryProvider.DeliveryResult result = provider.deliver(command());
+
+        assertThat(result.outcome()).isEqualTo(MessageDeliveryProvider.Outcome.TRANSIENT_FAILURE);
+        assertThat(result.errorCode()).isEqualTo("SLACK_HTTP_408");
+        assertThat(result.retryAfter()).isEqualTo(Duration.ofSeconds(3));
+    }
+
+    @Test
     void missingBotTokenIsPermanentConfigurationFailure() {
         when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .thenReturn(Optional.empty());

@@ -69,6 +69,22 @@ class HttpSlackWebApiClientTests {
     }
 
     @Test
+    void unusableRetryAfterFallsBackToProviderNeutralBackoff() throws Exception {
+        startServer(exchange -> {
+            exchange.getResponseHeaders().add("Retry-After", "not-a-number");
+            respond(exchange, 429, "{\"ok\":false,\"error\":\"ratelimited\"}");
+        });
+
+        SlackWebApiClient.PostMessageResponse response = client().postMessage(
+                fixtureCredential(), "C123", null, "Plain reply",
+                MessageBodyFormat.PLAIN_TEXT, "message-id");
+
+        assertThat(response.statusCode()).isEqualTo(429);
+        assertThat(response.errorCode()).isEqualTo("rate_limited");
+        assertThat(response.retryAfter()).isNull();
+    }
+
+    @Test
     void returnsSlackApiErrorFromSuccessfulHttpResponse() throws Exception {
         startServer(exchange -> respond(exchange, 200, "{\"ok\":false,\"error\":\"channel_not_found\"}"));
 

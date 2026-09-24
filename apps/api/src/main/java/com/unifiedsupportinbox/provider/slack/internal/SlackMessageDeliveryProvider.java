@@ -85,15 +85,16 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
         if (response.statusCode() == 429) {
             return DeliveryResult.transientFailure("SLACK_RATE_LIMITED", positive(response.retryAfter()));
         }
-        if (response.statusCode() >= 500) {
-            return DeliveryResult.transientFailure("SLACK_HTTP_" + response.statusCode(), positive(response.retryAfter()));
-        }
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            return DeliveryResult.permanentFailure("SLACK_HTTP_" + response.statusCode());
+            String code = "SLACK_HTTP_" + response.statusCode();
+            if (SlackDeliveryErrorClassifier.isTransientHttpStatus(response.statusCode())) {
+                return DeliveryResult.transientFailure(code, positive(response.retryAfter()));
+            }
+            return DeliveryResult.permanentFailure(code);
         }
         if (!response.ok()) {
-            String code = normalizedApiError(response.errorCode());
-            if (transientApiError(response.errorCode())) {
+            String code = SlackDeliveryErrorClassifier.normalizedApiError(response.errorCode());
+            if (SlackDeliveryErrorClassifier.isTransientApiError(response.errorCode())) {
                 return DeliveryResult.transientFailure(code, positive(response.retryAfter()));
             }
             return DeliveryResult.permanentFailure(code);
@@ -102,21 +103,6 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
             return DeliveryResult.transientFailure("SLACK_RESPONSE_TS_MISSING", null);
         }
         return DeliveryResult.sent(response.messageTs());
-    }
-
-    private static boolean transientApiError(String error) {
-        return "internal_error".equals(error)
-                || "fatal_error".equals(error)
-                || "service_unavailable".equals(error)
-                || "ratelimited".equals(error);
-    }
-
-    private static String normalizedApiError(String error) {
-        if (error == null || error.isBlank()) return "SLACK_API_ERROR";
-        String normalized = error.toUpperCase(java.util.Locale.ROOT)
-                .replaceAll("[^A-Z0-9_]+", "_");
-        String code = "SLACK_" + normalized;
-        return code.length() <= 128 ? code : code.substring(0, 128);
     }
 
     private static Duration positive(Duration value) {
