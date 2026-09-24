@@ -27,6 +27,6 @@ class MessageDeliveryRealtimeBridge {
         if (event.errorCategory() != null) payload.put("errorCategory", event.errorCategory());
         if (event.errorCode() != null) payload.put("errorCode", event.errorCode());
         if (event.nextRetryAt() != null) payload.put("nextRetryAt", event.nextRetryAt().toString());
-        messaging.convertAndSend("/topic/cases/" + event.caseId(), payload);
+        messaging.convertAndSend("/topic/cases/" + event.caseId(), (Object) payload);
     }
 }
