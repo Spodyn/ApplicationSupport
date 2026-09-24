@@ -2,6 +2,7 @@ package com.unifiedsupportinbox.messaging.internal;
 
 import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.ApiV1Conventions;
+import com.unifiedsupportinbox.CursorPage;
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.messaging.MessageBodyFormat;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,6 +13,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,9 +28,21 @@ class SupportMessageController {
     private static final String CORRELATION_ID_ATTRIBUTE = "usi.correlationId";
 
     private final SupportSendMessageService service;
+    private final MessageHistoryService history;
 
-    SupportMessageController(SupportSendMessageService service) {
+    SupportMessageController(SupportSendMessageService service, MessageHistoryService history) {
         this.service = service;
+        this.history = history;
+    }
+
+    @GetMapping("/{caseId}/messages")
+    CursorPage<MessageHistoryService.MessageHistoryItem> history(
+            @PathVariable UUID caseId,
+            @RequestParam(name = "before", required = false) String before,
+            @RequestParam(name = ApiV1Conventions.LIMIT_QUERY_PARAMETER, required = false) Integer limit,
+            Authentication authentication) {
+        authenticatedUserId(authentication);
+        return history.history(caseId, before, limit);
     }
 
     @PostMapping("/{caseId}/messages")
