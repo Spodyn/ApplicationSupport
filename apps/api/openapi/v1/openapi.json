@@ -471,6 +471,110 @@
         }
       }
     },
+    "/api/v1/cases/{caseId}/messages": {
+      "post": {
+        "operationId": "sendCaseMessage",
+        "summary": "Queue a support reply for asynchronous provider delivery",
+        "security": [
+          {
+            "sessionCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "caseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Message queued for delivery",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendMessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Case ownership required or CSRF validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Case not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Case state or idempotency conflict",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiProblem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/users/{userId}/permissions": {
       "put": {
         "operationId": "updateUserPermissions",
@@ -855,6 +959,56 @@
               "null"
             ],
             "maxLength": 160
+          }
+        }
+      },
+      "MessageBodyFormat": {
+        "type": "string",
+        "enum": [
+          "PLAIN_TEXT",
+          "MARKDOWN"
+        ]
+      },
+      "MessageDeliveryStatus": {
+        "type": "string",
+        "enum": [
+          "QUEUED",
+          "SENDING",
+          "SENT",
+          "DELIVERED",
+          "FAILED"
+        ]
+      },
+      "SendMessageRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "body"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "minLength": 1
+          },
+          "bodyFormat": {
+            "$ref": "#/components/schemas/MessageBodyFormat"
+          }
+        }
+      },
+      "SendMessageResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "messageId",
+          "deliveryStatus"
+        ],
+        "properties": {
+          "messageId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "deliveryStatus": {
+            "$ref": "#/components/schemas/MessageDeliveryStatus"
           }
         }
       }
