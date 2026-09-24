@@ -8,7 +8,6 @@ import java.time.Duration;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -17,13 +16,12 @@ class NotificationDeliveryWorker {
     private static final Logger LOGGER = LoggerFactory.getLogger(NotificationDeliveryWorker.class);
 
     private final NotificationDeliveryService deliveries;
-    private final ObjectProvider<NotificationDeliveryGateway> gateways;
+    private final NotificationDeliveryGateway gateway;
 
     NotificationDeliveryWorker(
-            NotificationDeliveryService deliveries,
-            ObjectProvider<NotificationDeliveryGateway> gateways) {
+            NotificationDeliveryService deliveries, NotificationDeliveryGateway gateway) {
         this.deliveries = deliveries;
-        this.gateways = gateways;
+        this.gateway = gateway;
     }
 
     AttemptResult process(UUID deliveryId) {
@@ -39,11 +37,6 @@ class NotificationDeliveryWorker {
         if (routeState != NotificationDeliveryService.RouteState.ENABLED) {
             deliveries.cancelClaim(claim, routeState);
             return AttemptResult.CANCELLED;
-        }
-
-        NotificationDeliveryGateway gateway = gateways.getIfUnique();
-        if (gateway == null) {
-            return transientFailure(claim, "GATEWAY_UNAVAILABLE", null);
         }
 
         DeliveryResult result;
