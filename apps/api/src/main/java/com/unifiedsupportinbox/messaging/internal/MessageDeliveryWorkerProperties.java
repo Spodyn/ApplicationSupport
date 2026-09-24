@@ -16,13 +16,15 @@ record MessageDeliveryWorkerProperties(
         @NotNull @DefaultValue("30s") Duration claimLease,
         @NotNull @DefaultValue("1s") Duration baseRetryDelay,
         @NotNull @DefaultValue("5m") Duration maxRetryDelay,
-        @Min(1) @Max(100) @DefaultValue("5") int maxAutomaticAttempts) {
+        @NotNull @DefaultValue("24h") Duration retryWindow,
+        @Min(1) @Max(100) @DefaultValue("8") int maxAutomaticAttempts) {
 
     @AssertTrue(message = "message delivery worker durations must be positive and max retry must not be shorter than base retry")
     boolean isValidDurations() {
         return positive(claimLease)
                 && positive(baseRetryDelay)
                 && positive(maxRetryDelay)
+                && positive(retryWindow)
                 && !maxRetryDelay.minus(baseRetryDelay).isNegative();
     }
 
