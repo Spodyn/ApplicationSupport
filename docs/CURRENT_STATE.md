@@ -62,7 +62,7 @@ Frontendowy workflow używa dokładnie sześciu statusów:
 - `ignored` -> `IGNORED`,
 - `resolved` -> `RESOLVED`.
 
-Backend będzie authoritative dla transition policy, ownership i action availability. Snooze, unread i analityczne dimensions nie są `CaseStatus`.
+Backend ma centralną `CaseTransitionPolicy` oraz transakcyjną granicę `CaseWorkflowTransactions` (USI-101): wspólne reguły dla command validation i action availability, blokada Case, kontrola wersji i atomowy zapis efektów. Dedykowane endpointy workflow i ich podłączenie do UI pozostają w odpowiednich ticketach E09. Snooze, unread i analityczne dimensions nie są `CaseStatus`.
 
 Terminalne `IGNORED` i `RESOLVED` nie są reopenowane. Nowa customer message po terminalnym Case tworzy nowy linked Case.
 

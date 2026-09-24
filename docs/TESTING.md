@@ -148,3 +148,23 @@ Testy implementacyjne obejmują:
 ## Completion rule
 
 Ticket nie jest gotowy, jeśli wymagany gate jest czerwony. Reviewer ocenia dokładny HEAD SHA. Zmiana HEAD po review wymaga ponownej walidacji/review zgodnie z agent/orchestrator contract.
+
+## Central workflow policy (USI-101)
+
+`CaseTransitionPolicyTests` checks all 66 human action/status combinations,
+inactive actors, current-owner and ADMIN permission gates, lifetime Ignore
+restrictions, duplicate/weighted votes, Ask delivery timing and duration bounds,
+customer activity, due waiting timeouts, personal Snooze and state invariants.
+`CaseWorkflowTransactionsIntegrationTests` uses migrated PostgreSQL to verify
+state/timestamp persistence, returned action availability, stale-version conflicts,
+rollback of state plus effects, and exactly one winner for concurrent Claims.
+
+```bash
+cd apps/api
+./mvnw --batch-mode clean verify -DexcludedGroups=integration
+./mvnw --batch-mode test -Dgroups=integration
+```
+
+Dedicated command tests must additionally exercise their durable audit/outbox,
+vote/SLA/personal-state effects and API idempotency. The shared boundary's tests
+isolate transaction behavior; they do not substitute for those acceptance tests.
