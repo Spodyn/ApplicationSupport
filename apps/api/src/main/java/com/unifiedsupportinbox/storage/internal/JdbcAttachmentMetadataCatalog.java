@@ -6,11 +6,16 @@ import com.unifiedsupportinbox.storage.AttachmentScanStatus;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -89,6 +94,29 @@ class JdbcAttachmentMetadataCatalog implements AttachmentMetadataCatalog {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Map<UUID, List<AttachmentMetadata>> findByMessageIds(Collection<UUID> messageIds) {
+        if (messageIds == null || messageIds.isEmpty()) return Map.of();
+        List<UUID> ids = messageIds.stream().filter(Objects::nonNull).distinct().toList();
+        if (ids.isEmpty()) return Map.of();
+        String placeholders = ids.stream().map(id -> "?").collect(Collectors.joining(", "));
+        List<AttachmentMetadata> rows = jdbc.query("""
+                SELECT id, message_id, storage_key, original_filename, content_type,
+                       detected_content_type, size_bytes, sha256, scan_status,
+                       scan_error, provider_file_id, created_at
+                FROM attachments
+                WHERE message_id IN (%s)
+                ORDER BY message_id ASC, created_at ASC, id ASC
+                """.formatted(placeholders), JdbcAttachmentMetadataCatalog::map, ids.toArray());
+        Map<UUID, List<AttachmentMetadata>> result = new LinkedHashMap<>();
+        for (AttachmentMetadata row : rows) {
+            result.computeIfAbsent(row.messageId(), ignored -> new java.util.ArrayList<>()).add(row);
+        }
+        result.replaceAll((ignored, values) -> List.copyOf(values));
+        return Map.copyOf(result);
+    }
+
+    @Override
     @Transactional
     public AttachmentMetadata associateWithMessage(UUID attachmentId, UUID messageId) {
         if (attachmentId == null) throw new IllegalArgumentException("attachmentId must not be null.");
@@ -137,7 +165,8 @@ class JdbcAttachmentMetadataCatalog implements AttachmentMetadataCatalog {
         requireText(command.storageKey(), "storageKey", 512);
         if (!command.storageKey().startsWith("attachments/")
                 || command.storageKey().startsWith("/")
-                || command.storageKey().contains("..")) {
+                || command.storageKey().contains("..")
+                || command.storageKey().contains("\\")) {
             throw new IllegalArgumentException("storageKey must be an internal attachment object key.");
         }
         requireText(command.originalFilename(), "originalFilename", 512);
