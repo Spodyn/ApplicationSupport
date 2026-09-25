@@ -42,7 +42,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
     @Transactional
     public void handle(Command command) {
         Objects.requireNonNull(command, "command");
-        validateSlackCreate(command);
+        validateInboundCreate(command);
 
         CaseCreationService.Result caseResult = cases.create(new CaseCreationService.Command(
                 command.inboundEventId(),
@@ -113,7 +113,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         return count != null && count == 1;
     }
 
-    private static void validateSlackCreate(Command command) {
+    private static void validateInboundCreate(Command command) {
         Objects.requireNonNull(command.inboundEventId(), "inboundEventId");
         Objects.requireNonNull(command.integrationId(), "integrationId");
         Objects.requireNonNull(command.channelId(), "channelId");
@@ -129,8 +129,8 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         if (command.mutation() != Mutation.CREATE) {
             throw notReady("Inbound message mutations are handled by a later messaging task.");
         }
-        if (provider != IntegrationProvider.SLACK) {
-            throw notReady("Only Slack inbound message mapping is active in the current Slack-first phase.");
+        if (provider != IntegrationProvider.SLACK && provider != IntegrationProvider.TELEGRAM) {
+            throw notReady("Only Slack and Telegram inbound message mapping is active in the current phase.");
         }
     }
 
