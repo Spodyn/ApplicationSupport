@@ -71,6 +71,8 @@ class BusinessHoursIntegrationTests {
         jdbc.update("DELETE FROM spring_session_attributes");
         jdbc.update("DELETE FROM spring_session");
         jdbc.update("DELETE FROM idempotency_keys");
+        jdbc.update("UPDATE ooo_config SET enabled = FALSE, message_template = ?, send_once_per_closure = TRUE, version = 1, updated_by = 'system:bootstrap' WHERE id = 1",
+                "Dziękujemy za wiadomość. Wrócimy do Ciebie {{next_opening_date}} o {{next_opening_time}} ({{timezone}}).");
         jdbc.update(
                 "UPDATE bootstrap_admin_state "
                         + "SET consumed = FALSE, consumed_at = NULL, admin_user_id = NULL WHERE id = 1");
@@ -214,6 +216,35 @@ class BusinessHoursIntegrationTests {
         HttpResponse<String> denied = get(client(plain), "/api/v1/admin/business-hours");
         assertThat(denied.statusCode()).isEqualTo(403);
         assertThat(denied.body()).contains("\"code\":\"ACCESS_DENIED\"");
+    }
+
+    @Test
+    void manageScheduleCanConfigureOutOfOfficePolicyAndPreviewItsScheduleVariables() throws Exception {
+        UUID delegatedId = createUser("ooo-admin@example.com");
+        jdbc.update("INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_schedule')", delegatedId);
+        CookieManager session = login("ooo-admin@example.com");
+
+        HttpResponse<String> initial = get(client(session), "/api/v1/admin/out-of-office");
+        assertThat(initial.statusCode()).isEqualTo(200);
+        assertThat(initial.body()).contains("\"enabled\":false").contains("\"version\":1");
+
+        HttpResponse<String> updated = mutate(session, "PUT", "/api/v1/admin/out-of-office", """
+                {"enabled":true,"template":"Cześć {{customer_name}}, wracamy {{next_opening_date}} {{next_opening_time}} {{timezone}}.",
+                 "sendOncePerClosure":true,"version":1}
+                """);
+        assertThat(updated.statusCode()).isEqualTo(200);
+        assertThat(updated.body()).contains("\"enabled\":true").contains("\"version\":2");
+        assertThat(queryInt("SELECT count(*) FROM audit_events WHERE action = 'OUT_OF_OFFICE_UPDATED'")).isEqualTo(1);
+
+        HttpResponse<String> preview = get(client(session), "/api/v1/admin/out-of-office/preview?customerName=Joanna");
+        assertThat(preview.statusCode()).isEqualTo(200);
+        assertThat(preview.body()).contains("Joanna").contains("UTC").contains("\"nextOpening\"");
+
+        HttpResponse<String> unsupportedVariable = mutate(session, "PUT", "/api/v1/admin/out-of-office", """
+                {"enabled":true,"template":"{{unknown}}","sendOncePerClosure":true,"version":2}
+                """);
+        assertThat(unsupportedVariable.statusCode()).isEqualTo(400);
+        assertThat(unsupportedVariable.body()).contains("VALIDATION_FAILED").contains("unsupported variable");
     }
 
     private static void assertValidationFailure(

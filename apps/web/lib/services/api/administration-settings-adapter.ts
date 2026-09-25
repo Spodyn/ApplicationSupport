@@ -70,6 +70,15 @@ type ApiNotificationRule = {
   updatedAt: string
 }
 
+type ApiOutOfOfficePolicy = {
+  enabled: boolean
+  template: string
+  sendOncePerClosure: boolean
+  version: number
+  updatedAt: string
+  updatedBy: string
+}
+
 const scheduleDays = [
   { dayOfWeek: 1, key: "mon", label: "Poniedziałek" },
   { dayOfWeek: 2, key: "tue", label: "Wtorek" },
@@ -89,6 +98,7 @@ const supportedNotificationTypes = new Set<NotificationType>([
 ])
 
 const notificationDestinationVersions = new Map<string, number>()
+let outOfOfficeVersion: number | undefined
 
 function mapChannel(channel: ApiChannelRecord): ManagedChannel {
   const activity = channel.active ? "Aktywny" : "Nieaktywny"
@@ -220,6 +230,28 @@ async function saveBusinessHours(
   })
 }
 
+async function getOutOfOffice(): Promise<ApiOutOfOfficePolicy> {
+  return browserApiTransport.request<ApiOutOfOfficePolicy>({
+    method: "GET",
+    path: "/api/v1/admin/out-of-office",
+  })
+}
+
+async function saveOutOfOffice(
+  policy: AdministrationSettings["outOfOffice"],
+): Promise<ApiOutOfOfficePolicy> {
+  if (outOfOfficeVersion === undefined) {
+    outOfOfficeVersion = (await getOutOfOffice()).version
+  }
+  const saved = await browserApiTransport.request<ApiOutOfOfficePolicy>({
+    method: "PUT",
+    path: "/api/v1/admin/out-of-office",
+    body: { ...policy, version: outOfOfficeVersion },
+  })
+  outOfOfficeVersion = saved.version
+  return saved
+}
+
 async function readNotificationConfiguration() {
   const [destinations, rules] = await Promise.all([
     browserApiTransport.request<ApiNotificationDestination[]>({
@@ -349,17 +381,23 @@ async function saveNotifications(
 
 export const apiAdministrationSettingsRepository: AdministrationSettingsRepository = {
   async get() {
-    const [settings, channels, businessHours, notifications] = await Promise.all([
+    const [settings, channels, businessHours, notifications, outOfOffice] = await Promise.all([
       mockAdministrationSettingsRepository.get(),
       listChannels(),
       getBusinessHours(),
       listNotifications(),
+      getOutOfOffice(),
     ])
     return {
       ...settings,
       schedule: mapApiBusinessHours(businessHours, settings.schedule.exceptions),
       channels,
       notifications,
+      outOfOffice: {
+        enabled: outOfOffice.enabled,
+        template: outOfOffice.template,
+        sendOncePerClosure: outOfOffice.sendOncePerClosure,
+      },
     }
   },
 
@@ -376,6 +414,14 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     }
     if (key === "notifications") {
       return (await saveNotifications(value as NotificationDestination[])) as AdministrationSettings[K]
+    }
+    if (key === "outOfOffice") {
+      const saved = await saveOutOfOffice(value as AdministrationSettings["outOfOffice"])
+      return {
+        enabled: saved.enabled,
+        template: saved.template,
+        sendOncePerClosure: saved.sendOncePerClosure,
+      } as AdministrationSettings[K]
     }
     return mockAdministrationSettingsRepository.saveSection(key, value)
   },
