@@ -2,6 +2,11 @@
 
 **Status:** FROZEN security baseline for v1
 
+The actionable threat-to-control mapping and implementation checklist are in
+[THREAT_MODEL.md](THREAT_MODEL.md). This specification remains the normative
+security baseline; the model records the affected trust boundaries, test evidence
+and ticket ownership for each control.
+
 ## 1. Principles
 
 - Deny by default.

@@ -26,6 +26,7 @@ An older Jira description, historical `USER_DECISION_REQUIRED` or earlier resolv
 - **ARCHITECTURE.md** - production architecture and implementation boundaries.
 - **INTEGRATIONS.md** - Slack, Microsoft Teams and Telegram behavior.
 - **SECURITY.md** - authentication, authorization, content/file/security boundaries.
+- **THREAT_MODEL.md** - threat-to-control matrix, release requirements and security ownership.
 - **OPERATIONS.md** - deployment, observability, DR, performance and release gates.
 - **ANALYTICS_CONTRACT.md** - canonical analytics events, KPI formulas, reporting-time rules and edge-case examples.
 - **DECISION_REGISTRY.md** - readable indexed decision catalog.
