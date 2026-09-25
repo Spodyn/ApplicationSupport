@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.slf4j.MDC;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Tag("integration")
@@ -60,6 +61,14 @@ class CaseWorkflowTransactionsIntegrationTests {
         assertThat(claimed.version()).isEqualTo(1);
         assertThat(claimed.availableActions()).contains(Action.REPLY, Action.RESOLVE).doesNotContain(Action.CLAIM);
         assertThat(jdbc.queryForObject("SELECT claimed_at IS NOT NULL FROM cases WHERE id = ?", Boolean.class, id)).isTrue();
+        assertThat(jdbc.queryForObject("""
+                SELECT correlation_id FROM audit_events
+                WHERE action = 'CASE_CLAIM' AND entity_id = ?
+                """, String.class, id)).isEqualTo("workflow-audit-test");
+        assertThat(jdbc.queryForObject("""
+                SELECT actor_user_id FROM audit_events
+                WHERE action = 'CASE_CLAIM' AND entity_id = ?
+                """, UUID.class, id)).isEqualTo(actor.id());
         var resolved = execute(id, 1, actor, Action.RESOLVE);
         assertThat(resolved.state().status()).isEqualTo(CaseStatus.RESOLVED);
         assertThat(resolved.state().ownerId()).isEqualTo(actor.id());
@@ -133,9 +142,11 @@ class CaseWorkflowTransactionsIntegrationTests {
     }
 
     private static CaseWorkflowTransactions.Result execute(UUID id, long version, Actor actor, Action action) {
-        return workflow.execute(id, version,
-                state -> new CaseWorkflowTransactions.Command(actor, action, Input.empty()),
-                decision -> {}); // This suite isolates persistence; dedicated commands own business effects.
+        try (MDC.MDCCloseable ignored = MDC.putCloseable("correlationId", "workflow-audit-test")) {
+            return workflow.execute(id, version,
+                    state -> new CaseWorkflowTransactions.Command(actor, action, Input.empty()),
+                    decision -> {}); // This suite isolates persistence; dedicated commands own business effects.
+        }
     }
 
     private static Actor newActor() {
