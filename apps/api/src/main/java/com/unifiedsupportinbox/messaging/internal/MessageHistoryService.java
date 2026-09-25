@@ -7,8 +7,12 @@ import com.unifiedsupportinbox.CursorPosition;
 import com.unifiedsupportinbox.messaging.MessageBodyFormat;
 import com.unifiedsupportinbox.messaging.MessageDeliveryStatus;
 import com.unifiedsupportinbox.messaging.MessageKind;
+import com.unifiedsupportinbox.storage.AttachmentMetadata;
+import com.unifiedsupportinbox.storage.AttachmentMetadataCatalog;
+import com.unifiedsupportinbox.storage.AttachmentScanStatus;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -19,10 +23,15 @@ import org.springframework.transaction.annotation.Transactional;
 class MessageHistoryService {
 
     private final MessageRepository messages;
+    private final AttachmentMetadataCatalog attachments;
     private final CursorCodec cursors;
 
-    MessageHistoryService(MessageRepository messages, CursorCodec cursors) {
+    MessageHistoryService(
+            MessageRepository messages,
+            AttachmentMetadataCatalog attachments,
+            CursorCodec cursors) {
         this.messages = messages;
+        this.attachments = attachments;
         this.cursors = cursors;
     }
 
@@ -40,7 +49,13 @@ class MessageHistoryService {
         String nextCursor = hasMore
                 ? cursors.encode(positionOf(page.getLast()), scope(caseId))
                 : null;
-        return new CursorPage<>(page.stream().map(MessageHistoryItem::from).toList(), nextCursor);
+        Map<UUID, List<AttachmentMetadata>> attachmentsByMessage = attachments.findByMessageIds(
+                page.stream().map(MessageEntity::id).toList());
+        return new CursorPage<>(page.stream()
+                .map(message -> MessageHistoryItem.from(
+                        message,
+                        attachmentsByMessage.getOrDefault(message.id(), List.of())))
+                .toList(), nextCursor);
     }
 
     private static CursorPosition positionOf(MessageEntity message) {
@@ -63,12 +78,32 @@ class MessageHistoryService {
             Instant createdAt,
             Instant editedAt,
             Instant deletedAt,
-            String authorName) {
-        static MessageHistoryItem from(MessageEntity message) {
+            String authorName,
+            List<MessageAttachmentItem> attachments) {
+        static MessageHistoryItem from(MessageEntity message, List<AttachmentMetadata> attachments) {
             return new MessageHistoryItem(
                     message.id(), message.kind(), message.body(), message.bodyFormat(), message.inbound(),
                     message.deliveryStatus(), message.providerCreatedAt(), message.createdAt(), message.editedAt(),
-                    message.deletedAt(), message.authorName());
+                    message.deletedAt(), message.authorName(),
+                    attachments.stream().map(MessageAttachmentItem::from).toList());
+        }
+    }
+
+    record MessageAttachmentItem(
+            UUID id,
+            String fileName,
+            long sizeBytes,
+            String contentType,
+            String detectedContentType,
+            AttachmentScanStatus scanStatus) {
+        static MessageAttachmentItem from(AttachmentMetadata metadata) {
+            return new MessageAttachmentItem(
+                    metadata.id(),
+                    metadata.originalFilename(),
+                    metadata.sizeBytes(),
+                    metadata.contentType(),
+                    metadata.detectedContentType(),
+                    metadata.scanStatus());
         }
     }
 }
