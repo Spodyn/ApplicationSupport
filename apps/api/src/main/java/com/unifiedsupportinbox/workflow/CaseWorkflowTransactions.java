@@ -1,6 +1,8 @@
 package com.unifiedsupportinbox.workflow;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.audit.AuditActorType;
+import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.cases.CaseStatus;
 import com.unifiedsupportinbox.workflow.CaseTransitionPolicy.Action;
 import com.unifiedsupportinbox.workflow.CaseTransitionPolicy.Actor;
@@ -10,6 +12,8 @@ import com.unifiedsupportinbox.workflow.CaseTransitionPolicy.State;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Objects;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -29,10 +33,12 @@ import org.springframework.transaction.annotation.Transactional;
 public class CaseWorkflowTransactions {
     private final JdbcTemplate jdbc;
     private final CaseTransitionPolicy policy;
+    private final AuditEventStore auditEvents;
 
-    public CaseWorkflowTransactions(JdbcTemplate jdbc, CaseTransitionPolicy policy) {
+    public CaseWorkflowTransactions(JdbcTemplate jdbc, CaseTransitionPolicy policy, AuditEventStore auditEvents) {
         this.jdbc = jdbc;
         this.policy = policy;
+        this.auditEvents = auditEvents;
     }
 
     public record Command(Actor actor, Action action, Input input) {}
@@ -78,6 +84,20 @@ public class CaseWorkflowTransactions {
             version++;
         }
         persistEffects.accept(decision);
+        if (!before.state().equals(after) || !decision.effects().isEmpty()) {
+            auditEvents.append(
+                    actorType(command.actor()),
+                    command.actor().id(),
+                    "CASE_" + command.action().name(),
+                    "CASE",
+                    caseId,
+                    caseId,
+                    Map.of(
+                            "action", command.action().name(),
+                            "previous", stateMetadata(before.state()),
+                            "current", stateMetadata(after),
+                            "version", version));
+        }
         Actor actor = command.actor();
         if (decision.effects().contains(CaseTransitionPolicy.Effect.RECORD_IGNORE_VOTE)) {
             actor = new Actor(actor.id(), actor.active(), actor.role(), actor.permissions(), true);
@@ -86,4 +106,17 @@ public class CaseWorkflowTransactions {
     }
 
     private record Snapshot(State state, long version) {}
+
+    private static AuditActorType actorType(Actor actor) {
+        return actor.role() == com.unifiedsupportinbox.identity.UserRole.ADMIN
+                ? AuditActorType.ADMIN : AuditActorType.USER;
+    }
+
+    private static Map<String, Object> stateMetadata(State state) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("status", state.status().name());
+        if (state.ownerId() != null) metadata.put("ownerUserId", state.ownerId().toString());
+        if (state.waitingUntil() != null) metadata.put("waitingUntil", state.waitingUntil().toString());
+        return Map.copyOf(metadata);
+    }
 }
