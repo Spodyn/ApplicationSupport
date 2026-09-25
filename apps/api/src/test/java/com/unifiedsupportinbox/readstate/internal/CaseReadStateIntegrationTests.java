@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.unifiedsupportinbox.UsiApiApplication;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
 import java.time.Instant;
+import java.sql.Timestamp;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -26,6 +27,7 @@ class CaseReadStateIntegrationTests {
     private static ConfigurableApplicationContext context;
     private static JdbcTemplate jdbc;
     private static CaseReadStateRepository repository;
+    private static CaseReadPositionService positions;
 
     @BeforeAll
     static void startApplication() {
@@ -44,6 +46,7 @@ class CaseReadStateIntegrationTests {
                         "--usi.bootstrap-admin.enabled=false");
         jdbc = context.getBean(JdbcTemplate.class);
         repository = context.getBean(CaseReadStateRepository.class);
+        positions = context.getBean(CaseReadPositionService.class);
     }
 
     @AfterAll
@@ -164,6 +167,42 @@ class CaseReadStateIntegrationTests {
                 "idx_case_read_states_user_updated");
     }
 
+    @Test
+    void readPositionIsMonotonicIdempotentAndPrivateToTheCurrentUser() {
+        Fixture fixture = fixture("monotonic");
+        UUID earlier = customerMessage(fixture.caseId(), "provider-earlier", "earlier",
+                Instant.parse("2026-09-23T10:00:00Z"));
+        UUID later = customerMessage(fixture.caseId(), "provider-later", "later",
+                Instant.parse("2026-09-23T10:01:00Z"));
+        UUID firstUser = createUser();
+        UUID secondUser = createUser();
+
+        assertThat(positions.markRead(fixture.caseId(), firstUser, later).messageId()).isEqualTo(later);
+        assertThat(positions.markRead(fixture.caseId(), firstUser, earlier).messageId()).isEqualTo(later);
+        assertThat(positions.markRead(fixture.caseId(), firstUser, later).messageId()).isEqualTo(later);
+        assertThat(positions.markRead(fixture.caseId(), secondUser, earlier).messageId()).isEqualTo(earlier);
+
+        assertThat(jdbc.queryForObject("""
+                SELECT last_read_message_id FROM case_read_states WHERE user_id = ? AND case_id = ?
+                """, UUID.class, firstUser, fixture.caseId())).isEqualTo(later);
+        assertThat(jdbc.queryForObject("""
+                SELECT last_read_message_id FROM case_read_states WHERE user_id = ? AND case_id = ?
+                """, UUID.class, secondUser, fixture.caseId())).isEqualTo(earlier);
+    }
+
+    @Test
+    void readPositionRejectsAMessageFromAnotherCase() {
+        Fixture first = fixture("read-position-first");
+        Fixture second = fixture("read-position-second");
+        UUID userId = createUser();
+        UUID foreignMessage = customerMessage(second.caseId(), "provider-foreign-position", "foreign");
+
+        assertThatThrownBy(() -> positions.markRead(first.caseId(), userId, foreignMessage))
+                .isInstanceOf(com.unifiedsupportinbox.ApiProblemException.class)
+                .hasMessageContaining("Message was not found");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM case_read_states", Integer.class)).isZero();
+    }
+
     private static Fixture fixture(String label) {
         String suffix = label + "-" + UUID.randomUUID();
         UUID customerId = jdbc.queryForObject(
@@ -209,19 +248,24 @@ class CaseReadStateIntegrationTests {
     }
 
     private static UUID customerMessage(UUID caseId, String externalMessageId, String body) {
+        return customerMessage(caseId, externalMessageId, body, Instant.now());
+    }
+
+    private static UUID customerMessage(UUID caseId, String externalMessageId, String body, Instant providerCreatedAt) {
         return jdbc.queryForObject("""
                 INSERT INTO messages (
                     case_id, external_message_id, external_thread_key, kind,
                     author_external_id, body, body_format, inbound,
                     provider_created_at, correlation_id
                 ) VALUES (?, ?, 'thread-read-state', 'CUSTOMER', 'U-customer', ?,
-                          'PLAIN_TEXT', TRUE, CURRENT_TIMESTAMP, ?)
+                          'PLAIN_TEXT', TRUE, ?, ?)
                 RETURNING id
                 """,
                 UUID.class,
                 caseId,
                 externalMessageId,
                 body,
+                Timestamp.from(providerCreatedAt),
                 "corr-" + UUID.randomUUID());
     }
 
