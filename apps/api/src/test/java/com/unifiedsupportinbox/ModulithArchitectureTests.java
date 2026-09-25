@@ -22,6 +22,7 @@ class ModulithArchitectureTests {
             "messaging",
             "workflow",
             "sla",
+            "ooo",
             "notification",
             "analytics",
             "audit",

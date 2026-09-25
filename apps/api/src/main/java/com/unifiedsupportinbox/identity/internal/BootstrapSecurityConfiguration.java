@@ -84,6 +84,7 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers("/api/v1/admin/integrations/**").hasAuthority("manage_integrations")
                         .requestMatchers("/api/v1/admin/channels/**").hasAuthority("manage_integrations")
                         .requestMatchers("/api/v1/admin/business-hours/**").hasAuthority("manage_schedule")
+                        .requestMatchers("/api/v1/admin/out-of-office/**").hasAuthority("manage_schedule")
                         .requestMatchers("/api/v1/admin/notifications/**").hasAuthority("manage_notifications")
                         .requestMatchers("/api/v1/admin/audit/**").hasAuthority("view_audit")
                         .anyRequest().denyAll())

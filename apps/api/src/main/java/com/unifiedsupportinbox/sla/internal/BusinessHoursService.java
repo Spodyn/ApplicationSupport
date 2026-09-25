@@ -4,6 +4,7 @@ import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.audit.AuditActors;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.sla.BusinessHoursScheduleView;
+import com.unifiedsupportinbox.sla.BusinessHoursScheduleCatalog;
 import java.time.DateTimeException;
 import java.time.LocalTime;
 import java.time.LocalDate;
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-class BusinessHoursService {
+class BusinessHoursService implements BusinessHoursScheduleCatalog {
 
     private static final String MANAGE_SCHEDULE = "manage_schedule";
     private static final Pattern HH_MM = Pattern.compile("^(?:[01]\\d|2[0-3]):[0-5]\\d$");
@@ -36,6 +37,12 @@ class BusinessHoursService {
         requireManageSchedule(actor);
         return schedules.findActive()
                 .orElseThrow(() -> new IllegalStateException("Active business-hours schedule is missing."));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public java.util.Optional<BusinessHoursScheduleView> findActiveSchedule() {
+        return schedules.findActive();
     }
 
     @Transactional
