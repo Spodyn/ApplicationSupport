@@ -37,4 +37,22 @@ class SecurityProblemIntegrationTests {
         assertThat(response.body()).contains("\"correlationId\":");
         assertThat(response.body()).doesNotContain("BadCredentialsException");
     }
+
+    @Test
+    void apiResponsesCarryTheBrowserHardeningHeaders() throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(
+                        URI.create("http://localhost:" + port + "/api/v1/not-yet-implemented"))
+                .GET()
+                .build();
+
+        HttpResponse<String> response = HttpClient.newHttpClient()
+                .send(request, HttpResponse.BodyHandlers.ofString());
+
+        assertThat(response.headers().firstValue("Content-Security-Policy").orElse(""))
+                .contains("default-src 'none'")
+                .contains("frame-ancestors 'none'");
+        assertThat(response.headers().firstValue("X-Frame-Options")).contains("DENY");
+        assertThat(response.headers().firstValue("X-Content-Type-Options")).contains("nosniff");
+        assertThat(response.headers().firstValue("Referrer-Policy")).contains("no-referrer");
+    }
 }
