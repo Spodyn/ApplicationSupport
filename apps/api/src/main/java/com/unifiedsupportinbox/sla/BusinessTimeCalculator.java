@@ -58,7 +58,25 @@ public final class BusinessTimeCalculator {
     }
 
     public Instant nextOpening(BusinessHoursScheduleView schedule, Instant at) {
-        return add(schedule, at, Duration.ofNanos(1));
+        return opening(schedule, at).nextOpening();
+    }
+
+    /** Reports the current state without inventing an opening for broken/legacy schedules. */
+    public Opening opening(BusinessHoursScheduleView schedule, Instant at) {
+        Objects.requireNonNull(schedule, "schedule");
+        Objects.requireNonNull(at, "at");
+        ZoneId zone = ZoneId.of(schedule.timezone());
+        Instant cursor = at;
+        for (int days = 0; days < MAX_SEARCH_DAYS; days++) {
+            LocalDate date = cursor.atZone(zone).toLocalDate();
+            for (Window window : windows(schedule, date, zone)) {
+                if (!cursor.isBefore(window.end())) continue;
+                if (!cursor.isBefore(window.start())) return new Opening(true, cursor, null);
+                return new Opening(false, null, window.start());
+            }
+            cursor = date.plusDays(1).atStartOfDay(zone).toInstant();
+        }
+        return new Opening(false, null, null);
     }
 
     private static List<Window> windows(BusinessHoursScheduleView schedule, LocalDate date, ZoneId zone) {
@@ -82,4 +100,7 @@ public final class BusinessTimeCalculator {
 
     private record TimeRange(LocalTime start, LocalTime end) {}
     private record Window(Instant start, Instant end) {}
+
+    /** A null nextOpening is the explicit NO_FUTURE_OPENING configuration-fault result. */
+    public record Opening(boolean open, Instant currentOpening, Instant nextOpening) {}
 }
