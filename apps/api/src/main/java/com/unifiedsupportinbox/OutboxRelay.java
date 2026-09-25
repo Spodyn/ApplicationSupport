@@ -45,7 +45,7 @@ public class OutboxRelay {
                         event.id(), event.attempts(), properties.retryDelay());
                 retryScheduled += released ? 1 : 0;
                 LOGGER.warn(
-                        "Outbox publish failed; eventId={}, type={}, attempt={}, retryScheduled={}",
+                        "Outbox publish failed; eventId={}, type={}, attempt={}, retryScheduled={}, reason={}",
                         event.id(),
                         event.type(),
                         event.attempts(),
