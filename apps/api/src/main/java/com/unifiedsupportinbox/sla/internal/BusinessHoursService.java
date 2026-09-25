@@ -1,6 +1,8 @@
 package com.unifiedsupportinbox.sla.internal;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.audit.AuditActors;
+import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.sla.BusinessHoursScheduleView;
 import java.time.DateTimeException;
 import java.time.LocalTime;
@@ -22,9 +24,11 @@ class BusinessHoursService {
     private static final int MAX_INTERVALS = 64;
 
     private final BusinessHoursRepository schedules;
+    private final AuditEventStore auditEvents;
 
-    BusinessHoursService(BusinessHoursRepository schedules) {
+    BusinessHoursService(BusinessHoursRepository schedules, AuditEventStore auditEvents) {
         this.schedules = schedules;
+        this.auditEvents = auditEvents;
     }
 
     @Transactional(readOnly = true)
@@ -42,7 +46,10 @@ class BusinessHoursService {
         requireManageSchedule(actor);
         String normalizedTimezone = normalizeTimezone(timezone);
         List<BusinessHoursIntervalValue> intervals = normalizeIntervals(intervalInputs);
-        return schedules.replaceActive(normalizedTimezone, intervals, actor.getName());
+        BusinessHoursScheduleView updated = schedules.replaceActive(normalizedTimezone, intervals, actor.getName());
+        auditEvents.append(AuditActors.type(actor), AuditActors.userId(actor), "SCHEDULE_UPDATED", "SCHEDULE",
+                updated.id(), null, java.util.Map.of("timezone", updated.timezone(), "intervalCount", intervals.size()));
+        return updated;
     }
 
     @Transactional
@@ -63,7 +70,10 @@ class BusinessHoursService {
             values.add(new ScheduleExceptionValue(date, type, start, end, input.note()));
         }
         schedules.replaceExceptions(active.id(), List.copyOf(values));
-        return schedules.findActive().orElseThrow();
+        BusinessHoursScheduleView updated = schedules.findActive().orElseThrow();
+        auditEvents.append(AuditActors.type(actor), AuditActors.userId(actor), "SCHEDULE_EXCEPTIONS_UPDATED",
+                "SCHEDULE", updated.id(), null, java.util.Map.of("exceptionCount", values.size()));
+        return updated;
     }
 
     private static String normalizeTimezone(String timezone) {

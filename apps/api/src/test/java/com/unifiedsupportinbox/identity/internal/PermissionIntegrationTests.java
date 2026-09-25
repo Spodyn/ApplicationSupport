@@ -101,6 +101,18 @@ class PermissionIntegrationTests {
         assertThat(added.body())
                 .contains("\"explicitPermissions\":[\"manage_notifications\",\"view_audit\"]")
                 .contains("\"effectivePermissions\":[\"manage_notifications\",\"view_audit\"]");
+        assertThat(jdbc.queryForObject("""
+                SELECT correlation_id
+                FROM audit_events
+                WHERE action = 'PERMISSIONS_UPDATED' AND entity_id = ?
+                """, String.class, user.id())).isEqualTo("permissions-audit-test");
+        assertThat(jdbc.queryForObject("""
+                SELECT metadata_json::text
+                FROM audit_events
+                WHERE action = 'PERMISSIONS_UPDATED' AND entity_id = ?
+                """, String.class, user.id()))
+                .contains("newPermissions")
+                .doesNotContain("password");
 
         CookieManager userCookies = login("user@example.com").cookies();
         assertThat(get(client(userCookies), "/api/v1/auth/me").body())
@@ -133,6 +145,10 @@ class PermissionIntegrationTests {
         assertThat(denied.body()).contains("\"code\":\"ACCESS_DENIED\"");
         assertThat(jdbc.queryForObject(
                 "SELECT count(*) FROM user_permissions WHERE user_id = ?",
+                Integer.class,
+                target.id())).isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE action = 'PERMISSIONS_UPDATED' AND entity_id = ?",
                 Integer.class,
                 target.id())).isZero();
     }
@@ -217,6 +233,7 @@ class PermissionIntegrationTests {
         HttpRequest request = HttpRequest.newBuilder(baseUri.resolve("/api/v1/users/" + userId + "/permissions"))
                 .header("Accept", "application/json")
                 .header("Content-Type", "application/json")
+                .header("X-Correlation-ID", "permissions-audit-test")
                 .header("X-XSRF-TOKEN", csrfToken(cookies))
                 .PUT(HttpRequest.BodyPublishers.ofString("{\"permissions\":" + permissionsJson + "}"))
                 .build();

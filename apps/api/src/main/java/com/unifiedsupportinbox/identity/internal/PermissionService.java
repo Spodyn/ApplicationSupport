@@ -1,6 +1,8 @@
 package com.unifiedsupportinbox.identity.internal;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.audit.AuditActorType;
+import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.identity.UserRole;
 import java.time.Instant;
 import java.util.List;
@@ -13,10 +15,12 @@ class PermissionService {
 
     private final UserAccountRepository users;
     private final PermissionStore permissions;
+    private final AuditEventStore auditEvents;
 
-    PermissionService(UserAccountRepository users, PermissionStore permissions) {
+    PermissionService(UserAccountRepository users, PermissionStore permissions, AuditEventStore auditEvents) {
         this.users = users;
         this.permissions = permissions;
+        this.auditEvents = auditEvents;
     }
 
     @Transactional(readOnly = true)
@@ -55,7 +59,16 @@ class PermissionService {
             throw ApiProblemException.validationFailed("One or more permission codes are invalid.");
         }
 
+        List<String> previous = permissions.explicitPermissions(userId);
         permissions.replaceExplicitPermissions(userId, normalized);
+        auditEvents.append(
+                actor.role() == UserRole.ADMIN ? AuditActorType.ADMIN : AuditActorType.USER,
+                actor.userId(),
+                "PERMISSIONS_UPDATED",
+                "USER",
+                userId,
+                null,
+                java.util.Map.of("previousPermissions", previous, "newPermissions", normalized));
         return new PermissionSnapshot(
                 userId,
                 permissions.explicitPermissions(userId),

@@ -1,6 +1,8 @@
 package com.unifiedsupportinbox.notification.internal;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.audit.AuditActors;
+import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.notification.NotificationDeliveryStatus;
 import com.unifiedsupportinbox.notification.NotificationDestinationView;
@@ -29,12 +31,15 @@ class NotificationService implements NotificationRoutingCatalog {
 
     private final NotificationRepository notifications;
     private final NotificationDeliveryRepository deliveries;
+    private final AuditEventStore auditEvents;
 
     NotificationService(
             NotificationRepository notifications,
-            NotificationDeliveryRepository deliveries) {
+            NotificationDeliveryRepository deliveries,
+            AuditEventStore auditEvents) {
         this.notifications = notifications;
         this.deliveries = deliveries;
+        this.auditEvents = auditEvents;
     }
 
     @Transactional(readOnly = true)
@@ -52,7 +57,7 @@ class NotificationService implements NotificationRoutingCatalog {
             DestinationRecord created = notifications.createDestination(
                     normalized.name(), normalized.provider(), normalized.integrationId(), normalized.targetRef(),
                     normalized.enabled(), normalized.secretRef(), normalized.configRef());
-            auditDestination(created, "CREATED", actor.getName());
+            auditDestination(created, "CREATED", actor);
             return created.toView();
         } catch (DataIntegrityViolationException exception) {
             throw ApiProblemException.conflict("A notification destination already uses this provider target.");
@@ -79,7 +84,7 @@ class NotificationService implements NotificationRoutingCatalog {
                             normalized.targetRef(), normalized.enabled(), secretRef, configRef)
                     .orElseThrow(() -> ApiProblemException.conflict(
                             "Notification destination changed since it was loaded."));
-            auditDestination(updated, "UPDATED", actor.getName());
+            auditDestination(updated, "UPDATED", actor);
             if (current.enabled() && !updated.enabled()) {
                 cancelUnsentForDestination(updated.id(), actor.getName());
             }
@@ -112,7 +117,7 @@ class NotificationService implements NotificationRoutingCatalog {
         if (!notifications.deleteDestination(id, expectedVersion)) {
             throw ApiProblemException.conflict("Notification destination changed since it was loaded.");
         }
-        auditDestination(current, "DELETED", actor.getName());
+        auditDestination(current, "DELETED", actor);
     }
 
     @Transactional(readOnly = true)
@@ -130,7 +135,7 @@ class NotificationService implements NotificationRoutingCatalog {
             RuleRecord created = notifications.createRule(
                     normalized.destinationId(), normalized.name(), normalized.enabled(),
                     normalized.eventTypes(), normalized.severityFilters());
-            auditRule(created, "CREATED", actor.getName());
+            auditRule(created, "CREATED", actor);
             return created.toView();
         } catch (DataIntegrityViolationException exception) {
             throw ApiProblemException.conflict("A notification rule with this name already exists for the destination.");
@@ -151,7 +156,7 @@ class NotificationService implements NotificationRoutingCatalog {
                             normalized.eventTypes(), normalized.severityFilters())
                     .orElseThrow(() -> ApiProblemException.conflict(
                             "Notification rule changed since it was loaded."));
-            auditRule(updated, "UPDATED", actor.getName());
+            auditRule(updated, "UPDATED", actor);
             if (current.enabled() && !updated.enabled()) {
                 cancelUnsentForRule(updated.id(), actor.getName());
             }
@@ -170,7 +175,7 @@ class NotificationService implements NotificationRoutingCatalog {
         if (!notifications.deleteRule(id, expectedVersion)) {
             throw ApiProblemException.conflict("Notification rule changed since it was loaded.");
         }
-        auditRule(current, "DELETED", actor.getName());
+        auditRule(current, "DELETED", actor);
     }
 
     @Override
@@ -282,7 +287,7 @@ class NotificationService implements NotificationRoutingCatalog {
         }
     }
 
-    private void auditDestination(DestinationRecord record, String action, String actor) {
+    private void auditDestination(DestinationRecord record, String action, Authentication actor) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("name", record.name());
         snapshot.put("provider", record.provider().name());
@@ -291,17 +296,23 @@ class NotificationService implements NotificationRoutingCatalog {
         snapshot.put("enabled", record.enabled());
         snapshot.put("secretConfigured", record.secretRef() != null);
         snapshot.put("configConfigured", record.configRef() != null);
-        notifications.appendChange("DESTINATION", record.id(), action, actor, record.version(), snapshot);
+        notifications.appendChange("DESTINATION", record.id(), action, actor.getName(), record.version(), snapshot);
+        auditEvents.append(
+                AuditActors.type(actor), AuditActors.userId(actor), "NOTIFICATION_DESTINATION_" + action,
+                "NOTIFICATION_DESTINATION", record.id(), null, snapshot);
     }
 
-    private void auditRule(RuleRecord record, String action, String actor) {
+    private void auditRule(RuleRecord record, String action, Authentication actor) {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         snapshot.put("destinationId", record.destinationId().toString());
         snapshot.put("name", record.name());
         snapshot.put("enabled", record.enabled());
         snapshot.put("eventTypes", new ArrayList<>(record.eventTypes()));
         snapshot.put("severityFilters", new ArrayList<>(record.severityFilters()));
-        notifications.appendChange("RULE", record.id(), action, actor, record.version(), snapshot);
+        notifications.appendChange("RULE", record.id(), action, actor.getName(), record.version(), snapshot);
+        auditEvents.append(
+                AuditActors.type(actor), AuditActors.userId(actor), "NOTIFICATION_RULE_" + action,
+                "NOTIFICATION_RULE", record.id(), null, snapshot);
     }
 
     record DestinationInput(
