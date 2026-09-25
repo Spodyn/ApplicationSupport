@@ -20,6 +20,7 @@ import {
 import type { InboxCase } from "@/lib/domain/inbox"
 import { useInboxCases, useInboxMessages, useMarkInboxCaseRead } from "@/lib/services/queries"
 import { cn } from "@/lib/utils"
+import { SafeExternalMessage } from "./safe-external-message"
 
 type QuickFilter = "all" | "sla" | "mine"
 type AdvancedFilter = "mine" | "unassigned" | "sla" | "unread"
@@ -504,12 +505,10 @@ function ConversationBody({
           <Avatar initials="JB" />
           <div className="min-w-0 max-w-[570px]">
             <MessageAuthor name="Joanna Borkowska" time="16:38" />
-            <p className="mt-2 text-[14px] leading-[25px] text-[#edf0f4]">
-              {isNorthstar ? (
-                <>W panelu widzę dwa obciążenia za ten sam okres rozliczeniowy.<br />Problem udaje się odtworzyć na dwóch kontach. Wysyłam<br className="hidden 2xl:block" /> dodatkowe szczegóły.</>
-              ) : (
-                <>Dzień dobry, potrzebujemy pomocy w sprawie zgłoszenia dla {company}.<br />Problem udało się odtworzyć na dwóch kontach.</>
-              )}
+            <p className="mt-2 whitespace-pre-wrap text-[14px] leading-[25px] text-[#edf0f4]">
+              <SafeExternalMessage content={isNorthstar
+                ? "W panelu widzę dwa obciążenia za ten sam okres rozliczeniowy.\nProblem udaje się odtworzyć na dwóch kontach. Wysyłam dodatkowe szczegóły."
+                : `Dzień dobry, potrzebujemy pomocy w sprawie zgłoszenia dla ${company}.\nProblem udało się odtworzyć na dwóch kontach.`} />
             </p>
             {isNorthstar && <CodeBlock />}
           </div>
@@ -531,7 +530,7 @@ function ConversationBody({
           <Avatar initials="JB" />
           <div className="min-w-0">
             <MessageAuthor name="Joanna Borkowska" time="14:05" />
-            <p className="mt-2 text-[14px] leading-6 text-[#edf0f4]">W panelu widzę dwa obciążenia za ten sam okres rozliczeniowy.</p>
+            <p className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]"><SafeExternalMessage content="W panelu widzę dwa obciążenia za ten sam okres rozliczeniowy." /></p>
           </div>
           <ReplyButton onClick={() => onReply("W panelu widzę dwa obciążenia...")} />
         </div>
@@ -544,7 +543,7 @@ function ConversationBody({
           <Avatar initials="JB" />
           <div className="min-w-0">
             <MessageAuthor name="Joanna Borkowska" time="14:05" />
-            <p className="mt-2 text-[14px] leading-6 text-[#edf0f4]">Dziękuję za aktualizację, czekam na dalsze informacje.</p>
+            <p className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]"><SafeExternalMessage content="Dziękuję za aktualizację, czekam na dalsze informacje." /></p>
           </div>
         </div>
       </div>
