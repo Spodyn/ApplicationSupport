@@ -1,5 +1,6 @@
 package com.unifiedsupportinbox.realtime.internal;
 
+import com.unifiedsupportinbox.SensitiveDataRedactor;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
@@ -75,7 +76,10 @@ final class FirstMessageTimeoutWebSocketHandlerDecorator extends WebSocketHandle
         try {
             session.close(CloseStatus.SESSION_NOT_RELIABLE);
         } catch (IOException exception) {
-            log.warn("Failed to close WebSocket session {} after first-message timeout", session.getId(), exception);
+            log.warn(
+                    "Failed to close WebSocket session {} after first-message timeout: {}",
+                    session.getId(),
+                    SensitiveDataRedactor.safeExceptionMessage(exception));
         }
     }
 

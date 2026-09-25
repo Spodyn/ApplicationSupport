@@ -50,7 +50,7 @@ public class OutboxRelay {
                         event.type(),
                         event.attempts(),
                         released,
-                        publishFailure);
+                        SensitiveDataRedactor.safeExceptionMessage(publishFailure));
                 if (Thread.currentThread().isInterrupted()) {
                     break;
                 }
