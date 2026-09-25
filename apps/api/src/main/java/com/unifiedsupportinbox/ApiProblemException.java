@@ -78,6 +78,15 @@ public final class ApiProblemException extends RuntimeException {
                 null);
     }
 
+    public static ApiProblemException caseAlreadyClaimed() {
+        return new ApiProblemException(
+                ApiProblemCode.CASE_ALREADY_CLAIMED,
+                HttpStatus.CONFLICT,
+                "Case already claimed",
+                "The Case has already been claimed or is no longer eligible. Refresh before retrying.",
+                null);
+    }
+
     public static ApiProblemException rateLimited(String safeDetail) {
         return new ApiProblemException(
                 ApiProblemCode.RATE_LIMITED,
