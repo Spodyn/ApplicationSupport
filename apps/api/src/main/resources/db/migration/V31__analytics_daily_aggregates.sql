@@ -20,9 +20,9 @@ CREATE TABLE analytics_daily_case_metrics (
     rebuilt_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT pk_analytics_daily_case_metrics PRIMARY KEY (id),
     CONSTRAINT fk_analytics_daily_case_metrics_customer
-        FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+        FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE,
     CONSTRAINT fk_analytics_daily_case_metrics_user
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT ck_analytics_daily_case_metrics_provider
         CHECK (provider IS NULL OR provider IN ('SLACK', 'TEAMS', 'TELEGRAM')),
     CONSTRAINT ck_analytics_daily_case_metrics_counts CHECK (
