@@ -8,6 +8,7 @@ import com.unifiedsupportinbox.cases.CaseStatus;
 import com.unifiedsupportinbox.channel.ChannelContextLookup;
 import com.unifiedsupportinbox.channel.ChannelContextLookup.Context;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
+import com.unifiedsupportinbox.sla.CaseSlaInitializer;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -34,16 +35,19 @@ class CaseCreationDomainService implements CaseCreationService {
     private final ChannelContextLookup channels;
     private final OutboxEventStore outbox;
     private final ObjectMapper json;
+    private final CaseSlaInitializer sla;
 
     CaseCreationDomainService(
             JdbcTemplate jdbc,
             ChannelContextLookup channels,
             OutboxEventStore outbox,
-            ObjectMapper json) {
+            ObjectMapper json,
+            CaseSlaInitializer sla) {
         this.jdbc = jdbc;
         this.channels = channels;
         this.outbox = outbox;
         this.json = json;
+        this.sla = sla;
     }
 
     @Override
@@ -117,6 +121,7 @@ class CaseCreationDomainService implements CaseCreationService {
         }
 
         PersistedCase created = inserted.getFirst();
+        sla.initialize(created.id(), created.createdAt());
         outbox.append(
                 OUTBOX_TYPE,
                 AGGREGATE_TYPE,
