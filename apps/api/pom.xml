@@ -22,6 +22,7 @@
         <spring-modulith.version>2.1.1</spring-modulith.version>
         <testcontainers.version>2.0.5</testcontainers.version>
         <password4j.version>1.8.4</password4j.version>
+        <aws.sdk.version>2.54.17</aws.sdk.version>
     </properties>
 
     <dependencyManagement>
@@ -88,6 +89,16 @@
         <dependency>
             <groupId>org.springframework.modulith</groupId>
             <artifactId>spring-modulith-starter-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>${aws.sdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+            <version>${aws.sdk.version}</version>
         </dependency>
         <dependency>
             <groupId>org.postgresql</groupId>
