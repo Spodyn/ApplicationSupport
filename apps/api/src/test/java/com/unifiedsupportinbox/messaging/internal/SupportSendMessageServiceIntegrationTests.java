@@ -140,6 +140,23 @@ class SupportSendMessageServiceIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isZero();
     }
 
+    @Test
+    void sendIsRejectedForUnclaimedWaitingAndTerminalCases() {
+        UUID userId = createUser("owner-invalid-state");
+        for (String status : new String[] {"NEW", "WAITING_FOR_CUSTOMER", "IGNORED", "RESOLVED"}) {
+            UUID caseId = createCase(
+                    status.equals("RESOLVED") ? userId : null,
+                    status);
+            assertThatThrownBy(() -> service.send(
+                    caseId, userId, "invalid-state-" + status, "Nope", null, "corr-" + status))
+                    .isInstanceOfSatisfying(ApiProblemException.class,
+                            problem -> assertThat(problem.status()).isEqualTo(HttpStatus.CONFLICT));
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM outbox_events WHERE type = 'message.send_requested'", Integer.class)).isZero();
+    }
+
     private UUID createUser(String prefix) {
         return jdbc.queryForObject("""
                 INSERT INTO users (email, display_name, role, active)
@@ -174,10 +191,12 @@ class SupportSendMessageServiceIntegrationTests {
                 INSERT INTO cases (
                     customer_id, integration_id, channel_id, provider,
                     external_conversation_id, external_thread_key, status,
-                    owner_user_id, claimed_at, resolved_at
+                    owner_user_id, claimed_at, waiting_until, resolved_at, ignored_at
                 ) VALUES (
                     ?, ?, ?, 'SLACK', 'C-support', 'thread-1', ?, ?, CURRENT_TIMESTAMP,
-                    CASE WHEN ? = 'RESOLVED' THEN CURRENT_TIMESTAMP ELSE NULL END
+                    CASE WHEN ? = 'WAITING_FOR_CUSTOMER' THEN CURRENT_TIMESTAMP + INTERVAL '1 hour' ELSE NULL END,
+                    CASE WHEN ? = 'RESOLVED' THEN CURRENT_TIMESTAMP ELSE NULL END,
+                    CASE WHEN ? = 'IGNORED' THEN CURRENT_TIMESTAMP ELSE NULL END
                 )
                 RETURNING id
                 """, UUID.class,
@@ -186,6 +205,8 @@ class SupportSendMessageServiceIntegrationTests {
                 channelId,
                 status,
                 ownerId,
+                status,
+                status,
                 status);
     }
 }
