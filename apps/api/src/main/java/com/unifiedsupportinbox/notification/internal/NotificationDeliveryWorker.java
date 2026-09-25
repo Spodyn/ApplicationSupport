@@ -1,5 +1,6 @@
 package com.unifiedsupportinbox.notification.internal;
 
+import com.unifiedsupportinbox.SensitiveDataRedactor;
 import com.unifiedsupportinbox.notification.NotificationDeliveryGateway;
 import com.unifiedsupportinbox.notification.NotificationDeliveryGateway.DeliveryCommand;
 import com.unifiedsupportinbox.notification.NotificationDeliveryGateway.DeliveryResult;
@@ -55,7 +56,7 @@ class NotificationDeliveryWorker {
         } catch (RuntimeException gatewayFailure) {
             LOGGER.warn(
                     "Notification provider call failed unexpectedly; deliveryId={}, provider={}, attempt={}",
-                    claim.id(), claim.provider(), claim.attempts(), gatewayFailure);
+                    claim.id(), claim.provider(), claim.attempts(), SensitiveDataRedactor.safeExceptionMessage(gatewayFailure));
             return transientFailure(claim, "GATEWAY_EXCEPTION", null);
         }
 

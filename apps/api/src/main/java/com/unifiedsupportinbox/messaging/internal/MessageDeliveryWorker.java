@@ -1,5 +1,6 @@
 package com.unifiedsupportinbox.messaging.internal;
 
+import com.unifiedsupportinbox.SensitiveDataRedactor;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.DeliveryCommand;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.DeliveryResult;
@@ -71,7 +72,7 @@ class MessageDeliveryWorker {
                     claim.message().messageId(),
                     claim.message().provider(),
                     claim.attempt().attemptNo(),
-                    providerFailure);
+                    SensitiveDataRedactor.safeExceptionMessage(providerFailure));
             return transientFailure(claim, "PROVIDER_EXCEPTION", null);
         }
 
