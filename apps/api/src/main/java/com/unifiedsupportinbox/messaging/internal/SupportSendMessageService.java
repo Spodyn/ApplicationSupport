@@ -83,11 +83,11 @@ class SupportSendMessageService {
                 .findFirst()
                 .orElseThrow(() -> ApiProblemException.notFound("Case was not found."));
 
-        if (!userId.equals(context.ownerUserId())) {
-            throw ApiProblemException.accessDenied();
-        }
         if (!"VERIFICATION".equals(context.status())) {
             throw ApiProblemException.conflict("Messages can only be sent by the current owner while the Case is in VERIFICATION.");
+        }
+        if (!userId.equals(context.ownerUserId())) {
+            throw ApiProblemException.accessDenied();
         }
 
         UUID messageId = jdbc.queryForObject("""
