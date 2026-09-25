@@ -11,6 +11,8 @@ import com.unifiedsupportinbox.cases.CaseCreationService.Command;
 import com.unifiedsupportinbox.cases.CaseCreationService.Result;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -119,6 +121,41 @@ class CaseCreationServiceIntegrationTests {
         assertThat(payload.get("customerId").stringValue()).isEqualTo(fixture.customerId().toString());
         assertThat(payload.get("sourceInboundEventId").stringValue())
                 .isEqualTo(firstCommand.sourceInboundEventId().toString());
+    }
+
+    @Test
+    void initializesSlaDeadlinesUsingTheActiveBusinessHoursSchedule() {
+        Fixture fixture = fixture(true, false, true);
+        jdbc.execute("""
+                CREATE OR REPLACE FUNCTION set_case_created_at_for_sla_test()
+                RETURNS trigger LANGUAGE plpgsql AS $$
+                BEGIN
+                    NEW.created_at := TIMESTAMPTZ '2026-03-06 16:30:00+00';
+                    RETURN NEW;
+                END;
+                $$
+                """);
+        jdbc.execute("""
+                CREATE TRIGGER set_case_created_at_for_sla_test_trigger
+                BEFORE INSERT ON cases FOR EACH ROW
+                EXECUTE FUNCTION set_case_created_at_for_sla_test()
+                """);
+
+        try {
+            Result created = service.create(command(fixture, "business-hours", "friday-afternoon"));
+
+            assertThat(jdbc.queryForObject(
+                    "SELECT first_response_due_at FROM case_sla WHERE case_id = ?",
+                    OffsetDateTime.class,
+                    created.caseId()).toInstant()).isEqualTo(Instant.parse("2026-03-09T09:30:00Z"));
+            assertThat(jdbc.queryForObject(
+                    "SELECT unclaimed_warning_at FROM case_sla WHERE case_id = ?",
+                    OffsetDateTime.class,
+                    created.caseId()).toInstant()).isEqualTo(Instant.parse("2026-03-06T16:45:00Z"));
+        } finally {
+            jdbc.execute("DROP TRIGGER IF EXISTS set_case_created_at_for_sla_test_trigger ON cases");
+            jdbc.execute("DROP FUNCTION IF EXISTS set_case_created_at_for_sla_test()");
+        }
     }
 
     @Test
