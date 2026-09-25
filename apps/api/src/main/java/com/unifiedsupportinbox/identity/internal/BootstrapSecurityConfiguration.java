@@ -89,6 +89,7 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers("/api/v1/admin/sla-policy/**").hasAuthority("manage_sla")
                         .requestMatchers("/api/v1/admin/notifications/**").hasAuthority("manage_notifications")
                         .requestMatchers("/api/v1/admin/audit/**").hasAuthority("view_audit")
+                        .requestMatchers("/api/v1/statistics/**").hasAuthority("view_global_statistics")
                         .anyRequest().denyAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")
