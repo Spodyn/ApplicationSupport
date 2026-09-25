@@ -17,17 +17,20 @@ class CorrelationIdFilterTests {
     void preservesSafeClientIdAcrossRequestResponseAndMdc() throws Exception {
         MockHttpServletRequest request = new MockHttpServletRequest();
         request.addHeader(CorrelationIdFilter.HEADER, "request-42:worker");
+        request.addHeader(CorrelationIdFilter.TRACE_HEADER, "trace-42:worker");
         MockHttpServletResponse response = new MockHttpServletResponse();
         AtomicReference<String> seenByHandler = new AtomicReference<>();
 
         filter.doFilter(request, response, (ignoredRequest, ignoredResponse) ->
-                seenByHandler.set(MDC.get("correlationId")));
+                seenByHandler.set(MDC.get("correlationId") + "/" + MDC.get("traceId")));
 
         assertThat(request.getAttribute(ApiProblemFactory.CORRELATION_ID_ATTRIBUTE))
                 .isEqualTo("request-42:worker");
         assertThat(response.getHeader(CorrelationIdFilter.HEADER)).isEqualTo("request-42:worker");
-        assertThat(seenByHandler).hasValue("request-42:worker");
+        assertThat(response.getHeader(CorrelationIdFilter.TRACE_HEADER)).isEqualTo("trace-42:worker");
+        assertThat(seenByHandler).hasValue("request-42:worker/trace-42:worker");
         assertThat(MDC.get("correlationId")).isNull();
+        assertThat(MDC.get("traceId")).isNull();
     }
 
     @Test

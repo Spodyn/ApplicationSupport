@@ -14,6 +14,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 public final class CorrelationIdFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-Correlation-ID";
+    public static final String TRACE_HEADER = "X-Trace-ID";
     private static final Pattern SAFE_VALUE = Pattern.compile("[A-Za-z0-9._:-]{1,128}");
 
     @Override
@@ -22,9 +23,12 @@ public final class CorrelationIdFilter extends OncePerRequestFilter {
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
         String correlationId = normalize(request.getHeader(HEADER));
+        String traceId = normalize(request.getHeader(TRACE_HEADER));
         request.setAttribute(ApiProblemFactory.CORRELATION_ID_ATTRIBUTE, correlationId);
         response.setHeader(HEADER, correlationId);
-        try (MDC.MDCCloseable ignored = MDC.putCloseable("correlationId", correlationId)) {
+        response.setHeader(TRACE_HEADER, traceId);
+        try (MDC.MDCCloseable correlation = MDC.putCloseable("correlationId", correlationId);
+                MDC.MDCCloseable trace = MDC.putCloseable("traceId", traceId)) {
             filterChain.doFilter(request, response);
         }
     }

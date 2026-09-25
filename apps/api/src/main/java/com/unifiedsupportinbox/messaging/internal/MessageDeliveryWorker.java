@@ -68,7 +68,7 @@ class MessageDeliveryWorker {
                     claim.message().correlationId()));
         } catch (RuntimeException providerFailure) {
             LOGGER.warn(
-                    "Outbound Message provider call failed; messageId={}, provider={}, attempt={}",
+                    "Outbound Message provider call failed; messageId={}, provider={}, attempt={}, reason={}",
                     claim.message().messageId(),
                     claim.message().provider(),
                     claim.attempt().attemptNo(),

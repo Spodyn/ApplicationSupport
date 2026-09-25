@@ -1,5 +1,6 @@
 package com.unifiedsupportinbox.messaging.internal;
 
+import com.unifiedsupportinbox.SensitiveDataRedactor;
 import com.unifiedsupportinbox.messaging.MessageDeliveryChanged;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -41,8 +42,8 @@ class MessageDeliveryRealtimeBridge {
             messaging.convertAndSend("/topic/cases/" + event.caseId(), (Object) envelope);
         } catch (RuntimeException deliveryFailure) {
             LOGGER.warn(
-                    "Realtime delivery update could not be published after commit; messageId={}, caseId={}, status={}",
-                    event.messageId(), event.caseId(), event.deliveryStatus(), deliveryFailure);
+                    "Realtime delivery update could not be published after commit; messageId={}, caseId={}, status={}, reason={}",
+                    event.messageId(), event.caseId(), event.deliveryStatus(), SensitiveDataRedactor.safeExceptionMessage(deliveryFailure));
         }
     }
 }
