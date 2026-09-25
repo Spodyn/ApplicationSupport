@@ -1,6 +1,8 @@
 package com.unifiedsupportinbox.storage;
 
+import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -12,6 +14,8 @@ public interface AttachmentMetadataCatalog {
     Optional<AttachmentMetadata> findById(UUID attachmentId);
 
     List<AttachmentMetadata> findByMessageId(UUID messageId);
+
+    Map<UUID, List<AttachmentMetadata>> findByMessageIds(Collection<UUID> messageIds);
 
     AttachmentMetadata associateWithMessage(UUID attachmentId, UUID messageId);
 
