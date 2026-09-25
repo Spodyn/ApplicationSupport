@@ -27,6 +27,7 @@ An older Jira description, historical `USER_DECISION_REQUIRED` or earlier resolv
 - **INTEGRATIONS.md** - Slack, Microsoft Teams and Telegram behavior.
 - **SECURITY.md** - authentication, authorization, content/file/security boundaries.
 - **OPERATIONS.md** - deployment, observability, DR, performance and release gates.
+- **ANALYTICS_CONTRACT.md** - canonical analytics events, KPI formulas, reporting-time rules and edge-case examples.
 - **DECISION_REGISTRY.md** - readable indexed decision catalog.
 - **decision-registry.yaml** - machine-readable frozen product decisions.
 - **ORCHESTRATOR_CONTRACT.md** - lifecycle, dependency, worker, review, merge and restart rules for autonomous development.
