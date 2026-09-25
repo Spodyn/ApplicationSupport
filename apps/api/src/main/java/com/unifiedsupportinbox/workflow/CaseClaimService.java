@@ -8,6 +8,8 @@ import com.unifiedsupportinbox.OutboxEventStore;
 import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.identity.UserRole;
+import com.unifiedsupportinbox.sla.CaseSlaClaimRecorder;
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -28,14 +30,17 @@ public class CaseClaimService {
     private final AuditEventStore audit;
     private final OutboxEventStore outbox;
     private final ObjectMapper json;
+    private final CaseSlaClaimRecorder sla;
 
     public CaseClaimService(JdbcTemplate jdbc, IdempotentCommandExecutor idempotency,
-                            AuditEventStore audit, OutboxEventStore outbox, ObjectMapper json) {
+                            AuditEventStore audit, OutboxEventStore outbox, ObjectMapper json,
+                            CaseSlaClaimRecorder sla) {
         this.jdbc = jdbc;
         this.idempotency = idempotency;
         this.audit = audit;
         this.outbox = outbox;
         this.json = json;
+        this.sla = sla;
     }
 
     public IdempotencyResult claim(UUID caseId, UUID userId, String idempotencyKey, String correlationId) {
@@ -59,8 +64,9 @@ public class CaseClaimService {
                 SET owner_user_id = ?, status = 'VERIFICATION', claimed_at = statement_timestamp(),
                     updated_at = statement_timestamp(), last_activity_at = statement_timestamp(), version = version + 1
                 WHERE id = ? AND owner_user_id IS NULL AND status IN ('NEW', 'PARTIALLY_IGNORED')
-                RETURNING version
-                """, (rs, rowNum) -> new Claim(rs.getLong("version")), userId, caseId)
+                RETURNING version, claimed_at
+                """, (rs, rowNum) -> new Claim(rs.getLong("version"),
+                        rs.getObject("claimed_at", OffsetDateTime.class).toInstant()), userId, caseId)
                 .stream().findFirst().orElse(null);
         if (claim == null) {
             if (jdbc.queryForObject("SELECT count(*) FROM cases WHERE id = ?", Integer.class, caseId) == 0) {
@@ -74,6 +80,7 @@ public class CaseClaimService {
                 WHERE case_id = ? AND active
                 """, caseId);
         jdbc.update("DELETE FROM case_snoozes WHERE case_id = ?", caseId);
+        sla.recordClaim(caseId, claim.claimedAt());
 
         audit.append(actor.role() == UserRole.ADMIN ? AuditActorType.ADMIN : AuditActorType.USER,
                 userId, "CASE_CLAIM", "CASE", caseId, caseId,
@@ -115,5 +122,5 @@ public class CaseClaimService {
     }
 
     private record Actor(boolean active, UserRole role, boolean lifetimeIgnoreVoter) {}
-    private record Claim(long version) {}
+    private record Claim(long version, java.time.Instant claimedAt) {}
 }
