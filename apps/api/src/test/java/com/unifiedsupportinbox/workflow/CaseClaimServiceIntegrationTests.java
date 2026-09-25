@@ -108,9 +108,49 @@ class CaseClaimServiceIntegrationTests {
         }
     }
 
+    @Test
+    void claimCompletesUnclaimedSlaOnceWithTheCurrentOutcome() {
+        UUID achievedCase = newCase();
+        UUID warningCase = newCase();
+        UUID breachedCase = newCase();
+        seedUnclaimedSla(achievedCase, "1 hour", "2 hours");
+        seedUnclaimedSla(warningCase, "-1 minute", "1 hour");
+        seedUnclaimedSla(breachedCase, "-2 hours", "-1 hour");
+
+        claims.claim(achievedCase, newUser(), "sla-achieved", "claim-correlation");
+        claims.claim(warningCase, newUser(), "sla-warning", "claim-correlation");
+        claims.claim(breachedCase, newUser(), "sla-breached", "claim-correlation");
+
+        assertThat(unclaimedOutcome(achievedCase)).isEqualTo("ACHIEVED");
+        assertThat(unclaimedOutcome(warningCase)).isEqualTo("WARNING");
+        assertThat(unclaimedOutcome(breachedCase)).isEqualTo("BREACHED");
+        assertThat(jdbc.queryForObject(
+                "SELECT unclaimed_completed_at IS NOT NULL FROM case_sla WHERE case_id = ?",
+                Boolean.class,
+                breachedCase)).isTrue();
+    }
+
     private static int count(String table, UUID caseId) {
         return jdbc.queryForObject("SELECT count(*) FROM " + table + " WHERE "
                 + (table.equals("outbox_events") ? "aggregate_id" : "case_id") + " = ?", Integer.class, caseId);
+    }
+
+    private static void seedUnclaimedSla(UUID caseId, String warningOffset, String breachOffset) {
+        jdbc.update("""
+                INSERT INTO case_sla (
+                    case_id, policy_id, first_response_started_at, first_response_due_at,
+                    unclaimed_started_at, unclaimed_warning_at, unclaimed_breach_at
+                )
+                SELECT ?, id, statement_timestamp(), statement_timestamp() + INTERVAL '1 hour',
+                    statement_timestamp(), statement_timestamp() + ?::interval,
+                    statement_timestamp() + ?::interval
+                FROM sla_policies WHERE active
+                """, caseId, warningOffset, breachOffset);
+    }
+
+    private static String unclaimedOutcome(UUID caseId) {
+        return jdbc.queryForObject(
+                "SELECT unclaimed_outcome FROM case_sla WHERE case_id = ?", String.class, caseId);
     }
 
     private static UUID newUser() {

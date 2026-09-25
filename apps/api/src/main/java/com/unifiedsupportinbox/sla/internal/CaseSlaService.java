@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.sla.internal;
 
 import com.unifiedsupportinbox.sla.CaseSlaInitializer;
+import com.unifiedsupportinbox.sla.CaseSlaClaimRecorder;
 import com.unifiedsupportinbox.sla.BusinessHoursScheduleCatalog;
 import com.unifiedsupportinbox.sla.BusinessHoursScheduleView;
 import com.unifiedsupportinbox.sla.BusinessTimeCalculator;
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-class CaseSlaService implements CaseSlaInitializer {
+class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder {
     private final JdbcTemplate jdbc;
     private final SlaPolicyRepository policies;
     private final BusinessHoursScheduleCatalog schedules;
@@ -50,5 +51,27 @@ class CaseSlaService implements CaseSlaInitializer {
 
     private Instant dueAt(BusinessHoursScheduleView schedule, Instant startedAt, long minutes) {
         return businessTime.add(schedule, startedAt, Duration.ofMinutes(minutes));
+    }
+
+    @Override
+    @Transactional
+    public void recordClaim(UUID caseId, Instant claimedAt) {
+        OffsetDateTime completedAt = OffsetDateTime.ofInstant(claimedAt, ZoneOffset.UTC);
+        jdbc.update("""
+                UPDATE case_sla
+                SET unclaimed_completed_at = ?,
+                    unclaimed_outcome = CASE
+                        WHEN ? < unclaimed_warning_at THEN 'ACHIEVED'
+                        WHEN ? < unclaimed_breach_at THEN 'WARNING'
+                        ELSE 'BREACHED'
+                    END,
+                    state = CASE
+                        WHEN ? >= unclaimed_breach_at THEN 'BREACHED'
+                        WHEN ? >= unclaimed_warning_at THEN 'WARNING'
+                        ELSE state
+                    END,
+                    updated_at = ?
+                WHERE case_id = ? AND unclaimed_completed_at IS NULL
+                """, completedAt, completedAt, completedAt, completedAt, completedAt, completedAt, caseId);
     }
 }
