@@ -79,6 +79,19 @@ type ApiOutOfOfficePolicy = {
   updatedBy: string
 }
 
+type ApiSlaPolicy = {
+  id: string
+  name: string
+  firstResponseMinutes: number
+  unclaimedWarningMinutes: number
+  unclaimedBreachMinutes: number
+  inProgressWarningMinutes: number
+  inProgressBreachMinutes: number
+  pauseWaiting: boolean
+  version: number
+  updatedAt: string
+}
+
 const scheduleDays = [
   { dayOfWeek: 1, key: "mon", label: "Poniedziałek" },
   { dayOfWeek: 2, key: "tue", label: "Wtorek" },
@@ -99,6 +112,7 @@ const supportedNotificationTypes = new Set<NotificationType>([
 
 const notificationDestinationVersions = new Map<string, number>()
 let outOfOfficeVersion: number | undefined
+let slaPolicyVersion: number | undefined
 
 function mapChannel(channel: ApiChannelRecord): ManagedChannel {
   const activity = channel.active ? "Aktywny" : "Nieaktywny"
@@ -252,6 +266,29 @@ async function saveOutOfOffice(
   return saved
 }
 
+async function getSlaPolicy(): Promise<ApiSlaPolicy> {
+  return browserApiTransport.request<ApiSlaPolicy>({ method: "GET", path: "/api/v1/admin/sla-policy" })
+}
+
+async function saveSlaPolicy(settings: AdministrationSettings["sla"]): Promise<ApiSlaPolicy> {
+  if (slaPolicyVersion === undefined) slaPolicyVersion = (await getSlaPolicy()).version
+  const current = await getSlaPolicy()
+  const saved = await browserApiTransport.request<ApiSlaPolicy>({
+    method: "PUT", path: "/api/v1/admin/sla-policy", body: {
+      name: current.name,
+      firstResponseMinutes: settings.firstResponseMinutes,
+      unclaimedWarningMinutes: settings.unclaimedReminderMinutes,
+      unclaimedBreachMinutes: Math.max(settings.unclaimedReminderMinutes, settings.firstResponseMinutes),
+      inProgressWarningMinutes: settings.inProgressReminderMinutes,
+      inProgressBreachMinutes: Math.max(settings.inProgressReminderMinutes, settings.repeatedBreachMinutes),
+      pauseWaiting: settings.pauseWhileWaiting,
+      version: slaPolicyVersion,
+    },
+  })
+  slaPolicyVersion = saved.version
+  return saved
+}
+
 async function readNotificationConfiguration() {
   const [destinations, rules] = await Promise.all([
     browserApiTransport.request<ApiNotificationDestination[]>({
@@ -381,12 +418,13 @@ async function saveNotifications(
 
 export const apiAdministrationSettingsRepository: AdministrationSettingsRepository = {
   async get() {
-    const [settings, channels, businessHours, notifications, outOfOffice] = await Promise.all([
+    const [settings, channels, businessHours, notifications, outOfOffice, sla] = await Promise.all([
       mockAdministrationSettingsRepository.get(),
       listChannels(),
       getBusinessHours(),
       listNotifications(),
       getOutOfOffice(),
+      getSlaPolicy(),
     ])
     return {
       ...settings,
@@ -397,6 +435,14 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
         enabled: outOfOffice.enabled,
         template: outOfOffice.template,
         sendOncePerClosure: outOfOffice.sendOncePerClosure,
+      },
+      sla: {
+        ...settings.sla,
+        firstResponseMinutes: sla.firstResponseMinutes,
+        unclaimedReminderMinutes: sla.unclaimedWarningMinutes,
+        inProgressReminderMinutes: sla.inProgressWarningMinutes,
+        repeatedBreachMinutes: sla.inProgressBreachMinutes,
+        pauseWhileWaiting: sla.pauseWaiting,
       },
     }
   },
@@ -422,6 +468,15 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
         template: saved.template,
         sendOncePerClosure: saved.sendOncePerClosure,
       } as AdministrationSettings[K]
+    }
+    if (key === "sla") {
+      const saved = await saveSlaPolicy(value as AdministrationSettings["sla"])
+      const existing = value as AdministrationSettings["sla"]
+      return { ...existing, firstResponseMinutes: saved.firstResponseMinutes,
+        unclaimedReminderMinutes: saved.unclaimedWarningMinutes,
+        inProgressReminderMinutes: saved.inProgressWarningMinutes,
+        repeatedBreachMinutes: saved.inProgressBreachMinutes,
+        pauseWhileWaiting: saved.pauseWaiting } as AdministrationSettings[K]
     }
     return mockAdministrationSettingsRepository.saveSection(key, value)
   },
