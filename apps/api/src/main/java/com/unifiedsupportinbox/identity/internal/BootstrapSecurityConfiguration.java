@@ -16,6 +16,7 @@ import org.springframework.security.web.authentication.logout.HttpStatusReturnin
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.context.SecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter.ReferrerPolicy;
 
 @Configuration
 class BootstrapSecurityConfiguration {
@@ -63,6 +64,17 @@ class BootstrapSecurityConfiguration {
                     csrf.spa();
                     csrf.ignoringRequestMatchers(SLACK_EVENTS_PATH, TELEGRAM_CALLBACK_PATH);
                 })
+                .cors(cors -> cors.disable())
+                .headers(headers -> headers
+                        .contentSecurityPolicy(policy -> policy.policyDirectives(
+                                "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"))
+                        .frameOptions(frame -> frame.deny())
+                        .contentTypeOptions(contentType -> { })
+                        .referrerPolicy(referrer -> referrer.policy(ReferrerPolicy.NO_REFERRER))
+                        .httpStrictTransportSecurity(hsts -> hsts
+                                .maxAgeInSeconds(31_536_000)
+                                .includeSubDomains(false)
+                                .preload(false)))
                 .requestCache(requestCache -> requestCache.disable())
                 .exceptionHandling(exceptionHandling -> exceptionHandling
                         .authenticationEntryPoint(authenticationEntryPoint)
