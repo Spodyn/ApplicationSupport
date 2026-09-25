@@ -1,6 +1,8 @@
 package com.unifiedsupportinbox.customer.internal;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.audit.AuditActors;
+import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.customer.CustomerView;
 import java.util.List;
 import java.util.UUID;
@@ -14,9 +16,11 @@ class CustomerService {
 
     private static final String ADMIN_AUTHORITY = "ROLE_ADMIN";
     private final CustomerRepository customers;
+    private final AuditEventStore auditEvents;
 
-    CustomerService(CustomerRepository customers) {
+    CustomerService(CustomerRepository customers, AuditEventStore auditEvents) {
         this.customers = customers;
+        this.auditEvents = auditEvents;
     }
 
     @Transactional(readOnly = true)
@@ -35,7 +39,9 @@ class CustomerService {
     CustomerView create(Authentication actor, String name, String externalRef) {
         requireAdmin(actor);
         try {
-            return view(customers.saveAndFlush(new CustomerEntity(name, externalRef)));
+            CustomerEntity created = customers.saveAndFlush(new CustomerEntity(name, externalRef));
+            appendAudit(actor, created, "CUSTOMER_CREATED");
+            return view(created);
         } catch (DataIntegrityViolationException exception) {
             throw duplicate();
         } catch (IllegalArgumentException exception) {
@@ -49,7 +55,9 @@ class CustomerService {
         CustomerEntity customer = required(customerId);
         try {
             customer.update(name, externalRef);
-            return view(customers.saveAndFlush(customer));
+            CustomerEntity updated = customers.saveAndFlush(customer);
+            appendAudit(actor, updated, "CUSTOMER_UPDATED");
+            return view(updated);
         } catch (DataIntegrityViolationException exception) {
             throw duplicate();
         } catch (IllegalArgumentException exception) {
@@ -62,7 +70,9 @@ class CustomerService {
         requireAdmin(actor);
         CustomerEntity customer = required(customerId);
         customer.deactivate();
-        return view(customers.saveAndFlush(customer));
+        CustomerEntity deactivated = customers.saveAndFlush(customer);
+        appendAudit(actor, deactivated, "CUSTOMER_DEACTIVATED");
+        return view(deactivated);
     }
 
     private CustomerEntity required(UUID customerId) {
@@ -79,6 +89,20 @@ class CustomerService {
 
     private static ApiProblemException duplicate() {
         return ApiProblemException.conflict("A customer with this name or external reference already exists.");
+    }
+
+    private void appendAudit(Authentication actor, CustomerEntity customer, String action) {
+        auditEvents.append(
+                AuditActors.type(actor),
+                AuditActors.userId(actor),
+                action,
+                "CUSTOMER",
+                customer.id(),
+                null,
+                java.util.Map.of(
+                        "name", customer.name(),
+                        "externalRef", customer.externalRef(),
+                        "active", customer.active()));
     }
 
     private static CustomerView view(CustomerEntity customer) {
