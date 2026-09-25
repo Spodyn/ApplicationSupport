@@ -9,5 +9,6 @@ public record MessageDeliveryChanged(
         MessageDeliveryStatus deliveryStatus,
         String errorCategory,
         String errorCode,
-        Instant nextRetryAt) {
+        Instant nextRetryAt,
+        String correlationId) {
 }

@@ -24,6 +24,7 @@ export interface RealtimeStompClientOptions {
 }
 
 type StateListener = (state: RealtimeConnectionState) => void
+export type RealtimeFrameListener = (destination: string, body: unknown) => void
 
 const WEBSOCKET_OPEN = 1
 const HEARTBEAT_GRACE_MULTIPLIER = 3
@@ -42,6 +43,7 @@ export class RealtimeStompClient {
   > & RealtimeStompClientOptions
 
   private readonly listeners = new Set<StateListener>()
+  private readonly frameListeners = new Set<RealtimeFrameListener>()
   private socket: WebSocketLike | null = null
   private state: RealtimeConnectionState = "disconnected"
   private shouldRun = false
@@ -68,6 +70,11 @@ export class RealtimeStompClient {
     this.listeners.add(listener)
     listener(this.state)
     return () => this.listeners.delete(listener)
+  }
+
+  subscribeFrames(listener: RealtimeFrameListener): () => void {
+    this.frameListeners.add(listener)
+    return () => this.frameListeners.delete(listener)
   }
 
   start(): void {
@@ -144,15 +151,19 @@ export class RealtimeStompClient {
   private handleFrame(socket: WebSocketLike, frame: string): void {
     const lines = frame.split("\n")
     const command = lines.shift()?.trim()
+    if (command === "MESSAGE") {
+      const headers = parseHeaders(lines)
+      const separator = lines.indexOf("")
+      const body = separator < 0 ? "" : lines.slice(separator + 1).join("\n")
+      let decoded: unknown = null
+      try { decoded = JSON.parse(body) } catch { return }
+      const destination = headers.get("destination")
+      if (destination) for (const listener of this.frameListeners) listener(destination, decoded)
+      return
+    }
     if (command !== "CONNECTED") return
 
-    const headers = new Map<string, string>()
-    for (const line of lines) {
-      if (line === "") break
-      const separator = line.indexOf(":")
-      if (separator <= 0) continue
-      headers.set(line.slice(0, separator), line.slice(separator + 1))
-    }
+    const headers = parseHeaders(lines)
 
     this.startHeartbeats(socket, headers.get("heart-beat"))
     this.setState("connected")
@@ -230,6 +241,17 @@ export class RealtimeStompClient {
     this.state = state
     for (const listener of this.listeners) listener(state)
   }
+}
+
+function parseHeaders(lines: string[]): Map<string, string> {
+  const headers = new Map<string, string>()
+  for (const line of lines) {
+    if (line === "") break
+    const separator = line.indexOf(":")
+    if (separator <= 0) continue
+    headers.set(line.slice(0, separator), line.slice(separator + 1))
+  }
+  return headers
 }
 
 function parseHeartbeat(value?: string): readonly [number, number] {

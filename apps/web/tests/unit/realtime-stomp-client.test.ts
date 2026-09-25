@@ -112,4 +112,17 @@ describe("RealtimeStompClient", () => {
 
     client.stop()
   })
+
+  it("delivers valid STOMP MESSAGE JSON to frame listeners", () => {
+    const received: unknown[] = []
+    const client = createClient()
+    client.subscribeFrames((_destination, body) => received.push(body))
+    client.start()
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+    socket.message("CONNECTED\nversion:1.2\n\n\u0000")
+    socket.message("MESSAGE\ndestination:/topic/cases/case-1\ncontent-type:application/json\n\n{\"eventType\":\"case.changed\"}\u0000")
+    expect(received).toEqual([{ eventType: "case.changed" }])
+    client.stop()
+  })
 })

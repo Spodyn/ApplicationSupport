@@ -142,7 +142,8 @@ class MessageDeliveryService {
                         MessageDeliveryStatus.QUEUED,
                         TRANSIENT,
                         "WORKER_LEASE_EXPIRED",
-                        null));
+                        null,
+                        due.correlationId()));
                 dispatched++;
                 continue;
             }
@@ -189,7 +190,7 @@ class MessageDeliveryService {
         appendWakeup(message.messageId(), message.caseId(), message.externalThreadKey(), correlationId);
         events.publishEvent(new MessageDeliveryChanged(
                 message.messageId(), message.caseId(), MessageDeliveryStatus.QUEUED,
-                latest.errorCategory(), latest.errorCode(), null));
+                latest.errorCategory(), latest.errorCode(), null, correlationId));
 
         ObjectNode response = json.createObjectNode();
         response.put("messageId", message.messageId().toString());
@@ -250,7 +251,8 @@ class MessageDeliveryService {
             String code,
             Instant nextRetryAt) {
         events.publishEvent(new MessageDeliveryChanged(
-                message.messageId(), message.caseId(), status, category, code, nextRetryAt));
+                message.messageId(), message.caseId(), status, category, code, nextRetryAt,
+                message.correlationId()));
     }
 
     private static boolean manualRetryAllowed(DeliveryAttemptRecord attempt) {
