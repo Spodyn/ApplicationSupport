@@ -4,6 +4,7 @@ import com.unifiedsupportinbox.cases.CaseCreationService;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.messaging.InboundMessageCommandHandler;
 import com.unifiedsupportinbox.readstate.CustomerMessageUnreadService;
+import com.unifiedsupportinbox.ooo.OutOfOfficeResponder;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -23,14 +24,17 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
 
     private final CaseCreationService cases;
     private final CustomerMessageUnreadService unread;
+    private final OutOfOfficeResponder outOfOffice;
     private final JdbcTemplate jdbc;
 
     InboundRootMessageCommandService(
             CaseCreationService cases,
             CustomerMessageUnreadService unread,
+            OutOfOfficeResponder outOfOffice,
             JdbcTemplate jdbc) {
         this.cases = cases;
         this.unread = unread;
+        this.outOfOffice = outOfOffice;
         this.jdbc = jdbc;
     }
 
@@ -97,6 +101,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                 caseResult.caseId(),
                 insertedMessageIds.getFirst(),
                 command.correlationId());
+        outOfOffice.customerMessageReceived(caseResult.caseId(), null, command.correlationId());
     }
 
     private boolean messageExists(UUID caseId, String externalMessageId) {

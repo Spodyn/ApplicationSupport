@@ -95,7 +95,7 @@ class OutOfOfficeService {
         return template;
     }
 
-    private static String render(String template, String customerName, Instant opening, String timezone) {
+    static String render(String template, String customerName, Instant opening, String timezone) {
         ZoneId zone = ZoneId.of(timezone);
         String date = opening == null ? "nieustalono" : DATE.withZone(zone).format(opening);
         String time = opening == null ? "nieustalono" : TIME.withZone(zone).format(opening);
