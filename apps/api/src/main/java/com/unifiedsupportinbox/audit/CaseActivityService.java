@@ -46,8 +46,11 @@ class CaseActivityService {
     }
 
     private ActivityItem view(RawActivity event) {
+        JsonNode metadata = sanitizedMetadata(event.metadataJson());
         return new ActivityItem(event.id(), event.actorType(), event.actorUserId(), actorLabel(event), event.action(),
-                actionDescription(event.action()), event.occurredAt(), sanitizedMetadata(event.metadataJson()));
+                actionDescription(event.action()), workflowChange(metadata),
+                event.relatedCaseId() == null ? null : new RelatedCase(event.relatedCaseId(), event.relatedCaseReference()),
+                event.occurredAt(), metadata);
     }
 
     private JsonNode sanitizedMetadata(String value) {
@@ -70,13 +73,39 @@ class CaseActivityService {
     }
 
     private static String actionDescription(String action) {
-        return action.replace('_', ' ').toLowerCase(Locale.ROOT);
+        return switch (action) {
+            case "CASE_CLAIM" -> "Case claimed";
+            case "CASE_IGNORE" -> "Case ignore vote recorded";
+            case "CASE_REPLY" -> "Support reply sent";
+            case "CASE_ASK_CUSTOMER" -> "Customer response requested";
+            case "CASE_RESOLVE", "CASE_FORCE_RESOLVE" -> "Case resolved";
+            case "CASE_ASSIGN", "CASE_REASSIGN" -> "Case assigned";
+            case "CASE_UNASSIGN" -> "Case unassigned";
+            case "CASE_SNOOZE" -> "Case snoozed";
+            case "CASE_WAITING_TIMEOUT" -> "Waiting period expired";
+            default -> action.replace('_', ' ').toLowerCase(Locale.ROOT);
+        };
+    }
+
+    private static WorkflowChange workflowChange(JsonNode metadata) {
+        JsonNode previous = metadata.path("previous").path("status");
+        JsonNode current = metadata.path("current").path("status");
+        if (previous.isTextual() || current.isTextual()) {
+            return new WorkflowChange(previous.isTextual() ? previous.asString() : null,
+                    current.isTextual() ? current.asString() : null);
+        }
+        JsonNode legacyCurrent = metadata.path("status");
+        return legacyCurrent.isTextual() ? new WorkflowChange(metadata.path("previousStatus").asText(null), legacyCurrent.asString()) : null;
     }
 
     private static String scope(UUID caseId) { return "case-activity:" + caseId; }
 
     record RawActivity(UUID id, AuditActorType actorType, UUID actorUserId, String actorReference,
-                       String actorDisplayName, String action, Instant occurredAt, String metadataJson) {}
+                       String actorDisplayName, String action, Instant occurredAt, String metadataJson,
+                       UUID relatedCaseId, String relatedCaseReference) {}
     record ActivityItem(UUID id, AuditActorType actorType, UUID actorUserId, String actorLabel, String action,
-                        String actionDescription, Instant occurredAt, JsonNode metadata) {}
+                        String actionDescription, WorkflowChange workflowChange, RelatedCase relatedCase,
+                        Instant occurredAt, JsonNode metadata) {}
+    record WorkflowChange(String previousStatus, String currentStatus) {}
+    record RelatedCase(UUID id, String reference) {}
 }

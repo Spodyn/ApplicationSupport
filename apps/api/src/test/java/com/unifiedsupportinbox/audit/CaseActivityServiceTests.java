@@ -37,7 +37,7 @@ class CaseActivityServiceTests {
 
         assertThat(page.items()).extracting(CaseActivityService.ActivityItem::actorLabel)
                 .containsExactly("Agent", "Admin");
-        assertThat(page.items().getFirst().actionDescription()).isEqualTo("case claim");
+        assertThat(page.items().getFirst().actionDescription()).isEqualTo("Case claimed");
         assertThat(page.items().getFirst().metadata().toString()).doesNotContain("token");
         assertThat(page.nextCursor()).isNotBlank();
         verify(repository).find(eq(caseId), eq(null), eq(null), eq(3));
@@ -69,6 +69,6 @@ class CaseActivityServiceTests {
     private static CaseActivityService.RawActivity event(
             AuditActorType actorType, String displayName, String action, Instant occurredAt, String metadata) {
         return new CaseActivityService.RawActivity(UUID.randomUUID(), actorType, UUID.randomUUID(), null,
-                displayName, action, occurredAt, metadata);
+                displayName, action, occurredAt, metadata, null, null);
     }
 }
