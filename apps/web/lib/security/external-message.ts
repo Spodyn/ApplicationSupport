@@ -29,7 +29,13 @@ export function parseExternalMessage(input: string): readonly ExternalMessagePar
 }
 
 function appendText(parts: ExternalMessagePart[], value: string) {
-  if (value) parts.push({ type: "text", value })
+  if (!value) return
+  const previous = parts.at(-1)
+  if (previous?.type === "text") {
+    parts[parts.length - 1] = { type: "text", value: previous.value + value }
+    return
+  }
+  parts.push({ type: "text", value })
 }
 
 function safeHref(value: string): string | undefined {
