@@ -243,6 +243,31 @@ class SlackRootCaseMappingIntegrationTests {
         assertThat(countOutbox("case.created")).isEqualTo(1);
     }
 
+    @Test
+    void outsideBusinessHoursQueuesOneDurableSystemOooResponsePerCaseAndClosure() {
+        jdbc.update("DELETE FROM business_hour_intervals");
+        jdbc.update("""
+                INSERT INTO business_hour_intervals (business_hours_id, day_of_week, start_time, end_time)
+                SELECT id, EXTRACT(ISODOW FROM CURRENT_TIMESTAMP + INTERVAL '1 day')::smallint, TIME '09:00', TIME '17:00'
+                FROM business_hours WHERE active = TRUE
+                """);
+        jdbc.update("UPDATE ooo_config SET enabled = TRUE, message_template = 'We are closed until {{next_opening_time}}.'");
+        Fixture fixture = mappedFixture("C-ooo");
+        InboundEvent root = persist(fixture.integrationId(), "Ev-ooo-root",
+                rootMessage("Ev-ooo-root", fixture.externalChannelId(), "U-customer", "root", "1720000600.1"));
+        InboundEvent reply = persist(fixture.integrationId(), "Ev-ooo-reply",
+                threadReply("Ev-ooo-reply", fixture.externalChannelId(), "U-customer", "again", "1720000600.2", "1720000600.1"));
+
+        assertThat(worker.process(root.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        assertThat(worker.process(reply.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+
+        assertThat(count("ooo_deliveries")).isEqualTo(1);
+        assertThat(count("messages")).isEqualTo(3);
+        assertThat(jdbc.queryForObject("SELECT kind FROM messages WHERE delivery_status = 'QUEUED'", String.class))
+                .isEqualTo("SYSTEM");
+        assertThat(countOutbox("message.send_requested")).isEqualTo(1);
+    }
+
     private Fixture mappedFixture(String externalChannelId) {
         UUID customerId = createCustomer();
         UUID integrationId = createSlackIntegration();
