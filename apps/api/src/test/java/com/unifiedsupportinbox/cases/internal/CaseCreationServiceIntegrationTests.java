@@ -103,6 +103,11 @@ class CaseCreationServiceIntegrationTests {
                 "SELECT count(*) FROM outbox_events WHERE type = 'case.created' AND aggregate_id = ?",
                 Integer.class,
                 first.caseId())).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM case_sla WHERE case_id = ? AND first_response_due_at > first_response_started_at "
+                        + "AND unclaimed_breach_at > unclaimed_warning_at",
+                Integer.class,
+                first.caseId())).isEqualTo(1);
 
         String payloadJson = jdbc.queryForObject(
                 "SELECT payload_json::text FROM outbox_events WHERE type = 'case.created' AND aggregate_id = ?",
