@@ -2,6 +2,7 @@ package com.unifiedsupportinbox.realtime.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.DirectExchange;
@@ -25,11 +26,17 @@ class CaseLifecycleRealtimeRabbitConfigurationTests {
     }
 
     @Test
-    void bindsCommittedCaseLifecycleEventsThroughOneTopicPattern() {
+    void bindsOnlyGlobalLifecycleEventsAndNeverPersonalUnreadState() {
         Queue queue = configuration.caseLifecycleRealtimeQueue();
-        Binding binding = configuration.caseLifecycleRealtimeBinding(queue, outbox);
-        assertThat(binding.getDestination()).isEqualTo(CaseLifecycleRealtimeRabbitConfiguration.QUEUE);
-        assertThat(binding.getRoutingKey()).isEqualTo(CaseLifecycleRealtimeRabbitConfiguration.CASE_EVENT_PATTERN);
+        Set<String> routingKeys = Set.of(
+                configuration.caseCreatedRealtimeBinding(queue, outbox).getRoutingKey(),
+                configuration.caseClaimedRealtimeBinding(queue, outbox).getRoutingKey(),
+                configuration.caseUpdatedRealtimeBinding(queue, outbox).getRoutingKey(),
+                configuration.caseSlaChangedRealtimeBinding(queue, outbox).getRoutingKey());
+
+        assertThat(routingKeys).containsExactlyInAnyOrder(
+                "case.created", "case.claimed", "case.updated", "case.sla_changed");
+        assertThat(routingKeys).doesNotContain("case.unread_changed", "case.*", "case.#");
     }
 
     @Test
