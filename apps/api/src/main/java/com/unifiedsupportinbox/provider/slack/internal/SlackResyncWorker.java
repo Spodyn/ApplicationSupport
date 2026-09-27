@@ -201,7 +201,9 @@ class SlackResyncWorker {
                     json.writeValueAsString(callback),
                     "slack-resync:" + job.id());
             return true;
-        } catch (JacksonException | RuntimeException exception) {
+        } catch (JacksonException exception) {
+            throw new EnqueueFailure(exception);
+        } catch (RuntimeException exception) {
             throw new EnqueueFailure(exception);
         }
     }
