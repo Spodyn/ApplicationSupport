@@ -86,6 +86,69 @@ describe("RealtimeStompClient", () => {
     client.stop()
   })
 
+  it("subscribes after CONNECTED and reference-counts duplicate destinations", () => {
+    const client = createClient()
+    const firstRelease = client.subscribeDestination("/topic/cases")
+    const secondRelease = client.subscribeDestination("/topic/cases")
+    client.start()
+
+    const socket = FakeWebSocket.instances[0]
+    socket.open()
+    expect(socket.sent.some((frame) => frame.startsWith("SUBSCRIBE"))).toBe(false)
+
+    socket.message("CONNECTED\nversion:1.2\n\n\u0000")
+    const subscriptions = socket.sent.filter((frame) => frame.startsWith("SUBSCRIBE"))
+    expect(subscriptions).toHaveLength(1)
+    expect(subscriptions[0]).toContain("destination:/topic/cases")
+    expect(subscriptions[0]).toContain("id:usi-sub-1")
+
+    firstRelease()
+    expect(socket.sent.some((frame) => frame.startsWith("UNSUBSCRIBE"))).toBe(false)
+    secondRelease()
+    expect(socket.sent.filter((frame) => frame.startsWith("UNSUBSCRIBE"))).toHaveLength(1)
+    expect(socket.sent.at(-1)).toContain("id:usi-sub-1")
+
+    client.stop()
+  })
+
+  it("restores destination subscriptions after reconnect", () => {
+    const client = createClient({
+      heartbeatOutgoingMs: 0,
+      heartbeatIncomingMs: 0,
+      reconnectDelayMs: 250,
+    })
+    client.subscribeDestination("/topic/cases")
+    client.start()
+
+    const first = FakeWebSocket.instances[0]
+    first.open()
+    first.message("CONNECTED\nversion:1.2\n\n\u0000")
+    expect(first.sent.filter((frame) => frame.startsWith("SUBSCRIBE"))).toHaveLength(1)
+
+    first.close(1006, "network lost")
+    vi.advanceTimersByTime(250)
+    const second = FakeWebSocket.instances[1]
+    second.open()
+    second.message("CONNECTED\nversion:1.2\n\n\u0000")
+
+    const subscriptions = second.sent.filter((frame) => frame.startsWith("SUBSCRIBE"))
+    expect(subscriptions).toHaveLength(1)
+    expect(subscriptions[0]).toContain("destination:/topic/cases")
+    expect(subscriptions[0]).toContain("id:usi-sub-1")
+
+    client.stop()
+  })
+
+  it("rejects destinations that could inject STOMP headers", () => {
+    const client = createClient()
+    expect(() => client.subscribeDestination("/topic/cases\nid:attacker")).toThrow(
+      "Invalid STOMP subscription destination",
+    )
+    expect(() => client.subscribeDestination("https://example.com/topic/cases")).toThrow(
+      "Invalid STOMP subscription destination",
+    )
+  })
+
   it("closes on heartbeat timeout and reconnects without blocking the client", () => {
     const states: string[] = []
     const client = createClient({
@@ -121,7 +184,7 @@ describe("RealtimeStompClient", () => {
     const socket = FakeWebSocket.instances[0]
     socket.open()
     socket.message("CONNECTED\nversion:1.2\n\n\u0000")
-    socket.message("MESSAGE\ndestination:/topic/cases/case-1\ncontent-type:application/json\n\n{\"eventType\":\"case.changed\"}\u0000")
+    socket.message("MESSAGE\ndestination:/topic/cases\ncontent-type:application/json\n\n{\"eventType\":\"case.changed\"}\u0000")
     expect(received).toEqual([{ eventType: "case.changed" }])
     client.stop()
   })
