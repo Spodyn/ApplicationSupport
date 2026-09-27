@@ -14,6 +14,12 @@ interface RealtimeContextValue {
 }
 
 const RealtimeContext = createContext<RealtimeContextValue>({ state: "connecting" })
+const CASE_LIFECYCLE_EVENTS = new Set([
+  "case.created",
+  "case.updated",
+  "case.claimed",
+  "case.sla_changed",
+])
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<RealtimeConnectionState>("connecting")
@@ -22,10 +28,17 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const client = new RealtimeStompClient()
     const unsubscribe = client.subscribe(setState)
-    const unsubscribeFrames = client.subscribeFrames((_destination, body) => {
+    const unsubscribeCases = client.subscribeDestination("/topic/cases")
+    const unsubscribeFrames = client.subscribeFrames((destination, body) => {
       const event = parseRealtimeEventEnvelope(body)
       // Unknown/future/malformed notifications are deliberately a safe refetch, never a local patch.
       if (!event || event.version !== REALTIME_EVENT_VERSION) {
+        void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() })
+        return
+      }
+      if (destination === "/topic/cases" && CASE_LIFECYCLE_EVENTS.has(event.eventType)) {
+        // REST/DB remains the source of truth. Invalidation avoids overwriting a local pending
+        // workflow mutation while still making changes from another browser visible promptly.
         void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() })
         return
       }
@@ -39,11 +52,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     })
     client.start()
     return () => {
-      unsubscribe()
       unsubscribeFrames()
+      unsubscribeCases()
+      unsubscribe()
       client.stop()
     }
-  }, [])
+  }, [queryClient])
 
   const value = useMemo(() => ({ state }), [state])
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>

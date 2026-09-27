@@ -26,6 +26,11 @@ export interface RealtimeStompClientOptions {
 type StateListener = (state: RealtimeConnectionState) => void
 export type RealtimeFrameListener = (destination: string, body: unknown) => void
 
+type DestinationSubscription = {
+  id: string
+  references: number
+}
+
 const WEBSOCKET_OPEN = 1
 const HEARTBEAT_GRACE_MULTIPLIER = 3
 
@@ -44,6 +49,7 @@ export class RealtimeStompClient {
 
   private readonly listeners = new Set<StateListener>()
   private readonly frameListeners = new Set<RealtimeFrameListener>()
+  private readonly destinationSubscriptions = new Map<string, DestinationSubscription>()
   private socket: WebSocketLike | null = null
   private state: RealtimeConnectionState = "disconnected"
   private shouldRun = false
@@ -52,6 +58,7 @@ export class RealtimeStompClient {
   private incomingWatchdog: ReturnType<typeof setInterval> | null = null
   private lastServerActivity = 0
   private frameBuffer = ""
+  private nextSubscriptionId = 1
 
   constructor(options: RealtimeStompClientOptions = {}) {
     this.options = {
@@ -75,6 +82,37 @@ export class RealtimeStompClient {
   subscribeFrames(listener: RealtimeFrameListener): () => void {
     this.frameListeners.add(listener)
     return () => this.frameListeners.delete(listener)
+  }
+
+  subscribeDestination(destination: string): () => void {
+    const normalized = normalizeDestination(destination)
+    const existing = this.destinationSubscriptions.get(normalized)
+    if (existing) {
+      existing.references += 1
+    } else {
+      const subscription = {
+        id: `usi-sub-${this.nextSubscriptionId++}`,
+        references: 1,
+      }
+      this.destinationSubscriptions.set(normalized, subscription)
+      if (this.state === "connected" && this.socket?.readyState === WEBSOCKET_OPEN) {
+        this.sendSubscribe(this.socket, normalized, subscription.id)
+      }
+    }
+
+    let active = true
+    return () => {
+      if (!active) return
+      active = false
+      const current = this.destinationSubscriptions.get(normalized)
+      if (!current) return
+      current.references -= 1
+      if (current.references > 0) return
+      this.destinationSubscriptions.delete(normalized)
+      if (this.state === "connected" && this.socket?.readyState === WEBSOCKET_OPEN) {
+        this.sendUnsubscribe(this.socket, current.id)
+      }
+    }
   }
 
   start(): void {
@@ -166,7 +204,22 @@ export class RealtimeStompClient {
     const headers = parseHeaders(lines)
 
     this.startHeartbeats(socket, headers.get("heart-beat"))
+    this.resubscribeAll(socket)
     this.setState("connected")
+  }
+
+  private resubscribeAll(socket: WebSocketLike): void {
+    for (const [destination, subscription] of this.destinationSubscriptions) {
+      this.sendSubscribe(socket, destination, subscription.id)
+    }
+  }
+
+  private sendSubscribe(socket: WebSocketLike, destination: string, id: string): void {
+    socket.send(`SUBSCRIBE\nid:${id}\ndestination:${destination}\nack:auto\n\n\u0000`)
+  }
+
+  private sendUnsubscribe(socket: WebSocketLike, id: string): void {
+    socket.send(`UNSUBSCRIBE\nid:${id}\n\n\u0000`)
   }
 
   private startHeartbeats(socket: WebSocketLike, serverHeartbeat?: string): void {
@@ -241,6 +294,21 @@ export class RealtimeStompClient {
     this.state = state
     for (const listener of this.listeners) listener(state)
   }
+}
+
+function normalizeDestination(value: string): string {
+  const destination = value.trim()
+  if (
+    !destination ||
+    destination.length > 255 ||
+    (!destination.startsWith("/topic/") &&
+      !destination.startsWith("/queue/") &&
+      !destination.startsWith("/user/")) ||
+    /[\r\n\u0000]/.test(destination)
+  ) {
+    throw new Error("Invalid STOMP subscription destination")
+  }
+  return destination
 }
 
 function parseHeaders(lines: string[]): Map<string, string> {
