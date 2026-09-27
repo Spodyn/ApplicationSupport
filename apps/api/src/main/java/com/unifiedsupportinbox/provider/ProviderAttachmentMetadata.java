@@ -31,7 +31,7 @@ public record ProviderAttachmentMetadata(
         return normalized;
     }
 
-    private static String normalizeFilename(String value) {
+    static String normalizeFilename(String value) {
         if (value == null) return "attachment";
         String normalized = value.strip()
                 .replace('\\', '_')
@@ -50,7 +50,7 @@ public record ProviderAttachmentMetadata(
         return result;
     }
 
-    private static String normalizeContentType(String value) {
+    static String normalizeContentType(String value) {
         if (value == null || value.isBlank()) return "application/octet-stream";
         String mediaType = value.split(";", 2)[0].strip().toLowerCase(Locale.ROOT);
         if (mediaType.isEmpty()
