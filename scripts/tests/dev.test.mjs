@@ -10,6 +10,7 @@ import {
   composeArgs,
   ensureLocalFile,
   parseEnvFile,
+  processInvocation,
   requireResetConfirmation,
 } from "../dev.mjs";
 
@@ -87,6 +88,62 @@ test("backendCommand prefers Maven wrapper and is platform-aware", () => {
       command: join(API_DIR, "mvnw.cmd"),
       args: ["spring-boot:run"],
       cwd: API_DIR,
+    },
+  );
+});
+
+test("Windows routes only trusted cmd launchers through ComSpec", () => {
+  assert.deepEqual(
+    processInvocation("pnpm", ["--filter", "@usi/web", "dev"], {
+      platform: "win32",
+      comSpec: "C:\\Windows\\System32\\cmd.exe",
+    }),
+    {
+      command: "C:\\Windows\\System32\\cmd.exe",
+      args: ["/d", "/s", "/c", "pnpm.cmd", "--filter", "@usi/web", "dev"],
+    },
+  );
+
+  assert.deepEqual(
+    processInvocation("mvn.cmd", ["spring-boot:run"], {
+      platform: "win32",
+      comSpec: "cmd.exe",
+    }),
+    {
+      command: "cmd.exe",
+      args: ["/d", "/s", "/c", "mvn.cmd", "spring-boot:run"],
+    },
+  );
+
+  assert.deepEqual(
+    processInvocation("docker", ["compose", "ps"], {
+      platform: "win32",
+      comSpec: "cmd.exe",
+    }),
+    {
+      command: "docker",
+      args: ["compose", "ps"],
+    },
+  );
+
+  assert.deepEqual(
+    processInvocation("pnpm", ["check"], { platform: "linux" }),
+    {
+      command: "pnpm",
+      args: ["check"],
+    },
+  );
+});
+
+test("Windows does not route arbitrary cmd files through the trusted shell path", () => {
+  assert.deepEqual(
+    processInvocation("untrusted.cmd", ["arg"], {
+      platform: "win32",
+      comSpec: "cmd.exe",
+    }),
+    {
+      command: "untrusted.cmd",
+      args: ["arg"],
     },
   );
 });

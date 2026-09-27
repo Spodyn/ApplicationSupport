@@ -1,7 +1,7 @@
 // @ts-check
 
 /** @typedef {Readonly<Record<string, string | undefined>>} EnvironmentSource */
-/** @typedef {Readonly<{source: string, destination: string}>} Rewrite */
+/** @typedef {{source: string, destination: string}} Rewrite */
 
 export const DEFAULT_DEVELOPMENT_BACKEND_ORIGIN = "http://127.0.0.1:8080"
 export const DEVELOPMENT_BACKEND_ORIGIN_VARIABLE = "USI_DEV_BACKEND_ORIGIN"
@@ -59,9 +59,13 @@ export function parseDevelopmentBackendOrigin(source) {
  * owned by the deployment reverse proxy (Caddy), which sends /api and /ws
  * directly to Spring Boot.
  *
+ * Next.js 16 normalizes rewrite descriptors in place while starting the dev
+ * server, so these objects deliberately remain mutable. Security comes from
+ * validating the destination origin above, not from freezing the descriptors.
+ *
  * @param {EnvironmentSource} source
  * @param {string | undefined} nodeEnvironment
- * @returns {readonly Rewrite[]}
+ * @returns {Rewrite[]}
  */
 export function developmentProxyRewrites(source, nodeEnvironment) {
   if (nodeEnvironment !== "development") {
@@ -69,14 +73,14 @@ export function developmentProxyRewrites(source, nodeEnvironment) {
   }
 
   const backendOrigin = parseDevelopmentBackendOrigin(source)
-  return Object.freeze([
-    Object.freeze({
+  return [
+    {
       source: "/api/:path*",
       destination: `${backendOrigin}/api/:path*`,
-    }),
-    Object.freeze({
+    },
+    {
       source: "/ws/:path*",
       destination: `${backendOrigin}/ws/:path*`,
-    }),
-  ])
+    },
+  ]
 }

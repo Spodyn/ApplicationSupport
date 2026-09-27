@@ -2,7 +2,7 @@
 
 import { copyFileSync, existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -17,12 +17,36 @@ export const ROOT_ENV = resolve(ROOT, ".env");
 export const ROOT_ENV_EXAMPLE = resolve(ROOT, ".env.example");
 
 const SERVICES = ["postgres", "rabbitmq", "minio"];
+const TRUSTED_WINDOWS_CMD_LAUNCHERS = new Set(["pnpm.cmd", "mvn.cmd", "mvnw.cmd"]);
 
 function platformCommand(command, platform = process.platform) {
   if (platform === "win32" && ["pnpm", "mvn"].includes(command)) {
     return `${command}.cmd`;
   }
   return command;
+}
+
+/**
+ * Windows cannot execute .cmd launchers directly through CreateProcess, which
+ * makes spawnSync(..., {shell:false}) fail with EINVAL. Route only the fixed,
+ * trusted package/build launchers through cmd.exe; all other commands keep the
+ * direct shell-free execution path.
+ */
+export function processInvocation(command, args, {
+  platform = process.platform,
+  comSpec = process.env.ComSpec || "cmd.exe",
+} = {}) {
+  const executable = platformCommand(command, platform);
+  if (
+    platform === "win32"
+    && TRUSTED_WINDOWS_CMD_LAUNCHERS.has(basename(executable).toLowerCase())
+  ) {
+    return {
+      command: comSpec,
+      args: ["/d", "/s", "/c", executable, ...args],
+    };
+  }
+  return { command: executable, args };
 }
 
 export function ensureLocalFile(target, example) {
@@ -163,7 +187,8 @@ function run(command, args, {
   env = process.env,
   capture = false,
 } = {}) {
-  const result = spawnSync(platformCommand(command), args, {
+  const invocation = processInvocation(command, args);
+  const result = spawnSync(invocation.command, invocation.args, {
     cwd,
     env,
     encoding: "utf8",
