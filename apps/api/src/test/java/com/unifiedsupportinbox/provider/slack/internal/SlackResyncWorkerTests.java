@@ -2,6 +2,7 @@ package com.unifiedsupportinbox.provider.slack.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -96,7 +97,7 @@ class SlackResyncWorkerTests {
         worker.process(job);
 
         verify(jobs).defer(job.id(), "SLACK_RATE_LIMITED", Duration.ofSeconds(73));
-        verify(jobs, never()).advance(any(), any(), anyInt(), anyInt(), any(Boolean.class));
+        verify(jobs, never()).advance(any(), any(), anyInt(), anyInt(), anyBoolean());
         verify(inbound, never()).persistAndWake(any(), anyString(), anyString(), anyString());
         assertThat(token).containsOnly((byte) 0);
     }
