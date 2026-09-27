@@ -26,6 +26,16 @@ describe("same-origin development proxy routing", () => {
     expect(developmentProxyRewrites({}, "production")).toEqual([])
   })
 
+  test("returns mutable rewrite descriptors because Next.js normalizes them in place", () => {
+    const rewrites = developmentProxyRewrites({}, "development")
+
+    expect(Object.isFrozen(rewrites)).toBe(false)
+    expect(Object.isFrozen(rewrites[0])).toBe(false)
+
+    rewrites[0].source = "/api-normalized/:path*"
+    expect(rewrites[0].source).toBe("/api-normalized/:path*")
+  })
+
   test("accepts an explicit loopback API port without exposing it to browser config", () => {
     const source = { USI_DEV_BACKEND_ORIGIN: "http://localhost:9080" }
 
