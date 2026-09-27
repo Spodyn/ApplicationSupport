@@ -45,7 +45,7 @@ public interface ProviderAttachmentGateway {
             UUID integrationId,
             String externalChannelId,
             String externalThreadKey,
-            ProviderAttachmentMetadata metadata,
+            ProviderAttachmentUploadMetadata metadata,
             ContentSource content,
             String idempotencyKey) {
 
@@ -58,9 +58,6 @@ public interface ProviderAttachmentGateway {
             Objects.requireNonNull(metadata, "metadata");
             Objects.requireNonNull(content, "content");
             idempotencyKey = ProviderAttachmentMetadata.requireIdentifier(idempotencyKey, "idempotencyKey");
-            if (metadata.sizeBytes() > MAX_FILE_BYTES) {
-                throw new IllegalArgumentException("Attachment exceeds the 25 MiB application limit.");
-            }
         }
     }
 
@@ -73,9 +70,7 @@ public interface ProviderAttachmentGateway {
         InputStream open() throws IOException;
     }
 
-    /**
-     * Download handle whose stream must be closed by the application pipeline.
-     */
+    /** Download handle whose stream must be closed by the application pipeline. */
     final class DownloadedAttachment implements AutoCloseable {
         private final ProviderAttachmentMetadata metadata;
         private final InputStream content;
@@ -83,10 +78,6 @@ public interface ProviderAttachmentGateway {
         public DownloadedAttachment(ProviderAttachmentMetadata metadata, InputStream content) {
             this.metadata = Objects.requireNonNull(metadata, "metadata");
             this.content = Objects.requireNonNull(content, "content");
-            if (metadata.sizeBytes() > MAX_FILE_BYTES) {
-                closeQuietly(content);
-                throw new IllegalArgumentException("Attachment exceeds the 25 MiB application limit.");
-            }
         }
 
         public ProviderAttachmentMetadata metadata() {
@@ -100,14 +91,6 @@ public interface ProviderAttachmentGateway {
         @Override
         public void close() throws IOException {
             content.close();
-        }
-
-        private static void closeQuietly(InputStream stream) {
-            try {
-                stream.close();
-            } catch (IOException ignored) {
-                // Constructor failure is authoritative; close is best effort.
-            }
         }
     }
 
