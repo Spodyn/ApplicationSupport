@@ -33,7 +33,10 @@ class CaseLifecycleRealtimeRabbitConfiguration {
     static final String DEAD_LETTER_EXCHANGE = "usi.realtime.case-lifecycle.dlx";
     static final String DEAD_LETTER_QUEUE = "usi.realtime.case-lifecycle.dlq";
     static final String DEAD_LETTER_ROUTING_KEY = "realtime.case-lifecycle.dead";
-    static final String CASE_EVENT_PATTERN = "case.*";
+    static final String CASE_CREATED_ROUTING_KEY = "case.created";
+    static final String CASE_CLAIMED_ROUTING_KEY = "case.claimed";
+    static final String CASE_UPDATED_ROUTING_KEY = "case.updated";
+    static final String CASE_SLA_CHANGED_ROUTING_KEY = "case.sla_changed";
 
     @Bean
     Queue caseLifecycleRealtimeQueue() {
@@ -54,10 +57,35 @@ class CaseLifecycleRealtimeRabbitConfiguration {
     }
 
     @Bean
-    Binding caseLifecycleRealtimeBinding(
+    Binding caseCreatedRealtimeBinding(
             @Qualifier("caseLifecycleRealtimeQueue") Queue queue,
             TopicExchange usiOutboxExchange) {
-        return BindingBuilder.bind(queue).to(usiOutboxExchange).with(CASE_EVENT_PATTERN);
+        return lifecycleBinding(queue, usiOutboxExchange, CASE_CREATED_ROUTING_KEY);
+    }
+
+    @Bean
+    Binding caseClaimedRealtimeBinding(
+            @Qualifier("caseLifecycleRealtimeQueue") Queue queue,
+            TopicExchange usiOutboxExchange) {
+        return lifecycleBinding(queue, usiOutboxExchange, CASE_CLAIMED_ROUTING_KEY);
+    }
+
+    @Bean
+    Binding caseUpdatedRealtimeBinding(
+            @Qualifier("caseLifecycleRealtimeQueue") Queue queue,
+            TopicExchange usiOutboxExchange) {
+        return lifecycleBinding(queue, usiOutboxExchange, CASE_UPDATED_ROUTING_KEY);
+    }
+
+    @Bean
+    Binding caseSlaChangedRealtimeBinding(
+            @Qualifier("caseLifecycleRealtimeQueue") Queue queue,
+            TopicExchange usiOutboxExchange) {
+        return lifecycleBinding(queue, usiOutboxExchange, CASE_SLA_CHANGED_ROUTING_KEY);
+    }
+
+    private static Binding lifecycleBinding(Queue queue, TopicExchange exchange, String routingKey) {
+        return BindingBuilder.bind(queue).to(exchange).with(routingKey);
     }
 
     @Bean
@@ -139,14 +167,12 @@ class CaseLifecycleRealtimeRabbitListener {
     }
 
     static String mapEventType(String sourceType) {
-        if (sourceType == null || !sourceType.startsWith("case.") || sourceType.length() <= "case.".length()) {
-            throw new IllegalArgumentException("Unsupported case lifecycle event type.");
-        }
         return switch (sourceType) {
-            case "case.created" -> "case.created";
-            case "case.claimed" -> "case.claimed";
-            case "case.sla_changed" -> "case.sla_changed";
-            default -> "case.updated";
+            case CaseLifecycleRealtimeRabbitConfiguration.CASE_CREATED_ROUTING_KEY -> "case.created";
+            case CaseLifecycleRealtimeRabbitConfiguration.CASE_CLAIMED_ROUTING_KEY -> "case.claimed";
+            case CaseLifecycleRealtimeRabbitConfiguration.CASE_UPDATED_ROUTING_KEY -> "case.updated";
+            case CaseLifecycleRealtimeRabbitConfiguration.CASE_SLA_CHANGED_ROUTING_KEY -> "case.sla_changed";
+            default -> throw new IllegalArgumentException("Unsupported case lifecycle event type.");
         };
     }
 
