@@ -1,24 +1,15 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import {
-  RealtimeStompClient,
-  type RealtimeConnectionState,
-} from "@/lib/realtime/stomp-client"
+import { RealtimeStompClient, type RealtimeConnectionState } from "@/lib/realtime/stomp-client"
 import { parseRealtimeEventEnvelope, REALTIME_EVENT_VERSION } from "@/lib/realtime/event-envelope"
+import { RealtimeContext } from "@/lib/realtime/realtime-context"
 import { queryKeys } from "@/lib/services/queries"
 
-interface RealtimeContextValue {
-  state: RealtimeConnectionState
-  subscribeCase: (caseId: string) => () => void
-}
+export { useRealtimeConnection } from "@/lib/realtime/realtime-context"
 
 const NOOP_UNSUBSCRIBE = () => {}
-const RealtimeContext = createContext<RealtimeContextValue>({
-  state: "connecting",
-  subscribeCase: () => NOOP_UNSUBSCRIBE,
-})
 const CASE_LIFECYCLE_EVENTS = new Set([
   "case.created",
   "case.updated",
@@ -26,7 +17,7 @@ const CASE_LIFECYCLE_EVENTS = new Set([
   "case.sla_changed",
 ])
 const CONVERSATION_EVENTS = new Set(["message.created", "message.delivery_updated"])
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<RealtimeConnectionState>("connecting")
@@ -80,16 +71,4 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo(() => ({ state, subscribeCase }), [state, subscribeCase])
   return <RealtimeContext.Provider value={value}>{children}</RealtimeContext.Provider>
-}
-
-export function useRealtimeConnection(): RealtimeContextValue {
-  return useContext(RealtimeContext)
-}
-
-export function useRealtimeCase(caseId?: string): void {
-  const { subscribeCase } = useContext(RealtimeContext)
-  useEffect(() => {
-    if (!caseId) return undefined
-    return subscribeCase(caseId)
-  }, [caseId, subscribeCase])
 }
