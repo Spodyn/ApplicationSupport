@@ -8,4 +8,6 @@ Case lifecycle hints are sent to `/topic/cases`. Supported v1 event types are `c
 
 The browser subscribes to `/topic/cases` after the STOMP `CONNECTED` frame and restores that subscription after reconnect. Receiving a lifecycle event invalidates the relevant REST-backed Case query instead of patching pending local workflow state.
 
-`message.delivery_updated` v1 is sent to `/topic/cases/{caseId}`. Its `entityId` is the message ID and its payload may contain `deliveryStatus`, `errorCategory`, `errorCode`, and `nextRetryAt`; it contains no credentials or per-user read state.
+Conversation hints are sent only to `/topic/cases/{caseId}` while that Case is actively subscribed in the browser. `message.created` v1 uses the message ID as `entityId` and carries only `messageId` and `caseId`; the full Message is always refetched from REST. The event is written through the transactional outbox together with inbound/support Message creation, so websocket delivery cannot precede the committed Message row.
+
+`message.delivery_updated` v1 is sent to `/topic/cases/{caseId}`. Its `entityId` is the message ID and its payload may contain `deliveryStatus`, `errorCategory`, `errorCode`, and `nextRetryAt`; it contains no credentials or per-user read state. Duplicate or out-of-order conversation hints are safe because the client invalidates the stable Message query rather than appending websocket payloads locally.
