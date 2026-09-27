@@ -9,7 +9,6 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -40,40 +39,39 @@ class SlackResyncRepository {
             String oldestTs,
             String latestTs,
             int maxMessages) {
-        try {
-            List<Job> created = jdbc.query("""
-                    INSERT INTO slack_resync_jobs (
-                        integration_id, channel_id, external_channel_id,
-                        oldest_ts, latest_ts, max_messages
-                    )
-                    SELECT i.id, c.id, c.external_channel_id, ?, ?, ?
-                    FROM integrations i
-                    JOIN channels c ON c.integration_id = i.id
-                    WHERE i.id = ?
-                      AND i.provider = 'SLACK'
-                      AND i.status = 'ENABLED'
-                      AND c.id = ?
-                      AND c.active = TRUE
-                      AND c.ignored = FALSE
-                    RETURNING id, integration_id, channel_id, external_channel_id, status,
-                              oldest_ts, latest_ts, cursor, fetched_messages, scheduled_events,
-                              max_messages, next_attempt_at, last_error_code, created_at,
-                              updated_at, completed_at
-                    """, prepared -> {
-                prepared.setString(1, oldestTs);
-                prepared.setString(2, latestTs);
-                prepared.setInt(3, maxMessages);
-                prepared.setObject(4, integrationId);
-                prepared.setObject(5, channelId);
-            }, ROW_MAPPER);
-            if (created.isEmpty()) {
-                throw ApiProblemException.conflict(
-                        "Slack resync requires an enabled Slack integration and an active monitored channel.");
-            }
-            return created.getFirst();
-        } catch (DataIntegrityViolationException conflict) {
-            return findActive(integrationId, channelId).orElseThrow(() -> conflict);
-        }
+        List<Job> created = jdbc.query("""
+                INSERT INTO slack_resync_jobs (
+                    integration_id, channel_id, external_channel_id,
+                    oldest_ts, latest_ts, max_messages
+                )
+                SELECT i.id, c.id, c.external_channel_id, ?, ?, ?
+                FROM integrations i
+                JOIN channels c ON c.integration_id = i.id
+                WHERE i.id = ?
+                  AND i.provider = 'SLACK'
+                  AND i.status = 'ENABLED'
+                  AND c.id = ?
+                  AND c.active = TRUE
+                  AND c.ignored = FALSE
+                ON CONFLICT (integration_id, channel_id)
+                    WHERE status IN ('QUEUED', 'RUNNING', 'WAITING')
+                    DO NOTHING
+                RETURNING id, integration_id, channel_id, external_channel_id, status,
+                          oldest_ts, latest_ts, cursor, fetched_messages, scheduled_events,
+                          max_messages, next_attempt_at, last_error_code, created_at,
+                          updated_at, completed_at
+                """, prepared -> {
+            prepared.setString(1, oldestTs);
+            prepared.setString(2, latestTs);
+            prepared.setInt(3, maxMessages);
+            prepared.setObject(4, integrationId);
+            prepared.setObject(5, channelId);
+        }, ROW_MAPPER);
+        if (!created.isEmpty()) return created.getFirst();
+
+        return findActive(integrationId, channelId)
+                .orElseThrow(() -> ApiProblemException.conflict(
+                        "Slack resync requires an enabled Slack integration and an active monitored channel."));
     }
 
     @Transactional(readOnly = true)
