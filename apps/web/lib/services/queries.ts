@@ -1,6 +1,7 @@
 "use client"
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useRealtimeCase } from "@/lib/realtime/realtime-context"
 import { serviceRegistry } from "./registry"
 import type {
   InboxAskInput,
@@ -53,6 +54,7 @@ export function useInboxCases() {
 }
 
 export function useInboxMessages(caseId?: string) {
+  useRealtimeCase(caseId)
   return useQuery({
     queryKey: queryKeys.inboxMessages(caseId ?? ""),
     queryFn: () => serviceRegistry.inbox.getMessages(caseId ?? ""),
