@@ -136,15 +136,6 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         }
     }
 
-    private boolean messageExists(UUID caseId, String externalMessageId) {
-        Integer count = jdbc.queryForObject(
-                "SELECT count(*) FROM messages WHERE case_id = ? AND external_message_id = ?",
-                Integer.class,
-                caseId,
-                externalMessageId);
-        return count != null && count == 1;
-    }
-
     private static IllegalStateException notReady(String message) {
         return new IllegalStateException(message);
     }
