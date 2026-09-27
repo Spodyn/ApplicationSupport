@@ -32,7 +32,7 @@ interface SlackHistoryClient {
             String errorCode,
             Duration retryAfter) {
 
-        Page {
+        public Page {
             messages = messages == null ? List.of() : List.copyOf(messages);
         }
     }
