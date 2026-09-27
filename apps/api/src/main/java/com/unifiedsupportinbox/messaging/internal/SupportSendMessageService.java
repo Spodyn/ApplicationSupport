@@ -11,7 +11,6 @@ import java.util.Objects;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -26,16 +25,19 @@ class SupportSendMessageService {
     private final OutboxEventStore outbox;
     private final IdempotentCommandExecutor idempotency;
     private final ObjectMapper json;
+    private final MessageCreatedOutboxPublisher messageCreated;
 
     SupportSendMessageService(
             JdbcTemplate jdbc,
             OutboxEventStore outbox,
             IdempotentCommandExecutor idempotency,
-            ObjectMapper json) {
+            ObjectMapper json,
+            MessageCreatedOutboxPublisher messageCreated) {
         this.jdbc = jdbc;
         this.outbox = outbox;
         this.idempotency = idempotency;
         this.json = json;
+        this.messageCreated = messageCreated;
     }
 
     IdempotencyResult send(
@@ -121,6 +123,7 @@ class SupportSendMessageService {
             throw new IllegalStateException("Support Message insert returned no id.");
         }
 
+        messageCreated.publish(messageId, caseId, correlationId);
         outbox.append(
                 OUTBOX_TYPE,
                 AGGREGATE_TYPE,
