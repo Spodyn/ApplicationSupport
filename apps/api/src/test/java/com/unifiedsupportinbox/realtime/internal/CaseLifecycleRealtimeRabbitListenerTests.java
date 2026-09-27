@@ -49,23 +49,30 @@ class CaseLifecycleRealtimeRabbitListenerTests {
     }
 
     @Test
-    void mapsDurableCaseLifecycleTypesToStablePublicRealtimeTypes() {
+    void mapsOnlyDurableGlobalLifecycleTypesToStablePublicRealtimeTypes() {
         assertThat(CaseLifecycleRealtimeRabbitListener.mapEventType("case.created"))
                 .isEqualTo("case.created");
         assertThat(CaseLifecycleRealtimeRabbitListener.mapEventType("case.claimed"))
                 .isEqualTo("case.claimed");
+        assertThat(CaseLifecycleRealtimeRabbitListener.mapEventType("case.updated"))
+                .isEqualTo("case.updated");
         assertThat(CaseLifecycleRealtimeRabbitListener.mapEventType("case.sla_changed"))
                 .isEqualTo("case.sla_changed");
-        assertThat(CaseLifecycleRealtimeRabbitListener.mapEventType("case.unclaimed"))
-                .isEqualTo("case.updated");
-        assertThat(CaseLifecycleRealtimeRabbitListener.mapEventType("case.resolved"))
-                .isEqualTo("case.updated");
+
+        assertThatThrownBy(() -> CaseLifecycleRealtimeRabbitListener.mapEventType("case.unread_changed"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> CaseLifecycleRealtimeRabbitListener.mapEventType("case.resolved"))
+                .isInstanceOf(IllegalArgumentException.class);
     }
 
     @Test
-    void rejectsMalformedOrNonCaseEventsWithoutRequeue() {
+    void rejectsMalformedOrNonGlobalEventsWithoutRequeue() {
         assertThatThrownBy(() -> listener.onCaseLifecycle(message(
                 "message.created", "corr", "{\"caseId\":\"" + UUID.randomUUID() + "\"}")))
+                .isInstanceOf(AmqpRejectAndDontRequeueException.class);
+
+        assertThatThrownBy(() -> listener.onCaseLifecycle(message(
+                "case.unread_changed", "corr", "{\"caseId\":\"" + UUID.randomUUID() + "\"}")))
                 .isInstanceOf(AmqpRejectAndDontRequeueException.class);
 
         assertThatThrownBy(() -> listener.onCaseLifecycle(message(
