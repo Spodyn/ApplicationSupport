@@ -26,16 +26,19 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
     private final CustomerMessageUnreadService unread;
     private final OutOfOfficeResponder outOfOffice;
     private final JdbcTemplate jdbc;
+    private final MessageCreatedOutboxPublisher messageCreated;
 
     InboundRootMessageCommandService(
             CaseCreationService cases,
             CustomerMessageUnreadService unread,
             OutOfOfficeResponder outOfOffice,
-            JdbcTemplate jdbc) {
+            JdbcTemplate jdbc,
+            MessageCreatedOutboxPublisher messageCreated) {
         this.cases = cases;
         this.unread = unread;
         this.outOfOffice = outOfOffice;
         this.jdbc = jdbc;
+        this.messageCreated = messageCreated;
     }
 
     @Override
@@ -97,10 +100,9 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
             throw new IllegalStateException("Inbound Message insert returned an unexpected number of rows.");
         }
 
-        unread.customerMessageCreated(
-                caseResult.caseId(),
-                insertedMessageIds.getFirst(),
-                command.correlationId());
+        UUID messageId = insertedMessageIds.getFirst();
+        messageCreated.publish(messageId, caseResult.caseId(), command.correlationId());
+        unread.customerMessageCreated(caseResult.caseId(), messageId, command.correlationId());
         outOfOffice.customerMessageReceived(caseResult.caseId(), null, command.correlationId());
     }
 
@@ -132,6 +134,15 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         if (provider != IntegrationProvider.SLACK && provider != IntegrationProvider.TELEGRAM) {
             throw notReady("Only Slack and Telegram inbound message mapping is active in the current phase.");
         }
+    }
+
+    private boolean messageExists(UUID caseId, String externalMessageId) {
+        Integer count = jdbc.queryForObject(
+                "SELECT count(*) FROM messages WHERE case_id = ? AND external_message_id = ?",
+                Integer.class,
+                caseId,
+                externalMessageId);
+        return count != null && count == 1;
     }
 
     private static IllegalStateException notReady(String message) {
