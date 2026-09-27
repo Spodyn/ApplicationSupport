@@ -54,6 +54,10 @@ CREATE TABLE slack_resync_jobs (
     )
 );
 
+CREATE UNIQUE INDEX uq_slack_resync_active_channel
+    ON slack_resync_jobs (integration_id, channel_id)
+    WHERE status IN ('QUEUED', 'RUNNING', 'WAITING');
+
 CREATE INDEX idx_slack_resync_jobs_due
     ON slack_resync_jobs (next_attempt_at, created_at, id)
     WHERE status IN ('QUEUED', 'WAITING', 'RUNNING');
