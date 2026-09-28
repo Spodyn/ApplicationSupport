@@ -15,7 +15,7 @@ class AttachmentFilePolicyTests {
     void normalizesPathsControlsAndWindowsReservedNames() {
         assertThat(policy.normalizeFilename(" ../folder\\invoice.pdf ")).isEqualTo("_folder_invoice.pdf");
         assertThat(policy.normalizeFilename("CON.txt")).isEqualTo("_CON.txt");
-        assertThat(policy.normalizeFilename("bad\u0000name.txt")).isEqualTo("bad_name.txt");
+        assertThat(policy.normalizeFilename("bad" + ((char) 0) + "name.txt")).isEqualTo("bad_name.txt");
     }
 
     @Test
@@ -53,7 +53,7 @@ class AttachmentFilePolicyTests {
                 .extracting(error -> ((AttachmentPolicyViolationException) error).code())
                 .isEqualTo(AttachmentPolicyViolationException.Code.BLOCKED_ARCHIVE);
 
-        byte[] exe = new byte[] {'M', 'Z', 0x00, 0x01};
+        byte[] exe = new byte[] {(byte) 'M', (byte) 'Z', 0x00, 0x01};
         String detectedExe = policy.detectContentType(new ByteArrayInputStream(exe));
         assertThatThrownBy(() -> policy.validate("renamed.pdf", "application/pdf", detectedExe, exe.length))
                 .isInstanceOf(AttachmentPolicyViolationException.class)
