@@ -71,7 +71,7 @@ class AttachmentFilePolicyTests {
 
         byte[] unknown = new byte[] {0x00, 0x01, 0x02, 0x03};
         String detected = policy.detectContentType(new ByteArrayInputStream(unknown));
-        assertThatThrownBy(() -> policy.validate("file.bin", "application/octet-stream", detected, unknown.length))
+        assertThatThrownBy(() -> policy.validate("file.data", "application/octet-stream", detected, unknown.length))
                 .isInstanceOf(AttachmentPolicyViolationException.class)
                 .extracting(error -> ((AttachmentPolicyViolationException) error).code())
                 .isEqualTo(AttachmentPolicyViolationException.Code.UNSUPPORTED_TYPE);
