@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class DefaultAttachmentSecurityServiceTests {
@@ -90,7 +91,8 @@ class DefaultAttachmentSecurityServiceTests {
         AttachmentMetadataCatalog metadata = mock(AttachmentMetadataCatalog.class);
         AttachmentObjectStorage objects = mock(AttachmentObjectStorage.class);
         when(metadata.claimForScan(id)).thenReturn(Optional.empty());
-        when(metadata.findById(id)).thenReturn(Optional.of(metadata(id, "file.txt", "text/plain", 4, AttachmentScanStatus.SCANNING, null)));
+        when(metadata.findById(id)).thenReturn(Optional.of(metadata(
+                id, "file.txt", "text/plain", 4, AttachmentScanStatus.SCANNING, null, null)));
         DefaultAttachmentSecurityService service = new DefaultAttachmentSecurityService(
                 metadata, objects, new AttachmentFilePolicy(), content -> AttachmentMalwareScanner.ScanResult.CLEAN);
 
@@ -103,30 +105,25 @@ class DefaultAttachmentSecurityServiceTests {
         UUID id = UUID.randomUUID();
         AttachmentMetadataCatalog metadata = mock(AttachmentMetadataCatalog.class);
         AttachmentObjectStorage objects = mock(AttachmentObjectStorage.class);
-        AttachmentMetadata claimed = metadata(id, filename, contentType, bytes.length, AttachmentScanStatus.SCANNING, null);
+        AttachmentMetadata claimed = metadata(
+                id, filename, contentType, bytes.length, AttachmentScanStatus.SCANNING, null, null);
+        AtomicReference<AttachmentMetadata> current = new AtomicReference<>(claimed);
         when(metadata.claimForScan(id)).thenReturn(Optional.of(claimed));
-        when(objects.open(claimed.storageKey())).thenReturn(new ByteArrayInputStream(bytes));
-        when(metadata.completeScan(eq(id), anyString(), any(), any(), any())).thenAnswer(invocation ->
-                metadata(
-                        id,
-                        invocation.getArgument(1, String.class),
-                        contentType,
-                        bytes.length,
-                        invocation.getArgument(3, AttachmentScanStatus.class),
-                        invocation.getArgument(4, String.class),
-                        invocation.getArgument(2, String.class)));
-        when(metadata.findById(id)).thenAnswer(invocation -> Optional.ofNullable(null));
-        return new Fixture(id, metadata, objects, bytes);
-    }
-
-    private static AttachmentMetadata metadata(
-            UUID id,
-            String filename,
-            String contentType,
-            long size,
-            AttachmentScanStatus status,
-            String scanError) {
-        return metadata(id, filename, contentType, size, status, scanError, null);
+        when(objects.open(claimed.storageKey())).thenAnswer(ignored -> new ByteArrayInputStream(bytes));
+        when(metadata.completeScan(eq(id), anyString(), any(), any(), any())).thenAnswer(invocation -> {
+            AttachmentMetadata completed = metadata(
+                    id,
+                    invocation.getArgument(1, String.class),
+                    contentType,
+                    bytes.length,
+                    invocation.getArgument(3, AttachmentScanStatus.class),
+                    invocation.getArgument(4, String.class),
+                    invocation.getArgument(2, String.class));
+            current.set(completed);
+            return completed;
+        });
+        when(metadata.findById(id)).thenAnswer(ignored -> Optional.of(current.get()));
+        return new Fixture(id, metadata, objects);
     }
 
     private static AttachmentMetadata metadata(
@@ -155,22 +152,10 @@ class DefaultAttachmentSecurityServiceTests {
     private record Fixture(
             UUID id,
             AttachmentMetadataCatalog metadata,
-            AttachmentObjectStorage objects,
-            byte[] bytes) {
+            AttachmentObjectStorage objects) {
 
         DefaultAttachmentSecurityService service(AttachmentMalwareScanner scanner) {
-            when(metadata.findById(id)).thenAnswer(invocation -> {
-                // Return the last completed state when requireClean is called after scan.
-                var captor = org.mockito.ArgumentCaptor.forClass(AttachmentScanStatus.class);
-                return Optional.empty();
-            });
-            return new DefaultAttachmentSecurityService(metadata, objects, new AttachmentFilePolicy(), scanner) {
-                @Override
-                public AttachmentMetadata requireClean(UUID attachmentId) {
-                    // Unit tests assert the guard separately through a catalog configured by the caller.
-                    return super.requireClean(attachmentId);
-                }
-            };
+            return new DefaultAttachmentSecurityService(metadata, objects, new AttachmentFilePolicy(), scanner);
         }
     }
 }
