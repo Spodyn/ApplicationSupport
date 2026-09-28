@@ -17,6 +17,7 @@ import com.unifiedsupportinbox.storage.AttachmentQuarantinedException;
 import com.unifiedsupportinbox.storage.AttachmentScanException;
 import com.unifiedsupportinbox.storage.AttachmentScanStatus;
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Optional;
@@ -44,10 +45,14 @@ class DefaultAttachmentSecurityServiceTests {
                 .getBytes(StandardCharsets.US_ASCII);
         Fixture fixture = fixture("eicar.txt", "text/plain", eicar);
         DefaultAttachmentSecurityService service = fixture.service(content -> {
-            String body = new String(content.readAllBytes(), StandardCharsets.US_ASCII);
-            return body.contains("EICAR-STANDARD-ANTIVIRUS-TEST-FILE")
-                    ? AttachmentMalwareScanner.ScanResult.INFECTED
-                    : AttachmentMalwareScanner.ScanResult.CLEAN;
+            try {
+                String body = new String(content.readAllBytes(), StandardCharsets.US_ASCII);
+                return body.contains("EICAR-STANDARD-ANTIVIRUS-TEST-FILE")
+                        ? AttachmentMalwareScanner.ScanResult.INFECTED
+                        : AttachmentMalwareScanner.ScanResult.CLEAN;
+            } catch (IOException failure) {
+                throw new AttachmentScanException(AttachmentScanException.Code.SCANNER_IO_ERROR, failure);
+            }
         });
 
         AttachmentMetadata result = service.scan(fixture.id());
