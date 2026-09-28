@@ -143,6 +143,71 @@ class JdbcAttachmentMetadataCatalog implements AttachmentMetadataCatalog {
         return updated.getFirst();
     }
 
+    @Override
+    @Transactional
+    public Optional<AttachmentMetadata> claimForScan(UUID attachmentId) {
+        if (attachmentId == null) throw new IllegalArgumentException("attachmentId must not be null.");
+        List<AttachmentMetadata> claimed = jdbc.query("""
+                UPDATE attachments
+                SET scan_status = 'SCANNING', scan_error = NULL
+                WHERE id = ? AND scan_status IN ('PENDING', 'ERROR')
+                RETURNING id, message_id, storage_key, original_filename, content_type,
+                          detected_content_type, size_bytes, sha256, scan_status,
+                          scan_error, provider_file_id, created_at
+                """, JdbcAttachmentMetadataCatalog::map, attachmentId);
+        if (claimed.size() > 1) {
+            throw new IllegalStateException("Attachment scan claim updated an unexpected number of rows.");
+        }
+        return claimed.stream().findFirst();
+    }
+
+    @Override
+    @Transactional
+    public AttachmentMetadata completeScan(
+            UUID attachmentId,
+            String normalizedFilename,
+            String detectedContentType,
+            AttachmentScanStatus status,
+            String scanError) {
+        if (attachmentId == null) throw new IllegalArgumentException("attachmentId must not be null.");
+        requireText(normalizedFilename, "normalizedFilename", 512);
+        optionalText(detectedContentType, "detectedContentType", 255);
+        if (status != AttachmentScanStatus.CLEAN
+                && status != AttachmentScanStatus.INFECTED
+                && status != AttachmentScanStatus.ERROR) {
+            throw new IllegalArgumentException("Completed scan status must be CLEAN, INFECTED or ERROR.");
+        }
+        if (status == AttachmentScanStatus.ERROR) {
+            requireText(scanError, "scanError", 1024);
+        } else if (scanError != null) {
+            throw new IllegalArgumentException("scanError is only valid for ERROR scan status.");
+        }
+
+        List<AttachmentMetadata> updated = jdbc.query("""
+                UPDATE attachments
+                SET original_filename = ?, detected_content_type = ?, scan_status = ?, scan_error = ?
+                WHERE id = ? AND scan_status = 'SCANNING'
+                RETURNING id, message_id, storage_key, original_filename, content_type,
+                          detected_content_type, size_bytes, sha256, scan_status,
+                          scan_error, provider_file_id, created_at
+                """,
+                ps -> {
+                    ps.setString(1, normalizedFilename);
+                    ps.setString(2, detectedContentType);
+                    ps.setString(3, status.name());
+                    ps.setString(4, scanError);
+                    ps.setObject(5, attachmentId);
+                },
+                JdbcAttachmentMetadataCatalog::map);
+        if (updated.isEmpty()) {
+            throw new IllegalStateException("Attachment is not actively claimed for scanning.");
+        }
+        if (updated.size() != 1) {
+            throw new IllegalStateException("Attachment scan completion updated an unexpected number of rows.");
+        }
+        return updated.getFirst();
+    }
+
     private static AttachmentMetadata map(ResultSet rs, int rowNum) throws SQLException {
         OffsetDateTime createdAt = rs.getObject("created_at", OffsetDateTime.class);
         return new AttachmentMetadata(
