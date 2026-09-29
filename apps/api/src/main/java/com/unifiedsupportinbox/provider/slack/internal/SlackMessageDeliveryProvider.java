@@ -6,11 +6,14 @@ import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.integration.ProviderIntegrationCredentialLookup;
 import com.unifiedsupportinbox.integration.ProviderIntegrationCredentialLookup.CredentialReference;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider;
+import com.unifiedsupportinbox.provider.ProviderAttachmentException;
 import com.unifiedsupportinbox.provider.internal.ConfiguredProviderSecretResolver;
+import com.unifiedsupportinbox.storage.AttachmentQuarantinedException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -23,28 +26,43 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
 
     static final String BOT_TOKEN_CREDENTIAL_FILE = "slack-bot-token";
 
-    private static final Set<String> DISCONNECT_API_ERRORS = Set.of(
-            "account_inactive",
-            "invalid_auth",
-            "missing_scope",
-            "no_permission",
-            "not_authed",
-            "team_access_not_granted",
-            "token_revoked");
+    private static final Set<String> DISCONNECT_ERROR_CODES = Set.of(
+            "SLACK_ACCOUNT_INACTIVE",
+            "SLACK_BOT_TOKEN_MISSING",
+            "SLACK_CREDENTIAL_REFERENCE_MISSING",
+            "SLACK_HTTP_401",
+            "SLACK_HTTP_403",
+            "SLACK_INVALID_AUTH",
+            "SLACK_MISSING_SCOPE",
+            "SLACK_NO_PERMISSION",
+            "SLACK_NOT_AUTHED",
+            "SLACK_TEAM_ACCESS_NOT_GRANTED",
+            "SLACK_TOKEN_REVOKED");
 
     private final ProviderIntegrationCredentialLookup integrations;
     private final ConfiguredProviderSecretResolver secrets;
     private final SlackWebApiClient slack;
+    private final SlackOutboundAttachmentService attachments;
     private final IntegrationHealthReporter integrationHealth;
 
     SlackMessageDeliveryProvider(
             ProviderIntegrationCredentialLookup integrations,
             ConfiguredProviderSecretResolver secrets,
+            SlackWebApiClient slack) {
+        this(integrations, secrets, slack, null, null);
+    }
+
+    @Autowired
+    SlackMessageDeliveryProvider(
+            ProviderIntegrationCredentialLookup integrations,
+            ConfiguredProviderSecretResolver secrets,
             SlackWebApiClient slack,
+            SlackOutboundAttachmentService attachments,
             IntegrationHealthReporter integrationHealth) {
         this.integrations = integrations;
         this.secrets = secrets;
         this.slack = slack;
+        this.attachments = attachments;
         this.integrationHealth = integrationHealth;
     }
 
@@ -64,15 +82,13 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
 
         CredentialReference integration = credentialFor(command);
         if (integration == null) {
-            integrationHealth.providerFailure(
-                    command.integrationId(), "SLACK_CREDENTIAL_REFERENCE_MISSING", FailureKind.DISCONNECTED);
+            reportFailure(command.integrationId(), "SLACK_CREDENTIAL_REFERENCE_MISSING");
             return DeliveryResult.permanentFailure("SLACK_CREDENTIAL_REFERENCE_MISSING");
         }
 
         byte[] token = secrets.resolve(integration.secretRef(), BOT_TOKEN_CREDENTIAL_FILE).orElse(null);
         if (token == null) {
-            integrationHealth.providerFailure(
-                    command.integrationId(), "SLACK_BOT_TOKEN_MISSING", FailureKind.DISCONNECTED);
+            reportFailure(command.integrationId(), "SLACK_BOT_TOKEN_MISSING");
             return DeliveryResult.permanentFailure("SLACK_BOT_TOKEN_MISSING");
         }
 
@@ -84,43 +100,65 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
                     command.body(),
                     command.bodyFormat(),
                     command.idempotencyKey());
-            DeliveryResult result = map(response);
-            reportHealth(command.integrationId(), response, result);
-            return result;
+            DeliveryResult messageResult = map(response);
+            if (messageResult.outcome() != MessageDeliveryProvider.Outcome.SENT
+                    && messageResult.outcome() != MessageDeliveryProvider.Outcome.DELIVERED) {
+                reportResult(command.integrationId(), messageResult);
+                return messageResult;
+            }
+            if (attachments != null) {
+                try {
+                    attachments.uploadAll(command);
+                } catch (ProviderAttachmentException attachmentFailure) {
+                    DeliveryResult result = attachmentFailure.retryable()
+                            ? DeliveryResult.transientFailure(
+                                    attachmentFailure.errorCode(), attachmentFailure.retryAfter())
+                            : DeliveryResult.permanentFailure(attachmentFailure.errorCode());
+                    reportResult(command.integrationId(), result);
+                    return result;
+                } catch (AttachmentQuarantinedException quarantined) {
+                    return DeliveryResult.permanentFailure("ATTACHMENT_NOT_CLEAN");
+                }
+            }
+            reportRecovered(command.integrationId());
+            return messageResult;
         } catch (RuntimeException failure) {
-            integrationHealth.providerFailure(
-                    command.integrationId(), "SLACK_REQUEST_FAILED", FailureKind.DEGRADED);
+            reportDegraded(command.integrationId(), "SLACK_REQUEST_FAILED");
             throw failure;
         } finally {
             Arrays.fill(token, (byte) 0);
         }
     }
 
-    private void reportHealth(
-            java.util.UUID integrationId,
-            SlackWebApiClient.PostMessageResponse response,
-            DeliveryResult result) {
-        if (result.outcome() == Outcome.SENT || result.outcome() == Outcome.DELIVERED) {
-            integrationHealth.providerRecovered(integrationId);
+    private void reportResult(java.util.UUID integrationId, DeliveryResult result) {
+        if (integrationHealth == null || result == null) return;
+        if (result.outcome() == MessageDeliveryProvider.Outcome.SENT
+                || result.outcome() == MessageDeliveryProvider.Outcome.DELIVERED) {
+            reportRecovered(integrationId);
             return;
         }
-        if (isDisconnected(response, result)) {
-            integrationHealth.providerFailure(integrationId, result.errorCode(), FailureKind.DISCONNECTED);
+        String code = result.errorCode();
+        if (code != null && DISCONNECT_ERROR_CODES.contains(code)) {
+            integrationHealth.providerFailure(integrationId, code, FailureKind.DISCONNECTED);
             return;
         }
-        if (result.outcome() == Outcome.TRANSIENT_FAILURE) {
-            integrationHealth.providerFailure(integrationId, result.errorCode(), FailureKind.DEGRADED);
+        if (result.outcome() == MessageDeliveryProvider.Outcome.TRANSIENT_FAILURE) {
+            reportDegraded(integrationId, code);
         }
     }
 
-    private static boolean isDisconnected(
-            SlackWebApiClient.PostMessageResponse response,
-            DeliveryResult result) {
-        if (response != null && (response.statusCode() == 401 || response.statusCode() == 403)) return true;
-        return response != null
-                && !response.ok()
-                && response.errorCode() != null
-                && DISCONNECT_API_ERRORS.contains(response.errorCode().toLowerCase(java.util.Locale.ROOT));
+    private void reportFailure(java.util.UUID integrationId, String code) {
+        if (integrationHealth == null) return;
+        integrationHealth.providerFailure(integrationId, code, FailureKind.DISCONNECTED);
+    }
+
+    private void reportDegraded(java.util.UUID integrationId, String code) {
+        if (integrationHealth == null) return;
+        integrationHealth.providerFailure(integrationId, code, FailureKind.DEGRADED);
+    }
+
+    private void reportRecovered(java.util.UUID integrationId) {
+        if (integrationHealth != null) integrationHealth.providerRecovered(integrationId);
     }
 
     private CredentialReference credentialFor(DeliveryCommand command) {
