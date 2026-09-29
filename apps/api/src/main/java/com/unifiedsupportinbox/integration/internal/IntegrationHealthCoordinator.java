@@ -46,6 +46,10 @@ class IntegrationHealthCoordinator implements IntegrationHealthReporter {
         Instant latest = current.lastEventAt() == null || receivedAt.isAfter(current.lastEventAt())
                 ? receivedAt
                 : current.lastEventAt();
+        if (current.health() == IntegrationHealth.UNAVAILABLE) {
+            integrations.updateHealth(integrationId, IntegrationHealth.UNAVAILABLE, latest, current.lastErrorCode());
+            return;
+        }
         integrations.updateHealth(integrationId, IntegrationHealth.HEALTHY, latest, null);
     }
 
