@@ -14,9 +14,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Objects;
 import java.util.UUID;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 @Service
+@ConditionalOnProperty(name = {
+        "usi.object-storage.access-key",
+        "usi.object-storage.secret-key"
+})
 class DefaultAttachmentSecurityService implements AttachmentSecurityService {
 
     private final AttachmentMetadataCatalog metadata;
