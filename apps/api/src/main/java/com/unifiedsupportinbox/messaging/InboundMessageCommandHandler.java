@@ -13,12 +13,18 @@ import java.util.UUID;
 @FunctionalInterface
 public interface InboundMessageCommandHandler {
 
-    void handle(Command command);
+    Result handle(Command command);
 
     enum Mutation {
         CREATE,
         EDIT,
         DELETE
+    }
+
+    record Result(
+            UUID messageId,
+            UUID caseId,
+            boolean created) {
     }
 
     record Command(
