@@ -6,7 +6,6 @@ import com.unifiedsupportinbox.InboundEventProcessor.ProcessingResult;
 import com.unifiedsupportinbox.InboundEventStore;
 import com.unifiedsupportinbox.InboundEventStore.InboundEvent;
 import com.unifiedsupportinbox.channel.ChannelIngestionPolicy;
-import com.unifiedsupportinbox.integration.IntegrationHealthReporter;
 import com.unifiedsupportinbox.provider.slack.internal.SlackInboundEventHandler.SlackInboundEvent;
 import java.time.Duration;
 import java.util.UUID;
@@ -28,7 +27,6 @@ class SlackInboundWorker {
     private final InboundEventOutcomeStore outcomes;
     private final ChannelIngestionPolicy channelPolicy;
     private final ObjectProvider<SlackInboundEventHandler> handlers;
-    private final IntegrationHealthReporter integrationHealth;
     private final ObjectMapper json;
     private final SlackInboundWorkerProperties properties;
 
@@ -38,7 +36,6 @@ class SlackInboundWorker {
             InboundEventOutcomeStore outcomes,
             ChannelIngestionPolicy channelPolicy,
             ObjectProvider<SlackInboundEventHandler> handlers,
-            IntegrationHealthReporter integrationHealth,
             ObjectMapper json,
             SlackInboundWorkerProperties properties) {
         this.processor = processor;
@@ -46,7 +43,6 @@ class SlackInboundWorker {
         this.outcomes = outcomes;
         this.channelPolicy = channelPolicy;
         this.handlers = handlers;
-        this.integrationHealth = integrationHealth;
         this.json = json;
         this.properties = properties;
     }
@@ -61,7 +57,6 @@ class SlackInboundWorker {
         try {
             ProcessingResult result = processor.process(eventId, "SLACK_PROCESSING_FAILED", inbound -> {
                 SlackInboundEvent decoded = decode(inbound);
-                integrationHealth.providerEventReceived(decoded.integrationId(), inbound.receivedAt());
                 if (isIgnoredChannel(decoded)) {
                     outcomes.markIgnoredByChannel(decoded.inboundEventId());
                     return;
