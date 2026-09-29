@@ -80,7 +80,8 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
                     command.bodyFormat(),
                     command.idempotencyKey());
             DeliveryResult messageResult = map(response);
-            if (messageResult.outcome() != Outcome.SENT && messageResult.outcome() != Outcome.DELIVERED) {
+            if (messageResult.outcome() != MessageDeliveryProvider.Outcome.SENT
+                    && messageResult.outcome() != MessageDeliveryProvider.Outcome.DELIVERED) {
                 return messageResult;
             }
             if (attachments != null) {
