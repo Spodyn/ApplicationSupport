@@ -19,8 +19,9 @@ class SlackInboundNormalizationConfiguration {
             ChannelIngestionPolicy channelPolicy,
             InboundEventOutcomeStore outcomes,
             SlackNormalizer normalizer,
-            ObjectProvider<InboundMessageCommandHandler> downstreamHandlers) {
+            ObjectProvider<InboundMessageCommandHandler> downstreamHandlers,
+            SlackInboundAttachmentService attachments) {
         return new SlackFilteringInboundEventHandler(
-                channelPolicy, outcomes, normalizer, downstreamHandlers);
+                channelPolicy, outcomes, normalizer, downstreamHandlers, attachments);
     }
 }
