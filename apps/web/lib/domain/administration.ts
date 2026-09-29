@@ -94,6 +94,7 @@ export interface ManagedIntegration {
   status: IntegrationStatus
   workspace: string
   lastEventAt?: string
+  lastErrorCode?: string
   health: IntegrationHealth
 }
 
