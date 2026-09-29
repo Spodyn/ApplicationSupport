@@ -8,16 +8,17 @@ import com.unifiedsupportinbox.messaging.MessageBodyFormat;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import tools.jackson.databind.JsonNode;
 
@@ -62,6 +63,7 @@ class SupportMessageController {
                 idempotencyKey,
                 request.body(),
                 request.bodyFormat(),
+                request.attachmentIds(),
                 correlationId);
         return ResponseEntity.status(result.status()).body(result.body());
     }
@@ -79,6 +81,7 @@ class SupportMessageController {
 
     record SendMessageRequest(
             @NotBlank String body,
-            MessageBodyFormat bodyFormat) {
+            MessageBodyFormat bodyFormat,
+            List<UUID> attachmentIds) {
     }
 }
