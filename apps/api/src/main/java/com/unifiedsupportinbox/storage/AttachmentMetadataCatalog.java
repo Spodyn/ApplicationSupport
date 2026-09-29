@@ -19,6 +19,17 @@ public interface AttachmentMetadataCatalog {
 
     AttachmentMetadata associateWithMessage(UUID attachmentId, UUID messageId);
 
+    /** Atomically claims a quarantined attachment for scanning. CLEAN/INFECTED/SCANNING rows are not claimable. */
+    Optional<AttachmentMetadata> claimForScan(UUID attachmentId);
+
+    /** Completes a previously claimed scan and persists normalized/detected metadata. */
+    AttachmentMetadata completeScan(
+            UUID attachmentId,
+            String normalizedFilename,
+            String detectedContentType,
+            AttachmentScanStatus status,
+            String scanError);
+
     record CreateAttachment(
             UUID messageId,
             String storageKey,
