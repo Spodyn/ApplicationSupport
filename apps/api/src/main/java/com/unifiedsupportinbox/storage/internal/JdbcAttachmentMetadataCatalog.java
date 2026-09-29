@@ -145,6 +145,39 @@ class JdbcAttachmentMetadataCatalog implements AttachmentMetadataCatalog {
 
     @Override
     @Transactional
+    public AttachmentMetadata recordProviderFileId(UUID attachmentId, String providerFileId) {
+        if (attachmentId == null) throw new IllegalArgumentException("attachmentId must not be null.");
+        requireText(providerFileId, "providerFileId", 255);
+        List<AttachmentMetadata> updated = jdbc.query("""
+                UPDATE attachments
+                SET provider_file_id = ?
+                WHERE id = ? AND (provider_file_id IS NULL OR provider_file_id = ?)
+                RETURNING id, message_id, storage_key, original_filename, content_type,
+                          detected_content_type, size_bytes, sha256, scan_status,
+                          scan_error, provider_file_id, created_at
+                """,
+                ps -> {
+                    ps.setString(1, providerFileId);
+                    ps.setObject(2, attachmentId);
+                    ps.setString(3, providerFileId);
+                },
+                JdbcAttachmentMetadataCatalog::map);
+        if (updated.isEmpty()) {
+            AttachmentMetadata current = findById(attachmentId)
+                    .orElseThrow(() -> new IllegalArgumentException("Unknown attachmentId."));
+            if (current.providerFileId() != null && !providerFileId.equals(current.providerFileId())) {
+                throw new IllegalStateException("Attachment already has a different provider file id.");
+            }
+            return current;
+        }
+        if (updated.size() != 1) {
+            throw new IllegalStateException("Provider file id update affected an unexpected number of rows.");
+        }
+        return updated.getFirst();
+    }
+
+    @Override
+    @Transactional
     public Optional<AttachmentMetadata> claimForScan(UUID attachmentId) {
         if (attachmentId == null) throw new IllegalArgumentException("attachmentId must not be null.");
         List<AttachmentMetadata> claimed = jdbc.query("""
