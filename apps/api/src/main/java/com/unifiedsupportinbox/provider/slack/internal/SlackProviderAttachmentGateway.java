@@ -16,6 +16,7 @@ import java.net.http.HttpTimeoutException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -28,6 +29,7 @@ class SlackProviderAttachmentGateway implements ProviderAttachmentGateway {
     private final SlackAttachmentApiClient slack;
     private final SafeProviderFileDownloader downloader;
 
+    @Autowired
     SlackProviderAttachmentGateway(
             ProviderIntegrationCredentialLookup integrations,
             ConfiguredProviderSecretResolver secrets,
