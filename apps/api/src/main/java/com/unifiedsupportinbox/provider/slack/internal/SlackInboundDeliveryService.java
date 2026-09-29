@@ -3,6 +3,8 @@ package com.unifiedsupportinbox.provider.slack.internal;
 import com.unifiedsupportinbox.InboundEventStore;
 import com.unifiedsupportinbox.InboundEventStore.InboundEvent;
 import com.unifiedsupportinbox.OutboxEventStore;
+import com.unifiedsupportinbox.integration.IntegrationHealthReporter;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -17,14 +19,17 @@ class SlackInboundDeliveryService {
     private final InboundEventStore inboundEvents;
     private final OutboxEventStore outbox;
     private final SlackInboundWorkerProperties properties;
+    private final IntegrationHealthReporter integrationHealth;
 
     SlackInboundDeliveryService(
             InboundEventStore inboundEvents,
             OutboxEventStore outbox,
-            SlackInboundWorkerProperties properties) {
+            SlackInboundWorkerProperties properties,
+            IntegrationHealthReporter integrationHealth) {
         this.inboundEvents = inboundEvents;
         this.outbox = outbox;
         this.properties = properties;
+        this.integrationHealth = integrationHealth;
     }
 
     /** Persist + reserve broker wake-up + append outbox are one PostgreSQL transaction. */
@@ -36,6 +41,7 @@ class SlackInboundDeliveryService {
             String correlationId) {
         InboundEvent event = inboundEvents.persistAuthenticated(
                 "SLACK", integrationId, externalEventId, payloadJson, correlationId);
+        integrationHealth.providerEventReceived(integrationId, Instant.now());
         if (inboundEvents.reserveWake(event.id())) {
             appendWake(event);
         }

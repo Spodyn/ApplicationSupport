@@ -7,6 +7,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.unifiedsupportinbox.integration.IntegrationHealthReporter;
+import com.unifiedsupportinbox.integration.IntegrationHealthReporter.FailureKind;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.integration.ProviderIntegrationCredentialLookup;
 import com.unifiedsupportinbox.integration.ProviderIntegrationCredentialLookup.CredentialReference;
@@ -26,6 +28,7 @@ class SlackMessageDeliveryProviderTests {
     private ProviderIntegrationCredentialLookup integrations;
     private ConfiguredProviderSecretResolver secrets;
     private SlackWebApiClient slack;
+    private IntegrationHealthReporter health;
     private SlackMessageDeliveryProvider provider;
     private UUID integrationId;
 
@@ -34,7 +37,8 @@ class SlackMessageDeliveryProviderTests {
         integrations = mock(ProviderIntegrationCredentialLookup.class);
         secrets = mock(ConfiguredProviderSecretResolver.class);
         slack = mock(SlackWebApiClient.class);
-        provider = new SlackMessageDeliveryProvider(integrations, secrets, slack);
+        health = mock(IntegrationHealthReporter.class);
+        provider = new SlackMessageDeliveryProvider(integrations, secrets, slack, null, health);
         integrationId = UUID.randomUUID();
         when(integrations.findForProvider(IntegrationProvider.SLACK)).thenReturn(List.of(
                 new CredentialReference(integrationId, "T123", "slack/workspace-one")));
@@ -59,10 +63,11 @@ class SlackMessageDeliveryProviderTests {
         verify(slack).postMessage(
                 any(byte[].class), eq("C123"), eq("1712000000.000001"), eq("Support reply"),
                 eq(MessageBodyFormat.PLAIN_TEXT), eq("stable-message-id"));
+        verify(health).providerRecovered(integrationId);
     }
 
     @Test
-    void propagatesSlackRateLimitAsTransientFailure() {
+    void propagatesSlackRateLimitAsTransientFailureAndDegradesHealth() {
         byte[] token = fixtureCredential();
         when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .thenReturn(Optional.of(token));
@@ -76,6 +81,38 @@ class SlackMessageDeliveryProviderTests {
         assertThat(result.errorCode()).isEqualTo("SLACK_RATE_LIMITED");
         assertThat(result.retryAfter()).isEqualTo(Duration.ofSeconds(9));
         assertThat(token).containsOnly((byte) 0);
+        verify(health).providerFailure(integrationId, "SLACK_RATE_LIMITED", FailureKind.DEGRADED);
+    }
+
+    @Test
+    void revokedTokenMarksIntegrationDisconnected() {
+        byte[] token = fixtureCredential();
+        when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
+                .thenReturn(Optional.of(token));
+        when(slack.postMessage(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new SlackWebApiClient.PostMessageResponse(
+                        200, false, null, "token_revoked", null));
+
+        MessageDeliveryProvider.DeliveryResult result = provider.deliver(command());
+
+        assertThat(result.outcome()).isEqualTo(MessageDeliveryProvider.Outcome.PERMANENT_FAILURE);
+        assertThat(result.errorCode()).isEqualTo("SLACK_TOKEN_REVOKED");
+        verify(health).providerFailure(integrationId, "SLACK_TOKEN_REVOKED", FailureKind.DISCONNECTED);
+    }
+
+    @Test
+    void missingScopeMarksIntegrationDisconnected() {
+        byte[] token = fixtureCredential();
+        when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
+                .thenReturn(Optional.of(token));
+        when(slack.postMessage(any(), any(), any(), any(), any(), any()))
+                .thenReturn(new SlackWebApiClient.PostMessageResponse(
+                        200, false, null, "missing_scope", null));
+
+        MessageDeliveryProvider.DeliveryResult result = provider.deliver(command());
+
+        assertThat(result.errorCode()).isEqualTo("SLACK_MISSING_SCOPE");
+        verify(health).providerFailure(integrationId, "SLACK_MISSING_SCOPE", FailureKind.DISCONNECTED);
     }
 
     @Test
@@ -111,7 +148,7 @@ class SlackMessageDeliveryProviderTests {
     }
 
     @Test
-    void missingBotTokenIsPermanentConfigurationFailure() {
+    void missingBotTokenIsPermanentConfigurationFailureAndDisconnectsHealth() {
         when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .thenReturn(Optional.empty());
 
@@ -119,6 +156,7 @@ class SlackMessageDeliveryProviderTests {
 
         assertThat(result.outcome()).isEqualTo(MessageDeliveryProvider.Outcome.PERMANENT_FAILURE);
         assertThat(result.errorCode()).isEqualTo("SLACK_BOT_TOKEN_MISSING");
+        verify(health).providerFailure(integrationId, "SLACK_BOT_TOKEN_MISSING", FailureKind.DISCONNECTED);
     }
 
     @Test

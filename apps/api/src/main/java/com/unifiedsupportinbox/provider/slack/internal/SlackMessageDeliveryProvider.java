@@ -1,5 +1,7 @@
 package com.unifiedsupportinbox.provider.slack.internal;
 
+import com.unifiedsupportinbox.integration.IntegrationHealthReporter;
+import com.unifiedsupportinbox.integration.IntegrationHealthReporter.FailureKind;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.integration.ProviderIntegrationCredentialLookup;
 import com.unifiedsupportinbox.integration.ProviderIntegrationCredentialLookup.CredentialReference;
@@ -10,6 +12,7 @@ import com.unifiedsupportinbox.storage.AttachmentQuarantinedException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -23,16 +26,30 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
 
     static final String BOT_TOKEN_CREDENTIAL_FILE = "slack-bot-token";
 
+    private static final Set<String> DISCONNECT_ERROR_CODES = Set.of(
+            "SLACK_ACCOUNT_INACTIVE",
+            "SLACK_BOT_TOKEN_MISSING",
+            "SLACK_CREDENTIAL_REFERENCE_MISSING",
+            "SLACK_HTTP_401",
+            "SLACK_HTTP_403",
+            "SLACK_INVALID_AUTH",
+            "SLACK_MISSING_SCOPE",
+            "SLACK_NO_PERMISSION",
+            "SLACK_NOT_AUTHED",
+            "SLACK_TEAM_ACCESS_NOT_GRANTED",
+            "SLACK_TOKEN_REVOKED");
+
     private final ProviderIntegrationCredentialLookup integrations;
     private final ConfiguredProviderSecretResolver secrets;
     private final SlackWebApiClient slack;
     private final SlackOutboundAttachmentService attachments;
+    private final IntegrationHealthReporter integrationHealth;
 
     SlackMessageDeliveryProvider(
             ProviderIntegrationCredentialLookup integrations,
             ConfiguredProviderSecretResolver secrets,
             SlackWebApiClient slack) {
-        this(integrations, secrets, slack, null);
+        this(integrations, secrets, slack, null, null);
     }
 
     @Autowired
@@ -40,11 +57,13 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
             ProviderIntegrationCredentialLookup integrations,
             ConfiguredProviderSecretResolver secrets,
             SlackWebApiClient slack,
-            SlackOutboundAttachmentService attachments) {
+            SlackOutboundAttachmentService attachments,
+            IntegrationHealthReporter integrationHealth) {
         this.integrations = integrations;
         this.secrets = secrets;
         this.slack = slack;
         this.attachments = attachments;
+        this.integrationHealth = integrationHealth;
     }
 
     @Override
@@ -63,11 +82,13 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
 
         CredentialReference integration = credentialFor(command);
         if (integration == null) {
+            reportFailure(command.integrationId(), "SLACK_CREDENTIAL_REFERENCE_MISSING");
             return DeliveryResult.permanentFailure("SLACK_CREDENTIAL_REFERENCE_MISSING");
         }
 
         byte[] token = secrets.resolve(integration.secretRef(), BOT_TOKEN_CREDENTIAL_FILE).orElse(null);
         if (token == null) {
+            reportFailure(command.integrationId(), "SLACK_BOT_TOKEN_MISSING");
             return DeliveryResult.permanentFailure("SLACK_BOT_TOKEN_MISSING");
         }
 
@@ -82,24 +103,62 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
             DeliveryResult messageResult = map(response);
             if (messageResult.outcome() != MessageDeliveryProvider.Outcome.SENT
                     && messageResult.outcome() != MessageDeliveryProvider.Outcome.DELIVERED) {
+                reportResult(command.integrationId(), messageResult);
                 return messageResult;
             }
             if (attachments != null) {
                 try {
                     attachments.uploadAll(command);
                 } catch (ProviderAttachmentException attachmentFailure) {
-                    return attachmentFailure.retryable()
+                    DeliveryResult result = attachmentFailure.retryable()
                             ? DeliveryResult.transientFailure(
                                     attachmentFailure.errorCode(), attachmentFailure.retryAfter())
                             : DeliveryResult.permanentFailure(attachmentFailure.errorCode());
+                    reportResult(command.integrationId(), result);
+                    return result;
                 } catch (AttachmentQuarantinedException quarantined) {
                     return DeliveryResult.permanentFailure("ATTACHMENT_NOT_CLEAN");
                 }
             }
+            reportRecovered(command.integrationId());
             return messageResult;
+        } catch (RuntimeException failure) {
+            reportDegraded(command.integrationId(), "SLACK_REQUEST_FAILED");
+            throw failure;
         } finally {
             Arrays.fill(token, (byte) 0);
         }
+    }
+
+    private void reportResult(java.util.UUID integrationId, DeliveryResult result) {
+        if (integrationHealth == null || result == null) return;
+        if (result.outcome() == MessageDeliveryProvider.Outcome.SENT
+                || result.outcome() == MessageDeliveryProvider.Outcome.DELIVERED) {
+            reportRecovered(integrationId);
+            return;
+        }
+        String code = result.errorCode();
+        if (code != null && DISCONNECT_ERROR_CODES.contains(code)) {
+            integrationHealth.providerFailure(integrationId, code, FailureKind.DISCONNECTED);
+            return;
+        }
+        if (result.outcome() == MessageDeliveryProvider.Outcome.TRANSIENT_FAILURE) {
+            reportDegraded(integrationId, code);
+        }
+    }
+
+    private void reportFailure(java.util.UUID integrationId, String code) {
+        if (integrationHealth == null) return;
+        integrationHealth.providerFailure(integrationId, code, FailureKind.DISCONNECTED);
+    }
+
+    private void reportDegraded(java.util.UUID integrationId, String code) {
+        if (integrationHealth == null) return;
+        integrationHealth.providerFailure(integrationId, code, FailureKind.DEGRADED);
+    }
+
+    private void reportRecovered(java.util.UUID integrationId) {
+        if (integrationHealth != null) integrationHealth.providerRecovered(integrationId);
     }
 
     private CredentialReference credentialFor(DeliveryCommand command) {
