@@ -4,10 +4,13 @@ import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.integration.ProviderIntegrationCredentialLookup;
 import com.unifiedsupportinbox.integration.ProviderIntegrationCredentialLookup.CredentialReference;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider;
+import com.unifiedsupportinbox.provider.ProviderAttachmentException;
 import com.unifiedsupportinbox.provider.internal.ConfiguredProviderSecretResolver;
+import com.unifiedsupportinbox.storage.AttachmentQuarantinedException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
@@ -23,14 +26,25 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
     private final ProviderIntegrationCredentialLookup integrations;
     private final ConfiguredProviderSecretResolver secrets;
     private final SlackWebApiClient slack;
+    private final SlackOutboundAttachmentService attachments;
 
     SlackMessageDeliveryProvider(
             ProviderIntegrationCredentialLookup integrations,
             ConfiguredProviderSecretResolver secrets,
             SlackWebApiClient slack) {
+        this(integrations, secrets, slack, null);
+    }
+
+    @Autowired
+    SlackMessageDeliveryProvider(
+            ProviderIntegrationCredentialLookup integrations,
+            ConfiguredProviderSecretResolver secrets,
+            SlackWebApiClient slack,
+            SlackOutboundAttachmentService attachments) {
         this.integrations = integrations;
         this.secrets = secrets;
         this.slack = slack;
+        this.attachments = attachments;
     }
 
     @Override
@@ -65,7 +79,23 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
                     command.body(),
                     command.bodyFormat(),
                     command.idempotencyKey());
-            return map(response);
+            DeliveryResult messageResult = map(response);
+            if (messageResult.outcome() != Outcome.SENT && messageResult.outcome() != Outcome.DELIVERED) {
+                return messageResult;
+            }
+            if (attachments != null) {
+                try {
+                    attachments.uploadAll(command);
+                } catch (ProviderAttachmentException attachmentFailure) {
+                    return attachmentFailure.retryable()
+                            ? DeliveryResult.transientFailure(
+                                    attachmentFailure.errorCode(), attachmentFailure.retryAfter())
+                            : DeliveryResult.permanentFailure(attachmentFailure.errorCode());
+                } catch (AttachmentQuarantinedException quarantined) {
+                    return DeliveryResult.permanentFailure("ATTACHMENT_NOT_CLEAN");
+                }
+            }
+            return messageResult;
         } finally {
             Arrays.fill(token, (byte) 0);
         }
