@@ -63,6 +63,7 @@ class SecureAttachmentService {
         String declaredContentType = normalizedContentType(file.getContentType());
         String storageKey = AttachmentStorageKey.generate();
         boolean objectWritten = false;
+        boolean metadataCreated = false;
         try (InputStream raw = file.getInputStream()) {
             byte[] prefix = raw.readNBytes(AttachmentFilePolicy.SNIFF_BYTES);
             String detectedContentType = policy.detectContentType(new ByteArrayInputStream(prefix));
@@ -87,17 +88,16 @@ class SecureAttachmentService {
                     AttachmentScanStatus.PENDING,
                     null,
                     null));
+            metadataCreated = true;
             return security.scan(created.id());
         } catch (AttachmentPolicyViolationException violation) {
-            if (objectWritten) safeDelete(storageKey);
+            if (objectWritten && !metadataCreated) safeDelete(storageKey);
             throw ApiProblemException.validationFailed("Attachment was rejected: " + violation.code().name() + ".");
         } catch (IOException io) {
-            if (objectWritten) safeDelete(storageKey);
+            if (objectWritten && !metadataCreated) safeDelete(storageKey);
             throw new IllegalStateException("Attachment upload could not be read.", io);
         } catch (RuntimeException failure) {
-            if (objectWritten && metadata.findByIdByStorageKeyNotAvailable(storageKey)) {
-                safeDelete(storageKey);
-            }
+            if (objectWritten && !metadataCreated) safeDelete(storageKey);
             throw failure;
         }
     }
