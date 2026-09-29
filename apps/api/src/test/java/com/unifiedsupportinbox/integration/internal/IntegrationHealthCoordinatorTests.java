@@ -47,6 +47,21 @@ class IntegrationHealthCoordinatorTests {
     }
 
     @Test
+    void authenticatedProviderEventDoesNotClearDisconnectedReauthorizationState() {
+        UUID id = UUID.randomUUID();
+        Instant previous = Instant.now().minusSeconds(30);
+        Instant received = Instant.now();
+        when(integrations.findById(id)).thenReturn(Optional.of(record(
+                id, IntegrationProvider.SLACK, IntegrationHealth.UNAVAILABLE, previous, "SLACK_TOKEN_REVOKED",
+                Instant.now().minusSeconds(120))));
+
+        coordinator.providerEventReceived(id, received);
+
+        verify(integrations).updateHealth(
+                id, IntegrationHealth.UNAVAILABLE, received, "SLACK_TOKEN_REVOKED");
+    }
+
+    @Test
     void revokedAuthorizationMarksUnavailableAndPublishesDisconnectTransition() {
         UUID id = UUID.randomUUID();
         IntegrationRecord current = record(
