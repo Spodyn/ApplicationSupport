@@ -52,6 +52,16 @@ class SupportSendMessageService {
             String idempotencyKey,
             String body,
             MessageBodyFormat bodyFormat,
+            String correlationId) {
+        return send(caseId, userId, idempotencyKey, body, bodyFormat, List.of(), correlationId);
+    }
+
+    IdempotencyResult send(
+            UUID caseId,
+            UUID userId,
+            String idempotencyKey,
+            String body,
+            MessageBodyFormat bodyFormat,
             List<UUID> attachmentIds,
             String correlationId) {
         Objects.requireNonNull(caseId, "caseId");
