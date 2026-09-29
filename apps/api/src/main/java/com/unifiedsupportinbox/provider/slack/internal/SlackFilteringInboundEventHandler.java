@@ -26,16 +26,19 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
     private final InboundEventOutcomeStore outcomes;
     private final SlackNormalizer normalizer;
     private final ObjectProvider<InboundMessageCommandHandler> downstreamHandlers;
+    private final SlackInboundAttachmentService attachments;
 
     SlackFilteringInboundEventHandler(
             ChannelIngestionPolicy channelPolicy,
             InboundEventOutcomeStore outcomes,
             SlackNormalizer normalizer,
-            ObjectProvider<InboundMessageCommandHandler> downstreamHandlers) {
+            ObjectProvider<InboundMessageCommandHandler> downstreamHandlers,
+            SlackInboundAttachmentService attachments) {
         this.channelPolicy = channelPolicy;
         this.outcomes = outcomes;
         this.normalizer = normalizer;
         this.downstreamHandlers = downstreamHandlers;
+        this.attachments = attachments;
     }
 
     @Override
@@ -80,7 +83,8 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
                     "INBOUND_MESSAGE_HANDLER_UNAVAILABLE",
                     "Provider-neutral inbound message handler is not available.");
         }
-        downstream.handle(((Accepted) result).command());
+        InboundMessageCommandHandler.Result persisted = downstream.handle(((Accepted) result).command());
+        attachments.ingest(inbound.integrationId(), persisted, event);
     }
 
     private static String requiredChannel(JsonNode event) {

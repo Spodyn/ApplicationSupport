@@ -63,6 +63,28 @@ class SlackNormalizerTests {
     }
 
     @Test
+    void normalizesFileShareMessageSoAttachmentsReachInboundPipeline() throws Exception {
+        SlackInboundEvent inbound = inbound("""
+                {
+                  "type":"event_callback",
+                  "event_id":"Ev-file",
+                  "event":{
+                    "type":"message","subtype":"file_share","channel":"C-support","user":"U-customer",
+                    "text":"","ts":"1720000002.000001","thread_ts":"1720000000.123456",
+                    "files":[{"id":"F123"}]
+                  }
+                }
+                """);
+
+        Command command = ((SlackNormalizer.Accepted) normalizer.normalize(inbound, channelId)).command();
+
+        assertThat(command.mutation()).isEqualTo(Mutation.CREATE);
+        assertThat(command.externalMessageId()).isEqualTo("1720000002.000001");
+        assertThat(command.externalThreadKey()).isEqualTo("1720000000.123456");
+        assertThat(command.body()).isEmpty();
+    }
+
+    @Test
     void rejectsBotSubtypeAndOwnAuthorizationUserToPreventReplyLoops() throws Exception {
         SlackInboundEvent botSubtype = inbound("""
                 {

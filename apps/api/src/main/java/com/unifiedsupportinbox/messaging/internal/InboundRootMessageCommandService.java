@@ -43,7 +43,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
 
     @Override
     @Transactional
-    public void handle(Command command) {
+    public Result handle(Command command) {
         Objects.requireNonNull(command, "command");
         validateInboundCreate(command);
 
@@ -90,10 +90,11 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                 (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class));
 
         if (insertedMessageIds.isEmpty()) {
-            if (!messageExists(caseResult.caseId(), command.externalMessageId())) {
+            UUID existingMessageId = existingMessageId(caseResult.caseId(), command.externalMessageId());
+            if (existingMessageId == null) {
                 throw new IllegalStateException("Inbound Message insert conflicted but no persisted Message exists.");
             }
-            return;
+            return new Result(existingMessageId, caseResult.caseId(), false);
         }
 
         if (insertedMessageIds.size() != 1) {
@@ -104,15 +105,19 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         messageCreated.publish(messageId, caseResult.caseId(), command.correlationId());
         unread.customerMessageCreated(caseResult.caseId(), messageId, command.correlationId());
         outOfOffice.customerMessageReceived(caseResult.caseId(), null, command.correlationId());
+        return new Result(messageId, caseResult.caseId(), true);
     }
 
-    private boolean messageExists(UUID caseId, String externalMessageId) {
-        Integer count = jdbc.queryForObject(
-                "SELECT count(*) FROM messages WHERE case_id = ? AND external_message_id = ?",
-                Integer.class,
+    private UUID existingMessageId(UUID caseId, String externalMessageId) {
+        List<UUID> ids = jdbc.query(
+                "SELECT id FROM messages WHERE case_id = ? AND external_message_id = ?",
+                (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class),
                 caseId,
                 externalMessageId);
-        return count != null && count == 1;
+        if (ids.size() > 1) {
+            throw new IllegalStateException("Multiple persisted Messages share the same provider identity.");
+        }
+        return ids.isEmpty() ? null : ids.getFirst();
     }
 
     private static void validateInboundCreate(Command command) {
