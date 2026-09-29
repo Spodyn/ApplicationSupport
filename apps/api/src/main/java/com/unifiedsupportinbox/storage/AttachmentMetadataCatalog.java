@@ -19,6 +19,9 @@ public interface AttachmentMetadataCatalog {
 
     AttachmentMetadata associateWithMessage(UUID attachmentId, UUID messageId);
 
+    /** Records the provider file identifier after a successful outbound upload. */
+    AttachmentMetadata recordProviderFileId(UUID attachmentId, String providerFileId);
+
     /** Atomically claims a quarantined attachment for scanning. CLEAN/INFECTED/SCANNING rows are not claimable. */
     Optional<AttachmentMetadata> claimForScan(UUID attachmentId);
 
