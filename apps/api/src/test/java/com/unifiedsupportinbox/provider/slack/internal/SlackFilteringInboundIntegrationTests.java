@@ -199,8 +199,9 @@ class SlackFilteringInboundIntegrationTests {
         private final List<Command> commands = new ArrayList<>();
 
         @Override
-        public void handle(Command command) {
+        public Result handle(Command command) {
             commands.add(command);
+            return new Result(UUID.randomUUID(), UUID.randomUUID(), true);
         }
 
         List<Command> commands() {

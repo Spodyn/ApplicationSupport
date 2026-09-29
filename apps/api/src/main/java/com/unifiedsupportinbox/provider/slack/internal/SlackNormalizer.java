@@ -27,6 +27,7 @@ class SlackNormalizer {
             return normalizeCreate(inbound, channelId, channel, event);
         }
         return switch (subtype) {
+            case "file_share" -> normalizeCreate(inbound, channelId, channel, event);
             case "bot_message" -> new Filtered(FilterReason.BOT_OR_APP_MESSAGE);
             case "message_changed" -> normalizeEdit(inbound, channelId, channel, event);
             case "message_deleted" -> normalizeDelete(inbound, channelId, channel, event);

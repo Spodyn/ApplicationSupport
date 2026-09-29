@@ -20,6 +20,9 @@ public interface AttachmentMetadataCatalog {
 
     AttachmentMetadata associateWithMessage(UUID attachmentId, UUID messageId);
 
+    /** Records the provider file identifier after a successful outbound upload. */
+    AttachmentMetadata recordProviderFileId(UUID attachmentId, String providerFileId);
+
     /** Associates an outgoing upload only when it belongs to the supplied Case and is still unassociated. */
     AttachmentMetadata associateWithMessageForCase(UUID attachmentId, UUID messageId, UUID caseId);
 
