@@ -7,6 +7,7 @@ import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.messaging.MessageBodyFormat;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,6 +28,7 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 class SupportSendMessageServiceIntegrationTests {
 
     private static final PostgreSQLContainer POSTGRES = TestInfrastructure.postgres();
+    private static final String SHA256 = "a".repeat(64);
 
     @Autowired
     private SupportSendMessageService service;
@@ -89,6 +91,104 @@ class SupportSendMessageServiceIntegrationTests {
                 "SELECT count(*) FROM outbox_events WHERE type = 'message.send_requested' AND aggregate_id = ?",
                 Integer.class,
                 messageId)).isEqualTo(1);
+    }
+
+    @Test
+    void cleanCaseScopedAttachmentsAreAssociatedWithOutgoingMessage() {
+        UUID ownerId = createUser("owner-attachments");
+        UUID caseId = createCase(ownerId, "VERIFICATION");
+        UUID first = createAttachment(caseId, "CLEAN", 1024);
+        UUID second = createAttachment(caseId, "CLEAN", 2048);
+
+        IdempotencyResult result = service.send(
+                caseId,
+                ownerId,
+                "send-with-files",
+                "Please see the files",
+                MessageBodyFormat.PLAIN_TEXT,
+                List.of(first, second),
+                "corr-files");
+
+        UUID messageId = UUID.fromString(result.body().get("messageId").asText());
+        assertThat(jdbc.queryForList(
+                "SELECT message_id FROM attachments WHERE id IN (?, ?) ORDER BY id", UUID.class, first, second))
+                .containsOnly(messageId);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM attachments WHERE message_id = ?", Integer.class, messageId))
+                .isEqualTo(2);
+    }
+
+    @Test
+    void crossCaseAttachmentIsRejectedWithoutCreatingMessage() {
+        UUID ownerId = createUser("owner-cross-case");
+        UUID caseId = createCase(ownerId, "VERIFICATION");
+        UUID otherCaseId = createCase(ownerId, "VERIFICATION");
+        UUID attachmentId = createAttachment(otherCaseId, "CLEAN", 1024);
+
+        assertThatThrownBy(() -> service.send(
+                caseId,
+                ownerId,
+                "cross-case-file",
+                "No cross case reuse",
+                null,
+                List.of(attachmentId),
+                "corr-cross-case"))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        problem -> assertThat(problem.status()).isEqualTo(HttpStatus.FORBIDDEN));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isZero();
+        assertThat(jdbc.queryForObject(
+                "SELECT message_id FROM attachments WHERE id = ?", UUID.class, attachmentId)).isNull();
+    }
+
+    @Test
+    void nonCleanAttachmentIsRejectedWithoutCreatingMessage() {
+        UUID ownerId = createUser("owner-pending-file");
+        UUID caseId = createCase(ownerId, "VERIFICATION");
+        UUID attachmentId = createAttachment(caseId, "PENDING", 1024);
+
+        assertThatThrownBy(() -> service.send(
+                caseId,
+                ownerId,
+                "pending-file",
+                "Still scanning",
+                null,
+                List.of(attachmentId),
+                "corr-pending"))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        problem -> assertThat(problem.status()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isZero();
+    }
+
+    @Test
+    void attachmentCountAndAggregateSizeLimitsAreEnforced() {
+        UUID ownerId = createUser("owner-file-limits");
+        UUID caseId = createCase(ownerId, "VERIFICATION");
+        List<UUID> eleven = java.util.stream.IntStream.range(0, 11)
+                .mapToObj(index -> createAttachment(caseId, "CLEAN", 1))
+                .toList();
+
+        assertThatThrownBy(() -> service.send(
+                caseId, ownerId, "too-many-files", "Too many", null, eleven, "corr-too-many"))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        problem -> assertThat(problem.status()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+        UUID largeOne = createAttachment(caseId, "CLEAN", 25L * 1024L * 1024L);
+        UUID largeTwo = createAttachment(caseId, "CLEAN", 25L * 1024L * 1024L);
+        UUID extra = createAttachment(caseId, "CLEAN", 1);
+        assertThatThrownBy(() -> service.send(
+                caseId,
+                ownerId,
+                "too-large-total",
+                "Too large",
+                null,
+                List.of(largeOne, largeTwo, extra),
+                "corr-too-large"))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        problem -> assertThat(problem.status()).isEqualTo(HttpStatus.BAD_REQUEST));
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isZero();
     }
 
     @Test
@@ -155,6 +255,23 @@ class SupportSendMessageServiceIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isZero();
         assertThat(jdbc.queryForObject(
                 "SELECT count(*) FROM outbox_events WHERE type = 'message.send_requested'", Integer.class)).isZero();
+    }
+
+    private UUID createAttachment(UUID caseId, String scanStatus, long sizeBytes) {
+        UUID id = UUID.randomUUID();
+        jdbc.update("""
+                INSERT INTO attachments (
+                    id, case_id, message_id, storage_key, original_filename, content_type,
+                    detected_content_type, size_bytes, sha256, scan_status, scan_error, provider_file_id
+                ) VALUES (?, ?, NULL, ?, 'file.txt', 'text/plain', 'text/plain', ?, ?, ?, NULL, NULL)
+                """,
+                id,
+                caseId,
+                "attachments/aa/" + id,
+                sizeBytes,
+                SHA256,
+                scanStatus);
+        return id;
     }
 
     private UUID createUser(String prefix) {
