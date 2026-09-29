@@ -5,6 +5,7 @@ import com.unifiedsupportinbox.storage.AttachmentMetadataCatalog;
 import com.unifiedsupportinbox.storage.AttachmentScanStatus;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -38,10 +39,10 @@ class JdbcAttachmentMetadataCatalog implements AttachmentMetadataCatalog {
         UUID id = UUID.randomUUID();
         List<AttachmentMetadata> inserted = jdbc.query("""
                 INSERT INTO attachments (
-                    id, message_id, storage_key, original_filename, content_type,
+                    id, message_id, case_id, storage_key, original_filename, content_type,
                     detected_content_type, size_bytes, sha256, scan_status,
                     scan_error, provider_file_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 RETURNING id, message_id, storage_key, original_filename, content_type,
                           detected_content_type, size_bytes, sha256, scan_status,
                           scan_error, provider_file_id, created_at
@@ -49,15 +50,16 @@ class JdbcAttachmentMetadataCatalog implements AttachmentMetadataCatalog {
                 ps -> {
                     ps.setObject(1, id);
                     ps.setObject(2, command.messageId());
-                    ps.setString(3, command.storageKey());
-                    ps.setString(4, command.originalFilename());
-                    ps.setString(5, command.contentType());
-                    ps.setString(6, command.detectedContentType());
-                    ps.setLong(7, command.sizeBytes());
-                    ps.setString(8, command.sha256());
-                    ps.setString(9, command.scanStatus().name());
-                    ps.setString(10, command.scanError());
-                    ps.setString(11, command.providerFileId());
+                    ps.setObject(3, command.caseId());
+                    ps.setString(4, command.storageKey());
+                    ps.setString(5, command.originalFilename());
+                    ps.setString(6, command.contentType());
+                    ps.setString(7, command.detectedContentType());
+                    ps.setLong(8, command.sizeBytes());
+                    ps.setString(9, command.sha256());
+                    ps.setString(10, command.scanStatus().name());
+                    ps.setString(11, command.scanError());
+                    ps.setString(12, command.providerFileId());
                 },
                 JdbcAttachmentMetadataCatalog::map);
         if (inserted.size() != 1) {
@@ -174,6 +176,89 @@ class JdbcAttachmentMetadataCatalog implements AttachmentMetadataCatalog {
             throw new IllegalStateException("Provider file id update affected an unexpected number of rows.");
         }
         return updated.getFirst();
+    }
+
+    @Override
+    @Transactional
+    public AttachmentMetadata associateWithMessageForCase(UUID attachmentId, UUID messageId, UUID caseId) {
+        if (attachmentId == null) throw new IllegalArgumentException("attachmentId must not be null.");
+        if (messageId == null) throw new IllegalArgumentException("messageId must not be null.");
+        if (caseId == null) throw new IllegalArgumentException("caseId must not be null.");
+        List<AttachmentMetadata> updated = jdbc.query("""
+                UPDATE attachments a
+                SET message_id = ?
+                WHERE a.id = ?
+                  AND a.case_id = ?
+                  AND a.message_id IS NULL
+                  AND a.scan_status = 'CLEAN'
+                  AND EXISTS (SELECT 1 FROM messages m WHERE m.id = ? AND m.case_id = ?)
+                RETURNING a.id, a.message_id, a.storage_key, a.original_filename, a.content_type,
+                          a.detected_content_type, a.size_bytes, a.sha256, a.scan_status,
+                          a.scan_error, a.provider_file_id, a.created_at
+                """, ps -> {
+                    ps.setObject(1, messageId);
+                    ps.setObject(2, attachmentId);
+                    ps.setObject(3, caseId);
+                    ps.setObject(4, messageId);
+                    ps.setObject(5, caseId);
+                }, JdbcAttachmentMetadataCatalog::map);
+        if (updated.isEmpty()) {
+            throw new IllegalStateException("Attachment is not a clean unassociated upload for this Case.");
+        }
+        if (updated.size() != 1) {
+            throw new IllegalStateException("Attachment association updated an unexpected number of rows.");
+        }
+        return updated.getFirst();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean belongsToCase(UUID attachmentId, UUID caseId) {
+        if (attachmentId == null || caseId == null) return false;
+        Boolean result = jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM attachments WHERE id = ? AND case_id = ?)",
+                Boolean.class, attachmentId, caseId);
+        return Boolean.TRUE.equals(result);
+    }
+
+    @Override
+    @Transactional
+    public Optional<AttachmentMetadata> deleteUnassociated(UUID attachmentId, UUID caseId) {
+        if (attachmentId == null || caseId == null) return Optional.empty();
+        List<AttachmentMetadata> deleted = jdbc.query("""
+                DELETE FROM attachments
+                WHERE id = ? AND case_id = ? AND message_id IS NULL
+                RETURNING id, message_id, storage_key, original_filename, content_type,
+                          detected_content_type, size_bytes, sha256, scan_status,
+                          scan_error, provider_file_id, created_at
+                """, JdbcAttachmentMetadataCatalog::map, attachmentId, caseId);
+        if (deleted.size() > 1) {
+            throw new IllegalStateException("Attachment deletion removed an unexpected number of rows.");
+        }
+        return deleted.stream().findFirst();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AttachmentMetadata> findUnassociatedCreatedBefore(Instant cutoff, int limit) {
+        if (cutoff == null) throw new IllegalArgumentException("cutoff must not be null.");
+        if (limit < 1 || limit > 1000) throw new IllegalArgumentException("limit must be between 1 and 1000.");
+        return jdbc.query("""
+                SELECT id, message_id, storage_key, original_filename, content_type,
+                       detected_content_type, size_bytes, sha256, scan_status,
+                       scan_error, provider_file_id, created_at
+                FROM attachments
+                WHERE message_id IS NULL AND created_at < ?
+                ORDER BY created_at ASC, id ASC
+                LIMIT ?
+                """, JdbcAttachmentMetadataCatalog::map, OffsetDateTime.ofInstant(cutoff, java.time.ZoneOffset.UTC), limit);
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteUnassociated(UUID attachmentId) {
+        if (attachmentId == null) return false;
+        return jdbc.update("DELETE FROM attachments WHERE id = ? AND message_id IS NULL", attachmentId) == 1;
     }
 
     @Override
