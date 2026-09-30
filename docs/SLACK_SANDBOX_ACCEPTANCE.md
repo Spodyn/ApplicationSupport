@@ -11,6 +11,20 @@ This runbook is the manual acceptance gate for the Slack integration. Automated 
 - Confirm the integration and mapped channel are enabled and healthy before starting.
 - Record only non-secret evidence: Case references, timestamps, Slack `ts` / `thread_ts`, correlation IDs, statuses, and screenshots with sensitive values hidden.
 
+## Minimum live text smoke test
+
+Use this shorter path as soon as the sandbox Slack app is connected. It proves the basic two-way text flow before running the complete acceptance sequence below.
+
+1. Start the local/staging USI stack according to the repository README and expose the web ingress (`localhost:3000`) through a public HTTPS tunnel.
+2. Configure the dedicated Slack development app exactly as described in `docs/SLACK_DEVELOPMENT.md`, with the Events API callback ending in `/api/v1/providers/slack/events`.
+3. Install/reinstall the app in the sandbox workspace, invite it to the test channel, and keep the Slack signing secret and bot token only in the external integration-secret directory referenced by `Integration.secret_ref`.
+4. Confirm the Slack Integration is `ENABLED`/healthy and the sandbox channel is mapped to the intended test Customer.
+5. Send one new root message from Slack. Pass condition: exactly one `NEW` Case appears in USI with that message.
+6. Claim the Case and send one support reply from USI. Pass condition: the reply appears once in the same Slack thread.
+7. Send one customer reply inside that Slack thread. Pass condition: it is appended to the same active Case and the Case becomes unread for the eligible test user.
+
+If steps 5–7 pass, the basic Slack text integration is live-testable. Continue with the full resolve/successor, attachment, and controlled retry/error paths before marking USI-138 complete.
+
 ## Acceptance flow
 
 ### 1. Root Slack message creates the first Case
