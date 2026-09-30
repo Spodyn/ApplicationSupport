@@ -126,6 +126,31 @@ class PersonalStateRealtimeRabbitListenerTests {
     }
 
     @Test
+    void dueSnoozeReminderIsSentOnlyToTheTargetUser() {
+        UUID caseId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        String until = "2026-09-30T09:30:00Z";
+
+        listener.onPersonalState(message(
+                PersonalStateRealtimeRabbitConfiguration.SNOOZE_DUE_ROUTING_KEY,
+                "corr-due",
+                """
+                {"caseId":"%s","userId":"%s","snoozedUntil":"%s","dueAt":"2026-09-30T09:30:01Z"}
+                """.formatted(caseId, userId, until)));
+
+        ArgumentCaptor<Object> envelopeCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(messaging).convertAndSendToUser(
+                eq(userId.toString()),
+                eq(PersonalStateRealtimeRabbitListener.DESTINATION),
+                envelopeCaptor.capture());
+        Map<?, ?> envelope = (Map<?, ?>) envelopeCaptor.getValue();
+        assertThat(envelope.get("eventType")).isEqualTo("case.snooze_due");
+        assertThat(envelope.get("payload")).isEqualTo(Map.of(
+                "caseId", caseId.toString(),
+                "snoozedUntil", until));
+    }
+
+    @Test
     void rejectsMalformedOrUnsupportedPersonalEventsWithoutRequeue() {
         assertThatThrownBy(() -> listener.onPersonalState(message(
                 "case.claimed", "corr", "{\"caseId\":\"" + UUID.randomUUID() + "\"}")))
@@ -142,6 +167,12 @@ class PersonalStateRealtimeRabbitListenerTests {
                 "corr",
                 "{\"caseId\":\"" + UUID.randomUUID() + "\"}")))
                 .isInstanceOf(AmqpRejectAndDontRequeueException.class);
+
+        assertThatThrownBy(() -> listener.onPersonalState(message(
+                PersonalStateRealtimeRabbitConfiguration.SNOOZE_DUE_ROUTING_KEY,
+                "corr",
+                "{\"caseId\":\"" + UUID.randomUUID() + "\"}")))
+                .isInstanceOf(AmqpRejectAndDontRequeueException.class);
     }
 
     @Test
@@ -154,6 +185,8 @@ class PersonalStateRealtimeRabbitListenerTests {
                 .isEqualTo("case.snoozed");
         assertThat(PersonalStateRealtimeRabbitListener.mapEventType("case.snooze_cancelled"))
                 .isEqualTo("case.snooze_cancelled");
+        assertThat(PersonalStateRealtimeRabbitListener.mapEventType("case.snooze_due"))
+                .isEqualTo("case.snooze_due");
         assertThatThrownBy(() -> PersonalStateRealtimeRabbitListener.mapEventType("case.updated"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
