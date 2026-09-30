@@ -84,6 +84,48 @@ class PersonalStateRealtimeRabbitListenerTests {
     }
 
     @Test
+    void snoozeChangeIsSentOnlyToTheSnoozingUser() {
+        UUID caseId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        String until = "2026-09-30T09:30:00Z";
+
+        listener.onPersonalState(message(
+                PersonalStateRealtimeRabbitConfiguration.SNOOZED_ROUTING_KEY,
+                "corr-snooze",
+                """
+                {"caseId":"%s","userId":"%s","snoozedUntil":"%s"}
+                """.formatted(caseId, userId, until)));
+
+        ArgumentCaptor<Object> envelopeCaptor = ArgumentCaptor.forClass(Object.class);
+        verify(messaging).convertAndSendToUser(
+                eq(userId.toString()),
+                eq(PersonalStateRealtimeRabbitListener.DESTINATION),
+                envelopeCaptor.capture());
+        Map<?, ?> envelope = (Map<?, ?>) envelopeCaptor.getValue();
+        assertThat(envelope.get("eventType")).isEqualTo("case.snoozed");
+        assertThat(envelope.get("payload")).isEqualTo(Map.of(
+                "caseId", caseId.toString(),
+                "snoozedUntil", until));
+    }
+
+    @Test
+    void snoozeCancelIsSentOnlyToTheUserNamedByServerSideEvent() {
+        UUID caseId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        listener.onPersonalState(message(
+                PersonalStateRealtimeRabbitConfiguration.SNOOZE_CANCELLED_ROUTING_KEY,
+                "corr-cancel",
+                """
+                {"caseId":"%s","userId":"%s"}
+                """.formatted(caseId, userId)));
+
+        verify(messaging).convertAndSendToUser(
+                eq(userId.toString()),
+                eq(PersonalStateRealtimeRabbitListener.DESTINATION),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void rejectsMalformedOrUnsupportedPersonalEventsWithoutRequeue() {
         assertThatThrownBy(() -> listener.onPersonalState(message(
                 "case.claimed", "corr", "{\"caseId\":\"" + UUID.randomUUID() + "\"}")))
@@ -91,6 +133,12 @@ class PersonalStateRealtimeRabbitListenerTests {
 
         assertThatThrownBy(() -> listener.onPersonalState(message(
                 PersonalStateRealtimeRabbitConfiguration.READ_POSITION_CHANGED_ROUTING_KEY,
+                "corr",
+                "{\"caseId\":\"" + UUID.randomUUID() + "\"}")))
+                .isInstanceOf(AmqpRejectAndDontRequeueException.class);
+
+        assertThatThrownBy(() -> listener.onPersonalState(message(
+                PersonalStateRealtimeRabbitConfiguration.SNOOZED_ROUTING_KEY,
                 "corr",
                 "{\"caseId\":\"" + UUID.randomUUID() + "\"}")))
                 .isInstanceOf(AmqpRejectAndDontRequeueException.class);
@@ -102,6 +150,10 @@ class PersonalStateRealtimeRabbitListenerTests {
                 .isEqualTo("case.unread_changed");
         assertThat(PersonalStateRealtimeRabbitListener.mapEventType("case.read_position_changed"))
                 .isEqualTo("case.read_position_changed");
+        assertThat(PersonalStateRealtimeRabbitListener.mapEventType("case.snoozed"))
+                .isEqualTo("case.snoozed");
+        assertThat(PersonalStateRealtimeRabbitListener.mapEventType("case.snooze_cancelled"))
+                .isEqualTo("case.snooze_cancelled");
         assertThatThrownBy(() -> PersonalStateRealtimeRabbitListener.mapEventType("case.updated"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
