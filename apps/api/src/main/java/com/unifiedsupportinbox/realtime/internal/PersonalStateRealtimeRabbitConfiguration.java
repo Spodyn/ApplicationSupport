@@ -37,6 +37,8 @@ class PersonalStateRealtimeRabbitConfiguration {
     static final String DEAD_LETTER_ROUTING_KEY = "realtime.personal-state.dead";
     static final String UNREAD_CHANGED_ROUTING_KEY = "case.unread_changed";
     static final String READ_POSITION_CHANGED_ROUTING_KEY = "case.read_position_changed";
+    static final String SNOOZED_ROUTING_KEY = "case.snoozed";
+    static final String SNOOZE_CANCELLED_ROUTING_KEY = "case.snooze_cancelled";
 
     @Bean
     Queue personalStateRealtimeQueue() {
@@ -68,6 +70,20 @@ class PersonalStateRealtimeRabbitConfiguration {
             @Qualifier("personalStateRealtimeQueue") Queue queue,
             TopicExchange usiOutboxExchange) {
         return BindingBuilder.bind(queue).to(usiOutboxExchange).with(READ_POSITION_CHANGED_ROUTING_KEY);
+    }
+
+    @Bean
+    Binding snoozedPersonalRealtimeBinding(
+            @Qualifier("personalStateRealtimeQueue") Queue queue,
+            TopicExchange usiOutboxExchange) {
+        return BindingBuilder.bind(queue).to(usiOutboxExchange).with(SNOOZED_ROUTING_KEY);
+    }
+
+    @Bean
+    Binding snoozeCancelledPersonalRealtimeBinding(
+            @Qualifier("personalStateRealtimeQueue") Queue queue,
+            TopicExchange usiOutboxExchange) {
+        return BindingBuilder.bind(queue).to(usiOutboxExchange).with(SNOOZE_CANCELLED_ROUTING_KEY);
     }
 
     @Bean
@@ -114,6 +130,7 @@ class PersonalStateRealtimeRabbitListener {
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("caseId", event.caseId().toString());
             if (event.messageId() != null) payload.put("messageId", event.messageId().toString());
+            if (event.snoozedUntil() != null) payload.put("snoozedUntil", event.snoozedUntil());
             envelope.put("payload", payload);
 
             try {
@@ -146,9 +163,8 @@ class PersonalStateRealtimeRabbitListener {
             }
             UUID caseId = requiredUuid(root, "caseId");
             UUID messageId = optionalUuid(root, "messageId");
-            UUID userId = PersonalStateRealtimeRabbitConfiguration.READ_POSITION_CHANGED_ROUTING_KEY.equals(sourceType)
-                    ? requiredUuid(root, "userId")
-                    : null;
+            UUID userId = requiresExplicitUser(sourceType) ? requiredUuid(root, "userId") : null;
+            String snoozedUntil = optionalText(root, "snoozedUntil");
 
             Object headerCorrelationId = message.getMessageProperties().getHeaders().get("usi_correlation_id");
             String correlationId = headerCorrelationId == null
@@ -160,7 +176,7 @@ class PersonalStateRealtimeRabbitListener {
             Instant occurredAt = message.getMessageProperties().getTimestamp() == null
                     ? Instant.now()
                     : message.getMessageProperties().getTimestamp().toInstant();
-            return new ParsedEvent(eventType, caseId, messageId, userId, occurredAt, correlationId);
+            return new ParsedEvent(eventType, caseId, messageId, userId, snoozedUntil, occurredAt, correlationId);
         } catch (JacksonException | IllegalArgumentException malformed) {
             throw new AmqpRejectAndDontRequeueException("Malformed personal-state realtime event.", malformed);
         }
@@ -171,8 +187,16 @@ class PersonalStateRealtimeRabbitListener {
             case PersonalStateRealtimeRabbitConfiguration.UNREAD_CHANGED_ROUTING_KEY -> "case.unread_changed";
             case PersonalStateRealtimeRabbitConfiguration.READ_POSITION_CHANGED_ROUTING_KEY ->
                     "case.read_position_changed";
+            case PersonalStateRealtimeRabbitConfiguration.SNOOZED_ROUTING_KEY -> "case.snoozed";
+            case PersonalStateRealtimeRabbitConfiguration.SNOOZE_CANCELLED_ROUTING_KEY -> "case.snooze_cancelled";
             default -> throw new IllegalArgumentException("Unsupported personal-state event type.");
         };
+    }
+
+    private static boolean requiresExplicitUser(String sourceType) {
+        return PersonalStateRealtimeRabbitConfiguration.READ_POSITION_CHANGED_ROUTING_KEY.equals(sourceType)
+                || PersonalStateRealtimeRabbitConfiguration.SNOOZED_ROUTING_KEY.equals(sourceType)
+                || PersonalStateRealtimeRabbitConfiguration.SNOOZE_CANCELLED_ROUTING_KEY.equals(sourceType);
     }
 
     private static UUID requiredUuid(JsonNode root, String field) {
@@ -186,11 +210,19 @@ class PersonalStateRealtimeRabbitListener {
         return value == null || value.isNull() ? null : UUID.fromString(value.stringValue());
     }
 
+    private static String optionalText(JsonNode root, String field) {
+        JsonNode value = root.get(field);
+        if (value == null || value.isNull()) return null;
+        if (!value.isTextual()) throw new IllegalArgumentException(field + " must be text.");
+        return value.stringValue();
+    }
+
     private record ParsedEvent(
             String eventType,
             UUID caseId,
             UUID messageId,
             UUID userId,
+            String snoozedUntil,
             Instant occurredAt,
             String correlationId) {
     }
