@@ -21,6 +21,7 @@ const PERSONAL_STATE_EVENTS = new Set([
   "case.read_position_changed",
   "case.snoozed",
   "case.snooze_cancelled",
+  "case.snooze_due",
 ])
 const CONVERSATION_EVENTS = new Set(["message.created", "message.delivery_updated"])
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
