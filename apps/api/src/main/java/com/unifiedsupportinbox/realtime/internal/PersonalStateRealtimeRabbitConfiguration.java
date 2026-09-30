@@ -39,6 +39,7 @@ class PersonalStateRealtimeRabbitConfiguration {
     static final String READ_POSITION_CHANGED_ROUTING_KEY = "case.read_position_changed";
     static final String SNOOZED_ROUTING_KEY = "case.snoozed";
     static final String SNOOZE_CANCELLED_ROUTING_KEY = "case.snooze_cancelled";
+    static final String SNOOZE_DUE_ROUTING_KEY = "case.snooze_due";
 
     @Bean
     Queue personalStateRealtimeQueue() {
@@ -84,6 +85,13 @@ class PersonalStateRealtimeRabbitConfiguration {
             @Qualifier("personalStateRealtimeQueue") Queue queue,
             TopicExchange usiOutboxExchange) {
         return BindingBuilder.bind(queue).to(usiOutboxExchange).with(SNOOZE_CANCELLED_ROUTING_KEY);
+    }
+
+    @Bean
+    Binding snoozeDuePersonalRealtimeBinding(
+            @Qualifier("personalStateRealtimeQueue") Queue queue,
+            TopicExchange usiOutboxExchange) {
+        return BindingBuilder.bind(queue).to(usiOutboxExchange).with(SNOOZE_DUE_ROUTING_KEY);
     }
 
     @Bean
@@ -189,6 +197,7 @@ class PersonalStateRealtimeRabbitListener {
                     "case.read_position_changed";
             case PersonalStateRealtimeRabbitConfiguration.SNOOZED_ROUTING_KEY -> "case.snoozed";
             case PersonalStateRealtimeRabbitConfiguration.SNOOZE_CANCELLED_ROUTING_KEY -> "case.snooze_cancelled";
+            case PersonalStateRealtimeRabbitConfiguration.SNOOZE_DUE_ROUTING_KEY -> "case.snooze_due";
             default -> throw new IllegalArgumentException("Unsupported personal-state event type.");
         };
     }
@@ -196,7 +205,8 @@ class PersonalStateRealtimeRabbitListener {
     private static boolean requiresExplicitUser(String sourceType) {
         return PersonalStateRealtimeRabbitConfiguration.READ_POSITION_CHANGED_ROUTING_KEY.equals(sourceType)
                 || PersonalStateRealtimeRabbitConfiguration.SNOOZED_ROUTING_KEY.equals(sourceType)
-                || PersonalStateRealtimeRabbitConfiguration.SNOOZE_CANCELLED_ROUTING_KEY.equals(sourceType);
+                || PersonalStateRealtimeRabbitConfiguration.SNOOZE_CANCELLED_ROUTING_KEY.equals(sourceType)
+                || PersonalStateRealtimeRabbitConfiguration.SNOOZE_DUE_ROUTING_KEY.equals(sourceType);
     }
 
     private static UUID requiredUuid(JsonNode root, String field) {
