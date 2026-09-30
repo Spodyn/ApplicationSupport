@@ -30,7 +30,9 @@ class CaseSnoozeDueWorker {
         this.json = json;
     }
 
-    @Scheduled(fixedDelayString = "${usi.readstate.snooze-worker.poll-interval:1s}")
+    @Scheduled(
+            fixedDelayString = "${usi.readstate.snooze-worker.poll-interval:1s}",
+            initialDelayString = "${usi.readstate.snooze-worker.initial-delay:1s}")
     @Transactional
     void wakeDue() {
         List<DueSnooze> due = jdbc.query("""
