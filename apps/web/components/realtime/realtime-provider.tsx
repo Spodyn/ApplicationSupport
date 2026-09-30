@@ -16,7 +16,12 @@ const CASE_LIFECYCLE_EVENTS = new Set([
   "case.claimed",
   "case.sla_changed",
 ])
-const PERSONAL_STATE_EVENTS = new Set(["case.unread_changed", "case.read_position_changed"])
+const PERSONAL_STATE_EVENTS = new Set([
+  "case.unread_changed",
+  "case.read_position_changed",
+  "case.snoozed",
+  "case.snooze_cancelled",
+])
 const CONVERSATION_EVENTS = new Set(["message.created", "message.delivery_updated"])
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
