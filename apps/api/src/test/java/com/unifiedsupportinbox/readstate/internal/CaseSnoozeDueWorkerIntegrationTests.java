@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.unifiedsupportinbox.UsiApiApplication;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
@@ -67,7 +68,7 @@ class CaseSnoozeDueWorkerIntegrationTests {
         jdbc.update("""
                 INSERT INTO case_snoozes (case_id, user_id, until_at, created_at)
                 VALUES (?, ?, ?, ?)
-                """, fixture.caseId(), userId, dueAt, createdAt);
+                """, fixture.caseId(), userId, Timestamp.from(dueAt), Timestamp.from(createdAt));
 
         worker.wakeDue();
         worker.wakeDue();
