@@ -15,6 +15,7 @@ export const WEB_ENV_EXAMPLE = resolve(ROOT, "apps", "web", ".env.example");
 export const API_DIR = resolve(ROOT, "apps", "api");
 export const ROOT_ENV = resolve(ROOT, ".env");
 export const ROOT_ENV_EXAMPLE = resolve(ROOT, ".env.example");
+export const LOCAL_SLACK_SEED_SQL = resolve(ROOT, "scripts", "sql", "local-slack-sandbox-seed.sql");
 
 const SERVICES = ["postgres", "rabbitmq", "minio"];
 const TRUSTED_WINDOWS_CMD_LAUNCHERS = new Set(["pnpm.cmd", "mvn.cmd", "mvnw.cmd"]);
@@ -186,13 +187,19 @@ function run(command, args, {
   cwd = ROOT,
   env = process.env,
   capture = false,
+  input,
 } = {}) {
   const invocation = processInvocation(command, args);
   const result = spawnSync(invocation.command, invocation.args, {
     cwd,
     env,
     encoding: "utf8",
-    stdio: capture ? ["ignore", "pipe", "pipe"] : "inherit",
+    stdio: [
+      input === undefined ? (capture ? "ignore" : "inherit") : "pipe",
+      capture ? "pipe" : "inherit",
+      capture ? "pipe" : "inherit",
+    ],
+    input,
     shell: false,
   });
 
@@ -318,6 +325,57 @@ function infraLogs(args) {
   );
 }
 
+export function assertLocalSlackPostgresLabels(labels) {
+  if (labels !== "usi-local|postgres") {
+    throw new Error("Slack sandbox seed requires the usi-local Compose postgres container");
+  }
+}
+
+export function localSlackPsqlArgs() {
+  return [
+    "exec", "-T", "postgres", "sh", "-c",
+    'exec psql -X -q -A -t -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"',
+  ];
+}
+
+export function parseLocalSlackSeedRecords(output) {
+  const expected = ["customer", "integration", "channel"];
+  const records = output.trim().split(/\r?\n/u).map((line) => line.split("|"));
+  for (let index = 0; index < expected.length; index += 1) {
+    const [entity, id, action] = records[index] ?? [];
+    if (entity !== expected[index]
+        || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu.test(id ?? "")
+        || !["created", "reused"].includes(action)) {
+      throw new Error("Local Slack sandbox seed did not return the expected record IDs");
+    }
+  }
+  if (records.length !== expected.length) {
+    throw new Error("Local Slack sandbox seed returned unexpected output");
+  }
+  return records;
+}
+
+function slackSeed() {
+  const containerId = dockerCompose(["ps", "--quiet", "postgres"], { capture: true });
+  if (!containerId) {
+    throw new Error("Local PostgreSQL is not running; run pnpm local:infra:up first");
+  }
+  const labels = run("docker", [
+    "inspect", "--format",
+    '{{index .Config.Labels "com.docker.compose.project"}}|{{index .Config.Labels "com.docker.compose.service"}}',
+    containerId,
+  ], { capture: true });
+  assertLocalSlackPostgresLabels(labels);
+
+  const sql = readFileSync(LOCAL_SLACK_SEED_SQL, "utf8");
+  const records = parseLocalSlackSeedRecords(
+    dockerCompose(localSlackPsqlArgs(), { capture: true, input: sql }),
+  );
+  for (const [entity, id, action] of records) {
+    console.log(`[local] Slack ${entity}: ${id} (${action})`);
+  }
+}
+
 function webDev() {
   ensureLocalFile(WEB_ENV, WEB_ENV_EXAMPLE);
   run("pnpm", ["--filter", "@usi/web", "dev"]);
@@ -373,6 +431,7 @@ Usage:
   node scripts/dev.mjs infra-logs [service...]
   node scripts/dev.mjs web
   node scripts/dev.mjs api
+  node scripts/dev.mjs slack-seed
   node scripts/dev.mjs health
   node scripts/dev.mjs check
 `;
@@ -399,6 +458,9 @@ export async function main(argv = process.argv.slice(2)) {
       break;
     case "api":
       apiDev();
+      break;
+    case "slack-seed":
+      slackSeed();
       break;
     case "health":
       await health();

@@ -8,13 +8,47 @@ import {
   API_DIR,
   INFRA_ENV,
   INFRA_ENV_EXAMPLE,
+  LOCAL_SLACK_SEED_SQL,
+  assertLocalSlackPostgresLabels,
   backendCommand,
   composeArgs,
   ensureLocalFile,
   parseEnvFile,
+  localSlackPsqlArgs,
+  parseLocalSlackSeedRecords,
   processInvocation,
   requireResetConfirmation,
 } from "../dev.mjs";
+
+test("Slack seed targets only local Compose postgres and reports three UUIDs", () => {
+  assert.doesNotThrow(() => assertLocalSlackPostgresLabels("usi-local|postgres"));
+  assert.throws(() => assertLocalSlackPostgresLabels("usi-staging|postgres"), /usi-local/u);
+  assert.throws(() => assertLocalSlackPostgresLabels("usi-local|rabbitmq"), /usi-local/u);
+  assert.deepEqual(localSlackPsqlArgs().slice(0, 3), ["exec", "-T", "postgres"]);
+
+  const ids = [
+    "0199f9f9-aaaa-7777-8888-000000000001",
+    "0199f9f9-aaaa-7777-8888-000000000002",
+    "0199f9f9-aaaa-7777-8888-000000000003",
+  ];
+  const output = `customer|${ids[0]}|created\nintegration|${ids[1]}|reused\nchannel|${ids[2]}|created`;
+  assert.deepEqual(parseLocalSlackSeedRecords(output), [
+    ["customer", ids[0], "created"],
+    ["integration", ids[1], "reused"],
+    ["channel", ids[2], "created"],
+  ]);
+  assert.throws(() => parseLocalSlackSeedRecords(output.replace("channel|", "secret|")));
+  assert.throws(() => parseLocalSlackSeedRecords(`${output}\nextra output`));
+
+  const sql = readFileSync(LOCAL_SLACK_SEED_SQL, "utf8");
+  for (const value of ["T0C6P3JEDU5", "C0C6N61M4HZ", "slack/development-workspace", "SLACK_ROOT_THREAD"]) {
+    assert.ok(sql.includes(value));
+  }
+  assert.ok(sql.includes("pg_advisory_xact_lock"));
+  assert.ok(sql.includes("FOR UPDATE"));
+  assert.ok(!sql.includes("xoxb-"));
+  assert.ok(!sql.includes("slack-signing-secret"));
+});
 
 test("ensureLocalFile copies template only when target is missing", () => {
   const root = mkdtempSync(join(tmpdir(), "usi-dev-script-"));

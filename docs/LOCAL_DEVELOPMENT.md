@@ -61,6 +61,7 @@ path in the ignored `.env` if another local directory is needed.
 | `pnpm local:infra:logs` | Follow local Compose logs (`-- postgres` etc. can narrow the service). |
 | `pnpm local:web` | Create `apps/web/.env.local` from its example if missing and run the frontend. |
 | `pnpm local:api` | Run the Spring Boot backend through the Maven wrapper when present. |
+| `pnpm local:slack:seed` | Create or reuse the local Slack sandbox customer, integration and monitored channel after Flyway has run. |
 | `pnpm local:health` | Require PostgreSQL, RabbitMQ and MinIO health; additionally require `/actuator/health` once `apps/api/pom.xml` exists. |
 | `pnpm local:check` | Validate Compose configuration, run the repository quality gate, and run backend `clean verify` when the backend exists. |
 
@@ -68,6 +69,17 @@ The reset command is intentionally named and constrained to
 `infra/compose.yaml`. Internally it requires an explicit
 `--confirm-local-data-loss` flag before issuing `docker compose down --volumes`.
 It has no code path for staging or production resources.
+
+To connect the `TestApp` Slack sandbox, start `pnpm local:api` once so Flyway
+creates the schema, then run `pnpm local:slack:seed`. The command writes only to
+the `usi-local` Compose PostgreSQL container. It creates or reuses customer
+`Slack Test Customer` (`slack-test`), Slack workspace `T0C6P3JEDU5` (`TestApp`),
+and monitored channel `C0C6N61M4HZ` (`new-channel`) with
+`SLACK_ROOT_THREAD`. Running it again reuses the same IDs. The integration stores
+only the relative locator `slack/development-workspace`; put the actual Slack
+credentials in the external secret files described in
+[`SLACK_DEVELOPMENT.md`](SLACK_DEVELOPMENT.md). The command does not read those
+files or contact Slack.
 
 To follow one service only:
 
