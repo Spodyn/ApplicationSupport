@@ -80,6 +80,10 @@ only the relative locator `slack/development-workspace`; put the actual Slack
 credentials in the external secret files described in
 [`SLACK_DEVELOPMENT.md`](SLACK_DEVELOPMENT.md). The command does not read those
 files or contact Slack.
+The `local` API profile enables the Slack inbound worker, so authenticated
+events for the seeded channel move from the durable inbox through RabbitMQ into
+Cases and Messages. Start the API before sending sandbox messages; already
+queued events are consumed when the API starts.
 
 To follow one service only:
 
