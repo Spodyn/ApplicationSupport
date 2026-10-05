@@ -55,10 +55,6 @@ only the scopes required by the current USI Slack feature set:
 | `channels:history` | Receive/read messages in public channels the app belongs to. |
 | `groups:read` | Discover/read metadata for private channels the app belongs to. |
 | `groups:history` | Receive/read messages in private channels the app belongs to. |
-| `im:read` | Read metadata for direct-message conversations with the app. |
-| `im:history` | Receive/read direct messages sent to the app. |
-| `mpim:read` | Read metadata for group direct-message conversations the app belongs to. |
-| `mpim:history` | Receive/read group direct messages for the app. |
 | `chat:write` | Send support replies as the Slack app/bot. |
 
 Do not add `chat:write.public`: monitored public channels must explicitly contain
@@ -83,16 +79,11 @@ families for the current integration:
 
 - `message.channels`
 - `message.groups`
-- `message.im`
-- `message.mpim`
 
 USI receives the normal message stream and later filters unsupported subtypes,
 message edits/deletes, ignored channels, and the app's own bot messages in the
 provider normalization layer. Do not subscribe to broad unrelated event families
 as a substitute for that filtering.
-
-If direct-message behavior is part of the sandbox test, enable the Slack app's
-Messages/App Home capability so a test user can message the bot.
 
 ## 4. Expose the callback through a public HTTPS tunnel
 
@@ -172,8 +163,6 @@ access. After installation:
 
 1. Invite the app to each public test channel that USI should monitor.
 2. Explicitly invite it to each private test channel.
-3. For DM testing, send a direct message to the app from a test user.
-4. For group-DM testing, add the app only to a dedicated sandbox conversation.
 
 Use test content only. Do not connect the development app to customer support
 channels.
@@ -228,8 +217,8 @@ Before considering the development Slack app ready for provider work, confirm:
 
 - the app belongs only to a test workspace;
 - bot scopes match the reviewed table above and no broad extra scopes remain;
-- bot event subscriptions are exactly `message.channels`, `message.groups`,
-  `message.im`, and `message.mpim` for the current feature set;
+- bot event subscriptions are exactly `message.channels` and `message.groups`
+  for the current v1 feature set; DM and group-DM subscriptions are outside scope;
 - the Request URL and `USI_SLACK_CALLBACK_URL` both end in
   `/api/v1/providers/slack/events` and use the same public HTTPS tunnel origin;
 - the tunnel forwards to local web port `3000`;
