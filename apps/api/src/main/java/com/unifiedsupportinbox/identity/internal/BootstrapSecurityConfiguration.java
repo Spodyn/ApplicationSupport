@@ -88,9 +88,11 @@ class BootstrapSecurityConfiguration {
                                 "/api/v1/auth/logout",
                                 "/api/v1/auth/me").authenticated()
                         .requestMatchers("/ws", "/ws/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/cases").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/cases/*/messages").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/cases/*", "/api/v1/cases/*/activity").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/cases/*/claim").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/cases/*/claim", "/api/v1/cases/*/messages").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/cases/*/read-position").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/v1/users/*/permissions")
                                 .hasAuthority(PermissionCatalog.MANAGE_USERS)
                         .requestMatchers("/api/v1/admin/customers/**").hasRole("ADMIN")

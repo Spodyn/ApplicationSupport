@@ -30,6 +30,7 @@
     "local:infra:logs": "node scripts/dev.mjs infra-logs",
     "local:web": "node scripts/dev.mjs web",
     "local:api": "node scripts/dev.mjs api",
+    "local:slack:seed": "node scripts/dev.mjs slack-seed",
     "local:health": "node scripts/dev.mjs health",
     "local:check": "node scripts/dev.mjs check",
     "check": "pnpm test:dev-tools && pnpm test:config && pnpm config:validate && pnpm security:secrets && pnpm openapi:check && pnpm --filter @usi/web check"

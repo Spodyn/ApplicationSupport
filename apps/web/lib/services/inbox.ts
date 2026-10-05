@@ -22,12 +22,19 @@ export interface InboxSendInput {
   body: string
   attachments?: { fileName: string; size: string }[]
   simulateFailure?: boolean
+  idempotencyKey?: string
+}
+
+export interface InboxPage<T> {
+  items: T[]
+  nextCursor?: string
 }
 
 export interface InboxRepository {
-  list(): Promise<InboxCase[]>
-  getMessages(caseId: string): Promise<InboxMessage[]>
-  markRead(caseId: string): Promise<void>
+  list(cursor?: string): Promise<InboxPage<InboxCase>>
+  getCase(caseId: string): Promise<InboxCase>
+  getMessages(caseId: string, before?: string): Promise<InboxPage<InboxMessage>>
+  markRead(caseId: string, messageId: string): Promise<void>
   markAllResolvedRead(): Promise<void>
   claim(caseId: string): Promise<void>
   ignore(caseId: string, input: InboxIgnoreInput): Promise<void>
@@ -143,11 +150,21 @@ export const mockInboxRepository: InboxRepository = {
         }
       },
     )
-    return wait(cases)
+    return wait({ items: cases })
+  },
+
+  async getCase(caseId) {
+    const { unreadForUserIds, snoozedUntilByUser, restrictedUserIds, ...item } = getRecord(caseId)
+    return wait({
+      ...item,
+      unreadForCurrentUser: unreadForUserIds.includes(mockCurrentUser.id),
+      snoozedForCurrentUserUntil: snoozedUntilByUser[mockCurrentUser.id],
+      currentUserRestrictedByIgnore: restrictedUserIds.includes(mockCurrentUser.id),
+    })
   },
 
   async getMessages(caseId) {
-    return wait([...(mockInboxMessages[caseId] ?? [])], 120)
+    return wait({ items: [...(mockInboxMessages[caseId] ?? [])] }, 120)
   },
 
   async markRead(caseId) {

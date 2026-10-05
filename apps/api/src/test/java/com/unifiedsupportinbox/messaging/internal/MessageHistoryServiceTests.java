@@ -35,7 +35,7 @@ class MessageHistoryServiceTests {
         MessageEntity newest = customerMessage(caseId, "2026-09-24T21:00:00Z");
         MessageEntity middle = customerMessage(caseId, "2026-09-24T20:00:00Z");
         MessageEntity oldest = customerMessage(caseId, "2026-09-24T19:00:00Z");
-        when(repository.findHistoryPage(any(), any(), any(), any(Pageable.class)))
+        when(repository.findLatestHistoryPage(any(), any(Pageable.class)))
                 .thenReturn(List.of(newest, middle, oldest));
         AttachmentMetadata attachment = new AttachmentMetadata(
                 UUID.randomUUID(),
@@ -68,7 +68,7 @@ class MessageHistoryServiceTests {
         assertThat(codec.decode(page.nextCursor(), "message-history:" + caseId).sortValue())
                 .isEqualTo(middle.providerCreatedAt());
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        org.mockito.Mockito.verify(repository).findHistoryPage(any(), any(), any(), pageable.capture());
+        org.mockito.Mockito.verify(repository).findLatestHistoryPage(any(), pageable.capture());
         assertThat(pageable.getValue().getPageSize()).isEqualTo(3);
     }
 

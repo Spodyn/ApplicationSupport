@@ -105,6 +105,47 @@ class SlackWebhookIntegrationTests {
     }
 
     @Test
+    void urlVerificationWithoutTeamIdUsesTheOnlyVerifiedIntegration() throws Exception {
+        createSlackIntegration(TEAM_ID);
+        writeSigningSecret();
+        String body = "{\"type\":\"url_verification\",\"challenge\":\"challenge-value\"}";
+        String timestamp = currentTimestamp();
+
+        HttpResponse<String> response = post(body, timestamp, sign(body, timestamp));
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(response.body()).contains("\"challenge\":\"challenge-value\"");
+        assertThat(countInboundEvents()).isZero();
+    }
+
+    @Test
+    void urlVerificationWithoutTeamIdRejectsAmbiguousVerifiedIntegrations() throws Exception {
+        createSlackIntegration(TEAM_ID);
+        createSlackIntegration("T-OTHER");
+        writeSigningSecret();
+        String body = "{\"type\":\"url_verification\",\"challenge\":\"challenge-value\"}";
+        String timestamp = currentTimestamp();
+
+        HttpResponse<String> response = post(body, timestamp, sign(body, timestamp));
+
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(countInboundEvents()).isZero();
+    }
+
+    @Test
+    void urlVerificationWithIncorrectTeamIdIsRejected() throws Exception {
+        createSlackIntegration(TEAM_ID);
+        writeSigningSecret();
+        String body = "{\"type\":\"url_verification\",\"team_id\":\"T-OTHER\",\"challenge\":\"challenge-value\"}";
+        String timestamp = currentTimestamp();
+
+        HttpResponse<String> response = post(body, timestamp, sign(body, timestamp));
+
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(countInboundEvents()).isZero();
+    }
+
+    @Test
     void eventCallbackIsDurableBeforeAckAndDuplicateDeliveryIsIdempotent() throws Exception {
         UUID integrationId = createSlackIntegration(TEAM_ID);
         writeSigningSecret();
@@ -166,6 +207,19 @@ class SlackWebhookIntegrationTests {
         createSlackIntegration("T-OTHER");
         writeSigningSecret();
         String body = eventBody("Ev-wrong-team");
+        String timestamp = currentTimestamp();
+
+        HttpResponse<String> response = post(body, timestamp, sign(body, timestamp));
+
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(countInboundEvents()).isZero();
+    }
+
+    @Test
+    void eventCallbackWithoutTeamIdStillRequiresWorkspaceIdentity() throws Exception {
+        createSlackIntegration(TEAM_ID);
+        writeSigningSecret();
+        String body = "{\"type\":\"event_callback\",\"event_id\":\"Ev-no-team\",\"event\":{\"type\":\"message\"}}";
         String timestamp = currentTimestamp();
 
         HttpResponse<String> response = post(body, timestamp, sign(body, timestamp));
