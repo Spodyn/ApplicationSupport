@@ -65,6 +65,36 @@ class EnvironmentContractTest(unittest.TestCase):
         self.assertTrue(web_environment)
         self.assertTrue(all(name.startswith("NEXT_PUBLIC_") for name in web_environment))
 
+    def test_local_bootstrap_supplies_required_spring_placeholders(self) -> None:
+        resources = REPOSITORY_ROOT / "apps/api/src/main/resources"
+        shared = (resources / "application.properties").read_text(encoding="utf-8")
+        local = (resources / "application-local.properties").read_text(encoding="utf-8")
+        example = parse_env_file(REPOSITORY_ROOT / ".env.example")
+
+        required_environment_names = set(
+            re.findall(r"\$\{([A-Z][A-Z0-9_]*)}", shared + local)
+        )
+        self.assertLessEqual(required_environment_names, set(example))
+        self.assertTrue(all(example[name] for name in required_environment_names))
+        self.assertEqual("local", example["SPRING_PROFILES_ACTIVE"])
+
+        # Both fallbacks live only in the local profile. user.home resolves to
+        # an absolute path on Windows and Unix without a POSIX-only /tmp value.
+        self.assertIn(
+            "usi.pagination.cursor-" + "signing-key" + "=${USI_PAGINATION_CURSOR_SIGNING_KEY:",
+            local,
+        )
+        self.assertIn(
+            "usi.integration-secrets.directory=${USI_INTEGRATION_SECRETS_DIRECTORY:${user.home}/",
+            local,
+        )
+        self.assertNotIn("USI_INTEGRATION_SECRETS_DIRECTORY", example)
+        self.assertIn("USI_PAGINATION_CURSOR_SIGNING_KEY", example)
+
+        without_optional_overrides = dict(example)
+        without_optional_overrides.pop("USI_PAGINATION_CURSOR_SIGNING_KEY")
+        validate_environment("api", without_optional_overrides, contract=self.contract)
+
     def test_all_four_explicit_profiles_have_a_valid_configuration_shape(self) -> None:
         local_environment = parse_env_file(REPOSITORY_ROOT / ".env.example")
         validate_environment("api", local_environment, contract=self.contract)

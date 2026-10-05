@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import {
   API_DIR,
+  INFRA_ENV,
+  INFRA_ENV_EXAMPLE,
   backendCommand,
   composeArgs,
   ensureLocalFile,
@@ -45,13 +47,13 @@ test("parseEnvFile handles comments, empty values and quoted values", () => {
   });
 });
 
-test("composeArgs uses checked-in example when local env is absent", () => {
+test("composeArgs uses the local env when present and the example otherwise", () => {
   const args = composeArgs({ createEnv: false });
   assert.equal(args[0], "compose");
   assert.ok(args.includes("--env-file"));
   assert.ok(args.includes("-f"));
-  assert.ok(args.some((value) => value.endsWith("infra/.env.example")));
-  assert.ok(args.some((value) => value.endsWith("infra/compose.yaml")));
+  assert.ok(args.includes(existsSync(INFRA_ENV) ? INFRA_ENV : INFRA_ENV_EXAMPLE));
+  assert.ok(args.some((value) => value.endsWith(join("infra", "compose.yaml"))));
 });
 
 test("destructive reset requires explicit local-data-loss confirmation", () => {

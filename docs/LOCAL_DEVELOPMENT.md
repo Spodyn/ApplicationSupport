@@ -44,6 +44,12 @@ pnpm local:health
 `local:api` creates the ignored root `.env` from `.env.example` only if needed,
 loads it into the backend process, and prefers the checked-in Maven wrapper. It
 fails with a clear message if the backend bootstrap has not been added yet.
+The example includes a disposable cursor signing key. The local profile also
+has a development-only fallback for older ignored `.env` files. The integration
+secret directory defaults to `.usi/integration-secrets/` below the current
+user's home directory on Windows, macOS, and Linux; create it only when testing
+provider credentials. Set `USI_INTEGRATION_SECRETS_DIRECTORY` to an absolute
+path in the ignored `.env` if another local directory is needed.
 
 ## Commands
 

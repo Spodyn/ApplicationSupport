@@ -55,6 +55,12 @@ The root example is server-only. The frontend example contains only the two
 reviewed, same-origin browser paths. The infra example configures loopback-only
 PostgreSQL, RabbitMQ, and MinIO. Keep the local API and infra dummy credentials
 aligned when starting both.
+The local profile uses disposable cursor signing material from the example (or
+a development-only fallback for older ignored `.env` files). Its provider
+integration-secret directory defaults to `.usi/integration-secrets/` below the
+current user's home directory, which is an absolute path on Windows and Unix.
+An optional `USI_INTEGRATION_SECRETS_DIRECTORY` override must be absolute.
+Staging and production-like profiles retain their required secret boundaries.
 
 Provider callbacks in local development may point to any suitable public HTTPS
 tunnel; the checked-in `.invalid` values are inert examples. No tunnel vendor
