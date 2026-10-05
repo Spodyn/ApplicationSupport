@@ -153,6 +153,29 @@ class SlackNormalizerTests {
     }
 
     @Test
+    void filtersDirectAndGroupDirectMessagesOutsideSlackV1Scope() throws Exception {
+        SlackInboundEvent directMessage = inbound("""
+                {
+                  "type":"event_callback",
+                  "event_id":"Ev-dm",
+                  "event":{"type":"message","channel":"D-support","channel_type":"im","user":"U1","text":"dm","ts":"1720000000.1"}
+                }
+                """);
+        SlackInboundEvent groupDirectMessage = inbound("""
+                {
+                  "type":"event_callback",
+                  "event_id":"Ev-mpim",
+                  "event":{"type":"message","channel":"G-support","channel_type":"mpim","user":"U1","text":"group dm","ts":"1720000000.2"}
+                }
+                """);
+
+        assertThat(((SlackNormalizer.Filtered) normalizer.normalize(directMessage, channelId)).reason())
+                .isEqualTo(SlackNormalizer.FilterReason.UNSUPPORTED_CONVERSATION);
+        assertThat(((SlackNormalizer.Filtered) normalizer.normalize(groupDirectMessage, channelId)).reason())
+                .isEqualTo(SlackNormalizer.FilterReason.UNSUPPORTED_CONVERSATION);
+    }
+
+    @Test
     void filtersUnsupportedMessageSubtypeAndNonMessageEvents() throws Exception {
         SlackInboundEvent unsupportedSubtype = inbound("""
                 {
