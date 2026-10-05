@@ -183,12 +183,18 @@
     "USI_SLACK_TEAM_ID": {
       "classification": "server-non-secret",
       "type": "optional-identifier",
-      "requiredProfiles": []
+      "requiredProfiles": [],
+      "allowedProfiles": [
+        "local"
+      ]
     },
     "USI_SLACK_CHANNEL_ID": {
       "classification": "server-non-secret",
       "type": "optional-identifier",
-      "requiredProfiles": []
+      "requiredProfiles": [],
+      "allowedProfiles": [
+        "local"
+      ]
     },
     "USI_TEAMS_CLIENT_ID": {
       "classification": "server-non-secret",
