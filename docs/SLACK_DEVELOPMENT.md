@@ -136,10 +136,12 @@ monitored channel in the local Compose PostgreSQL database. It stores the
 locator above, but neither reads nor stores the credential files. See
 [`LOCAL_DEVELOPMENT.md`](LOCAL_DEVELOPMENT.md) for the local seed workflow.
 
-The runtime then resolves the signing secret from:
+The runtime resolves the two Slack credentials from separate files below the
+same integration locator:
 
 ```text
 <USI_INTEGRATION_SECRETS_DIRECTORY>/<secret_ref>/slack-signing-secret
+<USI_INTEGRATION_SECRETS_DIRECTORY>/<secret_ref>/slack-bot-token
 ```
 
 The reference must be relative, may not contain traversal/backslash segments,
@@ -225,8 +227,8 @@ Before considering the development Slack app ready for provider work, confirm:
 - the tunnel forwards to local web port `3000`;
 - `.env` is ignored by Git and contains no Slack secrets;
 - the Integration row has a relative `secret_ref` and the corresponding
-  `slack-signing-secret` file exists only below the approved external
-  integration-secret root;
+  `slack-signing-secret` and `slack-bot-token` files exist only below the
+  approved external integration-secret root;
 - no token/signing-secret value is present in `git diff`, logs, Jira, screenshots
   committed to the repo, or browser-visible configuration;
 - Slack shows the Request URL as verified after the Integration/secret reference
