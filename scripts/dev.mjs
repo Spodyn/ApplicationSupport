@@ -331,11 +331,24 @@ export function assertLocalSlackPostgresLabels(labels) {
   }
 }
 
-export function localSlackPsqlArgs() {
+export function localSlackPsqlArgs(teamId, channelId) {
   return [
     "exec", "-T", "postgres", "sh", "-c",
-    'exec psql -X -q -A -t -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"',
+    'exec psql -X -q -A -t -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" '
+      + '-v slack_team_id="$1" -v slack_channel_id="$2"',
+    "sh", teamId, channelId,
   ];
+}
+
+export function localSlackSandboxIds(env) {
+  const teamId = env.USI_SLACK_TEAM_ID?.trim();
+  const channelId = env.USI_SLACK_CHANNEL_ID?.trim();
+  if (!/^T[A-Z0-9]+$/u.test(teamId ?? "") || !/^[CG][A-Z0-9]+$/u.test(channelId ?? "")) {
+    throw new Error(
+      "Set USI_SLACK_TEAM_ID and USI_SLACK_CHANNEL_ID in the ignored .env before seeding",
+    );
+  }
+  return { teamId, channelId };
 }
 
 export function parseLocalSlackSeedRecords(output) {
@@ -356,6 +369,11 @@ export function parseLocalSlackSeedRecords(output) {
 }
 
 function slackSeed() {
+  ensureLocalFile(ROOT_ENV, ROOT_ENV_EXAMPLE);
+  const { teamId, channelId } = localSlackSandboxIds({
+    ...process.env,
+    ...parseEnvFile(ROOT_ENV),
+  });
   const containerId = dockerCompose(["ps", "--quiet", "postgres"], { capture: true });
   if (!containerId) {
     throw new Error("Local PostgreSQL is not running; run pnpm local:infra:up first");
@@ -369,7 +387,7 @@ function slackSeed() {
 
   const sql = readFileSync(LOCAL_SLACK_SEED_SQL, "utf8");
   const records = parseLocalSlackSeedRecords(
-    dockerCompose(localSlackPsqlArgs(), { capture: true, input: sql }),
+    dockerCompose(localSlackPsqlArgs(teamId, channelId), { capture: true, input: sql }),
   );
   for (const [entity, id, action] of records) {
     console.log(`[local] Slack ${entity}: ${id} (${action})`);
