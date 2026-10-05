@@ -71,6 +71,7 @@ class SlackDevelopmentContractTest(unittest.TestCase):
         self.assertIn("Integration.secret_ref", guide)
         self.assertIn("USI_INTEGRATION_SECRETS_DIRECTORY", guide)
         self.assertIn("slack-signing-secret", guide)
+        self.assertIn("slack-bot-token", guide)
         self.assertIn("raw request body before JSON parsing", guide)
         self.assertNotIn("xoxb-", guide)
 
