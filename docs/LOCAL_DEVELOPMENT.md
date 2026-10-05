@@ -84,6 +84,9 @@ The `local` API profile enables the Slack inbound worker, so authenticated
 events for the seeded channel move from the durable inbox through RabbitMQ into
 Cases and Messages. Start the API before sending sandbox messages; already
 queued events are consumed when the API starts.
+The local profile also enables the message-delivery worker. It consumes queued
+support replies from `usi.messages.delivery` and redispatches due retries when
+the API is running. The bot token remains in the external secret directory.
 
 The `/cases` inbox reads persisted Cases and message history from the authenticated
 API. Sign in with a local `USER` or `ADMIN` account. A new Slack thread in the
