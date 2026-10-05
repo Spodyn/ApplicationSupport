@@ -94,7 +94,7 @@ The API receives URLs and identifiers through typed configuration properties:
 - PostgreSQL JDBC URL without embedded credentials;
 - RabbitMQ host, port, and vhost;
 - object-storage endpoint, region, and bucket names;
-- optional provider client/tenant identifiers and Telegram bot username;
+- optional provider client/tenant identifiers, local Slack sandbox workspace/channel IDs, and Telegram bot username;
 - an empty CORS origin list by default (same-origin, deny/off).
 
 Staging and production-like profiles require HTTPS for public and object-storage
