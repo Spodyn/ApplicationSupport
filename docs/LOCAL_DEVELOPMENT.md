@@ -85,6 +85,13 @@ events for the seeded channel move from the durable inbox through RabbitMQ into
 Cases and Messages. Start the API before sending sandbox messages; already
 queued events are consumed when the API starts.
 
+The `/cases` inbox reads persisted Cases and message history from the authenticated
+API. Sign in with a local `USER` or `ADMIN` account. A new Slack thread in the
+monitored channel appears as a Case; open it to read the inbound message, use
+**Przejmij** to claim it, then send a text reply from the composer. The reply
+uses the Case message API and the existing Slack outbound worker to post into
+the root thread. Unimplemented Case actions stay disabled in this view.
+
 To follow one service only:
 
 ```bash

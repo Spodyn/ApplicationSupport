@@ -1,6 +1,6 @@
 import { apiCurrentUserRepository } from "./api/auth-adapter"
 import { apiAdministrationSettingsRepository } from "./api/administration-settings-adapter"
-import { mockInboxRepository } from "./inbox"
+import { apiInboxRepository } from "./api/inbox-adapter"
 import { mockAdministrationUserRepository } from "./administration"
 import { mockAnalyticsRepository } from "./analytics"
 
@@ -11,7 +11,7 @@ import { mockAnalyticsRepository } from "./analytics"
  */
 export const serviceRegistry = {
   currentUser: apiCurrentUserRepository,
-  inbox: mockInboxRepository,
+  inbox: apiInboxRepository,
   administrationUsers: mockAdministrationUserRepository,
   administrationSettings: apiAdministrationSettingsRepository,
   analytics: mockAnalyticsRepository,

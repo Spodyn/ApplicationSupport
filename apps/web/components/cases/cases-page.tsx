@@ -4,21 +4,16 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import {
   AlarmClock,
   ArrowLeft,
-  Braces,
   Check,
-  CheckCheck,
   ChevronDown,
   Clock3,
-  ExternalLink,
-  Info,
-  Paperclip,
   Search,
   SlidersHorizontal,
-  Smile,
   UserRound,
 } from "lucide-react"
-import type { InboxCase } from "@/lib/domain/inbox"
-import { useInboxCases, useInboxMessages, useMarkInboxCaseRead } from "@/lib/services/queries"
+import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
+import { inboxStatusLabels } from "@/lib/domain/inbox"
+import { useCurrentUser, useInboxCase, useInboxCases, useInboxMessages, useInboxWorkflow, useMarkInboxCaseRead } from "@/lib/services/queries"
 import { cn } from "@/lib/utils"
 import { SafeExternalMessage } from "./safe-external-message"
 
@@ -26,107 +21,55 @@ type QuickFilter = "all" | "sla" | "mine"
 type AdvancedFilter = "mine" | "unassigned" | "sla" | "unread"
 
 type CasePresentation = {
+  id: string
   reference: string
   initials: string
   company: string
   subject: string
   time: string
-  platform: "Slack" | "E-mail" | "Telegram"
+  platform: "Slack" | "Teams" | "Telegram"
   source: string
   status: string
   statusTone: "red" | "blue" | "purple" | "green"
   sla: string
   slaTone: "red" | "amber" | "green"
-  unread?: boolean
-  breached?: boolean
-  mine?: boolean
+  unread: boolean
+  breached: boolean
+  mine: boolean
+  unassigned: boolean
 }
 
-const casePresentations: CasePresentation[] = [
-  {
-    reference: "ZG-2048",
-    initials: "NR",
-    company: "Northstar Retail",
-    subject: "Płatność pobrana dwukrotnie po odnowieniu subskrypcji",
-    time: "7 min temu",
-    platform: "Slack",
-    source: "#rozliczenia-premium",
-    status: "W trakcie weryfikacji",
-    statusTone: "red",
-    sla: "SLA +15 min",
-    slaTone: "red",
-    breached: true,
-  },
-  {
-    reference: "ZG-2051",
-    initials: "EC",
-    company: "Evergreen Cloud",
-    subject: "Kanał alarmowy nie synchronizuje wiadomości od godziny.",
-    time: "9 min temu",
-    platform: "Slack",
-    source: "#incydenty",
-    status: "Oczekuje na klienta",
-    statusTone: "blue",
-    sla: "18 min do SLA",
-    slaTone: "amber",
-  },
-  {
-    reference: "ZG-2044",
-    initials: "OL",
-    company: "Orbit Labs",
-    subject: "Brak możliwości logowania po aktywacji SSO",
-    time: "11 min temu",
-    platform: "E-mail",
-    source: "#helpdesk",
-    status: "Oczekuje na zespół",
-    statusTone: "purple",
-    sla: "42 min do SLA",
-    slaTone: "green",
-  },
-  {
-    reference: "ZG-2053",
-    initials: "NW",
-    company: "Nova Works",
-    subject: "Duplikaty powiadomień po ponownym połączeniu workspace.",
-    time: "13 min temu",
-    platform: "Telegram",
-    source: "@support",
-    status: "Nowy",
-    statusTone: "green",
-    sla: "SLA +30 min",
-    slaTone: "red",
-    unread: true,
-  },
-  {
-    reference: "ZG-2038",
-    initials: "VE",
-    company: "Vistala Energy",
-    subject: "Nie mogę pobrać faktury VAT",
-    time: "15 min temu",
-    platform: "E-mail",
-    source: "faktury@vistala.com",
-    status: "Oczekuje na klienta",
-    statusTone: "blue",
-    sla: "1 godz. do SLA",
-    slaTone: "green",
-    unread: true,
-  },
-  {
-    reference: "ZG-2029",
-    initials: "AC",
-    company: "Atlas Commerce",
-    subject: "Czy można zintegrować z API v2?",
-    time: "22 min temu",
-    platform: "Slack",
-    source: "#integracje",
-    status: "Nowy",
-    statusTone: "green",
-    sla: "SLA +2 godz.",
-    slaTone: "red",
-    unread: true,
-    mine: true,
-  },
-]
+function initials(name: string): string {
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0].toLocaleUpperCase("pl")).join("") || "?"
+}
+
+function timeLabel(value: string): string {
+  return new Intl.DateTimeFormat("pl-PL", { dateStyle: "short", timeStyle: "short" }).format(new Date(value))
+}
+
+function toPresentation(record: InboxCase, currentUserId?: string): CasePresentation {
+  const statusTone = record.status === "new" ? "green" : record.status === "verification" ? "purple" : record.status === "waiting_for_customer" ? "blue" : "red"
+  const slaTone = record.sla.state === "breached" ? "red" : record.sla.state === "at_risk" ? "amber" : "green"
+  const dueAt = record.sla.dueAt
+  return {
+    id: record.id,
+    reference: record.reference,
+    initials: initials(record.customer.name),
+    company: record.customer.name,
+    subject: record.subject,
+    time: timeLabel(record.updatedAt),
+    platform: record.platform === "slack" ? "Slack" : record.platform === "teams" ? "Teams" : "Telegram",
+    source: record.sourceChannel,
+    status: inboxStatusLabels[record.status],
+    statusTone,
+    sla: dueAt ? `SLA ${timeLabel(dueAt)}` : "SLA —",
+    slaTone,
+    unread: record.unreadForCurrentUser,
+    breached: record.sla.state === "breached",
+    mine: Boolean(currentUserId && record.owner?.id === currentUserId),
+    unassigned: !record.owner,
+  }
+}
 
 export function CasesPage({
   onlyMine = false,
@@ -136,41 +79,42 @@ export function CasesPage({
   initialCaseId?: string
 }) {
   const casesQuery = useInboxCases()
+  const currentUserQuery = useCurrentUser()
   const markRead = useMarkInboxCaseRead()
-  const [selectedReference, setSelectedReference] = useState(() => {
-    if (!initialCaseId) return casePresentations[0].reference
-    return casePresentations.find((item) => item.reference === initialCaseId)?.reference ?? casePresentations[0].reference
-  })
+  const [selectedCaseId, setSelectedCaseId] = useState<string | undefined>(initialCaseId)
   const [mobileConversationOpen, setMobileConversationOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(onlyMine ? "mine" : "all")
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilter[]>([])
-  const [locallyRead, setLocallyRead] = useState<string[]>([])
   const filterMenuRef = useRef<HTMLDivElement>(null)
+  const readAttempt = useRef<string | null>(null)
 
-  const recordsByReference = useMemo(
-    () => new Map((casesQuery.data ?? []).map((item) => [item.reference, item])),
-    [casesQuery.data],
-  )
+  const records = useMemo(() => casesQuery.data?.pages.flatMap((page) => page.items) ?? [], [casesQuery.data])
+  const selectedId = selectedCaseId ?? records[0]?.id
+  const selectedRecord = records.find((item) => item.id === selectedId)
+  const detailQuery = useInboxCase(selectedId)
+  const messagesQuery = useInboxMessages(selectedId)
+  const workflow = useInboxWorkflow(selectedId)
+  const presentations = useMemo(() => records.map((record) => toPresentation(record, currentUserQuery.data?.id)), [records, currentUserQuery.data?.id])
+  const selectedPresentation = presentations.find((item) => item.id === selectedId)
+    ?? (detailQuery.data ? toPresentation(detailQuery.data, currentUserQuery.data?.id) : undefined)
+  const messages = useMemo(() => messagesQuery.data?.pages.flatMap((page) => page.items).reverse() ?? [], [messagesQuery.data])
+  const latestMessageId = messagesQuery.data?.pages[0]?.items[0]?.id
 
   const visibleCases = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase("pl")
-    return casePresentations.filter((item) => {
-      if (normalized && !`${item.company} ${item.subject} ${item.source}`.toLocaleLowerCase("pl").includes(normalized)) return false
+    return presentations.filter((item) => {
+      if (normalized && !`${item.reference} ${item.company} ${item.subject} ${item.source}`.toLocaleLowerCase("pl").includes(normalized)) return false
       if (quickFilter === "sla" && !item.breached) return false
       if (quickFilter === "mine" && !item.mine) return false
       if (advancedFilters.includes("mine") && !item.mine) return false
-      if (advancedFilters.includes("sla") && item.slaTone !== "red") return false
-      if (advancedFilters.includes("unread") && (!item.unread || locallyRead.includes(item.reference))) return false
-      if (advancedFilters.includes("unassigned") && recordsByReference.get(item.reference)?.owner) return false
+      if (advancedFilters.includes("sla") && !item.breached) return false
+      if (advancedFilters.includes("unread") && !item.unread) return false
+      if (advancedFilters.includes("unassigned") && !item.unassigned) return false
       return true
     })
-  }, [advancedFilters, locallyRead, quickFilter, recordsByReference, search])
-
-  const selectedPresentation = casePresentations.find((item) => item.reference === selectedReference) ?? casePresentations[0]
-  const selectedRecord = recordsByReference.get(selectedPresentation.reference)
-  useInboxMessages(selectedRecord?.id)
+  }, [advancedFilters, quickFilter, presentations, search])
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -180,14 +124,19 @@ export function CasesPage({
     return () => document.removeEventListener("pointerdown", handlePointerDown)
   }, [])
 
-  const selectCase = (item: CasePresentation) => {
-    setSelectedReference(item.reference)
-    setMobileConversationOpen(true)
-    if (item.unread && !locallyRead.includes(item.reference)) {
-      setLocallyRead((current) => [...current, item.reference])
-      const record = recordsByReference.get(item.reference)
-      if (record) markRead.mutate(record.id)
+  useEffect(() => {
+    const key = selectedRecord && latestMessageId ? `${selectedRecord.id}:${latestMessageId}` : null
+    if (selectedRecord?.unreadForCurrentUser && latestMessageId && key !== readAttempt.current) {
+      readAttempt.current = key
+      markRead.mutate({ caseId: selectedRecord.id, messageId: latestMessageId }, {
+        onError: () => { readAttempt.current = null },
+      })
     }
+  }, [selectedRecord, latestMessageId, markRead])
+
+  const selectCase = (item: CasePresentation) => {
+    setSelectedCaseId(item.id)
+    setMobileConversationOpen(true)
   }
 
   const toggleAdvancedFilter = (filter: AdvancedFilter) => {
@@ -208,7 +157,7 @@ export function CasesPage({
         <div className="shrink-0 px-[34px] pb-[14px] pt-[23px]">
           <div className="flex h-8 items-center gap-2.5">
             <h1 className="text-[21px] font-bold tracking-[-0.02em]">Czaty</h1>
-            <span className="rounded-full bg-[#151f2e] px-2 py-0.5 text-[12px] font-semibold text-[#d8dce4]">18</span>
+            <span className="rounded-full bg-[#151f2e] px-2 py-0.5 text-[12px] font-semibold text-[#d8dce4]">{records.length}{casesQuery.hasNextPage ? "+" : ""}</span>
           </div>
 
           <div className="mt-[17px] flex gap-3">
@@ -278,25 +227,34 @@ export function CasesPage({
           ) : visibleCases.length ? (
             visibleCases.map((item) => (
               <CaseListItem
-                key={item.reference}
+                key={item.id}
                 item={item}
-                selected={item.reference === selectedReference}
-                unread={Boolean(item.unread && !locallyRead.includes(item.reference))}
+                selected={item.id === selectedId}
+                unread={item.unread}
                 onSelect={() => selectCase(item)}
               />
             ))
           ) : (
             <div className="mt-10 px-5 text-center text-sm text-[#9aa5b6]">Brak rozmów pasujących do filtrów.</div>
           )}
+          {casesQuery.hasNextPage && <button type="button" onClick={() => casesQuery.fetchNextPage()} disabled={casesQuery.isFetchingNextPage} className="mx-5 mb-4 text-sm text-violet-300">Wczytaj więcej</button>}
         </div>
       </section>
 
-      <ConversationPanel
+      {selectedPresentation ? <ConversationPanel
+        key={selectedId}
         item={selectedPresentation}
-        record={selectedRecord}
+        record={detailQuery.data}
+        detailError={detailQuery.isError}
+        messages={messages}
+        messagesLoading={messagesQuery.isLoading}
+        messagesError={messagesQuery.isError}
+        hasOlderMessages={Boolean(messagesQuery.hasNextPage)}
+        loadOlderMessages={() => messagesQuery.fetchNextPage()}
+        workflow={workflow}
         onBack={() => setMobileConversationOpen(false)}
         className={mobileConversationOpen ? "flex" : "hidden lg:flex"}
-      />
+      /> : <section className="hidden min-h-0 items-center justify-center bg-[#08111f] text-sm text-[#9aa5b6] lg:flex">{casesQuery.isError ? "Nie udało się wczytać rozmowy." : "Wybierz rozmowę"}</section>}
     </main>
   )
 }
@@ -404,242 +362,86 @@ function SlaBadge({ tone, children }: { tone: CasePresentation["slaTone"]; child
 }
 
 function ConversationPanel({
-  item,
-  record,
-  onBack,
-  className,
+  item, record, detailError, messages, messagesLoading, messagesError, hasOlderMessages, loadOlderMessages, workflow, onBack, className,
 }: {
   item: CasePresentation
   record?: InboxCase
+  detailError: boolean
+  messages: InboxMessage[]
+  messagesLoading: boolean
+  messagesError: boolean
+  hasOlderMessages: boolean
+  loadOlderMessages: () => void
+  workflow: ReturnType<typeof useInboxWorkflow>
   onBack: () => void
   className: string
 }) {
   const [draft, setDraft] = useState("")
-  const [alsoOnChannel, setAlsoOnChannel] = useState(false)
-  const [replyingTo, setReplyingTo] = useState<string | null>(null)
+  const [sendError, setSendError] = useState("")
+  const idempotencyKey = useRef<string | null>(null)
+  const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
+  const canReply = Boolean(record?.availableActions?.includes("REPLY"))
+
+  const send = async () => {
+    if (!canReply || !draft.trim() || workflow.sendMessage.isPending) return
+    idempotencyKey.current ??= crypto.randomUUID()
+    setSendError("")
+    try {
+      await workflow.sendMessage.mutateAsync({ body: draft, idempotencyKey: idempotencyKey.current })
+      setDraft("")
+      idempotencyKey.current = null
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : "Nie udało się wysłać odpowiedzi.")
+    }
+  }
 
   return (
     <section className={cn(className, "min-h-0 min-w-0 flex-col bg-[#08111f]")} aria-label={`Rozmowa ${item.company}`}>
       <header className="h-[148px] shrink-0 border-b border-white/[0.08] bg-[#08111f] px-[23px] py-[19px]">
         <div className="flex min-w-0 items-start gap-3">
-          <button type="button" onClick={onBack} className="mt-1 grid size-8 shrink-0 place-items-center rounded-lg text-[#9ba6b8] hover:bg-white/5 lg:hidden" aria-label="Wróć do listy">
-            <ArrowLeft className="size-5" />
-          </button>
+          <button type="button" onClick={onBack} className="mt-1 grid size-8 shrink-0 place-items-center rounded-lg text-[#9ba6b8] hover:bg-white/5 lg:hidden" aria-label="Wróć do listy"><ArrowLeft className="size-5" /></button>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h2 className="truncate text-[22px] font-bold leading-7 tracking-[-0.02em]">{item.source}</h2>
-              <ExternalLink className="size-[15px] text-[#8f9caf]" />
-            </div>
-            <div className="mt-[3px] flex items-center gap-2 text-[13px] text-[#d7dbe3]">
-              <span>{item.company}</span><span className="size-1 rounded-full bg-[#697587]" />
-              <a href="#source" onClick={(event) => event.preventDefault()} className="flex items-center gap-1.5 font-medium text-[#e0e3e9] hover:text-violet-300">
-                <SlackMark /> Slack <ExternalLink className="size-3.5 text-[#8592a5]" />
-              </a>
-            </div>
+            <div className="flex items-center gap-2"><h2 className="truncate text-[22px] font-bold leading-7 tracking-[-0.02em]">{item.source}</h2></div>
+            <div className="mt-[3px] flex items-center gap-2 text-[13px] text-[#d7dbe3]"><span>{item.company}</span><span className="size-1 rounded-full bg-[#697587]" /><span className="font-medium text-[#e0e3e9]">{item.platform === "Slack" && <SlackMark />} {item.platform} · {item.reference}</span></div>
           </div>
-          <HeaderActions />
-        </div>
-
-        <div className="mt-[15px] flex items-center gap-3 pl-0 lg:pl-0">
-          <button type="button" className="flex h-[45px] items-center gap-2 rounded-[9px] border border-violet-500/[0.12] bg-violet-950/35 px-3.5 text-[12px] font-medium text-violet-300 hover:bg-violet-950/50">
-            {item.status} <ChevronDown className="size-3.5" />
-          </button>
-          <button type="button" className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3.5 text-[12px] text-[#edf0f4] hover:border-white/[0.16]">
-            <Avatar initials="MW" size="sm" online />
-            Magdalena Wiśniewska <ChevronDown className="size-3.5 text-[#8995a7]" />
-          </button>
-          <div className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-red-500/[0.14] bg-red-950/20 px-3.5 text-[12px] font-semibold text-red-400">
-            <Clock3 className="size-[17px]" /> SLA +15 min <Info className="size-[15px]" />
+          <div className="hidden shrink-0 items-center gap-3 xl:flex">
+            <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:cursor-not-allowed disabled:opacity-50"><UserRound className="size-[17px]" />{workflow.claim.isPending ? "Przejmowanie…" : "Przejmij"}</button>
+            <button disabled title="Akcja niedostępna" className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75"><AlarmClock className="size-[17px]" /> Odłóż</button>
+            <button disabled title="Akcja niedostępna" className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75"><Check className="size-[17px]" /> Zamknij sprawę</button>
           </div>
         </div>
+        <div className="mt-[15px] flex items-center gap-3">
+          <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] text-[#edf0f4] disabled:cursor-not-allowed disabled:opacity-50 xl:hidden">Przejmij</button>
+          <div className="flex h-[45px] items-center gap-2 rounded-[9px] border border-violet-500/[0.12] bg-violet-950/35 px-3.5 text-[12px] font-medium text-violet-300">{item.status}</div>
+          <div className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3.5 text-[12px] text-[#edf0f4]"><Avatar initials={initials(record?.owner?.fullName ?? "?")} size="sm" />{record?.owner?.fullName ?? "Nieprzypisane"}</div>
+          <div className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3.5 text-[12px] font-semibold text-[#aeb8c8]"><Clock3 className="size-[17px]" />{item.sla}</div>
+        </div>
+        {detailError && <p role="alert" className="text-xs text-red-400">Nie udało się wczytać szczegółów case’u.</p>}
+        {workflow.claim.isError && <p role="alert" className="text-xs text-red-400">{workflow.claim.error.message}</p>}
       </header>
 
-      <ConversationBody
-        company={item.company}
-        isNorthstar={item.reference === "ZG-2048"}
-        replyingTo={replyingTo}
-        onReply={setReplyingTo}
-      />
-
-      <Composer
-        value={draft}
-        onChange={setDraft}
-        alsoOnChannel={alsoOnChannel}
-        onToggleChannel={() => setAlsoOnChannel((value) => !value)}
-        replyingTo={replyingTo}
-        onCancelReply={() => setReplyingTo(null)}
-        owner={record?.owner?.fullName}
-      />
-    </section>
-  )
-}
-
-function HeaderActions() {
-  return (
-    <div className="hidden shrink-0 items-center gap-3 xl:flex">
-      <button disabled className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75 disabled:cursor-not-allowed"><UserRound className="size-[17px]" /> Przejmij</button>
-      <button disabled className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75 disabled:cursor-not-allowed"><AlarmClock className="size-[17px]" /> Odłóż</button>
-      <div className="flex h-[42px] overflow-hidden rounded-[9px] border border-white/[0.07] bg-[#111a28] text-[#7f899a] opacity-75">
-        <button disabled className="flex items-center gap-2 px-4 text-[12px] disabled:cursor-not-allowed"><Check className="size-[17px]" /> Zamknij sprawę</button>
-        <button disabled className="grid w-11 place-items-center border-l border-white/[0.07] disabled:cursor-not-allowed" aria-label="Opcje zamknięcia"><ChevronDown className="size-[16px]" /></button>
-      </div>
-    </div>
-  )
-}
-
-function ConversationBody({
-  company,
-  isNorthstar,
-  replyingTo,
-  onReply,
-}: {
-  company: string
-  isNorthstar: boolean
-  replyingTo: string | null
-  onReply: (message: string) => void
-}) {
-  return (
-    <div className="cases-scrollbar min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_72%_34%,rgba(23,48,76,0.12),transparent_42%)] py-[22px] pl-[22px] pr-[12px]">
-      <div className="flex min-h-full flex-col">
-        <div className="flex items-start gap-[25px]">
-          <Avatar initials="JB" />
-          <div className="min-w-0 max-w-[570px]">
-            <MessageAuthor name="Joanna Borkowska" time="16:38" />
-            <p className="mt-2 whitespace-pre-wrap text-[14px] leading-[25px] text-[#edf0f4]">
-              <SafeExternalMessage content={isNorthstar
-                ? "W panelu widzę dwa obciążenia za ten sam okres rozliczeniowy.\nProblem udaje się odtworzyć na dwóch kontach. Wysyłam dodatkowe szczegóły."
-                : `Dzień dobry, potrzebujemy pomocy w sprawie zgłoszenia dla ${company}.\nProblem udało się odtworzyć na dwóch kontach.`} />
-            </p>
-            {isNorthstar && <CodeBlock />}
-          </div>
-          <ReplyButton onClick={() => onReply("W panelu widzę dwa obciążenia...")} active={replyingTo !== null} />
-          <span className="ml-auto pt-8 text-[12px] tabular-nums text-[#9aa5b7]">16:38</span>
-        </div>
-
-        <div className="mt-[-54px] flex justify-end">
-          <AgentBubble time="18:31">Zweryfikowałam dane po naszej stronie. Zespół techniczny<br className="hidden 2xl:block" /> analizuje teraz konkretny request.</AgentBubble>
-        </div>
-
-        <div className="my-[13px] flex justify-center">
-          <div className="rounded-[9px] border border-white/[0.055] bg-[#0d1725] px-3 py-2 text-[11px] text-[#9ba6b6]">
-            <span className="mr-3 tabular-nums">12:38</span> Status SLA został ponownie przeliczony: <span className="ml-1 font-semibold text-red-400">SLA +15 min</span>
-          </div>
-        </div>
-
-        <div className="flex items-start gap-[25px]">
-          <Avatar initials="JB" />
-          <div className="min-w-0">
-            <MessageAuthor name="Joanna Borkowska" time="14:05" />
-            <p className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]"><SafeExternalMessage content="W panelu widzę dwa obciążenia za ten sam okres rozliczeniowy." /></p>
-          </div>
-          <ReplyButton onClick={() => onReply("W panelu widzę dwa obciążenia...")} />
-        </div>
-
-        <div className="mt-[-1px] flex justify-end">
-          <AgentBubble time="14:05">Dziękuję za zgłoszenie. Sprawdzam konfigurację oraz<br className="hidden 2xl:block" /> ostatnie zdarzenie integracji.</AgentBubble>
-        </div>
-
-        <div className="mt-0 flex items-start gap-[25px]">
-          <Avatar initials="JB" />
-          <div className="min-w-0">
-            <MessageAuthor name="Joanna Borkowska" time="14:05" />
-            <p className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]"><SafeExternalMessage content="Dziękuję za aktualizację, czekam na dalsze informacje." /></p>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function MessageAuthor({ name, time }: { name: string; time: string }) {
-  return <div className="flex items-center gap-3"><span className="text-[13px] font-medium text-[#f4f4f5]">{name}</span><span className="text-[11px] tabular-nums text-[#8f9bad]">{time}</span></div>
-}
-
-function ReplyButton({ onClick, active = false }: { onClick: () => void; active?: boolean }) {
-  return <button type="button" onClick={onClick} className={cn("mt-7 grid size-[38px] shrink-0 place-items-center rounded-[9px] border border-white/[0.07] bg-[#0d1725] text-[#8996a8] hover:text-white", active && "text-violet-300")} aria-label="Odpowiedz na wiadomość"><ArrowLeft className="size-[17px] rotate-[25deg]" /></button>
-}
-
-function CodeBlock() {
-  return (
-    <div className="mt-3 w-[466px] max-w-full overflow-hidden rounded-[10px] border border-white/[0.09] bg-[#08121f] text-[12px]">
-      <div className="flex h-[39px] items-center justify-between border-b border-white/[0.08] px-4 font-medium"><span>JSON</span><button type="button" className="text-[11px] font-semibold hover:text-violet-300">Kopiuj</button></div>
-      <pre className="overflow-x-auto px-4 py-2 font-mono text-[12px] leading-[23px] text-[#d8dee9]">{`{
-  "requestId": `}<span className="text-cyan-400">&quot;ron_78_2949&quot;</span>{`,
-  "status": `}<span className="text-cyan-400">503</span>{`,
-  "message": `}<span className="text-fuchsia-400">&quot;upstream temporarily unavailable&quot;</span>{`
-}`}</pre>
-    </div>
-  )
-}
-
-function AgentBubble({ time, children }: { time: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-[18px]">
-      <span className="text-[12px] tabular-nums text-[#8f9bad]">{time}</span>
-      <div className="relative h-[98px] w-[416px] max-w-[46vw] overflow-hidden rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-[14px] py-[10px] shadow-[inset_0_1px_0_rgba(255,255,255,0.025)]">
-        <div className="flex items-center gap-2.5"><Avatar initials="MW" size="xs" /><span className="text-[11px] text-[#d7cfee]">Magdalena Wiśniewska</span><span className="ml-auto text-[10px] text-[#9e91bd]">{time}</span></div>
-        <p className="mt-1.5 text-[12px] leading-[20px] text-[#ded9eb]">{children}</p>
-        <div className="absolute bottom-2 right-3 text-violet-400"><CheckCheck className="size-[16px]" /></div>
-      </div>
-    </div>
-  )
-}
-
-function Composer({
-  value,
-  onChange,
-  alsoOnChannel,
-  onToggleChannel,
-  replyingTo,
-  onCancelReply,
-}: {
-  value: string
-  onChange: (value: string) => void
-  alsoOnChannel: boolean
-  onToggleChannel: () => void
-  replyingTo: string | null
-  onCancelReply: () => void
-  owner?: string
-}) {
-  return (
-    <div className="shrink-0 pb-[22px] pl-[18px] pr-[22px] pt-0">
-      <div className="min-h-[118px] rounded-[11px] border border-white/[0.085] bg-[linear-gradient(110deg,#0d1725,#0b1522)] shadow-[0_8px_30px_rgba(0,0,0,0.13)]">
-        {replyingTo && (
-          <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-2 text-[11px] text-[#9ba6b6]">
-            <ArrowLeft className="size-3.5 rotate-[25deg] text-violet-300" /><span className="truncate">Odpowiedź: {replyingTo}</span><button type="button" className="ml-auto hover:text-white" onClick={onCancelReply}>×</button>
+      <div className="cases-scrollbar min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_72%_34%,rgba(23,48,76,0.12),transparent_42%)] py-[22px] pl-[22px] pr-[12px]">
+        {hasOlderMessages && <button type="button" onClick={loadOlderMessages} className="mb-5 text-sm text-violet-300">Wczytaj starsze wiadomości</button>}
+        {messagesLoading ? <p className="text-sm text-[#9aa5b6]">Wczytywanie wiadomości…</p> : messagesError ? <p role="alert" className="text-sm text-red-400">Nie udało się wczytać wiadomości.</p> : messages.length === 0 ? <p className="text-sm text-[#9aa5b6]">Brak wiadomości.</p> : (
+          <div className="flex flex-col gap-6">
+            {messages.map((message) => message.kind === "support" ? (
+              <div key={message.id} className="flex justify-end"><div className="max-w-[570px] rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-4 py-3 text-sm text-[#ded9eb]"><div className="mb-2 text-xs text-[#cfc4e8]">{message.sender ?? "Wsparcie"} · {timeLabel(message.createdAt)}{message.deliveryStatus ? ` · ${message.deliveryStatus}` : ""}</div><p className="whitespace-pre-wrap"><SafeExternalMessage content={message.body} /></p></div></div>
+            ) : (
+              <div key={message.id} className="flex items-start gap-4"><Avatar initials={initials(message.sender ?? item.company)} /><div className="max-w-[570px]"><div className="text-xs text-[#aeb8c8]">{message.sender ?? item.company} · {timeLabel(message.createdAt)}</div><p className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]"><SafeExternalMessage content={message.body} /></p></div></div>
+            ))}
           </div>
         )}
-        <textarea
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder="Napisz odpowiedź..."
-          className="block h-[57px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa]"
-        />
-        <div className="flex h-[51px] items-center px-[19px]">
-          <div className="flex items-center gap-[21px] text-[#a7b1c0]">
-            <ComposerIcon label="Dodaj załącznik"><Paperclip /></ComposerIcon>
-            <ComposerIcon label="Dodaj emoji"><Smile /></ComposerIcon>
-            <ComposerIcon label="Wstaw kod"><Braces /></ComposerIcon>
-            <ComposerIcon label="Formatowanie"><span className="text-[15px] font-medium">Aa</span></ComposerIcon>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            <button type="button" onClick={onToggleChannel} className="hidden items-center gap-2 text-[12px] text-[#d6dae2] hover:text-white xl:flex">
-              <span className={cn("grid size-[18px] place-items-center rounded-[3px] border", alsoOnChannel ? "border-violet-500 bg-violet-600" : "border-[#738095]")}>{alsoOnChannel && <Check className="size-3" />}</span>
-              Wyślij również na kanał <Info className="ml-1 size-[15px] text-[#93a0b3]" />
-            </button>
-            <div className="flex h-[45px] overflow-hidden rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-white shadow-[0_4px_18px_rgba(91,33,232,0.25)]">
-              <button type="button" className="w-[117px] text-[12px] font-medium hover:bg-white/[0.06]">Wyślij</button>
-              <button type="button" className="grid w-[50px] place-items-center border-l border-white/20 hover:bg-white/[0.06]" aria-label="Opcje wysyłania"><ChevronDown className="size-[16px]" /></button>
-            </div>
-          </div>
-        </div>
       </div>
-    </div>
-  )
-}
 
-function ComposerIcon({ label, children }: { label: string; children: React.ReactNode }) {
-  return <button type="button" aria-label={label} title={label} className="grid size-5 place-items-center hover:text-white [&_svg]:size-[19px] [&_svg]:stroke-[1.7]">{children}</button>
+      <div className="shrink-0 pb-[22px] pl-[18px] pr-[22px]">
+        <div className="rounded-[11px] border border-white/[0.085] bg-[linear-gradient(110deg,#0d1725,#0b1522)]">
+          <textarea value={draft} onChange={(event) => { setDraft(event.target.value); idempotencyKey.current = null }} disabled={!canReply} placeholder={canReply ? "Napisz odpowiedź..." : "Przejmij case, aby odpowiedzieć"} aria-label="Treść odpowiedzi" className="block h-[80px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa] disabled:cursor-not-allowed" />
+          <div className="flex h-[51px] items-center justify-end px-[19px]"><button type="button" onClick={send} disabled={!canReply || !draft.trim() || workflow.sendMessage.isPending} className="h-[45px] w-[117px] rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{workflow.sendMessage.isPending ? "Wysyłanie…" : "Wyślij"}</button></div>
+        </div>
+        {sendError && <p role="alert" className="mt-2 text-sm text-red-400">{sendError}</p>}
+      </div>
+    </section>
+  )
 }
 
 function Avatar({ initials, size = "default", online = false }: { initials: string; size?: "default" | "sm" | "xs"; online?: boolean }) {
