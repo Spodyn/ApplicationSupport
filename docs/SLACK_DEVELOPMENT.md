@@ -128,12 +128,14 @@ integration may persist the non-secret locator:
 slack/development-workspace
 ```
 
-For the `TestApp` sandbox workspace and `new-channel`, start the local API once
-to apply Flyway migrations, then run `pnpm local:slack:seed` from the repository
+For an isolated sandbox workspace and monitored public/private channel, put the
+non-secret Slack workspace ID and channel ID in the ignored root `.env` as
+`USI_SLACK_TEAM_ID` and `USI_SLACK_CHANNEL_ID`. Start the local API once to
+apply Flyway migrations, then run `pnpm local:slack:seed` from the repository
 root. This idempotently creates or reuses the customer, Slack integration, and
 monitored channel in the local Compose PostgreSQL database. It stores the
 locator above, but neither reads nor stores the credential files. See
-[`LOCAL_DEVELOPMENT.md`](LOCAL_DEVELOPMENT.md) for the exact sandbox identifiers.
+[`LOCAL_DEVELOPMENT.md`](LOCAL_DEVELOPMENT.md) for the local seed workflow.
 
 The runtime then resolves the signing secret from:
 
