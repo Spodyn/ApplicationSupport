@@ -15,6 +15,7 @@ import {
   ensureLocalFile,
   parseEnvFile,
   localSlackPsqlArgs,
+  localSlackSandboxIds,
   parseLocalSlackSeedRecords,
   processInvocation,
   requireResetConfirmation,
@@ -24,7 +25,18 @@ test("Slack seed targets only local Compose postgres and reports three UUIDs", (
   assert.doesNotThrow(() => assertLocalSlackPostgresLabels("usi-local|postgres"));
   assert.throws(() => assertLocalSlackPostgresLabels("usi-staging|postgres"), /usi-local/u);
   assert.throws(() => assertLocalSlackPostgresLabels("usi-local|rabbitmq"), /usi-local/u);
-  assert.deepEqual(localSlackPsqlArgs().slice(0, 3), ["exec", "-T", "postgres"]);
+  const psqlArgs = localSlackPsqlArgs("TTEST123", "CTEST456");
+  assert.deepEqual(psqlArgs.slice(0, 3), ["exec", "-T", "postgres"]);
+  assert.deepEqual(psqlArgs.slice(-3), ["sh", "TTEST123", "CTEST456"]);
+  assert.deepEqual(localSlackSandboxIds({
+    USI_SLACK_TEAM_ID: "TTEST123",
+    USI_SLACK_CHANNEL_ID: "CTEST456",
+  }), { teamId: "TTEST123", channelId: "CTEST456" });
+  assert.throws(() => localSlackSandboxIds({ USI_SLACK_TEAM_ID: "", USI_SLACK_CHANNEL_ID: "" }));
+  assert.throws(() => localSlackSandboxIds({
+    USI_SLACK_TEAM_ID: "not-a-team",
+    USI_SLACK_CHANNEL_ID: "CTEST456",
+  }));
 
   const ids = [
     "0199f9f9-aaaa-7777-8888-000000000001",
@@ -41,9 +53,11 @@ test("Slack seed targets only local Compose postgres and reports three UUIDs", (
   assert.throws(() => parseLocalSlackSeedRecords(`${output}\nextra output`));
 
   const sql = readFileSync(LOCAL_SLACK_SEED_SQL, "utf8");
-  for (const value of ["T0C6P3JEDU5", "C0C6N61M4HZ", "slack/development-workspace", "SLACK_ROOT_THREAD"]) {
+  for (const value of ["slack_team_id", "slack_channel_id", "slack/development-workspace", "SLACK_ROOT_THREAD"]) {
     assert.ok(sql.includes(value));
   }
+  assert.ok(!sql.includes("T0C6P3JEDU5"));
+  assert.ok(!sql.includes("C0C6N61M4HZ"));
   assert.ok(sql.includes("pg_advisory_xact_lock"));
   assert.ok(sql.includes("FOR UPDATE"));
   assert.ok(!sql.includes("xoxb-"));
