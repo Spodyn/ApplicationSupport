@@ -121,6 +121,22 @@ class EnvironmentContractTest(unittest.TestCase):
                     )
                     validate_environment("api", environment, contract=self.contract)
 
+    def test_local_slack_sandbox_identifiers_are_local_only(self) -> None:
+        local_environment = parse_env_file(REPOSITORY_ROOT / ".env.example")
+        local_environment["USI_SLACK_TEAM_ID"] = "TTEST123"
+        local_environment["USI_SLACK_CHANNEL_ID"] = "CTEST456"
+        validate_environment("api", local_environment, contract=self.contract)
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = Path(temporary_directory)
+            staging_environment = valid_staging_environment(
+                root / "core", root / "integrations"
+            )
+            staging_environment["USI_SLACK_TEAM_ID"] = "TTEST123"
+            staging_environment["USI_SLACK_CHANNEL_ID"] = "CTEST456"
+            with self.assertRaises(EnvironmentValidationError):
+                validate_environment("api", staging_environment, contract=self.contract)
+
     def test_missing_required_value_fails_without_echoing_other_values(self) -> None:
         environment = parse_env_file(REPOSITORY_ROOT / ".env.example")
         required_names = {
