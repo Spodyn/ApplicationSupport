@@ -188,11 +188,14 @@ The implemented Slack HTTP boundary preserves these rules:
 4. Build the Slack v0 signature base string from the version, timestamp and
    exact raw body; verify HMAC-SHA256 with the signing secret using a
    timing-safe comparison.
-5. Resolve candidate signing secrets only from non-disabled Slack Integrations;
-   after signature verification, use the payload `team_id` to select the exact
-   configured workspace (or one not-yet-bound configuring integration).
-6. Handle `type=url_verification` only after request authenticity succeeds and
-   return the supplied challenge in the required response shape.
+5. Resolve candidate signing secrets only from non-disabled Slack Integrations.
+   For event callbacks, use the payload `team_id` to select the exact configured
+   workspace (or one not-yet-bound configuring integration).
+6. Handle `type=url_verification` only after request authenticity succeeds. Slack
+   can omit `team_id` from this request; in that case require exactly one
+   integration whose signing secret verified the request. If `team_id` is present,
+   apply the usual workspace selection. Return the supplied challenge in the
+   required response shape.
 7. For `event_callback`, require `event_id`, durably write/deduplicate the
    authenticated delivery in `inbound_events`, and only then return HTTP 2xx.
 8. Heavy normalization/case processing does not run in the request thread; later
