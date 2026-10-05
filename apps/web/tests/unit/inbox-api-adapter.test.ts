@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
-import type { ApiTransport, ApiTransportRequest } from "@usi/api-client/generated"
+import type { ApiTransport, ApiTransportRequest, CaseMessage } from "@usi/api-client/generated"
 import { ApiHttpError } from "@/lib/services/api/http-transport"
 import { InboxConflictError } from "@/lib/services/inbox"
-import { createApiInboxRepository, InboxActionUnavailableError } from "@/lib/services/api/inbox-adapter"
+import { createApiInboxRepository, InboxActionUnavailableError, mapCaseMessage } from "@/lib/services/api/inbox-adapter"
 
 const caseId = "01a10d64-2d99-7627-813d-2bad1ab9ab55"
 const messageId = "01a10d64-2da1-7555-a8cf-a27e56abbc35"
@@ -26,7 +26,7 @@ const detail = {
   claimedAt: null, waitingUntil: null, resolvedAt: null, ignoredAt: null, resolutionCategory: null,
   createdAt: listItem.createdAt, updatedAt: listItem.updatedAt, lastActivityAt: listItem.lastActivityAt, version: 1,
 }
-const message = {
+const message: CaseMessage = {
   id: messageId, kind: "CUSTOMER", body: "Hello from Slack - USI test 1", bodyFormat: "PLAIN_TEXT",
   inbound: true, deliveryStatus: null, providerCreatedAt: listItem.createdAt,
   createdAt: listItem.createdAt, editedAt: null, deletedAt: null, authorName: "Customer", attachments: [],
@@ -66,6 +66,17 @@ describe("real inbox API adapter", () => {
     expect(claim?.headers?.["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/)
     expect(send?.headers?.["Idempotency-Key"]).toBe("fixed-retry-key")
     expect(send?.body).toEqual({ body: "USI test reply", bodyFormat: "PLAIN_TEXT" })
+  })
+
+  it("maps persisted support messages as agent messages and accepts an empty real history page", async () => {
+    expect(mapCaseMessage({
+      ...message, kind: "SUPPORT", inbound: false, providerCreatedAt: null,
+      deliveryStatus: "SENT", authorName: "Agent", body: "Support reply",
+    })).toMatchObject({ kind: "support", sender: "Agent", body: "Support reply", deliveryStatus: "sent" })
+    const repository = createApiInboxRepository({
+      request: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
+    } as ApiTransport)
+    await expect(repository.getMessages(caseId)).resolves.toEqual({ items: [], nextCursor: undefined })
   })
 
   it("marks a rendered message read and rejects unavailable actions", async () => {

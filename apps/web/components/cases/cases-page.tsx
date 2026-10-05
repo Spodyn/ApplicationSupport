@@ -426,6 +426,8 @@ function ConversationPanel({
           <div className="flex flex-col gap-6">
             {messages.map((message) => message.kind === "support" ? (
               <div key={message.id} className="flex justify-end"><div className="max-w-[570px] rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-4 py-3 text-sm text-[#ded9eb]"><div className="mb-2 text-xs text-[#cfc4e8]">{message.sender ?? "Wsparcie"} · {timeLabel(message.createdAt)}{message.deliveryStatus ? ` · ${message.deliveryStatus}` : ""}</div><p className="whitespace-pre-wrap"><SafeExternalMessage content={message.body} /></p></div></div>
+            ) : message.kind === "system" ? (
+              <div key={message.id} className="text-center text-xs text-[#9ba6b6]">{timeLabel(message.createdAt)} · <SafeExternalMessage content={message.body} /></div>
             ) : (
               <div key={message.id} className="flex items-start gap-4"><Avatar initials={initials(message.sender ?? item.company)} /><div className="max-w-[570px]"><div className="text-xs text-[#aeb8c8]">{message.sender ?? item.company} · {timeLabel(message.createdAt)}</div><p className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]"><SafeExternalMessage content={message.body} /></p></div></div>
             ))}

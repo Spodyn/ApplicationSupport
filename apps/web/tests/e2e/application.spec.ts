@@ -197,6 +197,17 @@ test("real API Case opens, is marked read, claimed, and receives one persisted s
   expect(externalRequests).toEqual([])
 })
 
+test("empty persisted conversation renders an empty state", async ({ page }) => {
+  await preparePage(page)
+  await page.route("**/api/v1/cases/*/messages*", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [], nextCursor: null }) })
+  })
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await expect(conversation.getByText("Brak wiadomości.")).toBeVisible()
+  await expect(conversation.getByText("Nie udało się wczytać wiadomości.")).toHaveCount(0)
+})
+
 test("formularz dodawania użytkownika otwiera się i resetuje po anulowaniu", async ({ page }) => {
   const { externalRequests } = await preparePage(page)
   await page.goto("/users")

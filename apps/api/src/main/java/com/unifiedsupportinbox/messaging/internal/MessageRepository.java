@@ -18,12 +18,20 @@ interface MessageRepository extends JpaRepository<MessageEntity, UUID> {
     @Query(value = """
             SELECT * FROM messages
             WHERE case_id = :caseId
-              AND (:beforeAt IS NULL
-                   OR COALESCE(provider_created_at, created_at) < :beforeAt
+            ORDER BY COALESCE(provider_created_at, created_at) DESC, id DESC
+            """, nativeQuery = true)
+    List<MessageEntity> findLatestHistoryPage(
+            @Param("caseId") UUID caseId,
+            Pageable pageable);
+
+    @Query(value = """
+            SELECT * FROM messages
+            WHERE case_id = :caseId
+              AND (COALESCE(provider_created_at, created_at) < :beforeAt
                    OR (COALESCE(provider_created_at, created_at) = :beforeAt AND id < :beforeId))
             ORDER BY COALESCE(provider_created_at, created_at) DESC, id DESC
             """, nativeQuery = true)
-    List<MessageEntity> findHistoryPage(
+    List<MessageEntity> findBeforeHistoryPage(
             @Param("caseId") UUID caseId,
             @Param("beforeAt") Instant beforeAt,
             @Param("beforeId") UUID beforeId,
