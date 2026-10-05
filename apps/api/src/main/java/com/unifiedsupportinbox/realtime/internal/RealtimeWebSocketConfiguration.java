@@ -1,5 +1,6 @@
 package com.unifiedsupportinbox.realtime.internal;
 
+import com.unifiedsupportinbox.UsiConfigurationProperties;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
@@ -17,22 +18,32 @@ class RealtimeWebSocketConfiguration implements WebSocketMessageBrokerConfigurer
 
     private final RealtimeProperties properties;
     private final TaskScheduler taskScheduler;
-    private final AuthenticatedWebSocketHandshakeInterceptor handshakeInterceptor =
-            new AuthenticatedWebSocketHandshakeInterceptor();
+    private final UsiConfigurationProperties configuration;
+    private final AuthenticatedWebSocketHandshakeInterceptor handshakeInterceptor;
     private final AuthenticatedStompChannelInterceptor stompAuthentication =
             new AuthenticatedStompChannelInterceptor();
 
     RealtimeWebSocketConfiguration(
             RealtimeProperties properties,
+            UsiConfigurationProperties configuration,
             @Lazy @Qualifier("messageBrokerTaskScheduler") TaskScheduler taskScheduler) {
         this.properties = properties;
+        this.configuration = configuration;
         this.taskScheduler = taskScheduler;
+        this.handshakeInterceptor = new AuthenticatedWebSocketHandshakeInterceptor(
+                configuration.deployment().profile() == UsiConfigurationProperties.DeploymentProfile.LOCAL
+                        ? configuration.publicBaseUrl() : null);
     }
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint("/ws")
-                .addInterceptors(handshakeInterceptor);
+        var endpoint = registry.addEndpoint("/ws").addInterceptors(handshakeInterceptor);
+        if (configuration.deployment().profile() == UsiConfigurationProperties.DeploymentProfile.LOCAL) {
+            // Spring adds its own origin interceptor after ours. The sole extra
+            // allowed origin is the configured local web ingress, while our
+            // interceptor still requires a loopback proxy and matching headers.
+            endpoint.setAllowedOrigins(configuration.publicBaseUrl().toString());
+        }
     }
 
     @Override

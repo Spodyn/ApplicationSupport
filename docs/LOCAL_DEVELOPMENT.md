@@ -105,7 +105,13 @@ CORS.
 
 During `next dev`, Next.js proxies both `/api/:path*` and `/ws/:path*` to the
 local Spring Boot process. The default target is `http://127.0.0.1:8080`. A
-developer who intentionally runs the API on another local port may set the
+WebSocket Upgrade keeps the browser `Origin` but changes `Host` to the API
+target. Next also forwards the browser host and scheme. In the `local` profile,
+Spring accepts that forwarded origin only when the request comes from loopback,
+the target is a loopback API, and `Origin`, forwarded host/scheme, and
+`USI_PUBLIC_BASE_URL` agree exactly. Direct API requests and other profiles
+retain strict request-origin comparison and session authentication. A developer
+who intentionally runs the API on another local port may set the
 server-only process variable before starting the web app:
 
 ```bash
