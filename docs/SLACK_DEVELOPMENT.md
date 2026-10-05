@@ -117,8 +117,7 @@ Two sensitive values are associated with the Slack integration:
 - **Signing Secret** from the app's Basic Information/App Credentials area.
 - **Bot User OAuth Token** from OAuth & Permissions after installation.
 
-`E12-T02` currently consumes only the signing secret. The bot token is needed by
-later outbound Slack work and must follow the same external-secret boundary.
+The inbound webhook consumes the signing secret and the outbound Slack delivery adapter consumes the bot token. Both follow the same external-secret boundary.
 
 `Integration.secret_ref` is an opaque **relative directory reference** below the
 root configured by `USI_INTEGRATION_SECRETS_DIRECTORY`. For example, an
