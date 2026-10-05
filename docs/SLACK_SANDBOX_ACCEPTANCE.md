@@ -4,7 +4,7 @@ This runbook is the manual acceptance gate for the Slack integration. Automated 
 
 ## Preconditions
 
-- Use staging only. Do not use production data, production Slack credentials, or production channels.
+- Use only an isolated local or staging sandbox. Do not use production data, production Slack credentials, or production channels.
 - Use a dedicated Slack sandbox workspace and test channel mapped to a test Customer in USI.
 - Use a dedicated active test agent account in USI.
 - Provide Slack credentials through the existing secret-reference mechanism. Never commit tokens, signing secrets, cookies, or credential files to Git.
@@ -15,7 +15,7 @@ This runbook is the manual acceptance gate for the Slack integration. Automated 
 
 Use this shorter path as soon as the sandbox Slack app is connected. It proves the basic two-way text flow before running the complete acceptance sequence below.
 
-1. Start the local/staging USI stack according to the repository README and expose the web ingress (`localhost:3000`) through a public HTTPS tunnel.
+1. Start the isolated local/staging USI stack according to the repository README. For local development, expose the web ingress (`localhost:3000`) through a public HTTPS tunnel.
 2. Configure the dedicated Slack development app exactly as described in `docs/SLACK_DEVELOPMENT.md`, with the Events API callback ending in `/api/v1/providers/slack/events`.
 3. Install/reinstall the app in the sandbox workspace, invite it to the test channel, and keep the Slack signing secret and bot token only in the external integration-secret directory referenced by `Integration.secret_ref`.
 4. Confirm the Slack Integration is `ENABLED`/healthy and the sandbox channel is mapped to the intended test Customer.
