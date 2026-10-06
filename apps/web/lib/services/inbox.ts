@@ -15,7 +15,8 @@ export interface InboxAskInput {
 }
 
 export interface InboxResolveInput {
-  category?: string
+  category?: "SOLVED" | "NO_ACTION_REQUIRED" | "DUPLICATE" | "OTHER"
+  idempotencyKey?: string
 }
 
 export interface InboxSendInput {
