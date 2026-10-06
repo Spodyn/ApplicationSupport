@@ -57,6 +57,21 @@ class IntegrationService {
     }
 
     @Transactional
+    IntegrationView setStatus(Authentication actor, UUID integrationId, com.unifiedsupportinbox.integration.IntegrationStatus status) {
+        requireManageIntegrations(actor);
+        if (status == null || status == com.unifiedsupportinbox.integration.IntegrationStatus.CONFIGURING) {
+            throw ApiProblemException.validationFailed("status must be ENABLED or DISABLED.");
+        }
+        try {
+            return integrations.updateStatus(integrationId, status).toView();
+        } catch (IllegalArgumentException exception) {
+            throw ApiProblemException.notFound("Integration was not found.");
+        } catch (org.springframework.dao.DataIntegrityViolationException exception) {
+            throw ApiProblemException.conflict("Integration status conflicts with an existing active provider mapping.");
+        }
+    }
+
+    @Transactional
     IntegrationConnectionTestView testConnection(Authentication actor, UUID integrationId) {
         requireManageIntegrations(actor);
         IntegrationRecord integration = integrations.findById(integrationId)
