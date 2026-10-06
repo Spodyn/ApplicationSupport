@@ -42,7 +42,8 @@ class RealtimeWebSocketConfiguration implements WebSocketMessageBrokerConfigurer
             // Spring adds its own origin interceptor after ours. The sole extra
             // allowed origin is the configured local web ingress, while our
             // interceptor still requires a loopback proxy and matching headers.
-            endpoint.setAllowedOrigins(configuration.publicBaseUrl().toString());
+            var publicBaseUrl = configuration.publicBaseUrl();
+            endpoint.setAllowedOrigins(publicBaseUrl.getScheme() + "://" + publicBaseUrl.getRawAuthority());
         }
     }
 

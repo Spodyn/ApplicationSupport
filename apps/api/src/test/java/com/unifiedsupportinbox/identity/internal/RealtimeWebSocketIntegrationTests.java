@@ -65,6 +65,7 @@ class RealtimeWebSocketIntegrationTests {
                         "--spring.session.jdbc.initialize-schema=never",
                         // Exercise the local proxy contract with isolated test infrastructure.
                         "--usi.deployment.profile=local",
+                        "--usi.public-base-url=http://localhost:3000/",
                         "--usi.bootstrap-admin.enabled=false",
                         "--usi.realtime.heartbeat=100ms",
                         "--usi.realtime.time-to-first-message=500ms");

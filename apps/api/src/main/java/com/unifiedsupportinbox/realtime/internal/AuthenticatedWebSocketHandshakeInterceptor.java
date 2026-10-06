@@ -94,7 +94,7 @@ final class AuthenticatedWebSocketHandshakeInterceptor implements HandshakeInter
                 && uri.getUserInfo() == null
                 && uri.getRawQuery() == null
                 && uri.getRawFragment() == null
-                && (uri.getRawPath() == null || uri.getRawPath().isEmpty());
+                && (uri.getRawPath() == null || uri.getRawPath().isEmpty() || "/".equals(uri.getRawPath()));
     }
 
     private static boolean sameOrigin(URI left, URI right) {

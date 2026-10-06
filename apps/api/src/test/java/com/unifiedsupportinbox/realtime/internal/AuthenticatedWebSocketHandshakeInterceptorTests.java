@@ -18,6 +18,8 @@ class AuthenticatedWebSocketHandshakeInterceptorTests {
     void onlyLocalLoopbackProxyMayUseTheConfiguredForwardedOrigin() {
         assertThat(handshake(LOCAL_WEB_ORIGIN, "127.0.0.1", "http://localhost:3000",
                 "localhost:3000", "http")).isEqualTo(200);
+        assertThat(handshake(URI.create("http://localhost:3000/"), "127.0.0.1",
+                "http://localhost:3000", "localhost:3000", "http")).isEqualTo(200);
         assertThat(handshake(null, "127.0.0.1", "http://localhost:3000",
                 "localhost:3000", "http")).isEqualTo(403);
         assertThat(handshake(LOCAL_WEB_ORIGIN, "192.0.2.1", "http://localhost:3000",
