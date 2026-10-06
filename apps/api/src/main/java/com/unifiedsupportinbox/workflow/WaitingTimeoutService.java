@@ -90,7 +90,7 @@ class WaitingTimeoutService {
             audit.append(
                     AuditActorType.SYSTEM,
                     null,
-                    "WAITING_TIMEOUT",
+                    "CASE_WAITING_TIMEOUT",
                     "CASE",
                     item.id(),
                     item.id(),
