@@ -2,6 +2,7 @@ import type {
   AdministrationSettings,
   ChannelGroupingStrategy,
   ManagedChannel,
+  ManagedIntegration,
   NotificationDestination,
   NotificationType,
   ScheduleException,
@@ -14,6 +15,29 @@ import { mapApiChannel } from "./channel-adapter"
 import { browserApiTransport } from "./http-transport"
 
 type ApiProvider = "SLACK" | "TEAMS" | "TELEGRAM"
+type ApiIntegrationStatus = "CONFIGURING" | "ENABLED" | "DISABLED"
+type ApiIntegrationHealth = "UNKNOWN" | "HEALTHY" | "DEGRADED" | "UNAVAILABLE"
+
+type ApiIntegrationRecord = {
+  id: string
+  provider: ApiProvider
+  displayName: string
+  status: ApiIntegrationStatus
+  health: ApiIntegrationHealth
+  workspaceExternalId?: string | null
+  workspaceName?: string | null
+  secretConfigured: boolean
+  lastEventAt?: string | null
+  lastErrorCode?: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+type ApiIntegrationConnectionTest = {
+  integration: ApiIntegrationRecord
+  outcome: "SUCCESS" | "TIMEOUT" | "UNAUTHORIZED" | "UNAVAILABLE"
+  errorCode?: string | null
+}
 
 type ApiChannelRecord = {
   id: string
@@ -113,6 +137,21 @@ const supportedNotificationTypes = new Set<NotificationType>([
 const notificationDestinationVersions = new Map<string, number>()
 let outOfOfficeVersion: number | undefined
 let slaPolicyVersion: number | undefined
+
+function mapIntegration(integration: ApiIntegrationRecord): ManagedIntegration {
+  return {
+    id: integration.id,
+    platform: mapApiChannel(integration.provider),
+    status: integration.status.toLowerCase() as ManagedIntegration["status"],
+    workspace:
+      integration.workspaceName ??
+      integration.workspaceExternalId ??
+      integration.displayName,
+    lastEventAt: integration.lastEventAt ?? undefined,
+    lastErrorCode: integration.lastErrorCode ?? undefined,
+    health: integration.health.toLowerCase() as ManagedIntegration["health"],
+  }
+}
 
 function mapChannel(channel: ApiChannelRecord): ManagedChannel {
   const activity = channel.active ? "Aktywny" : "Nieaktywny"
@@ -214,6 +253,14 @@ export function mapWorkScheduleToApiIntervals(
       { dayOfWeek, start: day.breakEnd, end: day.end },
     ]
   })
+}
+
+async function listIntegrations(): Promise<ManagedIntegration[]> {
+  const integrations = await browserApiTransport.request<ApiIntegrationRecord[]>({
+    method: "GET",
+    path: "/api/v1/admin/integrations",
+  })
+  return integrations.map(mapIntegration)
 }
 
 async function listChannels(): Promise<ManagedChannel[]> {
@@ -418,8 +465,9 @@ async function saveNotifications(
 
 export const apiAdministrationSettingsRepository: AdministrationSettingsRepository = {
   async get() {
-    const [settings, channels, businessHours, notifications, outOfOffice, sla] = await Promise.all([
+    const [settings, integrations, channels, businessHours, notifications, outOfOffice, sla] = await Promise.all([
       mockAdministrationSettingsRepository.get(),
+      listIntegrations(),
       listChannels(),
       getBusinessHours(),
       listNotifications(),
@@ -429,6 +477,7 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     return {
       ...settings,
       schedule: mapApiBusinessHours(businessHours, settings.schedule.exceptions),
+      integrations,
       channels,
       notifications,
       outOfOffice: {
@@ -481,16 +530,31 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     return mockAdministrationSettingsRepository.saveSection(key, value)
   },
 
-  configureIntegration(id, workspace) {
-    return mockAdministrationSettingsRepository.configureIntegration(id, workspace)
+  async configureIntegration(id, workspace) {
+    // Provider OAuth / credential onboarding is intentionally provider-specific.
+    // Until those flows expose a common mutation, keep this explicit rather than
+    // pretending the workspace identifier is authoritative backend configuration.
+    const current = (await listIntegrations()).find((item) => item.id === id)
+    if (!current) throw new Error("Nie znaleziono integracji.")
+    if (current.workspace === workspace.trim()) return current
+    throw new Error("Zmiana identyfikatora integracji wymaga procesu konfiguracji dostawcy.")
   },
 
-  setIntegrationStatus(id, status) {
-    return mockAdministrationSettingsRepository.setIntegrationStatus(id, status)
+  async setIntegrationStatus(id, status) {
+    const integration = await browserApiTransport.request<ApiIntegrationRecord>({
+      method: "PATCH",
+      path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/status`,
+      body: { status: status.toUpperCase() },
+    })
+    return mapIntegration(integration)
   },
 
-  testIntegration(id) {
-    return mockAdministrationSettingsRepository.testIntegration(id)
+  async testIntegration(id) {
+    const result = await browserApiTransport.request<ApiIntegrationConnectionTest>({
+      method: "POST",
+      path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/test`,
+    })
+    return mapIntegration(result.integration)
   },
 
   async setChannelIgnored(id, ignored) {
