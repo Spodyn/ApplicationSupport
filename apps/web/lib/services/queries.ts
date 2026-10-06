@@ -8,6 +8,7 @@ import type {
   InboxIgnoreInput,
   InboxResolveInput,
   InboxSendInput,
+  InboxListView,
 } from "./inbox"
 import type {
   AdministrationSettings,
@@ -30,7 +31,10 @@ export type AdministrationSectionInput = {
  */
 export const queryKeys = {
   currentUser: () => ["current-user"] as const,
-  inboxCases: () => ["support-inbox", "cases"] as const,
+  inboxCases: (view?: InboxListView) =>
+    view
+      ? ["support-inbox", "cases", view] as const
+      : ["support-inbox", "cases"] as const,
   inboxCase: (caseId: string) => ["support-inbox", "case", caseId] as const,
   inboxMessages: (caseId: string) => ["support-inbox", "messages", caseId] as const,
   administrationUsers: (query?: AdministrationUserQuery) =>
@@ -47,10 +51,10 @@ export function useCurrentUser() {
   })
 }
 
-export function useInboxCases() {
+export function useInboxCases(view: InboxListView = "active") {
   return useInfiniteQuery({
-    queryKey: queryKeys.inboxCases(),
-    queryFn: ({ pageParam }) => serviceRegistry.inbox.list(pageParam),
+    queryKey: queryKeys.inboxCases(view),
+    queryFn: ({ pageParam }) => serviceRegistry.inbox.list(pageParam, view),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor,
   })
@@ -127,7 +131,11 @@ export function useInboxWorkflow(caseId?: string) {
   const snooze = useMutation({
     mutationFn: (until: string) =>
       serviceRegistry.inbox.snooze(requireCaseId(), until),
-    onSuccess: invalidateCases,
+    onSuccess: invalidateConversation,
+  })
+  const cancelSnooze = useMutation({
+    mutationFn: () => serviceRegistry.inbox.cancelSnooze(requireCaseId()),
+    onSuccess: invalidateConversation,
   })
   const sendMessage = useMutation({
     mutationFn: (input: InboxSendInput) =>
@@ -135,7 +143,7 @@ export function useInboxWorkflow(caseId?: string) {
     onSuccess: invalidateConversation,
   })
 
-  return { claim, ignore, askCustomer, resolve, snooze, sendMessage }
+  return { claim, ignore, askCustomer, resolve, snooze, cancelSnooze, sendMessage }
 }
 
 export function useMarkAllResolvedRead() {
