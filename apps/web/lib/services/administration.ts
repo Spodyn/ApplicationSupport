@@ -5,6 +5,9 @@ import type {
   AdministrationUser,
   AdministrationUserInput,
   ManagedIntegration,
+  ManagedChannel,
+  ManagedCustomerOption,
+  ChannelGroupingStrategy,
 } from "@/lib/domain/administration"
 import {
   administrationPermissionLabels,
@@ -42,6 +45,12 @@ export interface AdministrationSettingsRepository {
     status: ManagedIntegration["status"],
   ): Promise<ManagedIntegration>
   testIntegration(id: string): Promise<ManagedIntegration>
+  listCustomers(): Promise<ManagedCustomerOption[]>
+  configureChannel(
+    id: string,
+    customerId: string,
+    groupingStrategy: ChannelGroupingStrategy,
+  ): Promise<ManagedChannel>
   setChannelIgnored(id: string, ignored: boolean): Promise<void>
   toggleNotification(id: string, enabled: boolean): Promise<void>
 }
@@ -240,6 +249,25 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     integration.health = "healthy"
     integration.lastEventAt = new Date().toISOString()
     return delay(integration, 600)
+  },
+
+  async listCustomers() {
+    requireCurrentAdministrationPermission("manage_integrations")
+    const names = [...new Set(settingsState.channels.map((channel) => channel.customer))]
+    return delay(names.map((name, index) => ({ id: `mock-customer-${index + 1}`, name })))
+  },
+
+  async configureChannel(id, customerId, groupingStrategy) {
+    requireCurrentAdministrationPermission("manage_integrations")
+    const channel = settingsState.channels.find((item) => item.id === id)
+    if (!channel) throw new Error("Nie znaleziono kanału.")
+    const customers = await this.listCustomers()
+    const customer = customers.find((item) => item.id === customerId)
+    if (!customer) throw new Error("Nie znaleziono klienta.")
+    channel.customerId = customer.id
+    channel.customer = customer.name
+    channel.groupingStrategy = groupingStrategy
+    return delay(channel)
   },
 
   async setChannelIgnored(id, ignored) {

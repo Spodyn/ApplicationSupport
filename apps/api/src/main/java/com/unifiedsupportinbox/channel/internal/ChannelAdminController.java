@@ -1,8 +1,8 @@
 package com.unifiedsupportinbox.channel.internal;
 
+import com.unifiedsupportinbox.channel.ChannelGroupingStrategy;
 import com.unifiedsupportinbox.channel.ChannelView;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotNull;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.security.core.Authentication;
@@ -29,13 +29,21 @@ class ChannelAdminController {
     }
 
     @PatchMapping("/{channelId}")
-    ChannelView setIgnored(
+    ChannelView update(
             @PathVariable UUID channelId,
-            @Valid @RequestBody ChannelOperationalStateRequest input,
+            @Valid @RequestBody ChannelUpdateRequest input,
             Authentication actor) {
-        return channels.setIgnored(actor, channelId, Boolean.TRUE.equals(input.ignored()));
+        return channels.update(
+                actor,
+                channelId,
+                input.ignored(),
+                input.customerId(),
+                input.groupingStrategy());
     }
 
-    record ChannelOperationalStateRequest(@NotNull Boolean ignored) {
+    record ChannelUpdateRequest(
+            Boolean ignored,
+            UUID customerId,
+            ChannelGroupingStrategy groupingStrategy) {
     }
 }

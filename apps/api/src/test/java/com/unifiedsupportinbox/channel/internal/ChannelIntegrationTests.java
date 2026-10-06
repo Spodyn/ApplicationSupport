@@ -71,15 +71,7 @@ class ChannelIntegrationTests {
 
     @BeforeEach
     void resetState() {
-        jdbc.update("DELETE FROM channels");
-        jdbc.update("DELETE FROM integrations");
-        jdbc.update("DELETE FROM customers");
-        jdbc.update("DELETE FROM user_permissions");
-        jdbc.update("DELETE FROM spring_session_attributes");
-        jdbc.update("DELETE FROM spring_session");
-        jdbc.update("DELETE FROM idempotency_keys");
-        jdbc.update("UPDATE bootstrap_admin_state SET consumed = FALSE, consumed_at = NULL, admin_user_id = NULL WHERE id = 1");
-        jdbc.update("DELETE FROM users");
+        TestInfrastructure.resetPostgres(POSTGRES);
     }
 
     @Test
@@ -214,6 +206,84 @@ class ChannelIntegrationTests {
         assertThat(updated.body())
                 .contains("\"ignored\":true")
                 .contains("\"active\":true");
+    }
+
+    @Test
+    void adminCanChangeCustomerAndGroupingWithoutRewritingExistingCases() throws Exception {
+        UUID integrationId = createIntegration("SLACK", "Support Slack");
+        UUID originalCustomer = createCustomer("Original Customer");
+        UUID targetCustomer = createCustomer("Target Customer");
+        ChannelView channel = discovery.upsert(new DiscoveredChannel(
+                integrationId,
+                "C-map",
+                "mapping",
+                ChannelGroupingStrategy.SLACK_ROOT_THREAD,
+                true,
+                null,
+                "{}"));
+        jdbc.update("UPDATE channels SET customer_id = ? WHERE id = ?", originalCustomer, channel.id());
+        UUID caseId = jdbc.queryForObject("""
+                INSERT INTO cases (
+                    customer_id, integration_id, channel_id, provider, external_conversation_id
+                ) VALUES (?, ?, ?, 'SLACK', 'historic-thread') RETURNING id
+                """, UUID.class, originalCustomer, integrationId, channel.id());
+
+        UUID delegatedId = createUser("mapping-admin@example.com", "USER");
+        jdbc.update(
+                "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations')",
+                delegatedId);
+        CookieManager delegated = login("mapping-admin@example.com");
+
+        HttpResponse<String> updated = mutate(
+                delegated,
+                "PATCH",
+                "/api/v1/admin/channels/" + channel.id(),
+                "{\"customerId\":\"" + targetCustomer + "\",\"groupingStrategy\":\"SLACK_ROOT_THREAD\"}");
+
+        assertThat(updated.statusCode()).isEqualTo(200);
+        assertThat(updated.body())
+                .contains("\"customerId\":\"" + targetCustomer + "\"")
+                .contains("\"customerName\":\"Target Customer\"")
+                .contains("\"groupingStrategy\":\"SLACK_ROOT_THREAD\"");
+        assertThat(jdbc.queryForObject(
+                "SELECT customer_id FROM cases WHERE id = ?",
+                UUID.class,
+                caseId)).isEqualTo(originalCustomer);
+    }
+
+    @Test
+    void channelConfigurationRejectsInactiveCustomerAndInvalidProviderStrategy() throws Exception {
+        UUID integrationId = createIntegration("SLACK", "Support Slack");
+        UUID activeCustomer = createCustomer("Active Customer");
+        UUID inactiveCustomer = jdbc.queryForObject(
+                "INSERT INTO customers (name, active) VALUES ('Inactive Customer', FALSE) RETURNING id",
+                UUID.class);
+        ChannelView channel = discovery.upsert(new DiscoveredChannel(
+                integrationId,
+                "C-invalid",
+                "invalid",
+                ChannelGroupingStrategy.SLACK_ROOT_THREAD,
+                true,
+                null,
+                "{}"));
+        createUser("admin-channel-config@example.com", "ADMIN");
+        CookieManager admin = login("admin-channel-config@example.com");
+
+        HttpResponse<String> inactive = mutate(
+                admin,
+                "PATCH",
+                "/api/v1/admin/channels/" + channel.id(),
+                "{\"customerId\":\"" + inactiveCustomer + "\",\"groupingStrategy\":\"SLACK_ROOT_THREAD\"}");
+        assertThat(inactive.statusCode()).isEqualTo(400);
+        assertThat(inactive.body()).contains("\"code\":\"VALIDATION_FAILED\"");
+
+        HttpResponse<String> invalidStrategy = mutate(
+                admin,
+                "PATCH",
+                "/api/v1/admin/channels/" + channel.id(),
+                "{\"customerId\":\"" + activeCustomer + "\",\"groupingStrategy\":\"TEAMS_ROOT_REPLIES\"}");
+        assertThat(invalidStrategy.statusCode()).isEqualTo(400);
+        assertThat(invalidStrategy.body()).contains("\"code\":\"VALIDATION_FAILED\"");
     }
 
     @Test
