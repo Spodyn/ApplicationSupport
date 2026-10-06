@@ -80,6 +80,10 @@ class CustomerReplyWaitingServiceIntegrationTests {
                 "SELECT count(*) FROM outbox_events WHERE type = 'case.updated' AND aggregate_id = ?",
                 Integer.class,
                 caseId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE action = 'CASE_CUSTOMER_REPLY' AND entity_id = ?",
+                Integer.class,
+                caseId)).isEqualTo(1);
 
         assertThat(service.customerReplied(
                 caseId,
