@@ -2,6 +2,7 @@ import type {
   AdministrationSettings,
   ChannelGroupingStrategy,
   ManagedChannel,
+  ManagedIntegration,
   NotificationDestination,
   NotificationType,
   ScheduleException,
