@@ -148,8 +148,12 @@ export function mapCaseMessage(message: CaseMessage): InboxMessage {
 export function createApiInboxRepository(transport: ApiTransport): InboxRepository {
   const client = createApiClient(transport)
   return {
-    async list(cursor) {
-      const page = await client.listCases({ cursor, limit: 50 })
+    async list(cursor, view = "active") {
+      const page = await client.listCases({
+        cursor,
+        limit: 50,
+        view: view === "snoozed" ? "SNOOZED" : "ACTIVE",
+      })
       return { items: page.items.map(mapCaseListItem), nextCursor: page.nextCursor ?? undefined }
     },
     async getCase(caseId) {
@@ -176,7 +180,19 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     ignore: unavailable,
     askCustomer: unavailable,
     resolve: unavailable,
-    snooze: unavailable,
+    async snooze(caseId, until) {
+      await client.snoozeCase({
+        caseId,
+        "Idempotency-Key": crypto.randomUUID(),
+        body: { until },
+      })
+    },
+    async cancelSnooze(caseId) {
+      await client.cancelCaseSnooze({
+        caseId,
+        "Idempotency-Key": crypto.randomUUID(),
+      })
+    },
     async sendMessage(caseId, input) {
       if (input.attachments?.length || input.simulateFailure) throw new InboxActionUnavailableError()
       const body = input.body.trim()

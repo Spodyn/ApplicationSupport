@@ -11,6 +11,11 @@ export type ApiProblem = {
 
 export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTICATION_REQUIRED" | "ACCESS_DENIED" | "RESOURCE_NOT_FOUND" | "CONFLICT" | "CASE_ALREADY_CLAIMED" | "RATE_LIMITED" | "PROVIDER_FAILURE" | "APPLICATION_FAILURE" | "INTERNAL_ERROR"
 
+export type CancelSnoozeResponse = {
+  "caseId": string
+  "cancelled": boolean
+}
+
 export type CaseChannel = {
   "id": string
   "name": string
@@ -225,6 +230,15 @@ export type SendMessageRequest = {
 export type SendMessageResponse = {
   "messageId": string
   "deliveryStatus": MessageDeliveryStatus
+}
+
+export type SnoozeRequest = {
+  "until": string
+}
+
+export type SnoozeResponse = {
+  "caseId": string
+  "snoozedUntil": string
 }
 
 export type UpdateCustomerRequest = {

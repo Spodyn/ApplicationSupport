@@ -88,6 +88,73 @@ class CaseListServiceIntegrationTests {
     }
 
     @Test
+    void personalSnoozeHidesOnlyForActorAndHasDedicatedView() {
+        UUID actor = user(true);
+        UUID other = user(true);
+        UUID active = caseId("snoozed-active-" + UUID.randomUUID());
+        UUID expired = caseId("snoozed-expired-" + UUID.randomUUID());
+        UUID terminal = caseId("snoozed-terminal-" + UUID.randomUUID());
+        message(active, "active snooze");
+        message(expired, "expired snooze");
+        message(terminal, "terminal snooze");
+
+        jdbc.update("""
+                INSERT INTO case_snoozes (case_id, user_id, until_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP + INTERVAL '1 hour')
+                """, active, actor);
+        jdbc.update("""
+                INSERT INTO case_snoozes (case_id, user_id, until_at, created_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP - INTERVAL '1 hour', CURRENT_TIMESTAMP - INTERVAL '2 hours')
+                """, expired, actor);
+        jdbc.update("""
+                INSERT INTO case_snoozes (case_id, user_id, until_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP + INTERVAL '1 hour')
+                """, terminal, actor);
+        jdbc.update("UPDATE cases SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP WHERE id = ?", terminal);
+
+        assertThat(cases.list(actor, null, 100, CaseListView.ACTIVE).items())
+                .extracting(CaseListService.CaseListItem::id)
+                .contains(expired, terminal)
+                .doesNotContain(active);
+        assertThat(cases.list(actor, null, 100, CaseListView.SNOOZED).items())
+                .extracting(CaseListService.CaseListItem::id)
+                .contains(active)
+                .doesNotContain(expired, terminal);
+
+        assertThat(cases.list(other, null, 100, CaseListView.ACTIVE).items())
+                .extracting(CaseListService.CaseListItem::id)
+                .contains(active, expired, terminal);
+        assertThat(cases.list(other, null, 100, CaseListView.SNOOZED).items())
+                .extracting(CaseListService.CaseListItem::id)
+                .doesNotContain(active, expired, terminal);
+    }
+
+    @Test
+    void listCursorIsScopedToPersonalView() {
+        UUID actor = user(true);
+        UUID firstSnoozed = caseId("cursor-snooze-a-" + UUID.randomUUID());
+        UUID secondSnoozed = caseId("cursor-snooze-b-" + UUID.randomUUID());
+        UUID active = caseId("cursor-active-" + UUID.randomUUID());
+        message(firstSnoozed, "first snoozed");
+        message(secondSnoozed, "second snoozed");
+        message(active, "active");
+        jdbc.update("""
+                INSERT INTO case_snoozes (case_id, user_id, until_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP + INTERVAL '1 hour')
+                """, firstSnoozed, actor);
+        jdbc.update("""
+                INSERT INTO case_snoozes (case_id, user_id, until_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP + INTERVAL '2 hours')
+                """, secondSnoozed, actor);
+
+        var snoozedPage = cases.list(actor, null, 1, CaseListView.SNOOZED);
+        assertThat(snoozedPage.items()).hasSize(1);
+        assertThat(snoozedPage.nextCursor()).isNotBlank();
+        assertThatThrownBy(() -> cases.list(actor, snoozedPage.nextCursor(), 1, CaseListView.ACTIVE))
+                .hasMessageContaining("cursor");
+    }
+
+    @Test
     void rejectsInactiveUsersAndInvalidLimits() {
         UUID inactive = user(false);
         assertThatThrownBy(() -> cases.list(inactive, null, 1)).isInstanceOf(ApiProblemException.class);

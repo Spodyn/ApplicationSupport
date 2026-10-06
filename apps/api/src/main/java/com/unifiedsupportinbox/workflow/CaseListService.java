@@ -30,10 +30,20 @@ class CaseListService {
 
     @Transactional(readOnly = true)
     CursorPage<CaseListItem> list(UUID userId, String cursor, Integer requestedLimit) {
+        return list(userId, cursor, requestedLimit, CaseListView.ACTIVE);
+    }
+
+    @Transactional(readOnly = true)
+    CursorPage<CaseListItem> list(
+            UUID userId,
+            String cursor,
+            Integer requestedLimit,
+            CaseListView requestedView) {
         requireEligibleUser(userId);
+        CaseListView view = requestedView == null ? CaseListView.ACTIVE : requestedView;
         int limit = ApiV1Conventions.pageSize(requestedLimit);
-        CursorPosition position = cursor == null ? null : cursors.decode(cursor, scope(userId));
-        if (position != null && !anchorStillExists(position)) {
+        CursorPosition position = cursor == null ? null : cursors.decode(cursor, scope(userId, view));
+        if (position != null && !anchorStillVisible(userId, view, position)) {
             throw new InvalidCursorException(InvalidCursorException.Reason.SCOPE_MISMATCH);
         }
 
@@ -79,15 +89,25 @@ class CaseListService {
                         SELECT SUM(weight)::int AS points FROM case_ignore_votes
                         WHERE case_id = c.id AND active
                     ) votes ON TRUE
+                ), filtered AS (
+                    SELECT base.*
+                    FROM base
+                    WHERE CASE WHEN ?::boolean
+                        THEN status NOT IN ('IGNORED', 'RESOLVED')
+                             AND snoozed_until > CURRENT_TIMESTAMP
+                        ELSE status IN ('IGNORED', 'RESOLVED')
+                             OR snoozed_until IS NULL
+                             OR snoozed_until <= CURRENT_TIMESTAMP
+                    END
                 ), ranked AS (
-                    SELECT base.*,
+                    SELECT filtered.*,
                            CASE WHEN status IN ('IGNORED', 'RESOLVED') THEN 4
                                 WHEN sla_state = 'BREACHED' THEN 0
                                 WHEN sla_state = 'WARNING' THEN 1
                                 WHEN status = 'NEW' AND unread THEN 2
                                 ELSE 3 END AS sort_bucket,
                            COALESCE(sla_due_at, 'infinity'::timestamptz) AS sort_due
-                    FROM base
+                    FROM filtered
                 ), anchor AS (
                     SELECT sort_bucket, sort_due, last_activity_at, id
                     FROM ranked WHERE id = ? AND last_activity_at = ?
@@ -105,6 +125,7 @@ class CaseListService {
                 ORDER BY r.sort_bucket, r.sort_due, r.last_activity_at DESC, r.id DESC
                 LIMIT ?
                 """, (rs, ignored) -> item(rs), userId, userId,
+                view == CaseListView.SNOOZED,
                 position == null ? null : position.id(),
                 position == null ? null : OffsetDateTime.ofInstant(position.sortValue(), java.time.ZoneOffset.UTC),
                 position == null ? null : position.id(), limit + 1);
@@ -112,7 +133,9 @@ class CaseListService {
         boolean hasMore = fetched.size() > limit;
         List<CaseListItem> page = hasMore ? fetched.subList(0, limit) : fetched;
         String next = hasMore
-                ? cursors.encode(new CursorPosition(page.getLast().lastActivityAt(), page.getLast().id()), scope(userId))
+                ? cursors.encode(
+                        new CursorPosition(page.getLast().lastActivityAt(), page.getLast().id()),
+                        scope(userId, view))
                 : null;
         return new CursorPage<>(page, next);
     }
@@ -127,11 +150,26 @@ class CaseListService {
         if (count == null || count != 1) throw ApiProblemException.accessDenied();
     }
 
-    private boolean anchorStillExists(CursorPosition position) {
+    private boolean anchorStillVisible(UUID userId, CaseListView view, CursorPosition position) {
         Integer count = jdbc.queryForObject("""
-                SELECT count(*) FROM cases WHERE id = ? AND last_activity_at = ?
-                """, Integer.class, position.id(),
-                OffsetDateTime.ofInstant(position.sortValue(), java.time.ZoneOffset.UTC));
+                SELECT count(*)
+                FROM cases c
+                LEFT JOIN case_snoozes snoozes
+                  ON snoozes.case_id = c.id AND snoozes.user_id = ?
+                WHERE c.id = ?
+                  AND c.last_activity_at = ?
+                  AND CASE WHEN ?::boolean
+                      THEN c.status NOT IN ('IGNORED', 'RESOLVED')
+                           AND snoozes.until_at > CURRENT_TIMESTAMP
+                      ELSE c.status IN ('IGNORED', 'RESOLVED')
+                           OR snoozes.until_at IS NULL
+                           OR snoozes.until_at <= CURRENT_TIMESTAMP
+                  END
+                """, Integer.class,
+                userId,
+                position.id(),
+                OffsetDateTime.ofInstant(position.sortValue(), java.time.ZoneOffset.UTC),
+                view == CaseListView.SNOOZED);
         return count != null && count == 1;
     }
 
@@ -153,8 +191,8 @@ class CaseListService {
         return value == null ? null : value.toInstant();
     }
 
-    private static String scope(UUID userId) {
-        return "case-list:" + userId;
+    private static String scope(UUID userId, CaseListView view) {
+        return "case-list:" + userId + ":" + view.name();
     }
 
     record CaseListItem(UUID id, String reference, CaseStatus status,

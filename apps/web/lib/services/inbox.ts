@@ -25,13 +25,15 @@ export interface InboxSendInput {
   idempotencyKey?: string
 }
 
+export type InboxListView = "active" | "snoozed"
+
 export interface InboxPage<T> {
   items: T[]
   nextCursor?: string
 }
 
 export interface InboxRepository {
-  list(cursor?: string): Promise<InboxPage<InboxCase>>
+  list(cursor?: string, view?: InboxListView): Promise<InboxPage<InboxCase>>
   getCase(caseId: string): Promise<InboxCase>
   getMessages(caseId: string, before?: string): Promise<InboxPage<InboxMessage>>
   markRead(caseId: string, messageId: string): Promise<void>
@@ -41,6 +43,7 @@ export interface InboxRepository {
   askCustomer(caseId: string, input: InboxAskInput): Promise<void>
   resolve(caseId: string, input: InboxResolveInput): Promise<void>
   snooze(caseId: string, until: string): Promise<void>
+  cancelSnooze(caseId: string): Promise<void>
   sendMessage(caseId: string, input: InboxSendInput): Promise<InboxMessage>
 }
 
@@ -135,7 +138,7 @@ const canUseUnassignedActions = (caseId: string) => {
 }
 
 export const mockInboxRepository: InboxRepository = {
-  async list() {
+  async list(_cursor, view = "active") {
     const cases = mockInboxCaseRecords.map(
       ({ unreadForUserIds, snoozedUntilByUser, restrictedUserIds, ...item }) => {
         const snoozedUntil = snoozedUntilByUser[mockCurrentUser.id]
@@ -150,7 +153,16 @@ export const mockInboxRepository: InboxRepository = {
         }
       },
     )
-    return wait({ items: cases })
+    const now = Date.now()
+    return wait({
+      items: cases.filter((item) => {
+        const terminal = item.status === "resolved" || item.status === "ignored"
+        const activeSnooze = !terminal && item.snoozedForCurrentUserUntil
+          ? new Date(item.snoozedForCurrentUserUntil).getTime() > now
+          : false
+        return view === "snoozed" ? activeSnooze : !activeSnooze
+      }),
+    })
   },
 
   async getCase(caseId) {
@@ -294,6 +306,12 @@ export const mockInboxRepository: InboxRepository = {
     }
     record.snoozedUntilByUser[mockCurrentUser.id] = until
     markCurrentUserRead(caseId)
+  },
+
+  async cancelSnooze(caseId) {
+    await wait(undefined, 120)
+    const record = getRecord(caseId)
+    delete record.snoozedUntilByUser[mockCurrentUser.id]
   },
 
   async sendMessage(caseId, input) {
