@@ -24,7 +24,6 @@ class SupportSendMessageService {
     static final String OUTBOX_TYPE = "message.send_requested";
     private static final String AGGREGATE_TYPE = "message";
     private static final String COMMAND_SCOPE = "case.send-message";
-    private static final String ASK_COMMAND_SCOPE = "case.ask-customer";
     private static final int MAX_ATTACHMENTS = 10;
     private static final long MAX_ATTACHMENT_BYTES = 50L * 1024L * 1024L;
 
@@ -57,30 +56,6 @@ class SupportSendMessageService {
         return send(caseId, userId, idempotencyKey, body, bodyFormat, List.of(), correlationId);
     }
 
-    IdempotencyResult ask(
-            UUID caseId,
-            UUID userId,
-            String idempotencyKey,
-            String body,
-            MessageBodyFormat bodyFormat,
-            Long waitingMinutes,
-            String correlationId) {
-        long normalizedWaitingMinutes = waitingMinutes == null ? 24L * 60L : waitingMinutes;
-        if (normalizedWaitingMinutes < 60L || normalizedWaitingMinutes > 30L * 24L * 60L) {
-            throw ApiProblemException.validationFailed("Waiting duration must be between 60 and 43200 minutes.");
-        }
-        return sendInternal(
-                caseId,
-                userId,
-                idempotencyKey,
-                body,
-                bodyFormat,
-                List.of(),
-                correlationId,
-                normalizedWaitingMinutes * 60L,
-                ASK_COMMAND_SCOPE);
-    }
-
     IdempotencyResult send(
             UUID caseId,
             UUID userId,
@@ -89,28 +64,6 @@ class SupportSendMessageService {
             MessageBodyFormat bodyFormat,
             List<UUID> attachmentIds,
             String correlationId) {
-        return sendInternal(
-                caseId,
-                userId,
-                idempotencyKey,
-                body,
-                bodyFormat,
-                attachmentIds,
-                correlationId,
-                null,
-                COMMAND_SCOPE);
-    }
-
-    private IdempotencyResult sendInternal(
-            UUID caseId,
-            UUID userId,
-            String idempotencyKey,
-            String body,
-            MessageBodyFormat bodyFormat,
-            List<UUID> attachmentIds,
-            String correlationId,
-            Long askWaitingSeconds,
-            String commandScope) {
         Objects.requireNonNull(caseId, "caseId");
         Objects.requireNonNull(userId, "userId");
         String normalizedBody = requireBody(body);
@@ -118,16 +71,15 @@ class SupportSendMessageService {
         List<UUID> normalizedAttachments = normalizeAttachmentIds(attachmentIds);
         String normalizedCorrelationId = requireText(correlationId, "correlationId", 128);
 
-        Map<String, Object> canonicalRequest = new java.util.LinkedHashMap<>();
-        canonicalRequest.put("caseId", caseId.toString());
-        canonicalRequest.put("body", normalizedBody);
-        canonicalRequest.put("bodyFormat", normalizedFormat.name());
-        canonicalRequest.put("attachmentIds", normalizedAttachments.stream().map(UUID::toString).toList());
-        if (askWaitingSeconds != null) canonicalRequest.put("askWaitingSeconds", askWaitingSeconds);
+        Map<String, Object> canonicalRequest = Map.of(
+                "caseId", caseId.toString(),
+                "body", normalizedBody,
+                "bodyFormat", normalizedFormat.name(),
+                "attachmentIds", normalizedAttachments.stream().map(UUID::toString).toList());
 
         return idempotency.execute(
                 userId,
-                commandScope + ":" + caseId,
+                COMMAND_SCOPE + ":" + caseId,
                 idempotencyKey,
                 canonicalRequest,
                 () -> executeSend(
@@ -136,8 +88,7 @@ class SupportSendMessageService {
                         normalizedBody,
                         normalizedFormat,
                         normalizedAttachments,
-                        normalizedCorrelationId,
-                        askWaitingSeconds));
+                        normalizedCorrelationId));
     }
 
     private IdempotencyResponse executeSend(
@@ -146,8 +97,7 @@ class SupportSendMessageService {
             String body,
             MessageBodyFormat bodyFormat,
             List<UUID> attachmentIds,
-            String correlationId,
-            Long askWaitingSeconds) {
+            String correlationId) {
         CaseSendContext context = jdbc.query("""
                 SELECT owner_user_id, status, external_thread_key
                 FROM cases
@@ -183,12 +133,11 @@ class SupportSendMessageService {
                     body_format,
                     inbound,
                     delivery_status,
-                    ask_waiting_seconds,
                     provider_created_at,
                     edited_at,
                     deleted_at,
                     correlation_id
-                ) VALUES (?, NULL, ?, 'SUPPORT', ?, NULL, NULL, ?, ?, FALSE, 'QUEUED', ?, NULL, NULL, NULL, ?)
+                ) VALUES (?, NULL, ?, 'SUPPORT', ?, NULL, NULL, ?, ?, FALSE, 'QUEUED', NULL, NULL, NULL, ?)
                 RETURNING id
                 """, UUID.class,
                 caseId,
@@ -196,7 +145,6 @@ class SupportSendMessageService {
                 userId,
                 body,
                 bodyFormat.name(),
-                askWaitingSeconds,
                 correlationId);
 
         if (messageId == null) {
