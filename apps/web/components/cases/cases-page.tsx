@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   Check,
   ChevronDown,
+  MessageCircleQuestion,
   Clock3,
   Search,
   SlidersHorizontal,
@@ -378,9 +379,32 @@ function ConversationPanel({
 }) {
   const [draft, setDraft] = useState("")
   const [sendError, setSendError] = useState("")
+  const [askOpen, setAskOpen] = useState(false)
+  const [askMessage, setAskMessage] = useState("")
+  const [askError, setAskError] = useState("")
   const idempotencyKey = useRef<string | null>(null)
+  const askIdempotencyKey = useRef<string | null>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
+  const canAsk = Boolean(record?.availableActions?.includes("ASK_CUSTOMER"))
+
+  const askCustomer = async () => {
+    const message = askMessage.trim()
+    if (!canAsk || !message || workflow.askCustomer.isPending) return
+    askIdempotencyKey.current ??= crypto.randomUUID()
+    setAskError("")
+    try {
+      await workflow.askCustomer.mutateAsync({
+        message,
+        idempotencyKey: askIdempotencyKey.current,
+      })
+      setAskMessage("")
+      askIdempotencyKey.current = null
+      setAskOpen(false)
+    } catch (error) {
+      setAskError(error instanceof Error ? error.message : "Nie udało się wysłać pytania do klienta.")
+    }
+  }
 
   const send = async () => {
     if (!canReply || !draft.trim() || workflow.sendMessage.isPending) return
@@ -407,17 +431,20 @@ function ConversationPanel({
           <div className="hidden shrink-0 items-center gap-3 xl:flex">
             <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:cursor-not-allowed disabled:opacity-50"><UserRound className="size-[17px]" />{workflow.claim.isPending ? "Przejmowanie…" : "Przejmij"}</button>
             <button disabled title="Akcja niedostępna" className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75"><AlarmClock className="size-[17px]" /> Odłóż</button>
+            <button type="button" onClick={() => setAskOpen(true)} disabled={!canAsk || workflow.askCustomer.isPending} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:cursor-not-allowed disabled:opacity-50"><MessageCircleQuestion className="size-[17px]" /> {workflow.askCustomer.isPending ? "Wysyłanie…" : "Dopytaj"}</button>
             <button disabled title="Akcja niedostępna" className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75"><Check className="size-[17px]" /> Zamknij sprawę</button>
           </div>
         </div>
         <div className="mt-[15px] flex items-center gap-3">
           <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] text-[#edf0f4] disabled:cursor-not-allowed disabled:opacity-50 xl:hidden">Przejmij</button>
+          {canAsk && <button type="button" onClick={() => setAskOpen(true)} disabled={workflow.askCustomer.isPending} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] text-[#edf0f4] disabled:opacity-50 xl:hidden">Dopytaj</button>}
           <div className="flex h-[45px] items-center gap-2 rounded-[9px] border border-violet-500/[0.12] bg-violet-950/35 px-3.5 text-[12px] font-medium text-violet-300">{item.status}</div>
           <div className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3.5 text-[12px] text-[#edf0f4]"><Avatar initials={initials(record?.owner?.fullName ?? "?")} size="sm" />{record?.owner?.fullName ?? "Nieprzypisane"}</div>
           <div className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3.5 text-[12px] font-semibold text-[#aeb8c8]"><Clock3 className="size-[17px]" />{item.sla}</div>
         </div>
         {detailError && <p role="alert" className="text-xs text-red-400">Nie udało się wczytać szczegółów case’u.</p>}
         {workflow.claim.isError && <p role="alert" className="text-xs text-red-400">{workflow.claim.error.message}</p>}
+        {workflow.askCustomer.isError && <p role="alert" className="text-xs text-red-400">{workflow.askCustomer.error.message}</p>}
       </header>
 
       <div className="cases-scrollbar min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_72%_34%,rgba(23,48,76,0.12),transparent_42%)] py-[22px] pl-[22px] pr-[12px]">
@@ -442,6 +469,58 @@ function ConversationPanel({
         </div>
         {sendError && <p role="alert" className="mt-2 text-sm text-red-400">{sendError}</p>}
       </div>
+
+      <Dialog
+        open={askOpen}
+        onOpenChange={(open) => {
+          if (workflow.askCustomer.isPending) return
+          setAskOpen(open)
+          if (!open) {
+            setAskError("")
+            askIdempotencyKey.current = null
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Dopytaj klienta</DialogTitle>
+            <DialogDescription>
+              Wyślij pytanie do klienta. Case pozostanie przypisany do Ciebie do czasu potwierdzenia wysłania przez platformę.
+            </DialogDescription>
+          </DialogHeader>
+          <textarea
+            value={askMessage}
+            onChange={(event) => {
+              setAskMessage(event.target.value)
+              setAskError("")
+              askIdempotencyKey.current = null
+            }}
+            disabled={workflow.askCustomer.isPending}
+            aria-label="Pytanie do klienta"
+            placeholder="Wpisz pytanie do klienta..."
+            className="min-h-28 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-ring disabled:cursor-not-allowed disabled:opacity-60"
+          />
+          {askError && <p role="alert" className="text-sm text-destructive">{askError}</p>}
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setAskOpen(false)}
+              disabled={workflow.askCustomer.isPending}
+              className="h-9 rounded-md border border-border px-4 text-sm disabled:opacity-50"
+            >
+              Anuluj
+            </button>
+            <button
+              type="button"
+              onClick={() => void askCustomer()}
+              disabled={!askMessage.trim() || workflow.askCustomer.isPending}
+              className="h-9 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {workflow.askCustomer.isPending ? "Wysyłanie…" : "Wyślij pytanie"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   )
 }
