@@ -72,8 +72,15 @@ export const browserApiTransport: ApiTransport = {
       if (value !== undefined && value !== null) headers.set(name, String(value))
     }
     headers.set("Accept", "application/json")
-    const formDataBody = typeof FormData !== "undefined" && request.body instanceof FormData
-    if (request.body !== undefined && !formDataBody) headers.set("Content-Type", "application/json")
+    let body: BodyInit | undefined
+    if (request.body !== undefined) {
+      if (typeof FormData !== "undefined" && request.body instanceof FormData) {
+        body = request.body
+      } else {
+        headers.set("Content-Type", "application/json")
+        body = JSON.stringify(request.body)
+      }
+    }
 
     if (!["GET"].includes(request.method)) {
       const csrfToken = readCookie("XSRF-TOKEN")
@@ -83,11 +90,7 @@ export const browserApiTransport: ApiTransport = {
     const response = await fetch(requestPath(request), {
       method: request.method,
       headers,
-      body: request.body === undefined
-        ? undefined
-        : formDataBody
-          ? request.body
-          : JSON.stringify(request.body),
+      body,
       credentials: "same-origin",
       cache: "no-store",
     })
