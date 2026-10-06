@@ -71,15 +71,7 @@ class ChannelIntegrationTests {
 
     @BeforeEach
     void resetState() {
-        jdbc.update("DELETE FROM channels");
-        jdbc.update("DELETE FROM integrations");
-        jdbc.update("DELETE FROM customers");
-        jdbc.update("DELETE FROM user_permissions");
-        jdbc.update("DELETE FROM spring_session_attributes");
-        jdbc.update("DELETE FROM spring_session");
-        jdbc.update("DELETE FROM idempotency_keys");
-        jdbc.update("UPDATE bootstrap_admin_state SET consumed = FALSE, consumed_at = NULL, admin_user_id = NULL WHERE id = 1");
-        jdbc.update("DELETE FROM users");
+        TestInfrastructure.resetPostgres(POSTGRES);
     }
 
     @Test
