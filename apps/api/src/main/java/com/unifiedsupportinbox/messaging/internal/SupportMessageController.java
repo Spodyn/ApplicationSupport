@@ -7,6 +7,8 @@ import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.messaging.MessageBodyFormat;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import java.util.UUID;
@@ -68,6 +70,28 @@ class SupportMessageController {
         return ResponseEntity.status(result.status()).body(result.body());
     }
 
+    @PostMapping("/{caseId}/ask-customer")
+    ResponseEntity<JsonNode> askCustomer(
+            @PathVariable UUID caseId,
+            @RequestHeader(ApiV1Conventions.IDEMPOTENCY_KEY_HEADER) String idempotencyKey,
+            @Valid @RequestBody AskCustomerRequest request,
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+        UUID userId = authenticatedUserId(authentication);
+        Object correlationValue = httpRequest.getAttribute(CORRELATION_ID_ATTRIBUTE);
+        String correlationId = correlationValue instanceof String value ? value : UUID.randomUUID().toString();
+
+        IdempotencyResult result = service.ask(
+                caseId,
+                userId,
+                idempotencyKey,
+                request.message(),
+                MessageBodyFormat.PLAIN_TEXT,
+                request.waitingMinutes(),
+                correlationId);
+        return ResponseEntity.status(result.status()).body(result.body());
+    }
+
     private static UUID authenticatedUserId(Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
             throw ApiProblemException.authenticationRequired();
@@ -83,5 +107,10 @@ class SupportMessageController {
             @NotBlank String body,
             MessageBodyFormat bodyFormat,
             List<UUID> attachmentIds) {
+    }
+
+    record AskCustomerRequest(
+            @NotBlank String message,
+            @Min(60) @Max(43200) Long waitingMinutes) {
     }
 }
