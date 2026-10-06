@@ -36,6 +36,10 @@ class RealtimeWebSocketIntegrationTests {
     private static final PostgreSQLContainer POSTGRES = TestInfrastructure.postgres();
     private static final Duration WAIT = Duration.ofSeconds(5);
     private static final Duration FIRST_MESSAGE_CLOSE_WAIT = Duration.ofSeconds(8);
+    private static final String[] LOCAL_PROXY_HEADERS = {
+            "X-Forwarded-Host", "localhost:3000",
+            "X-Forwarded-Proto", "http"
+    };
 
     private static ConfigurableApplicationContext context;
     private static UserAccountRepository users;
@@ -59,6 +63,8 @@ class RealtimeWebSocketIntegrationTests {
                         "--spring.flyway.enabled=true",
                         "--spring.jpa.hibernate.ddl-auto=validate",
                         "--spring.session.jdbc.initialize-schema=never",
+                        // Exercise the local proxy contract with isolated test infrastructure.
+                        "--usi.deployment.profile=local",
                         "--usi.bootstrap-admin.enabled=false",
                         "--usi.realtime.heartbeat=100ms",
                         "--usi.realtime.time-to-first-message=500ms");
@@ -111,6 +117,52 @@ class RealtimeWebSocketIntegrationTests {
         assertThat(websocketUri.getQuery()).isNull();
 
         socket.sendClose(WebSocket.NORMAL_CLOSURE, "test complete").join();
+    }
+
+    @Test
+    void authenticatedLocalReverseProxyUpgradeReachesStompConnected() throws Exception {
+        createUser("proxied-realtime@example.com");
+        SessionClient session = login("proxied-realtime@example.com");
+        RealtimeListener listener = new RealtimeListener();
+
+        WebSocket socket = connect(
+                session.httpClient(), session.cookies(), websocketUri,
+                "http://localhost:3000", listener, LOCAL_PROXY_HEADERS);
+        socket.sendText(stompConnect("0,100"), true).join();
+        assertThat(listener.connectedFrame().get(WAIT.toMillis(), TimeUnit.MILLISECONDS))
+                .startsWith("CONNECTED\n");
+        socket.sendClose(WebSocket.NORMAL_CLOSURE, "test complete").join();
+    }
+
+    @Test
+    void localProxyHeadersDoNotBypassOriginOrSessionChecks() throws Exception {
+        createUser("proxy-origin@example.com");
+        SessionClient session = login("proxy-origin@example.com");
+
+        assertThat(handshakeStatus(
+                session.httpClient(), session.cookies(), websocketUri,
+                "http://localhost:3000"))
+                .isEqualTo(403);
+        assertThat(handshakeStatus(
+                session.httpClient(), session.cookies(), websocketUri,
+                "https://evil.example.invalid", LOCAL_PROXY_HEADERS))
+                .isEqualTo(403);
+        assertThat(handshakeStatus(
+                session.httpClient(), session.cookies(), websocketUri,
+                "http://localhost:3000", "X-Forwarded-Host", "evil.example.invalid",
+                "X-Forwarded-Proto", "http"))
+                .isEqualTo(403);
+        assertThat(handshakeStatus(
+                session.httpClient(), session.cookies(), websocketUri,
+                "http://localhost:3000", "X-Forwarded-Host", "localhost:3000",
+                "X-Forwarded-Proto", "https"))
+                .isEqualTo(403);
+
+        CookieManager anonymousCookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+        assertThat(handshakeStatus(
+                client(anonymousCookies), anonymousCookies, websocketUri,
+                "http://localhost:3000", LOCAL_PROXY_HEADERS))
+                .isEqualTo(401);
     }
 
     @Test
@@ -238,11 +290,16 @@ class RealtimeWebSocketIntegrationTests {
             CookieManager cookies,
             URI uri,
             String origin,
-            RealtimeListener listener) throws Exception {
-        return httpClient.newWebSocketBuilder()
+            RealtimeListener listener,
+            String... extraHeaders) throws Exception {
+        WebSocket.Builder builder = httpClient.newWebSocketBuilder()
                 .connectTimeout(Duration.ofSeconds(3))
                 .header("Origin", origin)
-                .header("Cookie", "USI_SESSION=" + cookieValue(cookies, "USI_SESSION"))
+                .header("Cookie", "USI_SESSION=" + cookieValue(cookies, "USI_SESSION"));
+        for (int index = 0; index < extraHeaders.length; index += 2) {
+            builder.header(extraHeaders[index], extraHeaders[index + 1]);
+        }
+        return builder
                 .buildAsync(uri, listener)
                 .get(WAIT.toMillis(), TimeUnit.MILLISECONDS);
     }
@@ -251,12 +308,17 @@ class RealtimeWebSocketIntegrationTests {
             HttpClient httpClient,
             CookieManager cookies,
             URI uri,
-            String origin) {
+            String origin,
+            String... extraHeaders) {
         try {
-            httpClient.newWebSocketBuilder()
+            WebSocket.Builder builder = httpClient.newWebSocketBuilder()
                     .connectTimeout(Duration.ofSeconds(3))
                     .header("Origin", origin)
-                    .header("Cookie", cookieHeader(cookies))
+                    .header("Cookie", cookieHeader(cookies));
+            for (int index = 0; index < extraHeaders.length; index += 2) {
+                builder.header(extraHeaders[index], extraHeaders[index + 1]);
+            }
+            builder
                     .buildAsync(uri, new RealtimeListener())
                     .join();
             throw new AssertionError("Expected WebSocket handshake to fail");

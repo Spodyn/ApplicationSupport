@@ -102,6 +102,18 @@
       "type": "optional-identifier",
       "requiredProfiles": []
     },
+    "USI_SLACK_TEAM_ID": {
+      "classification": "server-non-secret",
+      "type": "optional-identifier",
+      "requiredProfiles": [],
+      "allowedProfiles": ["local"]
+    },
+    "USI_SLACK_CHANNEL_ID": {
+      "classification": "server-non-secret",
+      "type": "optional-identifier",
+      "requiredProfiles": [],
+      "allowedProfiles": ["local"]
+    },
     "USI_TEAMS_CLIENT_ID": {
       "classification": "server-non-secret",
       "type": "optional-identifier",
@@ -173,6 +185,12 @@
       "requiredProfiles": ["local"],
       "allowedProfiles": ["local"]
     },
+    "USI_PAGINATION_CURSOR_SIGNING_KEY": {
+      "classification": "local-secret",
+      "type": "non-empty",
+      "requiredProfiles": [],
+      "allowedProfiles": ["local"]
+    },
     "USI_CORE_SECRETS_DIRECTORY": {
       "classification": "secret-location",
       "type": "absolute-directory",
@@ -182,7 +200,7 @@
     "USI_INTEGRATION_SECRETS_DIRECTORY": {
       "classification": "secret-location",
       "type": "absolute-directory",
-      "requiredProfiles": ["local", "staging", "prod", "production"],
+      "requiredProfiles": ["staging", "prod", "production"],
       "allowedProfiles": ["local", "staging", "prod", "production"]
     }
   },

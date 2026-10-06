@@ -44,6 +44,12 @@ pnpm local:health
 `local:api` creates the ignored root `.env` from `.env.example` only if needed,
 loads it into the backend process, and prefers the checked-in Maven wrapper. It
 fails with a clear message if the backend bootstrap has not been added yet.
+The example includes a disposable cursor signing key. The local profile also
+has a development-only fallback for older ignored `.env` files. The integration
+secret directory defaults to `.usi/integration-secrets/` below the current
+user's home directory on Windows, macOS, and Linux; create it only when testing
+provider credentials. Set `USI_INTEGRATION_SECRETS_DIRECTORY` to an absolute
+path in the ignored `.env` if another local directory is needed.
 
 ## Commands
 
@@ -55,6 +61,7 @@ fails with a clear message if the backend bootstrap has not been added yet.
 | `pnpm local:infra:logs` | Follow local Compose logs (`-- postgres` etc. can narrow the service). |
 | `pnpm local:web` | Create `apps/web/.env.local` from its example if missing and run the frontend. |
 | `pnpm local:api` | Run the Spring Boot backend through the Maven wrapper when present. |
+| `pnpm local:slack:seed` | Create or reuse the local Slack sandbox customer, integration and monitored channel after Flyway has run. |
 | `pnpm local:health` | Require PostgreSQL, RabbitMQ and MinIO health; additionally require `/actuator/health` once `apps/api/pom.xml` exists. |
 | `pnpm local:check` | Validate Compose configuration, run the repository quality gate, and run backend `clean verify` when the backend exists. |
 
@@ -62,6 +69,26 @@ The reset command is intentionally named and constrained to
 `infra/compose.yaml`. Internally it requires an explicit
 `--confirm-local-data-loss` flag before issuing `docker compose down --volumes`.
 It has no code path for staging or production resources.
+
+To connect an isolated Slack sandbox, put its non-secret workspace and monitored
+channel IDs in the ignored root `.env` as `USI_SLACK_TEAM_ID` and
+`USI_SLACK_CHANNEL_ID`. Start `pnpm local:api` once so Flyway creates the
+schema, then run `pnpm local:slack:seed`. The command writes only to the
+`usi-local` Compose PostgreSQL container. It creates or reuses customer
+`Slack Test Customer` (`slack-test`), the configured Slack workspace, and the
+configured monitored channel with `SLACK_ROOT_THREAD`. Running it again is
+idempotent. The integration stores only the relative locator
+`slack/development-workspace`; put the actual Slack credentials in the external
+secret files described in
+[`SLACK_DEVELOPMENT.md`](SLACK_DEVELOPMENT.md). The command does not read those
+files or contact Slack.
+The `local` API profile enables the Slack inbound worker, so authenticated
+events for the seeded channel move from the durable inbox through RabbitMQ into
+Cases and Messages. Start the API before sending sandbox messages; already
+queued events are consumed when the API starts.
+The local profile also enables the message-delivery worker. It consumes queued
+support replies from `usi.messages.delivery` and redispatches due retries when
+the API is running. The bot token remains in the external secret directory.
 
 To follow one service only:
 
@@ -99,7 +126,13 @@ CORS.
 
 During `next dev`, Next.js proxies both `/api/:path*` and `/ws/:path*` to the
 local Spring Boot process. The default target is `http://127.0.0.1:8080`. A
-developer who intentionally runs the API on another local port may set the
+WebSocket Upgrade keeps the browser `Origin` but changes `Host` to the API
+target. Next also forwards the browser host and scheme. In the `local` profile,
+Spring accepts that forwarded origin only when the request comes from loopback,
+the target is a loopback API, and `Origin`, forwarded host/scheme, and
+`USI_PUBLIC_BASE_URL` agree exactly. Direct API requests and other profiles
+retain strict request-origin comparison and session authentication. A developer
+who intentionally runs the API on another local port may set the
 server-only process variable before starting the web app:
 
 ```bash
