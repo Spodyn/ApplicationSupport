@@ -225,3 +225,13 @@ The developer-command contract itself is covered by Node's built-in test runner
 (`pnpm test:dev-tools`) and is part of the normal `pnpm check` gate. Same-origin
 proxy/origin behavior is covered by frontend unit tests, while the API
 environment suite verifies explicit CORS origin-list validation.
+
+
+## Persisted Slack Inbox MVP
+
+The authenticated `/cases` workspace reads persisted Cases and Message history from the API.
+For the isolated Slack sandbox, the supported minimal vertical path is: inbound Slack root message ->
+Case list -> open conversation -> claim -> plain-text support reply -> provider delivery. The active
+workspace uses the real API adapter for this path; unfinished workflow actions remain unavailable
+instead of falling back to mock business state. Message history is cursor-paginated and safely renders
+empty conversations.
