@@ -47,7 +47,7 @@ class CaseResolveController {
         return ResponseEntity.status(result.status()).body(result.body());
     }
 
-    private static CaseResolutionCategory resolutionCategory(String value) {
+    static CaseResolutionCategory resolutionCategory(String value) {
         if (value == null) return null;
         String normalized = value.strip();
         if (normalized.isEmpty()) {
