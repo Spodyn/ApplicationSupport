@@ -90,7 +90,7 @@ class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder, CaseSl
                   AND s.policy_id = p.id
                   AND p.pause_waiting = TRUE
                 """, paused, paused, caseId);
-
+    }
 
     @Override
     @Transactional
@@ -123,6 +123,4 @@ class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder, CaseSl
                   AND s.paused_at IS NOT NULL
                 """, resumed, resumed, resumed, resumed, resumed, caseId);
     }
-    }
-
 }
