@@ -235,8 +235,8 @@ test("current owner can queue Ask Customer without optimistic WAITING transition
 
   await expect(dialog).toHaveCount(0)
   await expect(conversation.getByText("Could you confirm the transaction?")).toBeVisible()
-  await expect(conversation.getByText("Anna Kowalska")).toBeVisible()
   await expect(conversation.getByText("W trakcie weryfikacji")).toBeVisible()
+  await expect(conversation.getByRole("button", { name: "Dopytaj" })).toBeEnabled()
   expect(asks).toEqual(["Could you confirm the transaction?"])
   expect(externalRequests).toEqual([])
 })
