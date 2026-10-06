@@ -12,6 +12,8 @@ export interface InboxIgnoreInput {
 
 export interface InboxAskInput {
   message: string
+  waitingMinutes?: number
+  idempotencyKey?: string
 }
 
 export interface InboxResolveInput {
