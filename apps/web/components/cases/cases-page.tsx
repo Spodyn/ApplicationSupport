@@ -15,6 +15,7 @@ import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
 import { inboxStatusLabels } from "@/lib/domain/inbox"
 import { useCurrentUser, useInboxCase, useInboxCases, useInboxMessages, useInboxWorkflow, useMarkInboxCaseRead } from "@/lib/services/queries"
 import { cn } from "@/lib/utils"
+import { ConfirmDialog } from "@/components/design-system/confirm-dialog"
 import { SafeExternalMessage } from "./safe-external-message"
 
 type QuickFilter = "all" | "sla" | "mine"
@@ -378,9 +379,21 @@ function ConversationPanel({
 }) {
   const [draft, setDraft] = useState("")
   const [sendError, setSendError] = useState("")
+  const [resolveOpen, setResolveOpen] = useState(false)
   const idempotencyKey = useRef<string | null>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
+  const canResolve = Boolean(record?.availableActions?.includes("RESOLVE"))
+
+  const resolveCase = async () => {
+    if (!canResolve || workflow.resolve.isPending) return
+    try {
+      await workflow.resolve.mutateAsync({})
+      setResolveOpen(false)
+    } catch {
+      // The mutation error is rendered below the header; keep the dialog open for retry/cancel.
+    }
+  }
 
   const send = async () => {
     if (!canReply || !draft.trim() || workflow.sendMessage.isPending) return
@@ -407,17 +420,19 @@ function ConversationPanel({
           <div className="hidden shrink-0 items-center gap-3 xl:flex">
             <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:cursor-not-allowed disabled:opacity-50"><UserRound className="size-[17px]" />{workflow.claim.isPending ? "Przejmowanie…" : "Przejmij"}</button>
             <button disabled title="Akcja niedostępna" className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75"><AlarmClock className="size-[17px]" /> Odłóż</button>
-            <button disabled title="Akcja niedostępna" className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75"><Check className="size-[17px]" /> Zamknij sprawę</button>
+            <button type="button" onClick={() => setResolveOpen(true)} disabled={!canResolve || workflow.resolve.isPending} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:cursor-not-allowed disabled:opacity-50"><Check className="size-[17px]" /> {workflow.resolve.isPending ? "Zamykanie…" : "Zamknij sprawę"}</button>
           </div>
         </div>
         <div className="mt-[15px] flex items-center gap-3">
           <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] text-[#edf0f4] disabled:cursor-not-allowed disabled:opacity-50 xl:hidden">Przejmij</button>
+          {canResolve && <button type="button" onClick={() => setResolveOpen(true)} disabled={workflow.resolve.isPending} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] text-[#edf0f4] disabled:opacity-50 xl:hidden">Zamknij</button>}
           <div className="flex h-[45px] items-center gap-2 rounded-[9px] border border-violet-500/[0.12] bg-violet-950/35 px-3.5 text-[12px] font-medium text-violet-300">{item.status}</div>
           <div className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3.5 text-[12px] text-[#edf0f4]"><Avatar initials={initials(record?.owner?.fullName ?? "?")} size="sm" />{record?.owner?.fullName ?? "Nieprzypisane"}</div>
           <div className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3.5 text-[12px] font-semibold text-[#aeb8c8]"><Clock3 className="size-[17px]" />{item.sla}</div>
         </div>
         {detailError && <p role="alert" className="text-xs text-red-400">Nie udało się wczytać szczegółów case’u.</p>}
         {workflow.claim.isError && <p role="alert" className="text-xs text-red-400">{workflow.claim.error.message}</p>}
+        {workflow.resolve.isError && <p role="alert" className="text-xs text-red-400">{workflow.resolve.error.message}</p>}
       </header>
 
       <div className="cases-scrollbar min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_72%_34%,rgba(23,48,76,0.12),transparent_42%)] py-[22px] pl-[22px] pr-[12px]">
@@ -442,6 +457,14 @@ function ConversationPanel({
         </div>
         {sendError && <p role="alert" className="mt-2 text-sm text-red-400">{sendError}</p>}
       </div>
+      <ConfirmDialog
+        open={resolveOpen}
+        onOpenChange={setResolveOpen}
+        title="Zamknąć sprawę?"
+        description="Case zostanie oznaczony jako rozwiązany. Ta operacja jest końcowa — kolejna wiadomość klienta utworzy nowy powiązany case."
+        confirmLabel={workflow.resolve.isPending ? "Zamykanie…" : "Zamknij sprawę"}
+        onConfirm={() => void resolveCase()}
+      />
     </section>
   )
 }
