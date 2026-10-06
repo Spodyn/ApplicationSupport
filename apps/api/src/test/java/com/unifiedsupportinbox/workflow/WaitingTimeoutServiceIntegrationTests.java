@@ -68,7 +68,7 @@ class WaitingTimeoutServiceIntegrationTests {
                 .isNull();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isZero();
         assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM audit_events WHERE action = 'WAITING_TIMEOUT' AND entity_id = ?",
+                "SELECT count(*) FROM audit_events WHERE action = 'CASE_WAITING_TIMEOUT' AND entity_id = ?",
                 Integer.class,
                 caseId)).isEqualTo(1);
         assertThat(jdbc.queryForObject(
@@ -78,7 +78,7 @@ class WaitingTimeoutServiceIntegrationTests {
 
         assertThat(service.processDue(100)).isZero();
         assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM audit_events WHERE action = 'WAITING_TIMEOUT' AND entity_id = ?",
+                "SELECT count(*) FROM audit_events WHERE action = 'CASE_WAITING_TIMEOUT' AND entity_id = ?",
                 Integer.class,
                 caseId)).isEqualTo(1);
     }
@@ -113,7 +113,7 @@ class WaitingTimeoutServiceIntegrationTests {
                 "SELECT status FROM cases WHERE id = ?", String.class, caseId))
                 .isEqualTo("NEW");
         assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM audit_events WHERE action = 'WAITING_TIMEOUT' AND entity_id = ?",
+                "SELECT count(*) FROM audit_events WHERE action = 'CASE_WAITING_TIMEOUT' AND entity_id = ?",
                 Integer.class,
                 caseId)).isEqualTo(1);
         assertThat(jdbc.queryForObject(
