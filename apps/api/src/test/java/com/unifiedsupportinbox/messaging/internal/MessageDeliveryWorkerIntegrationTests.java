@@ -40,6 +40,7 @@ class MessageDeliveryWorkerIntegrationTests {
 
     @Autowired private JdbcTemplate jdbc;
     @Autowired private SupportSendMessageService send;
+    @Autowired private AskCustomerService ask;
     @Autowired private MessageDeliveryService deliveries;
     @Autowired private MessageDeliveryWorker worker;
     @Autowired private FakeProvider provider;
@@ -104,6 +105,86 @@ class MessageDeliveryWorkerIntegrationTests {
         assertThat(provider.calls()).isEqualTo(2);
         assertThat(provider.idempotencyKey()).isEqualTo(messageId.toString());
         assertThat(provider.sawDatabaseTransaction()).isFalse();
+    }
+
+    @Test
+    void successfulAskDeliveryMovesCaseToWaitingAndPausesSla() {
+        Fixture fixture = createFixture("ENABLED");
+        seedCaseSla(fixture.caseId());
+        IdempotencyResult queued = ask.ask(
+                fixture.caseId(),
+                fixture.ownerId(),
+                "ask-delivery-success",
+                "Could you provide more details?",
+                null,
+                180L,
+                "corr-ask-success");
+        UUID messageId = UUID.fromString(queued.body().get("messageId").asText());
+        provider.steps(DeliveryResult.sent("slack-ts-ask"));
+
+        Instant before = Instant.now();
+        assertThat(worker.process(messageId)).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+
+        assertThat(status(messageId)).isEqualTo("SENT");
+        assertThat(jdbc.queryForObject(
+                "SELECT status FROM cases WHERE id = ?", String.class, fixture.caseId()))
+                .isEqualTo("WAITING_FOR_CUSTOMER");
+        assertThat(jdbc.queryForObject(
+                "SELECT owner_user_id FROM cases WHERE id = ?", UUID.class, fixture.caseId()))
+                .isNull();
+        Instant waitingUntil = jdbc.queryForObject(
+                "SELECT waiting_until FROM cases WHERE id = ?",
+                java.time.OffsetDateTime.class,
+                fixture.caseId()).toInstant();
+        assertThat(waitingUntil).isAfterOrEqualTo(before.plus(Duration.ofMinutes(179)));
+        assertThat(jdbc.queryForObject(
+                "SELECT state FROM case_sla WHERE case_id = ?", String.class, fixture.caseId()))
+                .isEqualTo("PAUSED");
+        assertThat(jdbc.queryForObject(
+                "SELECT paused_at IS NOT NULL FROM case_sla WHERE case_id = ?", Boolean.class, fixture.caseId()))
+                .isTrue();
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE action = 'CASE_ASK_CUSTOMER' AND entity_id = ?",
+                Integer.class,
+                fixture.caseId())).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM outbox_events WHERE type = 'case.updated' AND aggregate_id = ?",
+                Integer.class,
+                fixture.caseId())).isEqualTo(1);
+    }
+
+    @Test
+    void failedAskDeliveryKeepsCaseOwnedAndSlaRunning() {
+        Fixture fixture = createFixture("ENABLED");
+        seedCaseSla(fixture.caseId());
+        IdempotencyResult queued = ask.ask(
+                fixture.caseId(),
+                fixture.ownerId(),
+                "ask-delivery-failure",
+                "Could you provide more details?",
+                null,
+                null,
+                "corr-ask-failure");
+        UUID messageId = UUID.fromString(queued.body().get("messageId").asText());
+        provider.steps(DeliveryResult.permanentFailure("CHANNEL_NOT_FOUND"));
+
+        assertThat(worker.process(messageId)).isEqualTo(MessageDeliveryWorker.AttemptResult.FAILED);
+
+        assertThat(jdbc.queryForObject(
+                "SELECT status FROM cases WHERE id = ?", String.class, fixture.caseId()))
+                .isEqualTo("VERIFICATION");
+        assertThat(jdbc.queryForObject(
+                "SELECT owner_user_id FROM cases WHERE id = ?", UUID.class, fixture.caseId()))
+                .isEqualTo(fixture.ownerId());
+        assertThat(jdbc.queryForObject(
+                "SELECT waiting_until FROM cases WHERE id = ?", Object.class, fixture.caseId()))
+                .isNull();
+        assertThat(jdbc.queryForObject(
+                "SELECT state FROM case_sla WHERE case_id = ?", String.class, fixture.caseId()))
+                .isEqualTo("ON_TRACK");
+        assertThat(jdbc.queryForObject(
+                "SELECT paused_at FROM case_sla WHERE case_id = ?", Object.class, fixture.caseId()))
+                .isNull();
     }
 
     @Test
@@ -260,6 +341,25 @@ class MessageDeliveryWorkerIntegrationTests {
                 RETURNING id
                 """, UUID.class, customerId, integrationId, channelId, ownerId);
         return new Fixture(ownerId, integrationId, caseId);
+    }
+
+    private void seedCaseSla(UUID caseId) {
+        jdbc.update("""
+                INSERT INTO case_sla (
+                    case_id, policy_id,
+                    first_response_started_at, first_response_due_at,
+                    unclaimed_started_at, unclaimed_warning_at, unclaimed_breach_at,
+                    in_progress_started_at, in_progress_warning_at, in_progress_breach_at
+                )
+                SELECT ?, id,
+                       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 hour',
+                       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '15 minutes',
+                       CURRENT_TIMESTAMP + INTERVAL '1 hour',
+                       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '30 minutes',
+                       CURRENT_TIMESTAMP + INTERVAL '2 hours'
+                FROM sla_policies
+                WHERE active = TRUE
+                """, caseId);
     }
 
     private String status(UUID messageId) {
