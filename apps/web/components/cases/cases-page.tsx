@@ -381,14 +381,17 @@ function ConversationPanel({
   const [sendError, setSendError] = useState("")
   const [resolveOpen, setResolveOpen] = useState(false)
   const idempotencyKey = useRef<string | null>(null)
+  const resolveIdempotencyKey = useRef<string | null>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
   const canResolve = Boolean(record?.availableActions?.includes("RESOLVE"))
 
   const resolveCase = async () => {
     if (!canResolve || workflow.resolve.isPending) return
+    resolveIdempotencyKey.current ??= crypto.randomUUID()
     try {
-      await workflow.resolve.mutateAsync({})
+      await workflow.resolve.mutateAsync({ idempotencyKey: resolveIdempotencyKey.current })
+      resolveIdempotencyKey.current = null
       setResolveOpen(false)
     } catch {
       // The mutation error is rendered below the header; keep the dialog open for retry/cancel.
@@ -459,7 +462,10 @@ function ConversationPanel({
       </div>
       <ConfirmDialog
         open={resolveOpen}
-        onOpenChange={setResolveOpen}
+        onOpenChange={(open) => {
+          setResolveOpen(open)
+          if (!open && !workflow.resolve.isPending) resolveIdempotencyKey.current = null
+        }}
         title="Zamknąć sprawę?"
         description="Case zostanie oznaczony jako rozwiązany. Ta operacja jest końcowa — kolejna wiadomość klienta utworzy nowy powiązany case."
         confirmLabel={workflow.resolve.isPending ? "Zamykanie…" : "Zamknij sprawę"}
