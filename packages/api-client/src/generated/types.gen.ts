@@ -11,6 +11,12 @@ export type ApiProblem = {
 
 export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTICATION_REQUIRED" | "ACCESS_DENIED" | "RESOURCE_NOT_FOUND" | "CONFLICT" | "CASE_ALREADY_CLAIMED" | "RATE_LIMITED" | "PROVIDER_FAILURE" | "APPLICATION_FAILURE" | "INTERNAL_ERROR"
 
+export type AskCustomerRequest = {
+  "message": string
+  "bodyFormat"?: MessageBodyFormat
+  "waitingMinutes"?: number
+}
+
 export type CaseChannel = {
   "id": string
   "name": string
