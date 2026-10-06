@@ -80,7 +80,8 @@ families for the current integration:
 - `message.channels`
 - `message.groups`
 
-USI receives the normal message stream and later filters unsupported subtypes,
+USI accepts message events only when `channel_type` is `channel` or `group`,
+then filters unsupported subtypes,
 message edits/deletes, ignored channels, and the app's own bot messages in the
 provider normalization layer. Do not subscribe to broad unrelated event families
 as a substitute for that filtering.

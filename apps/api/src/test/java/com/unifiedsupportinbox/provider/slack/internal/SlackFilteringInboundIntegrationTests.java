@@ -76,7 +76,7 @@ class SlackFilteringInboundIntegrationTests {
         UUID integrationId = createSlackIntegration();
         UUID channelId = createChannel(integrationId, "C-support", true, false);
         InboundEvent event = persist(integrationId, "Ev-human", """
-                {"type":"event_callback","event_id":"Ev-human","event":{"type":"message","channel":"C-support","user":"U-customer","text":"hello","ts":"1720000000.123456"}}
+                {"type":"event_callback","event_id":"Ev-human","event":{"type":"message","channel":"C-support","channel_type":"channel","user":"U-customer","text":"hello","ts":"1720000000.123456"}}
                 """);
 
         assertThat(worker.process(event.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
@@ -91,7 +91,7 @@ class SlackFilteringInboundIntegrationTests {
         UUID integrationId = createSlackIntegration();
         createChannel(integrationId, "C-support", true, false);
         InboundEvent event = persist(integrationId, "Ev-bot", """
-                {"type":"event_callback","event_id":"Ev-bot","event":{"type":"message","subtype":"bot_message","channel":"C-support","bot_id":"B-usi","text":"our reply","ts":"1720000000.1"}}
+                {"type":"event_callback","event_id":"Ev-bot","event":{"type":"message","subtype":"bot_message","channel":"C-support","channel_type":"channel","bot_id":"B-usi","text":"our reply","ts":"1720000000.1"}}
                 """);
 
         assertThat(worker.process(event.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
@@ -131,7 +131,7 @@ class SlackFilteringInboundIntegrationTests {
         UUID integrationId = createSlackIntegration();
         createChannel(integrationId, "C-support", true, false);
         InboundEvent event = persist(integrationId, "Ev-malformed", """
-                {"type":"event_callback","event_id":"Ev-malformed","event":{"type":"message","channel":"C-support","user":"U-customer","ts":"1720000000.1"}}
+                {"type":"event_callback","event_id":"Ev-malformed","event":{"type":"message","channel":"C-support","channel_type":"channel","user":"U-customer","ts":"1720000000.1"}}
                 """);
 
         assertThat(worker.process(event.id())).isEqualTo(SlackInboundWorker.AttemptResult.DLQ);

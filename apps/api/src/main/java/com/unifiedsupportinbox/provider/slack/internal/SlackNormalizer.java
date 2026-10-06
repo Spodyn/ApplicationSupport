@@ -21,11 +21,11 @@ class SlackNormalizer {
             return new Filtered(FilterReason.UNSUPPORTED_EVENT);
         }
 
-        String channel = requiredText(event, "channel", "Slack message channel is required.");
         String channelType = optionalText(event, "channel_type");
-        if ("im".equals(channelType) || "mpim".equals(channelType)) {
+        if (!"channel".equals(channelType) && !"group".equals(channelType)) {
             return new Filtered(FilterReason.UNSUPPORTED_CONVERSATION);
         }
+        String channel = requiredText(event, "channel", "Slack message channel is required.");
         String subtype = optionalText(event, "subtype");
         if (subtype == null) {
             return normalizeCreate(inbound, channelId, channel, event);
