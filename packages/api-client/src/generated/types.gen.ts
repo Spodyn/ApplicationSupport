@@ -11,6 +11,15 @@ export type ApiProblem = {
 
 export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTICATION_REQUIRED" | "ACCESS_DENIED" | "RESOURCE_NOT_FOUND" | "CONFLICT" | "CASE_ALREADY_CLAIMED" | "RATE_LIMITED" | "PROVIDER_FAILURE" | "APPLICATION_FAILURE" | "INTERNAL_ERROR"
 
+export type AttachmentUploadResponse = {
+  "attachmentId": string
+  "filename": string
+  "contentType": string | null
+  "sizeBytes": number
+  "scanStatus": string
+  "scanError": string | null
+}
+
 export type CaseChannel = {
   "id": string
   "name": string
@@ -220,6 +229,7 @@ export type ReadPositionResponse = {
 export type SendMessageRequest = {
   "body": string
   "bodyFormat"?: MessageBodyFormat
+  "attachmentIds"?: Array<string>
 }
 
 export type SendMessageResponse = {
