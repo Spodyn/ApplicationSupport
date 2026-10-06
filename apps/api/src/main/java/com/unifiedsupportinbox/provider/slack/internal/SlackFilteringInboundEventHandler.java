@@ -99,7 +99,7 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
     private static String outcomeFor(FilterReason reason) {
         return switch (reason) {
             case BOT_OR_APP_MESSAGE -> IGNORED_BOT_MESSAGE;
-            case UNSUPPORTED_EVENT -> UNSUPPORTED_PROVIDER_EVENT;
+            case UNSUPPORTED_CONVERSATION, UNSUPPORTED_EVENT -> UNSUPPORTED_PROVIDER_EVENT;
         };
     }
 }

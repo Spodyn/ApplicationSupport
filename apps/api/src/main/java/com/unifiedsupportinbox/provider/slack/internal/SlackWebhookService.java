@@ -30,16 +30,24 @@ class SlackWebhookService {
     Optional<String> handle(String timestamp, String signature, byte[] rawBody) {
         List<CredentialReference> verified = authenticator.authenticate(timestamp, signature, rawBody);
         JsonNode payload = parse(rawBody);
-        CredentialReference integration = selectIntegration(verified, text(payload, "team_id"));
         String type = requiredText(payload, "type", "Slack request type is required.");
+        String teamId = text(payload, "team_id");
 
         if ("url_verification".equals(type)) {
+            // Slack URL verification can omit team_id. A unique verified signing
+            // credential is sufficient to answer the challenge in that case.
+            if (teamId == null) {
+                if (verified.size() != 1) throw ApiProblemException.authenticationRequired();
+            } else {
+                selectIntegration(verified, teamId);
+            }
             return Optional.of(requiredText(payload, "challenge", "Slack URL verification challenge is required."));
         }
         if (!"event_callback".equals(type)) {
             throw ApiProblemException.validationFailed("Unsupported Slack callback type.");
         }
 
+        CredentialReference integration = selectIntegration(verified, teamId);
         String eventId = requiredText(payload, "event_id", "Slack event_id is required.");
         String payloadJson = new String(rawBody, StandardCharsets.UTF_8);
         inboundEvents.persistAndWake(

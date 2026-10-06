@@ -27,7 +27,7 @@ class SlackNormalizerTests {
                 {
                   "type":"event_callback",
                   "event_id":"Ev-root",
-                  "event":{"type":"message","channel":"C-support","user":"U-customer","text":"hello","ts":"1720000000.123456"}
+                  "event":{"type":"message","channel":"C-support","channel_type":"channel","user":"U-customer","text":"hello","ts":"1720000000.123456"}
                 }
                 """);
 
@@ -51,7 +51,7 @@ class SlackNormalizerTests {
                 {
                   "type":"event_callback",
                   "event_id":"Ev-reply",
-                  "event":{"type":"message","channel":"C-support","user":"U-customer","text":"reply","ts":"1720000001.000001","thread_ts":"1720000000.123456"}
+                  "event":{"type":"message","channel":"C-support","channel_type":"channel","user":"U-customer","text":"reply","ts":"1720000001.000001","thread_ts":"1720000000.123456"}
                 }
                 """);
 
@@ -69,7 +69,7 @@ class SlackNormalizerTests {
                   "type":"event_callback",
                   "event_id":"Ev-file",
                   "event":{
-                    "type":"message","subtype":"file_share","channel":"C-support","user":"U-customer",
+                    "type":"message","subtype":"file_share","channel":"C-support","channel_type":"channel","user":"U-customer",
                     "text":"","ts":"1720000002.000001","thread_ts":"1720000000.123456",
                     "files":[{"id":"F123"}]
                   }
@@ -90,7 +90,7 @@ class SlackNormalizerTests {
                 {
                   "type":"event_callback",
                   "event_id":"Ev-bot",
-                  "event":{"type":"message","subtype":"bot_message","channel":"C-support","bot_id":"B1","text":"bot","ts":"1720000000.1"}
+                  "event":{"type":"message","subtype":"bot_message","channel":"C-support","channel_type":"channel","bot_id":"B1","text":"bot","ts":"1720000000.1"}
                 }
                 """);
         SlackInboundEvent ownUser = inbound("""
@@ -98,7 +98,7 @@ class SlackNormalizerTests {
                   "type":"event_callback",
                   "event_id":"Ev-own",
                   "authorizations":[{"user_id":"U-usi-bot"}],
-                  "event":{"type":"message","channel":"C-support","user":"U-usi-bot","text":"our reply","ts":"1720000000.2"}
+                  "event":{"type":"message","channel":"C-support","channel_type":"channel","user":"U-usi-bot","text":"our reply","ts":"1720000000.2"}
                 }
                 """);
 
@@ -115,7 +115,7 @@ class SlackNormalizerTests {
                   "type":"event_callback",
                   "event_id":"Ev-edit",
                   "event":{
-                    "type":"message","subtype":"message_changed","channel":"C-support","event_ts":"1720000010.5",
+                    "type":"message","subtype":"message_changed","channel":"C-support","channel_type":"channel","event_ts":"1720000010.5",
                     "message":{"type":"message","user":"U-customer","text":"edited","ts":"1720000001.000001","thread_ts":"1720000000.123456","edited":{"user":"U-customer","ts":"1720000010.250000"}}
                   }
                 }
@@ -137,7 +137,7 @@ class SlackNormalizerTests {
                   "type":"event_callback",
                   "event_id":"Ev-delete",
                   "event":{
-                    "type":"message","subtype":"message_deleted","channel":"C-support","deleted_ts":"1720000001.000001","event_ts":"1720000020.750000",
+                    "type":"message","subtype":"message_deleted","channel":"C-support","channel_type":"channel","deleted_ts":"1720000001.000001","event_ts":"1720000020.750000",
                     "previous_message":{"type":"message","user":"U-customer","text":"old","ts":"1720000001.000001","thread_ts":"1720000000.123456"}
                   }
                 }
@@ -153,12 +153,62 @@ class SlackNormalizerTests {
     }
 
     @Test
+    void acceptsPrivateChannelsAndFiltersAllOtherConversationTypes() throws Exception {
+        SlackInboundEvent privateChannel = inbound("""
+                {
+                  "type":"event_callback",
+                  "event_id":"Ev-private",
+                  "event":{"type":"message","channel":"G-support","channel_type":"group","user":"U1","text":"private","ts":"1720000000.3"}
+                }
+                """);
+        SlackInboundEvent directMessage = inbound("""
+                {
+                  "type":"event_callback",
+                  "event_id":"Ev-dm",
+                  "event":{"type":"message","channel":"D-support","channel_type":"im","user":"U1","text":"dm","ts":"1720000000.1"}
+                }
+                """);
+        SlackInboundEvent groupDirectMessage = inbound("""
+                {
+                  "type":"event_callback",
+                  "event_id":"Ev-mpim",
+                  "event":{"type":"message","channel":"G-support","channel_type":"mpim","user":"U1","text":"group dm","ts":"1720000000.2"}
+                }
+                """);
+        SlackInboundEvent appHome = inbound("""
+                {
+                  "type":"event_callback",
+                  "event_id":"Ev-home",
+                  "event":{"type":"message","channel":"D-support","channel_type":"app_home","user":"U1","text":"home","ts":"1720000000.4"}
+                }
+                """);
+        SlackInboundEvent missingType = inbound("""
+                {
+                  "type":"event_callback",
+                  "event_id":"Ev-no-type",
+                  "event":{"type":"message","channel":"C-support","user":"U1","text":"unknown","ts":"1720000000.5"}
+                }
+                """);
+
+        assertThat(normalizer.normalize(privateChannel, channelId))
+                .isInstanceOf(SlackNormalizer.Accepted.class);
+        assertThat(((SlackNormalizer.Filtered) normalizer.normalize(directMessage, channelId)).reason())
+                .isEqualTo(SlackNormalizer.FilterReason.UNSUPPORTED_CONVERSATION);
+        assertThat(((SlackNormalizer.Filtered) normalizer.normalize(groupDirectMessage, channelId)).reason())
+                .isEqualTo(SlackNormalizer.FilterReason.UNSUPPORTED_CONVERSATION);
+        assertThat(((SlackNormalizer.Filtered) normalizer.normalize(appHome, channelId)).reason())
+                .isEqualTo(SlackNormalizer.FilterReason.UNSUPPORTED_CONVERSATION);
+        assertThat(((SlackNormalizer.Filtered) normalizer.normalize(missingType, channelId)).reason())
+                .isEqualTo(SlackNormalizer.FilterReason.UNSUPPORTED_CONVERSATION);
+    }
+
+    @Test
     void filtersUnsupportedMessageSubtypeAndNonMessageEvents() throws Exception {
         SlackInboundEvent unsupportedSubtype = inbound("""
                 {
                   "type":"event_callback",
                   "event_id":"Ev-join",
-                  "event":{"type":"message","subtype":"channel_join","channel":"C-support","user":"U1","text":"joined","ts":"1720000000.1"}
+                  "event":{"type":"message","subtype":"channel_join","channel":"C-support","channel_type":"channel","user":"U1","text":"joined","ts":"1720000000.1"}
                 }
                 """);
         SlackInboundEvent reaction = inbound("""
@@ -181,7 +231,7 @@ class SlackNormalizerTests {
                 {
                   "type":"event_callback",
                   "event_id":"Ev-malformed",
-                  "event":{"type":"message","channel":"C-support","user":"U-customer","ts":"1720000000.1"}
+                  "event":{"type":"message","channel":"C-support","channel_type":"channel","user":"U-customer","ts":"1720000000.1"}
                 }
                 """);
 

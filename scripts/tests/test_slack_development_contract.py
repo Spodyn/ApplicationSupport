@@ -33,15 +33,19 @@ class SlackDevelopmentContractTest(unittest.TestCase):
             "channels:history",
             "groups:read",
             "groups:history",
-            "im:read",
-            "im:history",
-            "mpim:read",
-            "mpim:history",
             "chat:write",
         )
         required_events = (
             "message.channels",
             "message.groups",
+        )
+        out_of_scope_scopes = (
+            "im:read",
+            "im:history",
+            "mpim:read",
+            "mpim:history",
+        )
+        out_of_scope_events = (
             "message.im",
             "message.mpim",
         )
@@ -52,6 +56,12 @@ class SlackDevelopmentContractTest(unittest.TestCase):
         for event in required_events:
             with self.subTest(event=event):
                 self.assertIn(f"`{event}`", guide)
+        for scope in out_of_scope_scopes:
+            with self.subTest(out_of_scope_scope=scope):
+                self.assertNotIn(f"`{scope}`", guide)
+        for event in out_of_scope_events:
+            with self.subTest(out_of_scope_event=event):
+                self.assertNotIn(f"`{event}`", guide)
 
     def test_guide_preserves_secret_ref_boundary_and_runtime_signing_secret_layout(self) -> None:
         guide = (REPOSITORY_ROOT / "docs" / "SLACK_DEVELOPMENT.md").read_text(
@@ -61,6 +71,7 @@ class SlackDevelopmentContractTest(unittest.TestCase):
         self.assertIn("Integration.secret_ref", guide)
         self.assertIn("USI_INTEGRATION_SECRETS_DIRECTORY", guide)
         self.assertIn("slack-signing-secret", guide)
+        self.assertIn("slack-bot-token", guide)
         self.assertIn("raw request body before JSON parsing", guide)
         self.assertNotIn("xoxb-", guide)
 

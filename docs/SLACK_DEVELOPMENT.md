@@ -55,10 +55,6 @@ only the scopes required by the current USI Slack feature set:
 | `channels:history` | Receive/read messages in public channels the app belongs to. |
 | `groups:read` | Discover/read metadata for private channels the app belongs to. |
 | `groups:history` | Receive/read messages in private channels the app belongs to. |
-| `im:read` | Read metadata for direct-message conversations with the app. |
-| `im:history` | Receive/read direct messages sent to the app. |
-| `mpim:read` | Read metadata for group direct-message conversations the app belongs to. |
-| `mpim:history` | Receive/read group direct messages for the app. |
 | `chat:write` | Send support replies as the Slack app/bot. |
 
 Do not add `chat:write.public`: monitored public channels must explicitly contain
@@ -83,16 +79,12 @@ families for the current integration:
 
 - `message.channels`
 - `message.groups`
-- `message.im`
-- `message.mpim`
 
-USI receives the normal message stream and later filters unsupported subtypes,
+USI accepts message events only when `channel_type` is `channel` or `group`,
+then filters unsupported subtypes,
 message edits/deletes, ignored channels, and the app's own bot messages in the
 provider normalization layer. Do not subscribe to broad unrelated event families
 as a substitute for that filtering.
-
-If direct-message behavior is part of the sandbox test, enable the Slack app's
-Messages/App Home capability so a test user can message the bot.
 
 ## 4. Expose the callback through a public HTTPS tunnel
 
@@ -126,8 +118,7 @@ Two sensitive values are associated with the Slack integration:
 - **Signing Secret** from the app's Basic Information/App Credentials area.
 - **Bot User OAuth Token** from OAuth & Permissions after installation.
 
-`E12-T02` currently consumes only the signing secret. The bot token is needed by
-later outbound Slack work and must follow the same external-secret boundary.
+The inbound webhook consumes the signing secret and the outbound Slack delivery adapter consumes the bot token. Both follow the same external-secret boundary.
 
 `Integration.secret_ref` is an opaque **relative directory reference** below the
 root configured by `USI_INTEGRATION_SECRETS_DIRECTORY`. For example, an
@@ -137,10 +128,21 @@ integration may persist the non-secret locator:
 slack/development-workspace
 ```
 
-The runtime then resolves the signing secret from:
+For an isolated sandbox workspace and monitored public/private channel, put the
+non-secret Slack workspace ID and channel ID in the ignored root `.env` as
+`USI_SLACK_TEAM_ID` and `USI_SLACK_CHANNEL_ID`. Start the local API once to
+apply Flyway migrations, then run `pnpm local:slack:seed` from the repository
+root. This idempotently creates or reuses the customer, Slack integration, and
+monitored channel in the local Compose PostgreSQL database. It stores the
+locator above, but neither reads nor stores the credential files. See
+[`LOCAL_DEVELOPMENT.md`](LOCAL_DEVELOPMENT.md) for the local seed workflow.
+
+The runtime resolves the two Slack credentials from separate files below the
+same integration locator:
 
 ```text
 <USI_INTEGRATION_SECRETS_DIRECTORY>/<secret_ref>/slack-signing-secret
+<USI_INTEGRATION_SECRETS_DIRECTORY>/<secret_ref>/slack-bot-token
 ```
 
 The reference must be relative, may not contain traversal/backslash segments,
@@ -165,8 +167,6 @@ access. After installation:
 
 1. Invite the app to each public test channel that USI should monitor.
 2. Explicitly invite it to each private test channel.
-3. For DM testing, send a direct message to the app from a test user.
-4. For group-DM testing, add the app only to a dedicated sandbox conversation.
 
 Use test content only. Do not connect the development app to customer support
 channels.
@@ -181,11 +181,14 @@ The implemented Slack HTTP boundary preserves these rules:
 4. Build the Slack v0 signature base string from the version, timestamp and
    exact raw body; verify HMAC-SHA256 with the signing secret using a
    timing-safe comparison.
-5. Resolve candidate signing secrets only from non-disabled Slack Integrations;
-   after signature verification, use the payload `team_id` to select the exact
-   configured workspace (or one not-yet-bound configuring integration).
-6. Handle `type=url_verification` only after request authenticity succeeds and
-   return the supplied challenge in the required response shape.
+5. Resolve candidate signing secrets only from non-disabled Slack Integrations.
+   For event callbacks, use the payload `team_id` to select the exact configured
+   workspace (or one not-yet-bound configuring integration).
+6. Handle `type=url_verification` only after request authenticity succeeds. Slack
+   can omit `team_id` from this request; in that case require exactly one
+   integration whose signing secret verified the request. If `team_id` is present,
+   apply the usual workspace selection. Return the supplied challenge in the
+   required response shape.
 7. For `event_callback`, require `event_id`, durably write/deduplicate the
    authenticated delivery in `inbound_events`, and only then return HTTP 2xx.
 8. Heavy normalization/case processing does not run in the request thread; later
@@ -218,15 +221,15 @@ Before considering the development Slack app ready for provider work, confirm:
 
 - the app belongs only to a test workspace;
 - bot scopes match the reviewed table above and no broad extra scopes remain;
-- bot event subscriptions are exactly `message.channels`, `message.groups`,
-  `message.im`, and `message.mpim` for the current feature set;
+- bot event subscriptions are exactly `message.channels` and `message.groups`
+  for the current v1 feature set; DM and group-DM subscriptions are outside scope;
 - the Request URL and `USI_SLACK_CALLBACK_URL` both end in
   `/api/v1/providers/slack/events` and use the same public HTTPS tunnel origin;
 - the tunnel forwards to local web port `3000`;
 - `.env` is ignored by Git and contains no Slack secrets;
 - the Integration row has a relative `secret_ref` and the corresponding
-  `slack-signing-secret` file exists only below the approved external
-  integration-secret root;
+  `slack-signing-secret` and `slack-bot-token` files exist only below the
+  approved external integration-secret root;
 - no token/signing-secret value is present in `git diff`, logs, Jira, screenshots
   committed to the repo, or browser-visible configuration;
 - Slack shows the Request URL as verified after the Integration/secret reference

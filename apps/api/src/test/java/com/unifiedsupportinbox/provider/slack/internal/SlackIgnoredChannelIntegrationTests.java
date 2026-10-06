@@ -114,7 +114,7 @@ class SlackIgnoredChannelIntegrationTests {
 
     private InboundEvent persist(UUID integrationId, String eventId, String channel) {
         String payload = "{\"type\":\"event_callback\",\"event_id\":\"" + eventId
-                + "\",\"event\":{\"type\":\"message\",\"channel\":\"" + channel
+                + "\",\"event\":{\"type\":\"message\",\"channel_type\":\"channel\",\"channel\":\"" + channel
                 + "\",\"text\":\"hello\"}}";
         return deliveries.persistAndWake(integrationId, eventId, payload, "corr-" + eventId);
     }
