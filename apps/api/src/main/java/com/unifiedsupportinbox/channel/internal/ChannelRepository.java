@@ -120,6 +120,35 @@ class ChannelRepository {
                 .orElseThrow(() -> new IllegalStateException("Channel discovery upsert did not return a persisted channel."));
     }
 
+    boolean activeCustomerExists(UUID customerId) {
+        Objects.requireNonNull(customerId, "customerId");
+        Boolean exists = jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM customers WHERE id = ? AND active = TRUE)",
+                Boolean.class,
+                customerId);
+        return Boolean.TRUE.equals(exists);
+    }
+
+    ChannelRecord configure(UUID id, UUID customerId, ChannelGroupingStrategy groupingStrategy) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(customerId, "customerId");
+        Objects.requireNonNull(groupingStrategy, "groupingStrategy");
+        return jdbc.query("""
+                UPDATE channels
+                SET customer_id = ?,
+                    grouping_strategy = ?
+                WHERE id = ?
+                RETURNING id
+                """, preparedStatement -> {
+            preparedStatement.setObject(1, customerId);
+            preparedStatement.setString(2, groupingStrategy.name());
+            preparedStatement.setObject(3, id);
+        }, (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class)).stream()
+                .findFirst()
+                .flatMap(this::findById)
+                .orElseThrow(() -> new IllegalArgumentException("Channel was not found."));
+    }
+
     ChannelRecord setIgnored(UUID id, boolean ignored) {
         Objects.requireNonNull(id, "id");
         return jdbc.query("""
