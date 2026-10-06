@@ -2,6 +2,7 @@ package com.unifiedsupportinbox.messaging.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
 import java.time.Instant;
 import java.util.UUID;
@@ -25,6 +26,7 @@ class CustomerReplyWaitingServiceIntegrationTests {
     private static final PostgreSQLContainer POSTGRES = TestInfrastructure.postgres();
 
     @Autowired private CustomerReplyWaitingService service;
+    @Autowired private CaseSlaWaitingRecorder waitingSla;
     @Autowired private JdbcTemplate jdbc;
 
     @DynamicPropertySource
@@ -88,6 +90,62 @@ class CustomerReplyWaitingServiceIntegrationTests {
                 "SELECT count(*) FROM outbox_events WHERE type = 'case.updated' AND aggregate_id = ?",
                 Integer.class,
                 caseId)).isEqualTo(1);
+    }
+
+    @Test
+    void customerReplyResumesPolicyPausedSlaAndAccountsForWaitingTime() {
+        UUID caseId = createWaitingCase();
+        seedCaseSla(caseId);
+        Instant pausedAt = Instant.now().minusSeconds(3600);
+        Instant resumedAt = Instant.now();
+        waitingSla.pauseForWaiting(caseId, pausedAt);
+
+        java.time.OffsetDateTime dueBefore = jdbc.queryForObject(
+                "SELECT first_response_due_at FROM case_sla WHERE case_id = ?",
+                java.time.OffsetDateTime.class,
+                caseId);
+
+        assertThat(service.customerReplied(
+                caseId,
+                UUID.randomUUID(),
+                resumedAt,
+                "corr-sla-resume")).isTrue();
+
+        java.time.OffsetDateTime dueAfter = jdbc.queryForObject(
+                "SELECT first_response_due_at FROM case_sla WHERE case_id = ?",
+                java.time.OffsetDateTime.class,
+                caseId);
+        long shiftedSeconds = java.time.Duration.between(dueBefore, dueAfter).getSeconds();
+
+        assertThat(jdbc.queryForObject(
+                "SELECT paused_at FROM case_sla WHERE case_id = ?", Object.class, caseId))
+                .isNull();
+        assertThat(jdbc.queryForObject(
+                "SELECT state FROM case_sla WHERE case_id = ?", String.class, caseId))
+                .isEqualTo("ON_TRACK");
+        assertThat(jdbc.queryForObject(
+                "SELECT total_paused_seconds FROM case_sla WHERE case_id = ?", Long.class, caseId))
+                .isBetween(3590L, 3610L);
+        assertThat(shiftedSeconds).isBetween(3590L, 3610L);
+    }
+
+    private void seedCaseSla(UUID caseId) {
+        jdbc.update("""
+                INSERT INTO case_sla (
+                    case_id, policy_id,
+                    first_response_started_at, first_response_due_at,
+                    unclaimed_started_at, unclaimed_warning_at, unclaimed_breach_at,
+                    in_progress_started_at, in_progress_warning_at, in_progress_breach_at
+                )
+                SELECT ?, id,
+                       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 hour',
+                       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '15 minutes',
+                       CURRENT_TIMESTAMP + INTERVAL '1 hour',
+                       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '30 minutes',
+                       CURRENT_TIMESTAMP + INTERVAL '2 hours'
+                FROM sla_policies
+                WHERE active = TRUE
+                """, caseId);
     }
 
     private UUID createWaitingCase() {
