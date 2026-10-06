@@ -25,7 +25,15 @@ const caseListItem = {
 const inboundMessage = {
   id: inboundMessageId, kind: "CUSTOMER", body: "Hello from Slack - USI test 1", bodyFormat: "PLAIN_TEXT",
   inbound: true, deliveryStatus: null, providerCreatedAt: caseListItem.createdAt,
-  createdAt: caseListItem.createdAt, editedAt: null, deletedAt: null, authorName: "Customer", attachments: [],
+  createdAt: caseListItem.createdAt, editedAt: null, deletedAt: null, authorName: "Customer",
+  attachments: [] as Array<{
+    id: string
+    fileName: string
+    sizeBytes: number
+    contentType: string | null
+    detectedContentType: string | null
+    scanStatus: string
+  }>,
 }
 
 async function preparePage(page: Page, initiallyAuthenticated = true) {
@@ -35,6 +43,9 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
   let read = false
   const supportMessages: Array<Omit<typeof inboundMessage, "deliveryStatus"> & { deliveryStatus: string | null }> = []
   const sends: string[] = []
+  const uploads: string[] = []
+  const retries: string[] = []
+  const historyBefore: Array<string | null> = []
   await page.context().addCookies([{ name: "XSRF-TOKEN", value: "e2e-csrf", url: localOrigin }])
 
   await page.route("**/*", async (route) => {
@@ -115,7 +126,31 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
       return
     }
     if (requestUrl.pathname === `/api/v1/cases/${caseId}/messages` && request.method() === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [...supportMessages].reverse().concat(inboundMessage), nextCursor: null }) })
+      const before = requestUrl.searchParams.get("before")
+      historyBefore.push(before)
+      if (before === "older-cursor") {
+        const olderMessage = {
+          ...inboundMessage,
+          id: "018f0000-0000-7000-8000-000000000199",
+          body: "Older persisted message",
+          providerCreatedAt: "2026-10-05T09:00:00Z",
+          createdAt: "2026-10-05T09:00:00Z",
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: [inboundMessage, olderMessage], nextCursor: null }),
+        })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: [...supportMessages].reverse().concat(inboundMessage),
+          nextCursor: "older-cursor",
+        }),
+      })
       return
     }
     if (requestUrl.pathname === `/api/v1/cases/${caseId}/read-position` && request.method() === "PUT") {
@@ -130,19 +165,72 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ caseId, status: "VERIFICATION", ownerUserId: authenticatedSession.id, version: 2 }) })
       return
     }
+    if (requestUrl.pathname === `/api/v1/cases/${caseId}/attachments` && request.method() === "POST") {
+      expect(request.headers()["x-xsrf-token"]).toBe("e2e-csrf")
+      expect(request.headers()["content-type"]).toContain("multipart/form-data")
+      uploads.push("evidence.txt")
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          attachmentId: "018f0000-0000-7000-8000-000000000205",
+          filename: "evidence.txt",
+          contentType: "text/plain",
+          sizeBytes: 4,
+          scanStatus: "CLEAN",
+          scanError: null,
+        }),
+      })
+      return
+    }
+    if (requestUrl.pathname === `/api/v1/cases/${caseId}/attachments/018f0000-0000-7000-8000-000000000205` && request.method() === "DELETE") {
+      await route.fulfill({ status: 204 })
+      return
+    }
     if (requestUrl.pathname === `/api/v1/cases/${caseId}/messages` && request.method() === "POST") {
       expect(request.headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/)
       expect(request.headers()["x-xsrf-token"]).toBe("e2e-csrf")
-      const body = request.postDataJSON() as { body: string }
+      const body = request.postDataJSON() as { body: string; attachmentIds?: string[] }
       sends.push(body.body)
-      supportMessages.push({ ...inboundMessage, id: "018f0000-0000-7000-8000-000000000203", kind: "SUPPORT", inbound: false, body: body.body, authorName: authenticatedSession.displayName, deliveryStatus: "QUEUED" })
-      await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ messageId: supportMessages[0].id }) })
+      const id = `018f0000-0000-7000-8000-00000000020${3 + supportMessages.length}`
+      supportMessages.push({
+        ...inboundMessage,
+        id,
+        kind: "SUPPORT",
+        inbound: false,
+        body: body.body,
+        authorName: authenticatedSession.displayName,
+        deliveryStatus: "QUEUED",
+        attachments: body.attachmentIds?.map((attachmentId) => ({
+          id: attachmentId,
+          fileName: "evidence.txt",
+          sizeBytes: 4,
+          contentType: "text/plain",
+          detectedContentType: "text/plain",
+          scanStatus: "CLEAN",
+        })) ?? [],
+      })
+      await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ messageId: id, deliveryStatus: "QUEUED" }) })
+      return
+    }
+    const retryMatch = requestUrl.pathname.match(/^\/api\/v1\/messages\/([^/]+)\/retry$/)
+    if (retryMatch && request.method() === "POST") {
+      const messageId = retryMatch[1]
+      expect(request.headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/)
+      const message = supportMessages.find((candidate) => candidate.id === messageId)
+      if (message) message.deliveryStatus = "QUEUED"
+      retries.push(messageId)
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({ messageId, deliveryStatus: "QUEUED" }),
+      })
       return
     }
     await route.continue()
   })
 
-  return { externalRequests, sends }
+  return { externalRequests, sends, uploads, retries, historyBefore, supportMessages }
 }
 
 const smokeRoutes = [
@@ -195,6 +283,83 @@ test("real API Case opens, is marked read, claimed, and receives one persisted s
   await expect(conversation.getByText("USI test reply")).toBeVisible()
   expect(sends).toEqual(["USI test reply"])
   expect(externalRequests).toEqual([])
+})
+
+test("conversation lazy-loads older history without duplicating overlapping messages", async ({ page }) => {
+  const { historyBefore } = await preparePage(page)
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await conversation.getByRole("button", { name: "Wczytaj starsze wiadomości" }).click()
+  await expect(conversation.getByText("Older persisted message")).toBeVisible()
+  await expect(conversation.getByText("Hello from Slack - USI test 1")).toHaveCount(1)
+  expect(historyBefore).toContain("older-cursor")
+})
+
+test("current owner uploads an attachment and sends it with the persisted message", async ({ page }) => {
+  const { uploads } = await preparePage(page)
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await conversation.getByRole("button", { name: "Przejmij" }).click()
+
+  await conversation.locator('input[type="file"]').setInputFiles({
+    name: "evidence.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("test"),
+  })
+  await expect(conversation.getByText("evidence.txt")).toBeVisible()
+  await conversation.getByLabel("Treść odpowiedzi").fill("Reply with evidence")
+  await conversation.getByRole("button", { name: "Wyślij" }).click()
+
+  await expect(conversation.getByText("Reply with evidence")).toBeVisible()
+  await expect(conversation.getByRole("link", { name: /evidence\.txt/ })).toHaveAttribute(
+    "href",
+    `/api/v1/cases/${caseId}/attachments/018f0000-0000-7000-8000-000000000205`,
+  )
+  expect(uploads).toEqual(["evidence.txt"])
+})
+
+test("failed outbound message can be retried without creating duplicate content", async ({ page }) => {
+  const { retries, supportMessages } = await preparePage(page)
+  const failedId = "018f0000-0000-7000-8000-000000000204"
+  supportMessages.push({
+    ...inboundMessage,
+    id: failedId,
+    kind: "SUPPORT",
+    inbound: false,
+    body: "Retry me",
+    authorName: authenticatedSession.displayName,
+    deliveryStatus: "FAILED",
+    attachments: [],
+  })
+
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await conversation.getByRole("button", { name: "Przejmij" }).click()
+  await expect(conversation.getByText("Retry me")).toBeVisible()
+  await conversation.getByRole("button", { name: "Ponów" }).click()
+  await expect(conversation.getByRole("button", { name: "Ponów" })).toHaveCount(0)
+  await expect(conversation.getByText(/W kolejce/)).toBeVisible()
+  expect(retries).toEqual([failedId])
+})
+
+test("message API failure renders the conversation error state", async ({ page }) => {
+  await preparePage(page)
+  await page.route("**/api/v1/cases/*/messages*", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        code: "APPLICATION_FAILURE",
+        title: "Unavailable",
+        status: 503,
+        detail: "Messages unavailable",
+        correlationId: "e2e-message-error",
+      }),
+    })
+  })
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await expect(conversation.getByText("Nie udało się wczytać wiadomości.")).toBeVisible()
 })
 
 test("empty persisted conversation renders an empty state", async ({ page }) => {
