@@ -112,7 +112,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
         sla: null, ignoreScore: 0, availableActions: resolved ? ["MARK_READ"] : claimed ? ["REPLY", "RESOLVE", "MARK_READ"] : ["CLAIM", "MARK_READ"],
         claimedAt: claimed ? caseListItem.updatedAt : null, waitingUntil: null,
         resolvedAt: resolved ? new Date().toISOString() : null, ignoredAt: null, resolutionCategory: null,
-        createdAt: caseListItem.createdAt, updatedAt: caseListItem.updatedAt, lastActivityAt: caseListItem.lastActivityAt, version: claimed ? 2 : 1,
+        createdAt: caseListItem.createdAt, updatedAt: caseListItem.updatedAt, lastActivityAt: caseListItem.lastActivityAt, version: resolved ? 3 : claimed ? 2 : 1,
       }) })
       return
     }
