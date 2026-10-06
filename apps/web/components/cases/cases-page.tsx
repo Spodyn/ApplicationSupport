@@ -541,7 +541,7 @@ function ConversationPanel({
                       {message.sender ?? "Wsparcie"} · {timeLabel(message.createdAt)}
                       {message.deliveryStatus ? ` · ${deliveryStatusLabels[message.deliveryStatus]}` : ""}
                     </span>
-                    {message.deliveryStatus === "failed" && (
+                    {message.deliveryStatus === "failed" && canReply && (
                       <button
                         type="button"
                         onClick={() => void retryMessage(message.id)}
