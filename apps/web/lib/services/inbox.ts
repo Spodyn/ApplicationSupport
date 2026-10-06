@@ -1,4 +1,4 @@
-import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
+import type { InboxAttachment, InboxCase, InboxMessage } from "@/lib/domain/inbox"
 import type { User } from "@/lib/domain/shared"
 import { mockInboxCaseRecords, mockInboxMessages } from "@/mocks/inbox"
 import { mockCurrentUser } from "@/mocks/users"
@@ -18,9 +18,13 @@ export interface InboxResolveInput {
   category?: string
 }
 
+export interface InboxPendingAttachment extends InboxAttachment {
+  scanStatus: "pending" | "scanning" | "clean" | "infected" | "error"
+}
+
 export interface InboxSendInput {
   body: string
-  attachments?: { fileName: string; size: string }[]
+  attachments?: InboxPendingAttachment[]
   simulateFailure?: boolean
   idempotencyKey?: string
 }
@@ -41,6 +45,9 @@ export interface InboxRepository {
   askCustomer(caseId: string, input: InboxAskInput): Promise<void>
   resolve(caseId: string, input: InboxResolveInput): Promise<void>
   snooze(caseId: string, until: string): Promise<void>
+  uploadAttachment(caseId: string, file: File): Promise<InboxPendingAttachment>
+  removePendingAttachment(caseId: string, attachmentId: string): Promise<void>
+  retryMessage(messageId: string, idempotencyKey?: string): Promise<void>
   sendMessage(caseId: string, input: InboxSendInput): Promise<InboxMessage>
 }
 
@@ -109,12 +116,7 @@ const appendSupportMessage = (
     sender: mockCurrentUser.fullName,
     body: input.body,
     createdAt,
-    attachments: input.attachments?.map((attachment, index) => ({
-      id: createId(`${caseId}-attachment-${index}`),
-      fileName: attachment.fileName,
-      size: attachment.size,
-      type: "document",
-    })),
+    attachments: input.attachments?.map(({ scanStatus: _scanStatus, ...attachment }) => attachment),
     deliveryStatus: "sent",
   }
   mockInboxMessages[caseId] = [...(mockInboxMessages[caseId] ?? []), message]
@@ -294,6 +296,33 @@ export const mockInboxRepository: InboxRepository = {
     }
     record.snoozedUntilByUser[mockCurrentUser.id] = until
     markCurrentUserRead(caseId)
+  },
+
+  async uploadAttachment(_caseId, file) {
+    const type = file.type.startsWith("image/") ? "image" : "document"
+    return wait({
+      id: createId("pending-attachment"),
+      fileName: file.name,
+      size: `${file.size} B`,
+      type,
+      scanStatus: "clean",
+    }, 180)
+  },
+
+  async removePendingAttachment() {
+    await wait(undefined, 80)
+  },
+
+  async retryMessage(messageId) {
+    for (const messages of Object.values(mockInboxMessages)) {
+      const message = messages.find((candidate) => candidate.id === messageId)
+      if (message?.kind === "support" && message.deliveryStatus === "failed") {
+        message.deliveryStatus = "sent"
+        await wait(undefined, 180)
+        return
+      }
+    }
+    throw new Error("Nie znaleziono wiadomości do ponowienia.")
   },
 
   async sendMessage(caseId, input) {
