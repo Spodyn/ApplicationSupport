@@ -156,7 +156,8 @@ export const mockInboxRepository: InboxRepository = {
     const now = Date.now()
     return wait({
       items: cases.filter((item) => {
-        const activeSnooze = item.snoozedForCurrentUserUntil
+        const terminal = item.status === "resolved" || item.status === "ignored"
+        const activeSnooze = !terminal && item.snoozedForCurrentUserUntil
           ? new Date(item.snoozedForCurrentUserUntil).getTime() > now
           : false
         return view === "snoozed" ? activeSnooze : !activeSnooze
