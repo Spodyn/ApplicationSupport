@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.readstate.internal;
 
 import com.unifiedsupportinbox.OutboxEventStore;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -54,7 +55,7 @@ class CaseSnoozeDueWorker {
             int deleted = jdbc.update("""
                     DELETE FROM case_snoozes
                     WHERE case_id = ? AND user_id = ? AND until_at = ?
-                    """, snooze.caseId(), snooze.userId(), snooze.until());
+                    """, snooze.caseId(), snooze.userId(), Timestamp.from(snooze.until()));
             if (deleted == 1) {
                 outbox.append(
                         OUTBOX_TYPE,
