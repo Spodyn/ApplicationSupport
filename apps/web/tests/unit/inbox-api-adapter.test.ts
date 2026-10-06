@@ -6,6 +6,7 @@ import { createApiInboxRepository, InboxActionUnavailableError, mapCaseMessage }
 
 const caseId = "01a10d64-2d99-7627-813d-2bad1ab9ab55"
 const messageId = "01a10d64-2da1-7555-a8cf-a27e56abbc35"
+const attachmentId = "01a10d64-2da2-7555-a8cf-a27e56abbc36"
 const listItem = {
   id: caseId, reference: "CASE-00000002", status: "NEW", customerId: "customer",
   customerName: "Slack Test Customer", channelId: "channel", channelName: "new-channel",
@@ -39,7 +40,19 @@ function fixture() {
     if (input.path === "/api/v1/cases") return { items: [listItem], nextCursor: "cursor-2" }
     if (input.path === `/api/v1/cases/${caseId}`) return detail
     if (input.path === `/api/v1/cases/${caseId}/messages` && input.method === "GET") return { items: [message], nextCursor: null }
-    if (input.path === `/api/v1/cases/${caseId}/messages` && input.method === "POST") return { messageId }
+    if (input.path === `/api/v1/cases/${caseId}/attachments` && input.method === "POST") {
+      return {
+        attachmentId,
+        filename: "evidence.txt",
+        contentType: "text/plain",
+        sizeBytes: 4,
+        scanStatus: "CLEAN",
+        scanError: null,
+      }
+    }
+    if (input.path === `/api/v1/cases/${caseId}/attachments/${attachmentId}` && input.method === "DELETE") return undefined
+    if (input.path === `/api/v1/messages/${messageId}/retry` && input.method === "POST") return { messageId, deliveryStatus: "QUEUED" }
+    if (input.path === `/api/v1/cases/${caseId}/messages` && input.method === "POST") return { messageId, deliveryStatus: "QUEUED" }
     return {}
   })
   const repository = createApiInboxRepository({ request } as ApiTransport)
@@ -69,22 +82,74 @@ describe("real inbox API adapter", () => {
   })
 
   it("maps persisted support messages as agent messages and accepts an empty real history page", async () => {
-    expect(mapCaseMessage({
+    expect(mapCaseMessage(caseId, {
       ...message, kind: "SUPPORT", inbound: false, providerCreatedAt: null,
       deliveryStatus: "SENT", authorName: "Agent", body: "Support reply",
-    })).toMatchObject({ kind: "support", sender: "Agent", body: "Support reply", deliveryStatus: "sent" })
+      attachments: [{
+        id: attachmentId,
+        fileName: "evidence.txt",
+        sizeBytes: 4,
+        contentType: "text/plain",
+        detectedContentType: "text/plain",
+        scanStatus: "CLEAN",
+      }],
+    })).toMatchObject({
+      kind: "support",
+      sender: "Agent",
+      body: "Support reply",
+      deliveryStatus: "sent",
+      attachments: [{
+        id: attachmentId,
+        downloadUrl: `/api/v1/cases/${caseId}/attachments/${attachmentId}`,
+      }],
+    })
     const repository = createApiInboxRepository({
       request: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
     } as ApiTransport)
     await expect(repository.getMessages(caseId)).resolves.toEqual({ items: [], nextCursor: undefined })
   })
 
-  it("marks a rendered message read and rejects unavailable actions", async () => {
+  it("marks a rendered message read and rejects workflow actions that are still unavailable", async () => {
     const { repository, requests } = fixture()
     await repository.markRead(caseId, messageId)
     expect(requests[0]).toMatchObject({ method: "PUT", body: { messageId } })
     await expect(repository.snooze(caseId, "2026-10-06T00:00:00Z")).rejects.toBeInstanceOf(InboxActionUnavailableError)
-    await expect(repository.sendMessage(caseId, { body: "test", attachments: [{ fileName: "file", size: "1" }] })).rejects.toBeInstanceOf(InboxActionUnavailableError)
+  })
+
+  it("uploads and removes a pending attachment, sends its id, and retries a failed delivery", async () => {
+    const { repository, requests } = fixture()
+    const uploaded = await repository.uploadAttachment(
+      caseId,
+      new File(["test"], "evidence.txt", { type: "text/plain" }),
+    )
+    expect(uploaded).toMatchObject({
+      id: attachmentId,
+      fileName: "evidence.txt",
+      scanStatus: "clean",
+    })
+    const upload = requests.find((item) => item.path.endsWith("/attachments") && item.method === "POST")
+    expect(upload?.body).toBeInstanceOf(FormData)
+
+    await repository.sendMessage(caseId, {
+      body: "Reply with evidence",
+      attachments: [uploaded],
+      idempotencyKey: "send-with-file",
+    })
+    const send = requests.find((item) => item.path.endsWith("/messages") && item.method === "POST")
+    expect(send?.body).toEqual({
+      body: "Reply with evidence",
+      bodyFormat: "PLAIN_TEXT",
+      attachmentIds: [attachmentId],
+    })
+
+    await repository.retryMessage(messageId, "retry-key")
+    const retry = requests.find((item) => item.path.endsWith(`/messages/${messageId}/retry`))
+    expect(retry?.headers?.["Idempotency-Key"]).toBe("retry-key")
+
+    await repository.removePendingAttachment(caseId, attachmentId)
+    expect(requests.some((item) =>
+      item.method === "DELETE" && item.path.endsWith(`/attachments/${attachmentId}`)
+    )).toBe(true)
   })
   it("propagates API list errors without falling back to mock cases", async () => {
     const failure = new ApiHttpError(503)
