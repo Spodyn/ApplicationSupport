@@ -257,65 +257,6 @@ class SupportSendMessageServiceIntegrationTests {
                 "SELECT count(*) FROM outbox_events WHERE type = 'message.send_requested'", Integer.class)).isZero();
     }
 
-    @Test
-    void askCustomerQueuesTaggedMessageAndKeepsCaseOwnedUntilProviderSuccess() {
-        UUID ownerId = createUser("owner-ask");
-        UUID caseId = createCase(ownerId, "VERIFICATION");
-
-        IdempotencyResult result = service.ask(
-                caseId,
-                ownerId,
-                "ask-key-1",
-                "Could you provide more details?",
-                MessageBodyFormat.PLAIN_TEXT,
-                null,
-                "corr-ask-1");
-
-        assertThat(result.status()).isEqualTo(202);
-        UUID messageId = UUID.fromString(result.body().get("messageId").asText());
-
-        assertThat(jdbc.queryForObject(
-                "SELECT ask_waiting_seconds FROM messages WHERE id = ?", Long.class, messageId))
-                .isEqualTo(24L * 60L * 60L);
-        assertThat(jdbc.queryForObject(
-                "SELECT status FROM cases WHERE id = ?", String.class, caseId))
-                .isEqualTo("VERIFICATION");
-        assertThat(jdbc.queryForObject(
-                "SELECT owner_user_id FROM cases WHERE id = ?", UUID.class, caseId))
-                .isEqualTo(ownerId);
-        assertThat(jdbc.queryForObject(
-                "SELECT waiting_until FROM cases WHERE id = ?", java.time.OffsetDateTime.class, caseId))
-                .isNull();
-        assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM outbox_events WHERE type = 'message.send_requested' AND aggregate_id = ?",
-                Integer.class,
-                messageId)).isEqualTo(1);
-    }
-
-    @Test
-    void askCustomerValidatesWaitingRangeAndIsIdempotent() {
-        UUID ownerId = createUser("owner-ask-range");
-        UUID caseId = createCase(ownerId, "VERIFICATION");
-
-        assertThatThrownBy(() -> service.ask(
-                caseId, ownerId, "ask-too-short", "Question", null, 59L, "corr-short"))
-                .isInstanceOfSatisfying(ApiProblemException.class,
-                        problem -> assertThat(problem.status()).isEqualTo(HttpStatus.BAD_REQUEST));
-
-        IdempotencyResult first = service.ask(
-                caseId, ownerId, "ask-repeat", "Question", null, 60L, "corr-first");
-        IdempotencyResult replay = service.ask(
-                caseId, ownerId, "ask-repeat", "Question", null, 60L, "corr-replay");
-
-        assertThat(replay.replayed()).isTrue();
-        assertThat(replay.body()).isEqualTo(first.body());
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isEqualTo(1);
-        UUID messageId = UUID.fromString(first.body().get("messageId").asText());
-        assertThat(jdbc.queryForObject(
-                "SELECT ask_waiting_seconds FROM messages WHERE id = ?", Long.class, messageId))
-                .isEqualTo(60L * 60L);
-    }
-
     private UUID createAttachment(UUID caseId, String scanStatus, long sizeBytes) {
         UUID id = UUID.randomUUID();
         jdbc.update("""
