@@ -192,6 +192,73 @@ class IntegrationIntegrationTests {
     }
 
     @Test
+    void adminCanEnableAndDisableIntegrationThroughCommonStatusEndpoint() throws Exception {
+        IntegrationRecord integration = integrations.create(
+                IntegrationProvider.SLACK,
+                "Acme Slack",
+                IntegrationStatus.CONFIGURING,
+                IntegrationHealth.UNKNOWN,
+                "T-status",
+                "Acme",
+                "configured-secret-ref",
+                "{}");
+        createUser("status-admin@example.com", "ADMIN");
+        CookieManager cookies = login("status-admin@example.com");
+
+        HttpResponse<String> enabled = mutate(
+                cookies,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{\"status\":\"ENABLED\"}");
+        assertThat(enabled.statusCode()).isEqualTo(200);
+        assertThat(enabled.body())
+                .contains("\"status\":\"ENABLED\"")
+                .contains("\"secretConfigured\":true")
+                .doesNotContain("configured-secret-ref");
+
+        HttpResponse<String> disabled = mutate(
+                cookies,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{\"status\":\"DISABLED\"}");
+        assertThat(disabled.statusCode()).isEqualTo(200);
+        assertThat(disabled.body()).contains("\"status\":\"DISABLED\"");
+
+        HttpResponse<String> configuring = mutate(
+                cookies,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{\"status\":\"CONFIGURING\"}");
+        assertThat(configuring.statusCode()).isEqualTo(400);
+        assertThat(integrations.findById(integration.id()).orElseThrow().status())
+                .isEqualTo(IntegrationStatus.DISABLED);
+    }
+
+    @Test
+    void integrationStatusMutationRequiresManageIntegrationsPermission() throws Exception {
+        IntegrationRecord integration = integrations.create(
+                IntegrationProvider.TELEGRAM,
+                "Telegram",
+                IntegrationStatus.CONFIGURING,
+                IntegrationHealth.UNKNOWN,
+                "bot-status",
+                "@bot",
+                null,
+                "{}");
+        createUser("status-user@example.com", "USER");
+        CookieManager plainUser = login("status-user@example.com");
+
+        HttpResponse<String> denied = mutate(
+                plainUser,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{\"status\":\"ENABLED\"}");
+        assertThat(denied.statusCode()).isEqualTo(403);
+        assertThat(integrations.findById(integration.id()).orElseThrow().status())
+                .isEqualTo(IntegrationStatus.CONFIGURING);
+    }
+
+    @Test
     void integrationReadRoutesRequireManageIntegrationsPermission() throws Exception {
         integrations.create(
                 IntegrationProvider.SLACK,
