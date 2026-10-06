@@ -116,7 +116,13 @@ const appendSupportMessage = (
     sender: mockCurrentUser.fullName,
     body: input.body,
     createdAt,
-    attachments: input.attachments?.map(({ scanStatus: _scanStatus, ...attachment }) => attachment),
+    attachments: input.attachments?.map((attachment) => ({
+      id: attachment.id,
+      fileName: attachment.fileName,
+      size: attachment.size,
+      type: attachment.type,
+      downloadUrl: attachment.downloadUrl,
+    })),
     deliveryStatus: "sent",
   }
   mockInboxMessages[caseId] = [...(mockInboxMessages[caseId] ?? []), message]
