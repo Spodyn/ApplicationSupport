@@ -11,6 +11,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.slf4j.MDC;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -87,22 +88,23 @@ class WaitingTimeoutService {
             metadata.put("status", "NEW");
             metadata.put("waitingUntil", item.waitingUntil().toString());
             metadata.put("version", nextVersion);
-            audit.append(
-                    AuditActorType.SYSTEM,
-                    null,
-                    "CASE_WAITING_TIMEOUT",
-                    "CASE",
-                    item.id(),
-                    item.id(),
-                    Map.copyOf(metadata));
-
             String correlationId = UUID.randomUUID().toString();
-            outbox.append(
-                    CASE_UPDATED,
-                    "case",
-                    item.id(),
-                    payload(item.id(), nextVersion),
-                    correlationId);
+            try (MDC.MDCCloseable ignored = MDC.putCloseable("correlationId", correlationId)) {
+                audit.append(
+                        AuditActorType.SYSTEM,
+                        null,
+                        "CASE_WAITING_TIMEOUT",
+                        "CASE",
+                        item.id(),
+                        item.id(),
+                        Map.copyOf(metadata));
+                outbox.append(
+                        CASE_UPDATED,
+                        "case",
+                        item.id(),
+                        payload(item.id(), nextVersion),
+                        correlationId);
+            }
             processed++;
         }
         return processed;
