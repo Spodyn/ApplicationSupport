@@ -148,8 +148,12 @@ export function mapCaseMessage(message: CaseMessage): InboxMessage {
 export function createApiInboxRepository(transport: ApiTransport): InboxRepository {
   const client = createApiClient(transport)
   return {
-    async list(cursor) {
-      const page = await client.listCases({ cursor, limit: 50 })
+    async list(cursor, view = "active") {
+      const page = await transport.request<import("@usi/api-client/generated").CaseListPage>({
+        method: "GET",
+        path: "/api/v1/cases",
+        query: { cursor, limit: 50, view: view.toUpperCase() },
+      })
       return { items: page.items.map(mapCaseListItem), nextCursor: page.nextCursor ?? undefined }
     },
     async getCase(caseId) {
@@ -176,7 +180,21 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     ignore: unavailable,
     askCustomer: unavailable,
     resolve: unavailable,
-    snooze: unavailable,
+    async snooze(caseId, until) {
+      await transport.request({
+        method: "POST",
+        path: `/api/v1/cases/${encodeURIComponent(caseId)}/snooze`,
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+        body: { until },
+      })
+    },
+    async cancelSnooze(caseId) {
+      await transport.request({
+        method: "DELETE",
+        path: `/api/v1/cases/${encodeURIComponent(caseId)}/snooze`,
+        headers: { "Idempotency-Key": crypto.randomUUID() },
+      })
+    },
     async sendMessage(caseId, input) {
       if (input.attachments?.length || input.simulateFailure) throw new InboxActionUnavailableError()
       const body = input.body.trim()
