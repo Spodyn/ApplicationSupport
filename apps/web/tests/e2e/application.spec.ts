@@ -35,6 +35,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
   let read = false
   const supportMessages: Array<Omit<typeof inboundMessage, "deliveryStatus"> & { deliveryStatus: string | null }> = []
   const sends: string[] = []
+  const asks: string[] = []
   await page.context().addCookies([{ name: "XSRF-TOKEN", value: "e2e-csrf", url: localOrigin }])
 
   await page.route("**/*", async (route) => {
@@ -108,7 +109,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
         channel: { id: "channel", name: "new-channel", externalChannelId: "C0C6N61M4HZ", groupingStrategy: "SLACK_ROOT_THREAD" },
         integration: { id: "integration", provider: "SLACK", displayName: "TestApp", workspaceExternalId: "team", workspaceName: "TestApp" },
         relatedCase: { id: null, reference: null }, personalState: { lastReadMessageId: read ? inboundMessageId : null, lastReadAt: null, snoozedUntil: null },
-        sla: null, ignoreScore: 0, availableActions: claimed ? ["REPLY", "MARK_READ"] : ["CLAIM", "MARK_READ"],
+        sla: null, ignoreScore: 0, availableActions: claimed ? ["REPLY", "ASK_CUSTOMER", "MARK_READ"] : ["CLAIM", "MARK_READ"],
         claimedAt: null, waitingUntil: null, resolvedAt: null, ignoredAt: null, resolutionCategory: null,
         createdAt: caseListItem.createdAt, updatedAt: caseListItem.updatedAt, lastActivityAt: caseListItem.lastActivityAt, version: claimed ? 2 : 1,
       }) })
@@ -139,10 +140,32 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
       await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ messageId: supportMessages[0].id }) })
       return
     }
+    if (requestUrl.pathname === `/api/v1/cases/${caseId}/ask-customer` && request.method() === "POST") {
+      expect(request.headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/)
+      expect(request.headers()["x-xsrf-token"]).toBe("e2e-csrf")
+      const body = request.postDataJSON() as { message: string; waitingMinutes?: number }
+      asks.push(body.message)
+      const askMessageId = "018f0000-0000-7000-8000-000000000204"
+      supportMessages.push({
+        ...inboundMessage,
+        id: askMessageId,
+        kind: "SUPPORT",
+        inbound: false,
+        body: body.message,
+        authorName: authenticatedSession.displayName,
+        deliveryStatus: "QUEUED",
+      })
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({ messageId: askMessageId, deliveryStatus: "QUEUED" }),
+      })
+      return
+    }
     await route.continue()
   })
 
-  return { externalRequests, sends }
+  return { externalRequests, sends, asks }
 }
 
 const smokeRoutes = [
@@ -194,6 +217,27 @@ test("real API Case opens, is marked read, claimed, and receives one persisted s
   await conversation.getByRole("button", { name: "Wyślij" }).click()
   await expect(conversation.getByText("USI test reply")).toBeVisible()
   expect(sends).toEqual(["USI test reply"])
+  expect(externalRequests).toEqual([])
+})
+
+test("current owner can queue Ask Customer without optimistic WAITING transition", async ({ page }) => {
+  const { externalRequests, asks } = await preparePage(page)
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await conversation.getByRole("button", { name: "Przejmij" }).click()
+  await expect(conversation.getByText("Anna Kowalska")).toBeVisible()
+
+  await conversation.getByRole("button", { name: "Dopytaj" }).click()
+  const dialog = page.getByRole("dialog", { name: "Dopytaj klienta" })
+  await expect(dialog.getByRole("button", { name: "Wyślij pytanie" })).toBeDisabled()
+  await dialog.getByLabel("Pytanie do klienta").fill("Could you confirm the transaction?")
+  await dialog.getByRole("button", { name: "Wyślij pytanie" }).click()
+
+  await expect(dialog).toHaveCount(0)
+  await expect(conversation.getByText("Could you confirm the transaction?")).toBeVisible()
+  await expect(conversation.getByText("Anna Kowalska")).toBeVisible()
+  await expect(conversation.getByText("W trakcie weryfikacji")).toBeVisible()
+  expect(asks).toEqual(["Could you confirm the transaction?"])
   expect(externalRequests).toEqual([])
 })
 
