@@ -175,7 +175,13 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     },
     ignore: unavailable,
     askCustomer: unavailable,
-    resolve: unavailable,
+    async resolve(caseId, input) {
+      await client.resolveCase({
+        caseId,
+        "Idempotency-Key": crypto.randomUUID(),
+        body: { resolutionCategory: input.category?.trim() || null },
+      })
+    },
     snooze: unavailable,
     async sendMessage(caseId, input) {
       if (input.attachments?.length || input.simulateFailure) throw new InboxActionUnavailableError()
