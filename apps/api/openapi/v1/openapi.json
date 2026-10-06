@@ -2496,7 +2496,8 @@
             "type": "string",
             "format": "date-time"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "SnoozeResponse": {
         "type": "object",
@@ -2513,7 +2514,8 @@
             "type": "string",
             "format": "date-time"
           }
-        }
+        },
+        "additionalProperties": false
       },
       "CancelSnoozeResponse": {
         "type": "object",
@@ -2529,7 +2531,8 @@
           "cancelled": {
             "type": "boolean"
           }
-        }
+        },
+        "additionalProperties": false
       }
     },
     "securitySchemes": {
