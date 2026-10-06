@@ -12,6 +12,9 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
+/**
+ * Processes due personal snoozes without changing global Case workflow state.
+ */
 @Component
 @ConditionalOnProperty(prefix = "usi.readstate.snooze-worker", name = "enabled", havingValue = "true")
 class CaseSnoozeDueWorker {
