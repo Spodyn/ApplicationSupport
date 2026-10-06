@@ -86,7 +86,7 @@ class SupportMessageController {
                 userId,
                 idempotencyKey,
                 request.message(),
-                MessageBodyFormat.PLAIN_TEXT,
+                request.bodyFormat(),
                 request.waitingMinutes(),
                 correlationId);
         return ResponseEntity.status(result.status()).body(result.body());
@@ -111,6 +111,7 @@ class SupportMessageController {
 
     record AskCustomerRequest(
             @NotBlank String message,
+            MessageBodyFormat bodyFormat,
             @Min(60) @Max(43200) Long waitingMinutes) {
     }
 }
