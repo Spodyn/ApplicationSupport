@@ -39,7 +39,8 @@ function fixture() {
     if (input.path === "/api/v1/cases") return { items: [listItem], nextCursor: "cursor-2" }
     if (input.path === `/api/v1/cases/${caseId}`) return detail
     if (input.path === `/api/v1/cases/${caseId}/messages` && input.method === "GET") return { items: [message], nextCursor: null }
-    if (input.path === `/api/v1/cases/${caseId}/messages` && input.method === "POST") return { messageId }
+    if (input.path === `/api/v1/cases/${caseId}/messages` && input.method === "POST") return { messageId, deliveryStatus: "QUEUED" }
+    if (input.path === `/api/v1/cases/${caseId}/ask-customer` && input.method === "POST") return { messageId, deliveryStatus: "QUEUED" }
     return {}
   })
   const repository = createApiInboxRepository({ request } as ApiTransport)
@@ -66,6 +67,25 @@ describe("real inbox API adapter", () => {
     expect(claim?.headers?.["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/)
     expect(send?.headers?.["Idempotency-Key"]).toBe("fixed-retry-key")
     expect(send?.body).toEqual({ body: "USI test reply", bodyFormat: "PLAIN_TEXT" })
+  })
+
+  it("queues Ask Customer with stable idempotency and optional waiting duration", async () => {
+    const { repository, requests } = fixture()
+    await repository.askCustomer(caseId, {
+      message: "  Could you confirm the transaction?  ",
+      waitingMinutes: 180,
+      idempotencyKey: "ask-retry-key",
+    })
+    const ask = requests.find((item) => item.path.endsWith("/ask-customer"))
+    expect(ask).toMatchObject({
+      method: "POST",
+      headers: { "Idempotency-Key": "ask-retry-key" },
+      body: {
+        message: "Could you confirm the transaction?",
+        bodyFormat: "PLAIN_TEXT",
+        waitingMinutes: 180,
+      },
+    })
   })
 
   it("maps persisted support messages as agent messages and accepts an empty real history page", async () => {
