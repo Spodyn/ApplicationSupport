@@ -142,14 +142,14 @@ function mapIntegration(integration: ApiIntegrationRecord): ManagedIntegration {
   return {
     id: integration.id,
     platform: mapApiChannel(integration.provider),
-    status: integration.status.toLocaleLowerCase() as ManagedIntegration["status"],
+    status: integration.status.toLowerCase() as ManagedIntegration["status"],
     workspace:
       integration.workspaceName ??
       integration.workspaceExternalId ??
       integration.displayName,
     lastEventAt: integration.lastEventAt ?? undefined,
     lastErrorCode: integration.lastErrorCode ?? undefined,
-    health: integration.health.toLocaleLowerCase() as ManagedIntegration["health"],
+    health: integration.health.toLowerCase() as ManagedIntegration["health"],
   }
 }
 
@@ -544,7 +544,7 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     const integration = await browserApiTransport.request<ApiIntegrationRecord>({
       method: "PATCH",
       path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/status`,
-      body: { status: status.toLocaleUpperCase() },
+      body: { status: status.toUpperCase() },
     })
     return mapIntegration(integration)
   },
