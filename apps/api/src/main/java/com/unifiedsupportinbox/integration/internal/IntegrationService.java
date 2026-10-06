@@ -4,6 +4,7 @@ import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.integration.IntegrationConnectionTestView;
 import com.unifiedsupportinbox.integration.IntegrationConnectionTester;
 import com.unifiedsupportinbox.integration.IntegrationHealth;
+import com.unifiedsupportinbox.integration.IntegrationStatus;
 import com.unifiedsupportinbox.integration.IntegrationView;
 import java.util.List;
 import java.util.UUID;
@@ -38,6 +39,21 @@ class IntegrationService {
         return integrations.findById(integrationId)
                 .map(IntegrationRecord::toView)
                 .orElseThrow(() -> ApiProblemException.notFound("Integration was not found."));
+    }
+
+    @Transactional
+    IntegrationView setStatus(Authentication actor, UUID integrationId, IntegrationStatus status) {
+        requireManageIntegrations(actor);
+        if (status == null || status == IntegrationStatus.CONFIGURING) {
+            throw ApiProblemException.validationFailed("Common status update supports only ENABLED or DISABLED.");
+        }
+        integrations.findById(integrationId)
+                .orElseThrow(() -> ApiProblemException.notFound("Integration was not found."));
+        try {
+            return integrations.updateStatus(integrationId, status).toView();
+        } catch (org.springframework.dao.DataIntegrityViolationException conflict) {
+            throw ApiProblemException.conflict("Integration status conflicts with the active provider/workspace mapping.");
+        }
     }
 
     @Transactional
