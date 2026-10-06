@@ -149,10 +149,10 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
   const client = createApiClient(transport)
   return {
     async list(cursor, view = "active") {
-      const page = await transport.request<import("@usi/api-client/generated").CaseListPage>({
-        method: "GET",
-        path: "/api/v1/cases",
-        query: { cursor, limit: 50, view: view.toUpperCase() },
+      const page = await client.listCases({
+        cursor,
+        limit: 50,
+        view: view === "snoozed" ? "SNOOZED" : "ACTIVE",
       })
       return { items: page.items.map(mapCaseListItem), nextCursor: page.nextCursor ?? undefined }
     },
@@ -181,18 +181,16 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     askCustomer: unavailable,
     resolve: unavailable,
     async snooze(caseId, until) {
-      await transport.request({
-        method: "POST",
-        path: `/api/v1/cases/${encodeURIComponent(caseId)}/snooze`,
-        headers: { "Idempotency-Key": crypto.randomUUID() },
+      await client.snoozeCase({
+        caseId,
+        "Idempotency-Key": crypto.randomUUID(),
         body: { until },
       })
     },
     async cancelSnooze(caseId) {
-      await transport.request({
-        method: "DELETE",
-        path: `/api/v1/cases/${encodeURIComponent(caseId)}/snooze`,
-        headers: { "Idempotency-Key": crypto.randomUUID() },
+      await client.cancelCaseSnooze({
+        caseId,
+        "Idempotency-Key": crypto.randomUUID(),
       })
     },
     async sendMessage(caseId, input) {
