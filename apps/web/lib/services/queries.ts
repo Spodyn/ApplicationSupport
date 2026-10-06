@@ -37,6 +37,7 @@ export const queryKeys = {
     ["administration", "users", query ?? {}] as const,
   currentAdministrationUser: () => ["administration", "current-user"] as const,
   administrationSettings: () => ["administration", "settings"] as const,
+  administrationCustomers: () => ["administration", "customers"] as const,
   analytics: (filters: AnalyticsFilters) => ["analytics", filters] as const,
 }
 
@@ -187,6 +188,13 @@ export function useAdministrationUserActions() {
   return { save, deactivate, delete: deleteUser }
 }
 
+export function useAdministrationCustomers() {
+  return useQuery({
+    queryKey: queryKeys.administrationCustomers(),
+    queryFn: () => serviceRegistry.administrationSettings.listCustomers(),
+  })
+}
+
 export function useAdministrationSettings() {
   return useQuery({
     queryKey: queryKeys.administrationSettings(),
@@ -221,6 +229,23 @@ export function useAdministrationSettingsActions() {
     mutationFn: (id: string) => serviceRegistry.administrationSettings.testIntegration(id),
     onSuccess: invalidate,
   })
+  const configureChannel = useMutation({
+    mutationFn: ({
+      id,
+      customerId,
+      groupingStrategy,
+    }: {
+      id: string
+      customerId: string
+      groupingStrategy: import("@/lib/domain/administration").ChannelGroupingStrategy
+    }) =>
+      serviceRegistry.administrationSettings.configureChannel(
+        id,
+        customerId,
+        groupingStrategy,
+      ),
+    onSuccess: invalidate,
+  })
   const setChannelIgnored = useMutation({
     mutationFn: ({ id, ignored }: { id: string; ignored: boolean }) =>
       serviceRegistry.administrationSettings.setChannelIgnored(id, ignored),
@@ -237,6 +262,7 @@ export function useAdministrationSettingsActions() {
     configureIntegration,
     setIntegrationStatus,
     testIntegration,
+    configureChannel,
     setChannelIgnored,
     toggleNotification,
   }
