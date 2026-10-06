@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, type ReactNode } from "react"
+import { useState, type ComponentType, type PropsWithChildren, type ReactNode } from "react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { ThemeProvider } from "next-themes"
+import { ThemeProvider, type ThemeProviderProps } from "next-themes"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration"
+
+const AppThemeProvider = ThemeProvider as ComponentType<PropsWithChildren<ThemeProviderProps>>
 
 export function Providers({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -22,7 +24,7 @@ export function Providers({ children }: { children: ReactNode }) {
   )
 
   return (
-    <ThemeProvider
+    <AppThemeProvider
       attribute="class"
       defaultTheme="light"
       enableSystem={false}
@@ -35,6 +37,6 @@ export function Providers({ children }: { children: ReactNode }) {
         <Toaster richColors position="top-right" />
         <ServiceWorkerRegistration />
       </QueryClientProvider>
-    </ThemeProvider>
+    </AppThemeProvider>
   )
 }

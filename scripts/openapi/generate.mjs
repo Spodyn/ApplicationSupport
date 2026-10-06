@@ -16,6 +16,7 @@ function schemaType(schema, required = false) {
   if (schema?.type === 'array') return `Array<${schemaType(schema.items ?? {})}>`
   if (schema?.type === 'integer' || schema?.type === 'number') return 'number'
   if (schema?.type === 'boolean') return 'boolean'
+  if (schema?.type === 'null') return 'null'
   if (schema?.type === 'object') return objectType(schema)
   if (schema?.type === 'string') return 'string'
   if (Array.isArray(schema?.type)) {

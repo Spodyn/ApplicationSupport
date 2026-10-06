@@ -60,7 +60,9 @@ export interface InboxCase {
   sourceChannel: string
   customer: InboxCustomer
   status: InboxStatus
-  owner?: User
+  owner?: Pick<User, "id" | "fullName">
+  lastMessageId?: string
+  availableActions?: string[]
   unreadForCurrentUser: boolean
   snoozedForCurrentUserUntil?: string
   currentUserRestrictedByIgnore: boolean
@@ -68,7 +70,7 @@ export interface InboxCase {
   createdAt: string
   updatedAt: string
   sla: {
-    state: SlaState
+    state: SlaState | "unknown"
     dueAt?: string
   }
   ignoreVotes: {
@@ -77,7 +79,7 @@ export interface InboxCase {
     voters: string[]
   }
   metadata: {
-    priority: "Niski" | "Średni" | "Wysoki" | "Krytyczny"
+    priority: "Nieustalony" | "Niski" | "Średni" | "Wysoki" | "Krytyczny"
     category: string
     product: string
     environment: string
