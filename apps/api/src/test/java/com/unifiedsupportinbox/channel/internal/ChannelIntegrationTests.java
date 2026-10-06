@@ -246,13 +246,13 @@ class ChannelIntegrationTests {
                 delegated,
                 "PATCH",
                 "/api/v1/admin/channels/" + channel.id(),
-                "{"customerId":"" + targetCustomer + "","groupingStrategy":"SLACK_ROOT_THREAD"}");
+                "{\"customerId\":\"" + targetCustomer + "\",\"groupingStrategy\":\"SLACK_ROOT_THREAD\"}");
 
         assertThat(updated.statusCode()).isEqualTo(200);
         assertThat(updated.body())
-                .contains(""customerId":"" + targetCustomer + """)
-                .contains(""customerName":"Target Customer"")
-                .contains(""groupingStrategy":"SLACK_ROOT_THREAD"");
+                .contains("\"customerId\":\"" + targetCustomer + "\"")
+                .contains("\"customerName\":\"Target Customer\"")
+                .contains("\"groupingStrategy\":\"SLACK_ROOT_THREAD\"");
         assertThat(jdbc.queryForObject(
                 "SELECT customer_id FROM cases WHERE id = ?",
                 UUID.class,
@@ -281,17 +281,17 @@ class ChannelIntegrationTests {
                 admin,
                 "PATCH",
                 "/api/v1/admin/channels/" + channel.id(),
-                "{"customerId":"" + inactiveCustomer + "","groupingStrategy":"SLACK_ROOT_THREAD"}");
+                "{\"customerId\":\"" + inactiveCustomer + "\",\"groupingStrategy\":\"SLACK_ROOT_THREAD\"}");
         assertThat(inactive.statusCode()).isEqualTo(400);
-        assertThat(inactive.body()).contains(""code":"VALIDATION_FAILED"");
+        assertThat(inactive.body()).contains("\"code\":\"VALIDATION_FAILED\"");
 
         HttpResponse<String> invalidStrategy = mutate(
                 admin,
                 "PATCH",
                 "/api/v1/admin/channels/" + channel.id(),
-                "{"customerId":"" + activeCustomer + "","groupingStrategy":"TEAMS_ROOT_REPLIES"}");
+                "{\"customerId\":\"" + activeCustomer + "\",\"groupingStrategy\":\"TEAMS_ROOT_REPLIES\"}");
         assertThat(invalidStrategy.statusCode()).isEqualTo(400);
-        assertThat(invalidStrategy.body()).contains(""code":"VALIDATION_FAILED"");
+        assertThat(invalidStrategy.body()).contains("\"code\":\"VALIDATION_FAILED\"");
     }
 
     @Test
