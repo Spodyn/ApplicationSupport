@@ -13,8 +13,8 @@ export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTIC
 
 export type AskCustomerRequest = {
   "message": string
-  "bodyFormat"?: MessageBodyFormat
   "waitingMinutes"?: number
+  "bodyFormat"?: MessageBodyFormat
 }
 
 export type CaseChannel = {
