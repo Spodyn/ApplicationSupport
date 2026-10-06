@@ -5,6 +5,7 @@ import com.unifiedsupportinbox.IdempotencyResponse;
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.IdempotentCommandExecutor;
 import com.unifiedsupportinbox.OutboxEventStore;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -109,7 +110,7 @@ class CaseSnoozeService {
                 ON CONFLICT (case_id, user_id) DO UPDATE
                 SET until_at = EXCLUDED.until_at,
                     created_at = CURRENT_TIMESTAMP
-                """, caseId, userId, until);
+                """, caseId, userId, Timestamp.from(until));
 
         outbox.append(
                 SNOOZED_OUTBOX_TYPE,
