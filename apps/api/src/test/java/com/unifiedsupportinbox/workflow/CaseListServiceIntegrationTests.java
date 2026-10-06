@@ -132,21 +132,26 @@ class CaseListServiceIntegrationTests {
     @Test
     void listCursorIsScopedToPersonalView() {
         UUID actor = user(true);
-        UUID snoozed = caseId("cursor-snooze-" + UUID.randomUUID());
+        UUID firstSnoozed = caseId("cursor-snooze-a-" + UUID.randomUUID());
+        UUID secondSnoozed = caseId("cursor-snooze-b-" + UUID.randomUUID());
         UUID active = caseId("cursor-active-" + UUID.randomUUID());
-        message(snoozed, "snoozed");
+        message(firstSnoozed, "first snoozed");
+        message(secondSnoozed, "second snoozed");
         message(active, "active");
         jdbc.update("""
                 INSERT INTO case_snoozes (case_id, user_id, until_at)
                 VALUES (?, ?, CURRENT_TIMESTAMP + INTERVAL '1 hour')
-                """, snoozed, actor);
+                """, firstSnoozed, actor);
+        jdbc.update("""
+                INSERT INTO case_snoozes (case_id, user_id, until_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP + INTERVAL '2 hours')
+                """, secondSnoozed, actor);
 
         var snoozedPage = cases.list(actor, null, 1, CaseListView.SNOOZED);
         assertThat(snoozedPage.items()).hasSize(1);
-        if (snoozedPage.nextCursor() != null) {
-            assertThatThrownBy(() -> cases.list(actor, snoozedPage.nextCursor(), 1, CaseListView.ACTIVE))
-                    .hasMessageContaining("cursor");
-        }
+        assertThat(snoozedPage.nextCursor()).isNotBlank();
+        assertThatThrownBy(() -> cases.list(actor, snoozedPage.nextCursor(), 1, CaseListView.ACTIVE))
+                .hasMessageContaining("cursor");
     }
 
     @Test
