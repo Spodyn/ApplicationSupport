@@ -174,7 +174,19 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
       }
     },
     ignore: unavailable,
-    askCustomer: unavailable,
+    async askCustomer(caseId, input) {
+      const message = input.message.trim()
+      if (!message) throw new Error("Wiadomość do klienta nie może być pusta.")
+      await client.askCustomer({
+        caseId,
+        "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
+        body: {
+          message,
+          bodyFormat: "PLAIN_TEXT",
+          waitingMinutes: input.waitingMinutes,
+        },
+      })
+    },
     resolve: unavailable,
     snooze: unavailable,
     async sendMessage(caseId, input) {
