@@ -23,28 +23,6 @@ export interface LoginInput {
   "body": LoginRequest
 }
 
-export interface GetCaseMessagesInput {
-  "caseId": string
-  "before"?: string
-  "limit"?: number
-}
-
-export interface SendCaseMessageInput {
-  "caseId": string
-  "Idempotency-Key": string
-  "body": SendMessageRequest
-}
-
-export interface RetryMessageDeliveryInput {
-  "messageId": string
-  "Idempotency-Key": string
-}
-
-export interface UpdateUserPermissionsInput {
-  "userId": string
-  "body": PermissionUpdateRequest
-}
-
 export interface ListCasesInput {
   "cursor"?: string
   "limit"?: number
@@ -59,6 +37,18 @@ export interface ClaimCaseInput {
   "Idempotency-Key": string
 }
 
+export interface GetCaseMessagesInput {
+  "caseId": string
+  "before"?: string
+  "limit"?: number
+}
+
+export interface SendCaseMessageInput {
+  "caseId": string
+  "Idempotency-Key": string
+  "body": SendMessageRequest
+}
+
 export interface MarkCaseReadInput {
   "caseId": string
   "body": ReadPositionRequest
@@ -68,6 +58,16 @@ export interface ResolveCaseInput {
   "caseId": string
   "Idempotency-Key": string
   "body": ResolveCaseRequest
+}
+
+export interface RetryMessageDeliveryInput {
+  "messageId": string
+  "Idempotency-Key": string
+}
+
+export interface UpdateUserPermissionsInput {
+  "userId": string
+  "body": PermissionUpdateRequest
 }
 
 export interface ApiTransportRequest {
@@ -92,15 +92,15 @@ export function createApiClient(transport: ApiTransport) {
   login: (input: LoginInput) => transport.request<CurrentSession>({ method: "POST", path: "/api/v1/auth/login", body: input.body }),
   logout: () => transport.request<void>({ method: "POST", path: "/api/v1/auth/logout" }),
   getCurrentSession: () => transport.request<CurrentSession>({ method: "GET", path: "/api/v1/auth/me" }),
-  getCaseMessages: (input: GetCaseMessagesInput) => transport.request<CaseMessagePage>({ method: "GET", path: interpolatePath("/api/v1/cases/{caseId}/messages", { "caseId": input["caseId"] }), query: { "before": input["before"], "limit": input["limit"] } }),
-  sendCaseMessage: (input: SendCaseMessageInput) => transport.request<SendMessageResponse>({ method: "POST", path: interpolatePath("/api/v1/cases/{caseId}/messages", { "caseId": input["caseId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] }, body: input.body }),
-  retryMessageDelivery: (input: RetryMessageDeliveryInput) => transport.request<SendMessageResponse>({ method: "POST", path: interpolatePath("/api/v1/messages/{messageId}/retry", { "messageId": input["messageId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] } }),
-  updateUserPermissions: (input: UpdateUserPermissionsInput) => transport.request<UserPermissions>({ method: "PUT", path: interpolatePath("/api/v1/users/{userId}/permissions", { "userId": input["userId"] }), body: input.body }),
   listCases: (input: ListCasesInput) => transport.request<CaseListPage>({ method: "GET", path: "/api/v1/cases", query: { "cursor": input["cursor"], "limit": input["limit"] } }),
   getCaseDetail: (input: GetCaseDetailInput) => transport.request<CaseDetail>({ method: "GET", path: interpolatePath("/api/v1/cases/{caseId}", { "caseId": input["caseId"] }) }),
   claimCase: (input: ClaimCaseInput) => transport.request<ClaimCaseResponse>({ method: "POST", path: interpolatePath("/api/v1/cases/{caseId}/claim", { "caseId": input["caseId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] } }),
+  getCaseMessages: (input: GetCaseMessagesInput) => transport.request<CaseMessagePage>({ method: "GET", path: interpolatePath("/api/v1/cases/{caseId}/messages", { "caseId": input["caseId"] }), query: { "before": input["before"], "limit": input["limit"] } }),
+  sendCaseMessage: (input: SendCaseMessageInput) => transport.request<SendMessageResponse>({ method: "POST", path: interpolatePath("/api/v1/cases/{caseId}/messages", { "caseId": input["caseId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] }, body: input.body }),
   markCaseRead: (input: MarkCaseReadInput) => transport.request<ReadPositionResponse>({ method: "PUT", path: interpolatePath("/api/v1/cases/{caseId}/read-position", { "caseId": input["caseId"] }), body: input.body }),
   resolveCase: (input: ResolveCaseInput) => transport.request<ResolveCaseResponse>({ method: "POST", path: interpolatePath("/api/v1/cases/{caseId}/resolve", { "caseId": input["caseId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] }, body: input.body }),
+  retryMessageDelivery: (input: RetryMessageDeliveryInput) => transport.request<SendMessageResponse>({ method: "POST", path: interpolatePath("/api/v1/messages/{messageId}/retry", { "messageId": input["messageId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] } }),
+  updateUserPermissions: (input: UpdateUserPermissionsInput) => transport.request<UserPermissions>({ method: "PUT", path: interpolatePath("/api/v1/users/{userId}/permissions", { "userId": input["userId"] }), body: input.body }),
 } as const
 }
 
