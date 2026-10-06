@@ -16,6 +16,14 @@ import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
 import { inboxStatusLabels } from "@/lib/domain/inbox"
 import { useCurrentUser, useInboxCase, useInboxCases, useInboxMessages, useInboxWorkflow, useMarkInboxCaseRead } from "@/lib/services/queries"
 import { cn } from "@/lib/utils"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { SafeExternalMessage } from "./safe-external-message"
 
 type QuickFilter = "all" | "sla" | "mine"
