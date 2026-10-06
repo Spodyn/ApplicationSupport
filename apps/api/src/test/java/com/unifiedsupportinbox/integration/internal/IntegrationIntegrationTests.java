@@ -259,6 +259,46 @@ class IntegrationIntegrationTests {
     }
 
     @Test
+    void statusEndpointUpdatesOnlySupportedStates() throws Exception {
+        IntegrationRecord integration = integrations.create(
+                IntegrationProvider.SLACK,
+                "Acme Slack",
+                IntegrationStatus.CONFIGURING,
+                IntegrationHealth.UNKNOWN,
+                "T-status",
+                "Acme",
+                null,
+                "{}");
+        createUser("admin-status@example.com", "ADMIN");
+        CookieManager cookies = login("admin-status@example.com");
+
+        HttpResponse<String> enabled = mutate(
+                cookies,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{"status":"ENABLED"}");
+        assertThat(enabled.statusCode()).isEqualTo(200);
+        assertThat(enabled.body()).contains(""status":"ENABLED"");
+        assertThat(integrations.findById(integration.id()).orElseThrow().status()).isEqualTo(IntegrationStatus.ENABLED);
+
+        HttpResponse<String> disabled = mutate(
+                cookies,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{"status":"DISABLED"}");
+        assertThat(disabled.statusCode()).isEqualTo(200);
+        assertThat(disabled.body()).contains(""status":"DISABLED"");
+
+        HttpResponse<String> configuring = mutate(
+                cookies,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{"status":"CONFIGURING"}");
+        assertThat(configuring.statusCode()).isEqualTo(400);
+        assertThat(configuring.body()).contains(""code":"VALIDATION_FAILED"");
+    }
+
+    @Test
     void integrationReadRoutesRequireManageIntegrationsPermission() throws Exception {
         integrations.create(
                 IntegrationProvider.SLACK,
