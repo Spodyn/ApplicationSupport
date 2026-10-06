@@ -7,13 +7,18 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  Paperclip,
+  RotateCcw,
   Search,
   SlidersHorizontal,
   UserRound,
+  X,
 } from "lucide-react"
 import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
 import { inboxStatusLabels } from "@/lib/domain/inbox"
+import { deliveryStatusLabels } from "@/lib/domain/labels"
 import { useCurrentUser, useInboxCase, useInboxCases, useInboxMessages, useInboxWorkflow, useMarkInboxCaseRead } from "@/lib/services/queries"
+import type { InboxPendingAttachment } from "@/lib/services/inbox"
 import { cn } from "@/lib/utils"
 import { SafeExternalMessage } from "./safe-external-message"
 
@@ -99,7 +104,18 @@ export function CasesPage({
   const presentations = useMemo(() => records.map((record) => toPresentation(record, currentUserQuery.data?.id)), [records, currentUserQuery.data?.id])
   const selectedPresentation = presentations.find((item) => item.id === selectedId)
     ?? (detailQuery.data ? toPresentation(detailQuery.data, currentUserQuery.data?.id) : undefined)
-  const messages = useMemo(() => messagesQuery.data?.pages.flatMap((page) => page.items).reverse() ?? [], [messagesQuery.data])
+  const messages = useMemo(() => {
+    const seen = new Set<string>()
+    const newestFirst: InboxMessage[] = []
+    for (const page of messagesQuery.data?.pages ?? []) {
+      for (const message of page.items) {
+        if (seen.has(message.id)) continue
+        seen.add(message.id)
+        newestFirst.push(message)
+      }
+    }
+    return newestFirst.reverse()
+  }, [messagesQuery.data])
   const latestMessageId = messagesQuery.data?.pages[0]?.items[0]?.id
 
   const visibleCases = useMemo(() => {
@@ -250,6 +266,7 @@ export function CasesPage({
         messagesLoading={messagesQuery.isLoading}
         messagesError={messagesQuery.isError}
         hasOlderMessages={Boolean(messagesQuery.hasNextPage)}
+        loadingOlderMessages={messagesQuery.isFetchingNextPage}
         loadOlderMessages={() => messagesQuery.fetchNextPage()}
         workflow={workflow}
         onBack={() => setMobileConversationOpen(false)}
@@ -361,8 +378,39 @@ function SlaBadge({ tone, children }: { tone: CasePresentation["slaTone"]; child
   return <span className={cn("rounded-[6px] px-2.5 py-[5px] text-[11px] font-medium leading-none", colors[tone])}>{children}</span>
 }
 
+function MessageAttachments({ attachments }: { attachments: NonNullable<InboxMessage["attachments"]> }) {
+  if (!attachments.length) return null
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {attachments.map((attachment) => {
+        const content = (
+          <>
+            <Paperclip className="size-3.5" />
+            <span className="max-w-[220px] truncate">{attachment.fileName}</span>
+            <span className="text-[10px] text-[#8f99aa]">{attachment.size}</span>
+          </>
+        )
+        return attachment.downloadUrl ? (
+          <a
+            key={attachment.id}
+            href={attachment.downloadUrl}
+            download
+            className="flex items-center gap-1.5 rounded-md border border-white/10 bg-black/10 px-2.5 py-1.5 text-xs text-[#d8dde7] hover:border-violet-400/40"
+          >
+            {content}
+          </a>
+        ) : (
+          <span key={attachment.id} className="flex items-center gap-1.5 rounded-md border border-white/10 bg-black/10 px-2.5 py-1.5 text-xs text-[#d8dde7]">
+            {content}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
 function ConversationPanel({
-  item, record, detailError, messages, messagesLoading, messagesError, hasOlderMessages, loadOlderMessages, workflow, onBack, className,
+  item, record, detailError, messages, messagesLoading, messagesError, hasOlderMessages, loadingOlderMessages, loadOlderMessages, workflow, onBack, className,
 }: {
   item: CasePresentation
   record?: InboxCase
@@ -371,6 +419,7 @@ function ConversationPanel({
   messagesLoading: boolean
   messagesError: boolean
   hasOlderMessages: boolean
+  loadingOlderMessages: boolean
   loadOlderMessages: () => void
   workflow: ReturnType<typeof useInboxWorkflow>
   onBack: () => void
@@ -378,17 +427,77 @@ function ConversationPanel({
 }) {
   const [draft, setDraft] = useState("")
   const [sendError, setSendError] = useState("")
+  const [attachmentError, setAttachmentError] = useState("")
+  const [pendingAttachments, setPendingAttachments] = useState<InboxPendingAttachment[]>([])
   const idempotencyKey = useRef<string | null>(null)
+  const retryKeys = useRef(new Map<string, string>())
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
+  const attachmentsReady = pendingAttachments.every((attachment) => attachment.scanStatus === "clean")
+
+  const uploadFiles = async (files: FileList | null) => {
+    if (!canReply || !files?.length) return
+    const availableSlots = Math.max(0, 10 - pendingAttachments.length)
+    const selected = Array.from(files).slice(0, availableSlots)
+    if (selected.length < files.length) {
+      setAttachmentError("Do jednej wiadomości można dodać maksymalnie 10 załączników.")
+    } else {
+      setAttachmentError("")
+    }
+    for (const file of selected) {
+      try {
+        const uploaded = await workflow.uploadAttachment.mutateAsync(file)
+        setPendingAttachments((current) => [...current, uploaded])
+        if (uploaded.scanStatus !== "clean") {
+          setAttachmentError(`Załącznik ${uploaded.fileName} nie przeszedł kontroli bezpieczeństwa.`)
+        }
+      } catch (error) {
+        setAttachmentError(error instanceof Error ? error.message : "Nie udało się przesłać załącznika.")
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  const removeAttachment = async (attachmentId: string) => {
+    setAttachmentError("")
+    try {
+      await workflow.removePendingAttachment.mutateAsync(attachmentId)
+      setPendingAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : "Nie udało się usunąć załącznika.")
+    }
+  }
+
+  const retryMessage = async (messageId: string) => {
+    const key = retryKeys.current.get(messageId) ?? crypto.randomUUID()
+    retryKeys.current.set(messageId, key)
+    setSendError("")
+    try {
+      await workflow.retryMessage.mutateAsync({ messageId, idempotencyKey: key })
+      retryKeys.current.delete(messageId)
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : "Nie udało się ponowić wysyłki.")
+    }
+  }
 
   const send = async () => {
     if (!canReply || !draft.trim() || workflow.sendMessage.isPending) return
+    if (!attachmentsReady) {
+      setAttachmentError("Usuń załączniki, które nie przeszły kontroli bezpieczeństwa.")
+      return
+    }
     idempotencyKey.current ??= crypto.randomUUID()
     setSendError("")
     try {
-      await workflow.sendMessage.mutateAsync({ body: draft, idempotencyKey: idempotencyKey.current })
+      await workflow.sendMessage.mutateAsync({
+        body: draft,
+        attachments: pendingAttachments,
+        idempotencyKey: idempotencyKey.current,
+      })
       setDraft("")
+      setPendingAttachments([])
+      setAttachmentError("")
       idempotencyKey.current = null
     } catch (error) {
       setSendError(error instanceof Error ? error.message : "Nie udało się wysłać odpowiedzi.")
@@ -421,15 +530,44 @@ function ConversationPanel({
       </header>
 
       <div className="cases-scrollbar min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_72%_34%,rgba(23,48,76,0.12),transparent_42%)] py-[22px] pl-[22px] pr-[12px]">
-        {hasOlderMessages && <button type="button" onClick={loadOlderMessages} className="mb-5 text-sm text-violet-300">Wczytaj starsze wiadomości</button>}
+        {hasOlderMessages && <button type="button" onClick={loadOlderMessages} disabled={loadingOlderMessages} className="mb-5 text-sm text-violet-300 disabled:opacity-50">{loadingOlderMessages ? "Wczytywanie…" : "Wczytaj starsze wiadomości"}</button>}
         {messagesLoading ? <p className="text-sm text-[#9aa5b6]">Wczytywanie wiadomości…</p> : messagesError ? <p role="alert" className="text-sm text-red-400">Nie udało się wczytać wiadomości.</p> : messages.length === 0 ? <p className="text-sm text-[#9aa5b6]">Brak wiadomości.</p> : (
           <div className="flex flex-col gap-6">
             {messages.map((message) => message.kind === "support" ? (
-              <div key={message.id} className="flex justify-end"><div className="max-w-[570px] rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-4 py-3 text-sm text-[#ded9eb]"><div className="mb-2 text-xs text-[#cfc4e8]">{message.sender ?? "Wsparcie"} · {timeLabel(message.createdAt)}{message.deliveryStatus ? ` · ${message.deliveryStatus}` : ""}</div><p className="whitespace-pre-wrap"><SafeExternalMessage content={message.body} /></p></div></div>
+              <div key={message.id} className="flex justify-end">
+                <div className="max-w-[570px] rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-4 py-3 text-sm text-[#ded9eb]">
+                  <div className="mb-2 flex items-center gap-2 text-xs text-[#cfc4e8]">
+                    <span>
+                      {message.sender ?? "Wsparcie"} · {timeLabel(message.createdAt)}
+                      {message.deliveryStatus ? ` · ${deliveryStatusLabels[message.deliveryStatus]}` : ""}
+                    </span>
+                    {message.deliveryStatus === "failed" && canReply && (
+                      <button
+                        type="button"
+                        onClick={() => void retryMessage(message.id)}
+                        disabled={workflow.retryMessage.isPending}
+                        className="ml-auto flex items-center gap-1 rounded-md border border-red-400/30 px-2 py-1 text-[11px] text-red-300 disabled:opacity-50"
+                      >
+                        <RotateCcw className="size-3" />
+                        {workflow.retryMessage.isPending ? "Ponawianie…" : "Ponów"}
+                      </button>
+                    )}
+                  </div>
+                  <p className="whitespace-pre-wrap"><SafeExternalMessage content={message.body} /></p>
+                  <MessageAttachments attachments={message.attachments ?? []} />
+                </div>
+              </div>
             ) : message.kind === "system" ? (
               <div key={message.id} className="text-center text-xs text-[#9ba6b6]">{timeLabel(message.createdAt)} · <SafeExternalMessage content={message.body} /></div>
             ) : (
-              <div key={message.id} className="flex items-start gap-4"><Avatar initials={initials(message.sender ?? item.company)} /><div className="max-w-[570px]"><div className="text-xs text-[#aeb8c8]">{message.sender ?? item.company} · {timeLabel(message.createdAt)}</div><p className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]"><SafeExternalMessage content={message.body} /></p></div></div>
+              <div key={message.id} className="flex items-start gap-4">
+                <Avatar initials={initials(message.sender ?? item.company)} />
+                <div className="max-w-[570px]">
+                  <div className="text-xs text-[#aeb8c8]">{message.sender ?? item.company} · {timeLabel(message.createdAt)}</div>
+                  <p className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]"><SafeExternalMessage content={message.body} /></p>
+                  <MessageAttachments attachments={message.attachments ?? []} />
+                </div>
+              </div>
             ))}
           </div>
         )}
@@ -438,8 +576,59 @@ function ConversationPanel({
       <div className="shrink-0 pb-[22px] pl-[18px] pr-[22px]">
         <div className="rounded-[11px] border border-white/[0.085] bg-[linear-gradient(110deg,#0d1725,#0b1522)]">
           <textarea value={draft} onChange={(event) => { setDraft(event.target.value); idempotencyKey.current = null }} disabled={!canReply} placeholder={canReply ? "Napisz odpowiedź..." : "Przejmij case, aby odpowiedzieć"} aria-label="Treść odpowiedzi" className="block h-[80px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa] disabled:cursor-not-allowed" />
-          <div className="flex h-[51px] items-center justify-end px-[19px]"><button type="button" onClick={send} disabled={!canReply || !draft.trim() || workflow.sendMessage.isPending} className="h-[45px] w-[117px] rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{workflow.sendMessage.isPending ? "Wysyłanie…" : "Wyślij"}</button></div>
+          {pendingAttachments.length > 0 && (
+            <div className="flex flex-wrap gap-2 border-t border-white/[0.06] px-[19px] py-2.5">
+              {pendingAttachments.map((attachment) => (
+                <span key={attachment.id} className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.03] px-2.5 py-1.5 text-xs text-[#d8dde7]">
+                  <Paperclip className="size-3.5" />
+                  <span className="max-w-[180px] truncate">{attachment.fileName}</span>
+                  <span className={attachment.scanStatus === "clean" ? "text-emerald-400" : "text-red-400"}>
+                    {attachment.scanStatus === "clean" ? attachment.size : attachment.scanStatus}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => void removeAttachment(attachment.id)}
+                    disabled={workflow.removePendingAttachment.isPending}
+                    aria-label={`Usuń załącznik ${attachment.fileName}`}
+                    className="text-[#8f99aa] hover:text-white disabled:opacity-50"
+                  >
+                    <X className="size-3.5" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex h-[51px] items-center justify-between px-[19px]">
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(event) => void uploadFiles(event.target.files)}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={!canReply || workflow.uploadAttachment.isPending || pendingAttachments.length >= 10}
+                aria-label="Dodaj załączniki"
+                className="grid size-9 place-items-center rounded-md text-[#9aa5b6] hover:bg-white/5 hover:text-white disabled:opacity-40"
+              >
+                <Paperclip className="size-[17px]" />
+              </button>
+              {workflow.uploadAttachment.isPending && <span className="text-xs text-[#9aa5b6]">Przesyłanie załącznika…</span>}
+            </div>
+            <button
+              type="button"
+              onClick={send}
+              disabled={!canReply || !draft.trim() || !attachmentsReady || workflow.uploadAttachment.isPending || workflow.sendMessage.isPending}
+              className="h-[45px] w-[117px] rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {workflow.sendMessage.isPending ? "Wysyłanie…" : "Wyślij"}
+            </button>
+          </div>
         </div>
+        {attachmentError && <p role="alert" className="mt-2 text-sm text-red-400">{attachmentError}</p>}
         {sendError && <p role="alert" className="mt-2 text-sm text-red-400">{sendError}</p>}
       </div>
     </section>
