@@ -5,6 +5,7 @@ import type {
   AdministrationUser,
   AdministrationUserInput,
   ManagedIntegration,
+  ManagedChannel,
   ManagedCustomerOption,
   ChannelGroupingStrategy,
 } from "@/lib/domain/administration"
