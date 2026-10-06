@@ -122,7 +122,7 @@ test("production workspace homes are explicit pnpm packages/directories", async 
   const workspace = await readFile(
     path.join(repositoryRoot, "pnpm-workspace.yaml"),
     "utf8",
-  )
+  ).then((text) => text.replace(/\r\n/g, "\n"))
   expect(workspace).toMatch(/^packages:\n/m)
   expect(workspace).toMatch(/^  - apps\/\*$/m)
   expect(workspace).toMatch(/^  - packages\/\*$/m)

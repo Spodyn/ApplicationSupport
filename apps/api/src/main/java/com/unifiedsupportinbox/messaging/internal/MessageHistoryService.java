@@ -39,11 +39,10 @@ class MessageHistoryService {
     CursorPage<MessageHistoryItem> history(UUID caseId, String before, Integer requestedLimit) {
         int limit = ApiV1Conventions.pageSize(requestedLimit);
         CursorPosition position = before == null ? null : cursors.decode(before, scope(caseId));
-        List<MessageEntity> fetched = messages.findHistoryPage(
-                caseId,
-                position == null ? null : position.sortValue(),
-                position == null ? null : position.id(),
-                PageRequest.of(0, limit + 1));
+        List<MessageEntity> fetched = position == null
+                ? messages.findLatestHistoryPage(caseId, PageRequest.of(0, limit + 1))
+                : messages.findBeforeHistoryPage(
+                        caseId, position.sortValue(), position.id(), PageRequest.of(0, limit + 1));
         boolean hasMore = fetched.size() > limit;
         List<MessageEntity> page = hasMore ? fetched.subList(0, limit) : fetched;
         String nextCursor = hasMore

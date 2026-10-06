@@ -119,3 +119,10 @@ test('lint fails closed for generator-unsupported contract features', () => {
   assert.match(errors, /parameter location cookie is not supported/)
   assert.match(errors, /media type application\/xml is not supported/)
 })
+
+test('generated types preserve nullable schema variants', () => {
+  const next = structuredClone(base)
+  next.components.schemas.Example.properties.note = { oneOf: [{ type: 'string' }, { type: 'null' }] }
+  const types = generatedFiles(next).get('types.gen.ts')
+  assert.match(types, /"note"\?: string \| null/)
+})

@@ -137,6 +137,35 @@ class MessagePersistenceIntegrationTests {
     }
 
     @Test
+    void historyReadsPostgresPagesAndEmptyConversationsWithoutUntypedNullParameters() {
+        Fixture fixture = fixture();
+        UUID supportUserId = createUser();
+        MessageHistoryService history = context.getBean(MessageHistoryService.class);
+
+        assertThat(history.history(fixture.caseId(), null, 50).items()).isEmpty();
+
+        MessageEntity customer = repository.saveAndFlush(customerMessage(
+                fixture.caseId(), "history-customer", "history-thread", "Inbound Slack text",
+                Instant.parse("2026-09-23T12:00:00Z"), "history-customer-correlation"));
+        MessageEntity support = repository.saveAndFlush(new MessageEntity(
+                fixture.caseId(), null, "history-thread", MessageKind.SUPPORT,
+                supportUserId, null, "Agent", "Support reply", MessageBodyFormat.PLAIN_TEXT,
+                false, MessageDeliveryStatus.QUEUED, null, null, null, "history-support-correlation"));
+
+        var first = history.history(fixture.caseId(), null, 1);
+        assertThat(first.items()).hasSize(1);
+        assertThat(first.items().getFirst().id()).isEqualTo(support.id());
+        assertThat(first.items().getFirst().kind()).isEqualTo(MessageKind.SUPPORT);
+        assertThat(first.nextCursor()).isNotBlank();
+
+        var older = history.history(fixture.caseId(), first.nextCursor(), 1);
+        assertThat(older.items()).hasSize(1);
+        assertThat(older.items().getFirst().id()).isEqualTo(customer.id());
+        assertThat(older.items().getFirst().kind()).isEqualTo(MessageKind.CUSTOMER);
+        assertThat(older.nextCursor()).isNull();
+    }
+
+    @Test
     void providerMessageIdentityIsDeduplicatedWithinCase() {
         Fixture fixture = fixture();
         Instant occurredAt = Instant.parse("2026-09-23T11:00:00Z");

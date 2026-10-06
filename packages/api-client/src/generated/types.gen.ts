@@ -9,9 +9,147 @@ export type ApiProblem = {
   "fieldErrors"?: Array<FieldError>
 }
 
-export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTICATION_REQUIRED" | "ACCESS_DENIED" | "RESOURCE_NOT_FOUND" | "CONFLICT" | "RATE_LIMITED" | "PROVIDER_FAILURE" | "APPLICATION_FAILURE" | "INTERNAL_ERROR"
+export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTICATION_REQUIRED" | "ACCESS_DENIED" | "RESOURCE_NOT_FOUND" | "CONFLICT" | "CASE_ALREADY_CLAIMED" | "RATE_LIMITED" | "PROVIDER_FAILURE" | "APPLICATION_FAILURE" | "INTERNAL_ERROR"
+
+export type CaseChannel = {
+  "id": string
+  "name": string
+  "externalChannelId": string
+  "groupingStrategy": string
+}
+
+export type CaseCustomer = {
+  "id": string
+  "name": string
+  "externalRef": string | null
+}
+
+export type CaseDetail = {
+  "id": string
+  "reference": string
+  "status": CaseStatus
+  "customer": CaseCustomer
+  "owner": CaseOwner
+  "channel": CaseChannel
+  "integration": CaseIntegration
+  "relatedCase": CaseRelated
+  "personalState": CasePersonalState
+  "sla": CaseSla | null
+  "ignoreScore": number
+  "availableActions": Array<string>
+  "claimedAt": string | null
+  "waitingUntil": string | null
+  "resolvedAt": string | null
+  "ignoredAt": string | null
+  "resolutionCategory": string | null
+  "createdAt": string
+  "updatedAt": string
+  "lastActivityAt": string
+  "version": number
+}
+
+export type CaseIntegration = {
+  "id": string
+  "provider": Channel
+  "displayName": string
+  "workspaceExternalId": string | null
+  "workspaceName": string | null
+}
+
+export type CaseListItem = {
+  "id": string
+  "reference": string
+  "status": CaseStatus
+  "customerId": string
+  "customerName": string
+  "channelId": string
+  "channelName": string
+  "externalChannelId": string
+  "provider": Channel
+  "ownerUserId": string | null
+  "ownerDisplayName": string | null
+  "lastMessageId": string | null
+  "lastMessagePreview": string | null
+  "unreadForCurrentUser": boolean
+  "snoozedUntil": string | null
+  "slaState": string | null
+  "slaDueAt": string | null
+  "ignoreScore": number
+  "waitingUntil": string | null
+  "createdAt": string
+  "updatedAt": string
+  "lastActivityAt": string
+}
+
+export type CaseListPage = {
+  "items": Array<CaseListItem>
+  "nextCursor": string | null
+}
+
+export type CaseMessage = {
+  "id": string
+  "kind": "CUSTOMER" | "SUPPORT" | "SYSTEM"
+  "body": string
+  "bodyFormat": MessageBodyFormat
+  "inbound": boolean
+  "deliveryStatus": MessageDeliveryStatus | null
+  "providerCreatedAt": string | null
+  "createdAt": string
+  "editedAt": string | null
+  "deletedAt": string | null
+  "authorName": string | null
+  "attachments": Array<MessageAttachment>
+}
+
+export type CaseMessagePage = {
+  "items": Array<CaseMessage>
+  "nextCursor": string | null
+}
+
+export type CaseOwner = {
+  "id": string | null
+  "displayName": string | null
+}
+
+export type CasePersonalState = {
+  "lastReadMessageId": string | null
+  "lastReadAt": string | null
+  "snoozedUntil": string | null
+}
+
+export type CaseRelated = {
+  "id": string | null
+  "reference": string | null
+}
+
+export type CaseSla = {
+  "policyId": string
+  "firstResponseStartedAt": string | null
+  "firstResponseDueAt": string | null
+  "firstResponseCompletedAt": string | null
+  "unclaimedStartedAt": string | null
+  "unclaimedWarningAt": string | null
+  "unclaimedBreachAt": string | null
+  "inProgressStartedAt": string | null
+  "inProgressWarningAt": string | null
+  "inProgressBreachAt": string | null
+  "pausedAt": string | null
+  "totalPausedSeconds": number
+  "state": string
+  "unclaimedCompletedAt": string | null
+  "unclaimedOutcome": string | null
+}
+
+export type CaseStatus = "NEW" | "VERIFICATION" | "WAITING_FOR_CUSTOMER" | "PARTIALLY_IGNORED" | "IGNORED" | "RESOLVED"
 
 export type Channel = "SLACK" | "TEAMS" | "TELEGRAM"
+
+export type ClaimCaseResponse = {
+  "caseId": string
+  "status": CaseStatus
+  "ownerUserId": string
+  "version": number
+}
 
 export type CreateCustomerRequest = {
   "name": string
@@ -50,6 +188,15 @@ export type LoginRequest = {
   "password": string
 }
 
+export type MessageAttachment = {
+  "id": string
+  "fileName": string
+  "sizeBytes": number
+  "contentType": string | null
+  "detectedContentType": string | null
+  "scanStatus": string
+}
+
 export type MessageBodyFormat = "PLAIN_TEXT" | "MARKDOWN"
 
 export type MessageDeliveryStatus = "QUEUED" | "SENDING" | "SENT" | "DELIVERED" | "FAILED"
@@ -58,6 +205,16 @@ export type PermissionCode = "manage_users" | "manage_integrations" | "manage_sl
 
 export type PermissionUpdateRequest = {
   "permissions": Array<PermissionCode>
+}
+
+export type ReadPositionRequest = {
+  "messageId": string
+}
+
+export type ReadPositionResponse = {
+  "caseId": string
+  "messageId": string
+  "readAt": string
 }
 
 export type SendMessageRequest = {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRealtimeCase } from "@/lib/realtime/realtime-context"
 import { serviceRegistry } from "./registry"
 import type {
@@ -31,6 +31,7 @@ export type AdministrationSectionInput = {
 export const queryKeys = {
   currentUser: () => ["current-user"] as const,
   inboxCases: () => ["support-inbox", "cases"] as const,
+  inboxCase: (caseId: string) => ["support-inbox", "case", caseId] as const,
   inboxMessages: (caseId: string) => ["support-inbox", "messages", caseId] as const,
   administrationUsers: (query?: AdministrationUserQuery) =>
     ["administration", "users", query ?? {}] as const,
@@ -47,25 +48,41 @@ export function useCurrentUser() {
 }
 
 export function useInboxCases() {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: queryKeys.inboxCases(),
-    queryFn: () => serviceRegistry.inbox.list(),
+    queryFn: ({ pageParam }) => serviceRegistry.inbox.list(pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor,
+  })
+}
+
+export function useInboxCase(caseId?: string) {
+  return useQuery({
+    queryKey: queryKeys.inboxCase(caseId ?? ""),
+    queryFn: () => serviceRegistry.inbox.getCase(caseId ?? ""),
+    enabled: Boolean(caseId),
   })
 }
 
 export function useInboxMessages(caseId?: string) {
   useRealtimeCase(caseId)
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: queryKeys.inboxMessages(caseId ?? ""),
-    queryFn: () => serviceRegistry.inbox.getMessages(caseId ?? ""),
+    queryFn: ({ pageParam }) => serviceRegistry.inbox.getMessages(caseId ?? "", pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor,
     enabled: Boolean(caseId),
+    refetchInterval: (query) => query.state.data?.pages[0]?.items.some(
+      (message) => message.deliveryStatus === "queued" || message.deliveryStatus === "sending",
+    ) ? 2_000 : false,
   })
 }
 
 export function useMarkInboxCaseRead() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (caseId: string) => serviceRegistry.inbox.markRead(caseId),
+    mutationFn: ({ caseId, messageId }: { caseId: string; messageId: string }) =>
+      serviceRegistry.inbox.markRead(caseId, messageId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() }),
   })
 }
@@ -81,6 +98,7 @@ export function useInboxWorkflow(caseId?: string) {
   const invalidateConversation = async () => {
     await Promise.all([
       invalidateCases(),
+      queryClient.invalidateQueries({ queryKey: queryKeys.inboxCase(caseId ?? "") }),
       queryClient.invalidateQueries({
         queryKey: queryKeys.inboxMessages(caseId ?? ""),
       }),
