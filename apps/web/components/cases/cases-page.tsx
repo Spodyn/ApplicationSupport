@@ -7,13 +7,18 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  Paperclip,
+  RotateCcw,
   Search,
   SlidersHorizontal,
   UserRound,
+  X,
 } from "lucide-react"
 import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
 import { inboxStatusLabels } from "@/lib/domain/inbox"
+import { deliveryStatusLabels } from "@/lib/domain/labels"
 import { useCurrentUser, useInboxCase, useInboxCases, useInboxMessages, useInboxWorkflow, useMarkInboxCaseRead } from "@/lib/services/queries"
+import type { InboxPendingAttachment } from "@/lib/services/inbox"
 import { cn } from "@/lib/utils"
 import { SafeExternalMessage } from "./safe-external-message"
 
@@ -99,7 +104,18 @@ export function CasesPage({
   const presentations = useMemo(() => records.map((record) => toPresentation(record, currentUserQuery.data?.id)), [records, currentUserQuery.data?.id])
   const selectedPresentation = presentations.find((item) => item.id === selectedId)
     ?? (detailQuery.data ? toPresentation(detailQuery.data, currentUserQuery.data?.id) : undefined)
-  const messages = useMemo(() => messagesQuery.data?.pages.flatMap((page) => page.items).reverse() ?? [], [messagesQuery.data])
+  const messages = useMemo(() => {
+    const seen = new Set<string>()
+    const newestFirst: InboxMessage[] = []
+    for (const page of messagesQuery.data?.pages ?? []) {
+      for (const message of page.items) {
+        if (seen.has(message.id)) continue
+        seen.add(message.id)
+        newestFirst.push(message)
+      }
+    }
+    return newestFirst.reverse()
+  }, [messagesQuery.data])
   const latestMessageId = messagesQuery.data?.pages[0]?.items[0]?.id
 
   const visibleCases = useMemo(() => {
@@ -250,6 +266,7 @@ export function CasesPage({
         messagesLoading={messagesQuery.isLoading}
         messagesError={messagesQuery.isError}
         hasOlderMessages={Boolean(messagesQuery.hasNextPage)}
+        loadingOlderMessages={messagesQuery.isFetchingNextPage}
         loadOlderMessages={() => messagesQuery.fetchNextPage()}
         workflow={workflow}
         onBack={() => setMobileConversationOpen(false)}
@@ -362,7 +379,7 @@ function SlaBadge({ tone, children }: { tone: CasePresentation["slaTone"]; child
 }
 
 function ConversationPanel({
-  item, record, detailError, messages, messagesLoading, messagesError, hasOlderMessages, loadOlderMessages, workflow, onBack, className,
+  item, record, detailError, messages, messagesLoading, messagesError, hasOlderMessages, loadingOlderMessages, loadOlderMessages, workflow, onBack, className,
 }: {
   item: CasePresentation
   record?: InboxCase
@@ -371,6 +388,7 @@ function ConversationPanel({
   messagesLoading: boolean
   messagesError: boolean
   hasOlderMessages: boolean
+  loadingOlderMessages: boolean
   loadOlderMessages: () => void
   workflow: ReturnType<typeof useInboxWorkflow>
   onBack: () => void
