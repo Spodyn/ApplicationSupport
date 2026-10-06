@@ -91,7 +91,12 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/v1/cases").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/cases/*/messages").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/cases/*", "/api/v1/cases/*/activity").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/cases/*/claim", "/api/v1/cases/*/messages").authenticated()
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/v1/cases/*/claim",
+                                "/api/v1/cases/*/messages",
+                                "/api/v1/cases/*/snooze").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/cases/*/snooze").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/v1/cases/*/read-position").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/v1/users/*/permissions")
                                 .hasAuthority(PermissionCatalog.MANAGE_USERS)
