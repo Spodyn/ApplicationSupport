@@ -396,17 +396,77 @@ function ConversationPanel({
 }) {
   const [draft, setDraft] = useState("")
   const [sendError, setSendError] = useState("")
+  const [attachmentError, setAttachmentError] = useState("")
+  const [pendingAttachments, setPendingAttachments] = useState<InboxPendingAttachment[]>([])
   const idempotencyKey = useRef<string | null>(null)
+  const retryKeys = useRef(new Map<string, string>())
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
+  const attachmentsReady = pendingAttachments.every((attachment) => attachment.scanStatus === "clean")
+
+  const uploadFiles = async (files: FileList | null) => {
+    if (!canReply || !files?.length) return
+    const availableSlots = Math.max(0, 10 - pendingAttachments.length)
+    const selected = Array.from(files).slice(0, availableSlots)
+    if (selected.length < files.length) {
+      setAttachmentError("Do jednej wiadomości można dodać maksymalnie 10 załączników.")
+    } else {
+      setAttachmentError("")
+    }
+    for (const file of selected) {
+      try {
+        const uploaded = await workflow.uploadAttachment.mutateAsync(file)
+        setPendingAttachments((current) => [...current, uploaded])
+        if (uploaded.scanStatus !== "clean") {
+          setAttachmentError(`Załącznik ${uploaded.fileName} nie przeszedł kontroli bezpieczeństwa.`)
+        }
+      } catch (error) {
+        setAttachmentError(error instanceof Error ? error.message : "Nie udało się przesłać załącznika.")
+      }
+    }
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  const removeAttachment = async (attachmentId: string) => {
+    setAttachmentError("")
+    try {
+      await workflow.removePendingAttachment.mutateAsync(attachmentId)
+      setPendingAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+    } catch (error) {
+      setAttachmentError(error instanceof Error ? error.message : "Nie udało się usunąć załącznika.")
+    }
+  }
+
+  const retryMessage = async (messageId: string) => {
+    const key = retryKeys.current.get(messageId) ?? crypto.randomUUID()
+    retryKeys.current.set(messageId, key)
+    setSendError("")
+    try {
+      await workflow.retryMessage.mutateAsync({ messageId, idempotencyKey: key })
+      retryKeys.current.delete(messageId)
+    } catch (error) {
+      setSendError(error instanceof Error ? error.message : "Nie udało się ponowić wysyłki.")
+    }
+  }
 
   const send = async () => {
     if (!canReply || !draft.trim() || workflow.sendMessage.isPending) return
+    if (!attachmentsReady) {
+      setAttachmentError("Usuń załączniki, które nie przeszły kontroli bezpieczeństwa.")
+      return
+    }
     idempotencyKey.current ??= crypto.randomUUID()
     setSendError("")
     try {
-      await workflow.sendMessage.mutateAsync({ body: draft, idempotencyKey: idempotencyKey.current })
+      await workflow.sendMessage.mutateAsync({
+        body: draft,
+        attachments: pendingAttachments,
+        idempotencyKey: idempotencyKey.current,
+      })
       setDraft("")
+      setPendingAttachments([])
+      setAttachmentError("")
       idempotencyKey.current = null
     } catch (error) {
       setSendError(error instanceof Error ? error.message : "Nie udało się wysłać odpowiedzi.")
