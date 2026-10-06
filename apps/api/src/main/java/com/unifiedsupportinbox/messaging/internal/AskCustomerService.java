@@ -153,11 +153,11 @@ class AskCustomerService {
     }
 
     private static Duration normalizeWait(Long waitingMinutes) {
-        Duration value = waitingMinutes == null ? DEFAULT_WAIT : Duration.ofMinutes(waitingMinutes);
-        if (value.compareTo(MIN_WAIT) < 0 || value.compareTo(MAX_WAIT) > 0) {
+        if (waitingMinutes == null) return DEFAULT_WAIT;
+        if (waitingMinutes < MIN_WAIT.toMinutes() || waitingMinutes > MAX_WAIT.toMinutes()) {
             throw ApiProblemException.validationFailed("waitingMinutes must be between 60 and 43200.");
         }
-        return value;
+        return Duration.ofMinutes(waitingMinutes);
     }
 
     private static String requireBody(String value) {
