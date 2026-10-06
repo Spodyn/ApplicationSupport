@@ -462,10 +462,7 @@ function ConversationPanel({
       </div>
       <ConfirmDialog
         open={resolveOpen}
-        onOpenChange={(open) => {
-          setResolveOpen(open)
-          if (!open && !workflow.resolve.isPending) resolveIdempotencyKey.current = null
-        }}
+        onOpenChange={setResolveOpen}
         title="Zamknąć sprawę?"
         description="Case zostanie oznaczony jako rozwiązany. Ta operacja jest końcowa — kolejna wiadomość klienta utworzy nowy powiązany case."
         confirmLabel={workflow.resolve.isPending ? "Zamykanie…" : "Zamknij sprawę"}
