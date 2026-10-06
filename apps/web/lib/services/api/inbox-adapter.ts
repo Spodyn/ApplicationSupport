@@ -5,7 +5,7 @@ import type {
   CaseListItem,
   CaseMessage,
 } from "@usi/api-client/generated"
-import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
+import type { InboxAttachment, InboxCase, InboxMessage } from "@/lib/domain/inbox"
 import type { SlaState } from "@/lib/domain/shared"
 import {
   InboxConflictError,
@@ -134,7 +134,7 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function attachmentType(contentType: string | null, fileName: string): InboxMessage["attachments"][number]["type"] {
+function attachmentType(contentType: string | null, fileName: string): InboxAttachment["type"] {
   if (contentType?.startsWith("image/")) return "image"
   if (/\.(zip|rar|7z|tar|gz)$/i.test(fileName)) return "archive"
   return "document"
