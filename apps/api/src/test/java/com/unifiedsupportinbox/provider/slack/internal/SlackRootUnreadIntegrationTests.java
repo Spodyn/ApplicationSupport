@@ -158,7 +158,7 @@ class SlackRootUnreadIntegrationTests {
 
     private static String rootMessage(String eventId, String channel, String ts) {
         return "{\"type\":\"event_callback\",\"event_id\":\"" + eventId
-                + "\",\"event\":{\"type\":\"message\",\"channel\":\"" + channel
+                + "\",\"event\":{\"type\":\"message\",\"channel_type\":\"channel\",\"channel\":\"" + channel
                 + "\",\"user\":\"U-customer\",\"text\":\"hello\",\"ts\":\"" + ts + "\"}}";
     }
 
