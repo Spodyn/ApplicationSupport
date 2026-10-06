@@ -9,6 +9,7 @@ import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
 import type { SlaState } from "@/lib/domain/shared"
 import {
   InboxConflictError,
+  type InboxPendingAttachment,
   type InboxRepository,
 } from "@/lib/services/inbox"
 import { mapApiChannel } from "./channel-adapter"
@@ -127,7 +128,23 @@ export function mapCaseDetail(detail: CaseDetail): InboxCase {
   }
 }
 
-export function mapCaseMessage(message: CaseMessage): InboxMessage {
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function attachmentType(contentType: string | null, fileName: string): InboxMessage["attachments"][number]["type"] {
+  if (contentType?.startsWith("image/")) return "image"
+  if (/\.(zip|rar|7z|tar|gz)$/i.test(fileName)) return "archive"
+  return "document"
+}
+
+function attachmentDownloadUrl(caseId: string, attachmentId: string): string {
+  return `/api/v1/cases/${encodeURIComponent(caseId)}/attachments/${encodeURIComponent(attachmentId)}`
+}
+
+export function mapCaseMessage(caseId: string, message: CaseMessage): InboxMessage {
   return {
     id: message.id,
     kind: message.kind.toLowerCase() as InboxMessage["kind"],
@@ -139,8 +156,9 @@ export function mapCaseMessage(message: CaseMessage): InboxMessage {
     attachments: message.attachments.map((item) => ({
       id: item.id,
       fileName: item.fileName,
-      size: `${item.sizeBytes} B`,
-      type: item.contentType?.startsWith("image/") ? "image" : "document",
+      size: formatBytes(item.sizeBytes),
+      type: attachmentType(item.contentType, item.fileName),
+      downloadUrl: attachmentDownloadUrl(caseId, item.id),
     })),
   }
 }
@@ -157,7 +175,7 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     },
     async getMessages(caseId, before) {
       const page = await client.getCaseMessages({ caseId, before, limit: 50 })
-      return { items: page.items.map(mapCaseMessage), nextCursor: page.nextCursor ?? undefined }
+      return { items: page.items.map((message) => mapCaseMessage(caseId, message)), nextCursor: page.nextCursor ?? undefined }
     },
     async markRead(caseId, messageId) {
       await client.markCaseRead({ caseId, body: { messageId } })
@@ -177,19 +195,49 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     askCustomer: unavailable,
     resolve: unavailable,
     snooze: unavailable,
+    async uploadAttachment(caseId, file) {
+      const body = new FormData()
+      body.append("file", file)
+      const uploaded = await client.uploadCaseAttachment({ caseId, body })
+      return {
+        id: uploaded.attachmentId,
+        fileName: uploaded.filename,
+        size: formatBytes(uploaded.sizeBytes),
+        type: attachmentType(uploaded.contentType, uploaded.filename),
+        scanStatus: uploaded.scanStatus.toLowerCase() as InboxPendingAttachment["scanStatus"],
+      }
+    },
+    async removePendingAttachment(caseId, attachmentId) {
+      await client.removePendingCaseAttachment({ caseId, attachmentId })
+    },
+    async retryMessage(messageId, idempotencyKey) {
+      await client.retryMessageDelivery({
+        messageId,
+        "Idempotency-Key": idempotencyKey ?? crypto.randomUUID(),
+      })
+    },
     async sendMessage(caseId, input) {
-      if (input.attachments?.length || input.simulateFailure) throw new InboxActionUnavailableError()
+      if (input.simulateFailure) throw new InboxActionUnavailableError()
       const body = input.body.trim()
       if (!body) throw new Error("Wiadomość nie może być pusta.")
+      const attachments = input.attachments ?? []
+      if (attachments.some((attachment) => attachment.scanStatus !== "clean")) {
+        throw new Error("Wiadomość może zawierać tylko poprawnie zeskanowane załączniki.")
+      }
+      const attachmentIds = attachments.map((attachment) => attachment.id)
       const accepted = await client.sendCaseMessage({
         caseId,
         "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
-        body: { body, bodyFormat: "PLAIN_TEXT" },
+        body: {
+          body,
+          bodyFormat: "PLAIN_TEXT",
+          ...(attachmentIds.length ? { attachmentIds } : {}),
+        },
       })
       const history = await client.getCaseMessages({ caseId, limit: 50 })
       const persisted = history.items.find((message) => message.id === accepted.messageId)
       if (!persisted) throw new Error("Wysłana wiadomość nie pojawiła się w historii case’u.")
-      return mapCaseMessage(persisted)
+      return mapCaseMessage(caseId, persisted)
     },
   }
 }
