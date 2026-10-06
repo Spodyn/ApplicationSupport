@@ -88,8 +88,7 @@ class SupportSendMessageService {
             String body,
             MessageBodyFormat bodyFormat,
             List<UUID> attachmentIds,
-            String correlationId,
-            Long askWaitingSeconds) {
+            String correlationId) {
         return sendInternal(
                 caseId,
                 userId,
@@ -147,7 +146,8 @@ class SupportSendMessageService {
             String body,
             MessageBodyFormat bodyFormat,
             List<UUID> attachmentIds,
-            String correlationId) {
+            String correlationId,
+            Long askWaitingSeconds) {
         CaseSendContext context = jdbc.query("""
                 SELECT owner_user_id, status, external_thread_key
                 FROM cases
