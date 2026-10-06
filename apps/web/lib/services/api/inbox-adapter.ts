@@ -179,7 +179,7 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
       await client.resolveCase({
         caseId,
         "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
-        body: { resolutionCategory: input.category?.trim() || null },
+        body: { resolutionCategory: input.category ?? null },
       })
     },
     snooze: unavailable,
