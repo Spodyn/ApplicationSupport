@@ -93,6 +93,7 @@ export interface ManagedIntegration {
   platform: Channel
   status: IntegrationStatus
   workspace: string
+  canEnable: boolean
   lastEventAt?: string
   lastErrorCode?: string
   health: IntegrationHealth

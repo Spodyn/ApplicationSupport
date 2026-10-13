@@ -47,8 +47,12 @@ class IntegrationService {
         if (status == null || status == IntegrationStatus.CONFIGURING) {
             throw ApiProblemException.validationFailed("Common status update supports only ENABLED or DISABLED.");
         }
-        integrations.findById(integrationId)
+        IntegrationRecord integration = integrations.findById(integrationId)
                 .orElseThrow(() -> ApiProblemException.notFound("Integration was not found."));
+        if (status == IntegrationStatus.ENABLED && integration.secretRef() == null) {
+            throw ApiProblemException.validationFailed(
+                    "Integration credentials must be configured before the integration can be enabled.");
+        }
         try {
             return integrations.updateStatus(integrationId, status).toView();
         } catch (org.springframework.dao.DataIntegrityViolationException conflict) {

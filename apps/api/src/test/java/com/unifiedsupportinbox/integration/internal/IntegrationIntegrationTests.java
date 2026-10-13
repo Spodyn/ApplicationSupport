@@ -259,6 +259,32 @@ class IntegrationIntegrationTests {
     }
 
     @Test
+    void integrationCannotBeEnabledBeforeCredentialsAreConfigured() throws Exception {
+        IntegrationRecord integration = integrations.create(
+                IntegrationProvider.TEAMS,
+                "Teams without credentials",
+                IntegrationStatus.CONFIGURING,
+                IntegrationHealth.UNKNOWN,
+                "tenant-without-credentials",
+                "Acme",
+                null,
+                "{}");
+        createUser("credential-admin@example.com", "ADMIN");
+        CookieManager cookies = login("credential-admin@example.com");
+
+        HttpResponse<String> response = mutate(
+                cookies,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{\"status\":\"ENABLED\"}");
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(response.body()).contains("credentials must be configured");
+        assertThat(integrations.findById(integration.id()).orElseThrow().status())
+                .isEqualTo(IntegrationStatus.CONFIGURING);
+    }
+
+    @Test
     void integrationReadRoutesRequireManageIntegrationsPermission() throws Exception {
         integrations.create(
                 IntegrationProvider.SLACK,

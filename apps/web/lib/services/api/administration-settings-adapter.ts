@@ -143,6 +143,7 @@ function mapIntegration(integration: ApiIntegrationRecord): ManagedIntegration {
     id: integration.id,
     platform: mapApiChannel(integration.provider),
     status: integration.status.toLowerCase() as ManagedIntegration["status"],
+    canEnable: integration.secretConfigured,
     workspace:
       integration.workspaceName ??
       integration.workspaceExternalId ??
@@ -528,16 +529,6 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
         pauseWhileWaiting: saved.pauseWaiting } as AdministrationSettings[K]
     }
     return mockAdministrationSettingsRepository.saveSection(key, value)
-  },
-
-  async configureIntegration(id, workspace) {
-    // Provider OAuth / credential onboarding is intentionally provider-specific.
-    // Until those flows expose a common mutation, keep this explicit rather than
-    // pretending the workspace identifier is authoritative backend configuration.
-    const current = (await listIntegrations()).find((item) => item.id === id)
-    if (!current) throw new Error("Nie znaleziono integracji.")
-    if (current.workspace === workspace.trim()) return current
-    throw new Error("Zmiana identyfikatora integracji wymaga procesu konfiguracji dostawcy.")
   },
 
   async setIntegrationStatus(id, status) {
