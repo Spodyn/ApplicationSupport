@@ -259,15 +259,15 @@ class ChannelIntegrationTests {
 
         HttpResponse<String> listed = get(client(delegated), "/api/v1/admin/channels");
         assertThat(listed.statusCode()).isEqualTo(403);
-        assertThat(listed.body()).contains("\\"code\\":\\"ACCESS_DENIED\\"");
+        assertThat(listed.body()).contains("\"code\":\"ACCESS_DENIED\"");
 
         HttpResponse<String> updated = mutate(
                 delegated,
                 "PATCH",
                 "/api/v1/admin/channels/" + channel.id(),
-                "{\\"ignored\\":true}");
+                "{\"ignored\":true}");
         assertThat(updated.statusCode()).isEqualTo(403);
-        assertThat(updated.body()).contains("\\"code\\":\\"ACCESS_DENIED\\"");
+        assertThat(updated.body()).contains("\"code\":\"ACCESS_DENIED\"");
         assertThat(jdbc.queryForObject(
                 "SELECT ignored FROM channels WHERE id = ?", Boolean.class, channel.id())).isFalse();
     }
@@ -292,7 +292,7 @@ class ChannelIntegrationTests {
                 administrator,
                 "PATCH",
                 "/api/v1/admin/channels/" + channel.id(),
-                "{\\"ignored\\":true}");
+                "{\"ignored\":true}");
         assertThat(updated.statusCode()).isEqualTo(403);
         assertThat(jdbc.queryForObject(
                 "SELECT ignored FROM channels WHERE id = ?", Boolean.class, channel.id())).isFalse();
