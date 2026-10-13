@@ -104,11 +104,17 @@ export type ChannelGroupingStrategy =
   | "TELEGRAM_TOPIC"
   | "TELEGRAM_CHAT_ACTIVE_CASE"
 
+export interface ManagedCustomerOption {
+  id: string
+  name: string
+}
+
 export interface ManagedChannel {
   id: string
   platform: Channel
   externalChannelId: string
   channelName: string
+  customerId?: string
   customer: string
   ignored: boolean
   groupingStrategy: ChannelGroupingStrategy

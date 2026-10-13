@@ -2,6 +2,7 @@ import type {
   AdministrationSettings,
   ChannelGroupingStrategy,
   ManagedChannel,
+  ManagedCustomerOption,
   NotificationDestination,
   NotificationType,
   ScheduleException,
@@ -14,6 +15,12 @@ import { mapApiChannel } from "./channel-adapter"
 import { browserApiTransport } from "./http-transport"
 
 type ApiProvider = "SLACK" | "TEAMS" | "TELEGRAM"
+
+type ApiCustomerRecord = {
+  id: string
+  name: string
+  active: boolean
+}
 
 type ApiChannelRecord = {
   id: string
@@ -121,6 +128,7 @@ function mapChannel(channel: ApiChannelRecord): ManagedChannel {
     platform: mapApiChannel(channel.provider),
     externalChannelId: channel.externalChannelId,
     channelName: `${channel.name} · ${activity}`,
+    customerId: channel.customerId ?? undefined,
     customer: channel.customerName ?? "Nie przypisano",
     ignored: channel.ignored,
     groupingStrategy: channel.groupingStrategy,
@@ -214,6 +222,16 @@ export function mapWorkScheduleToApiIntervals(
       { dayOfWeek, start: day.breakEnd, end: day.end },
     ]
   })
+}
+
+async function listCustomers(): Promise<ManagedCustomerOption[]> {
+  const customers = await browserApiTransport.request<ApiCustomerRecord[]>({
+    method: "GET",
+    path: "/api/v1/admin/customers",
+  })
+  return customers
+    .filter((customer) => customer.active)
+    .map((customer) => ({ id: customer.id, name: customer.name }))
 }
 
 async function listChannels(): Promise<ManagedChannel[]> {
@@ -491,6 +509,17 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
 
   testIntegration(id) {
     return mockAdministrationSettingsRepository.testIntegration(id)
+  },
+
+  listCustomers,
+
+  async configureChannel(id, customerId, groupingStrategy) {
+    const updated = await browserApiTransport.request<ApiChannelRecord>({
+      method: "PATCH",
+      path: `/api/v1/admin/channels/${encodeURIComponent(id)}`,
+      body: { customerId, groupingStrategy },
+    })
+    return mapChannel(updated)
   },
 
   async setChannelIgnored(id, ignored) {
