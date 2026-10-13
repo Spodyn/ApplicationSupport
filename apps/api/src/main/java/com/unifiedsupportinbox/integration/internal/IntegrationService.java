@@ -15,16 +15,20 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 class IntegrationService {
 
+    private static final String ADMIN_AUTHORITY = "ROLE_ADMIN";
     private static final String MANAGE_INTEGRATIONS = "manage_integrations";
 
     private final IntegrationRepository integrations;
     private final List<IntegrationConnectionTester> connectionTesters;
+    private final IntegrationConnectionTestRunner connectionTestRunner;
 
     IntegrationService(
             IntegrationRepository integrations,
-            List<IntegrationConnectionTester> connectionTesters) {
+            List<IntegrationConnectionTester> connectionTesters,
+            IntegrationConnectionTestRunner connectionTestRunner) {
         this.integrations = integrations;
         this.connectionTesters = List.copyOf(connectionTesters);
+        this.connectionTestRunner = connectionTestRunner;
     }
 
     @Transactional(readOnly = true)
@@ -60,7 +64,6 @@ class IntegrationService {
         }
     }
 
-    @Transactional
     IntegrationConnectionTestView testConnection(Authentication actor, UUID integrationId) {
         requireManageIntegrations(actor);
         IntegrationRecord integration = integrations.findById(integrationId)
@@ -70,7 +73,7 @@ class IntegrationService {
                 .filter(tester -> tester.supports(integration.provider()))
                 .toList();
         IntegrationConnectionTester.Result result = matching.size() == 1
-                ? runTest(matching.getFirst(), integration)
+                ? connectionTestRunner.run(matching.getFirst(), integration)
                 : IntegrationConnectionTester.Result.unavailable();
         IntegrationHealth health = switch (result.outcome()) {
             case SUCCESS -> IntegrationHealth.HEALTHY;
@@ -83,26 +86,15 @@ class IntegrationService {
             case UNAUTHORIZED -> "PROVIDER_UNAUTHORIZED";
             case UNAVAILABLE -> "PROVIDER_UNAVAILABLE";
         };
-        IntegrationRecord updated = integrations.updateHealth(
-                integration.id(), health, integration.lastEventAt(), errorCode);
+        IntegrationRecord updated = integrations.updateHealthPreservingLastEvent(
+                integration.id(), health, errorCode);
         return new IntegrationConnectionTestView(updated.toView(), result.outcome(), errorCode);
     }
 
-    private static IntegrationConnectionTester.Result runTest(
-            IntegrationConnectionTester tester, IntegrationRecord integration) {
-        try {
-            IntegrationConnectionTester.Result result = tester.test(new IntegrationConnectionTester.Request(
-                    integration.id(), integration.provider(), integration.workspaceExternalId(), integration.secretRef() != null));
-            return result == null || result.outcome() == null
-                    ? IntegrationConnectionTester.Result.unavailable()
-                    : result;
-        } catch (RuntimeException ignored) {
-            return IntegrationConnectionTester.Result.unavailable();
-        }
-    }
-
     private static void requireManageIntegrations(Authentication actor) {
-        if (!hasAuthority(actor, MANAGE_INTEGRATIONS)) throw ApiProblemException.accessDenied();
+        if (!hasAuthority(actor, ADMIN_AUTHORITY) || !hasAuthority(actor, MANAGE_INTEGRATIONS)) {
+            throw ApiProblemException.accessDenied();
+        }
     }
 
     private static boolean hasAuthority(Authentication actor, String expected) {

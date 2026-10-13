@@ -1,3 +1,9 @@
+import { createApiClient } from "@usi/api-client/generated"
+import type {
+  Channel as ApiProvider,
+  IntegrationStatus as ApiIntegrationStatus,
+  IntegrationView as ApiIntegrationRecord,
+} from "@usi/api-client/generated"
 import type {
   AdministrationSettings,
   ChannelGroupingStrategy,
@@ -13,31 +19,6 @@ import type { AdministrationSettingsRepository } from "@/lib/services/administra
 import { mockAdministrationSettingsRepository } from "@/lib/services/administration"
 import { mapApiChannel } from "./channel-adapter"
 import { browserApiTransport } from "./http-transport"
-
-type ApiProvider = "SLACK" | "TEAMS" | "TELEGRAM"
-type ApiIntegrationStatus = "CONFIGURING" | "ENABLED" | "DISABLED"
-type ApiIntegrationHealth = "UNKNOWN" | "HEALTHY" | "DEGRADED" | "UNAVAILABLE"
-
-type ApiIntegrationRecord = {
-  id: string
-  provider: ApiProvider
-  displayName: string
-  status: ApiIntegrationStatus
-  health: ApiIntegrationHealth
-  workspaceExternalId?: string | null
-  workspaceName?: string | null
-  secretConfigured: boolean
-  lastEventAt?: string | null
-  lastErrorCode?: string | null
-  createdAt: string
-  updatedAt: string
-}
-
-type ApiIntegrationConnectionTest = {
-  integration: ApiIntegrationRecord
-  outcome: "SUCCESS" | "TIMEOUT" | "UNAUTHORIZED" | "UNAVAILABLE"
-  errorCode?: string | null
-}
 
 type ApiChannelRecord = {
   id: string
@@ -137,6 +118,7 @@ const supportedNotificationTypes = new Set<NotificationType>([
 const notificationDestinationVersions = new Map<string, number>()
 let outOfOfficeVersion: number | undefined
 let slaPolicyVersion: number | undefined
+const integrationApi = createApiClient(browserApiTransport)
 
 function mapIntegration(integration: ApiIntegrationRecord): ManagedIntegration {
   return {
@@ -173,6 +155,12 @@ function apiProvider(channel: Channel): ApiProvider {
   if (channel === "slack") return "SLACK"
   if (channel === "teams") return "TEAMS"
   return "TELEGRAM"
+}
+
+function apiIntegrationStatus(status: ManagedIntegration["status"]): ApiIntegrationStatus {
+  if (status === "configuring") return "CONFIGURING"
+  if (status === "enabled") return "ENABLED"
+  return "DISABLED"
 }
 
 function wallClock(value: string): string {
@@ -257,10 +245,7 @@ export function mapWorkScheduleToApiIntervals(
 }
 
 async function listIntegrations(): Promise<ManagedIntegration[]> {
-  const integrations = await browserApiTransport.request<ApiIntegrationRecord[]>({
-    method: "GET",
-    path: "/api/v1/admin/integrations",
-  })
+  const integrations = await integrationApi.listIntegrations()
   return integrations.map(mapIntegration)
 }
 
@@ -532,19 +517,15 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
   },
 
   async setIntegrationStatus(id, status) {
-    const integration = await browserApiTransport.request<ApiIntegrationRecord>({
-      method: "PATCH",
-      path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/status`,
-      body: { status: status.toUpperCase() },
+    const integration = await integrationApi.setIntegrationStatus({
+      integrationId: id,
+      body: { status: apiIntegrationStatus(status) },
     })
     return mapIntegration(integration)
   },
 
   async testIntegration(id) {
-    const result = await browserApiTransport.request<ApiIntegrationConnectionTest>({
-      method: "POST",
-      path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/test`,
-    })
+    const result = await integrationApi.testIntegrationConnection({ integrationId: id })
     return mapIntegration(result.integration)
   },
 
