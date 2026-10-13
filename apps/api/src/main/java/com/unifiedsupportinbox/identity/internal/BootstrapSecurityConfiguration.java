@@ -7,6 +7,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.authorization.AuthorizationManagers;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
@@ -96,8 +98,10 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers(HttpMethod.PUT, "/api/v1/users/*/permissions")
                                 .hasAuthority(PermissionCatalog.MANAGE_USERS)
                         .requestMatchers("/api/v1/admin/customers/**").hasRole("ADMIN")
-                        .requestMatchers("/api/v1/admin/integrations/**").hasAuthority("manage_integrations")
-                        .requestMatchers("/api/v1/admin/channels/**").hasAuthority("manage_integrations")
+                        .requestMatchers("/api/v1/admin/integrations/**", "/api/v1/admin/channels/**")
+                                .access(AuthorizationManagers.allOf(
+                                        AuthorityAuthorizationManager.hasRole("ADMIN"),
+                                        AuthorityAuthorizationManager.hasAuthority(PermissionCatalog.MANAGE_INTEGRATIONS)))
                         .requestMatchers("/api/v1/admin/business-hours/**").hasAuthority("manage_schedule")
                         .requestMatchers("/api/v1/admin/out-of-office/**").hasAuthority("manage_schedule")
                         .requestMatchers("/api/v1/admin/sla-policy/**").hasAuthority("manage_sla")
