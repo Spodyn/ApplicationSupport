@@ -5,7 +5,9 @@
  */
 import {safeToDelete} from "./delete_merged_branch.mjs";
 
-export function eligibleStaleBranch({branch, mergedPRs, openPRs, now, minAgeMs = 7*24*60*60*1000}) {
+export function eligibleStaleBranch({branch, mergedPRs, openPRs, now, minAgeMs = 7*24*60*60*1000, verifiedNoActiveWorkerLease = false}) {
+  // Merged provenance is not evidence that a live worker/lease is absent.
+  if (verifiedNoActiveWorkerLease !== true) return false;
   if (!branch || branch.protected || !branch.commit?.sha) return false;
   if (!Array.isArray(mergedPRs) || !Array.isArray(openPRs)) return false;
   for (const p of mergedPRs) {
@@ -14,7 +16,7 @@ export function eligibleStaleBranch({branch, mergedPRs, openPRs, now, minAgeMs =
     if (now - Date.parse(p.merged_at) < minAgeMs) continue;
     if (safeToDelete({
       pull: {...p, state:"closed", merged:true},
-      refSha:branch.commit.sha, openPulls:openPRs, defaultBranch:"main"
+      refSha:branch.commit.sha, openPulls:openPRs, defaultBranch:"main", verifiedNoActiveWorkerLease
     })) return true;
   }
   return false;
@@ -51,10 +53,13 @@ export async function sweep(env=process.env){
     allPages(api,"/pulls?state=closed",auth)
   ]);
   const merged=closed.filter(x=>x.merged_at && x.state==="closed");
+  // No authoritative lease registry/heartbeat lookup exists in this runner.
+  // Fail closed. A configured Actions variable alone is not valid evidence.
+  const verifiedNoActiveWorkerLease = false;
   const now=Date.now();
   let deleted=0,eligible=0;
   for(const branch of branches){
-    if(!eligibleStaleBranch({branch,mergedPRs:merged,openPRs:open,now}))continue;
+    if(!eligibleStaleBranch({branch,mergedPRs:merged,openPRs:open,now,verifiedNoActiveWorkerLease}))continue;
     eligible++;
     if(deleted>=40)break;
     // The SHA is fetched again immediately before deletion; any new commit
@@ -72,7 +77,8 @@ export async function sweep(env=process.env){
     deleted++;
     console.log("Deleted safely merged stale branch:",branch.name);
   }
-  console.log(JSON.stringify({eligible,deleted,dryRun:env.USI_BRANCH_SWEEP_DRY_RUN==="true"}));
+  if (!verifiedNoActiveWorkerLease) console.log("BLOCKED: no authoritative worker lease/heartbeat inactivity evidence; all branches retained");
+  console.log(JSON.stringify({eligible,deleted,dryRun:env.USI_BRANCH_SWEEP_DRY_RUN==="true",workerLeaseVerification:"NOT_RUN"}));
 }
 if(process.argv[1]?.endsWith("/prune_merged_branches.mjs")){
   sweep().catch(error=>{console.error(error);process.exitCode=1;});

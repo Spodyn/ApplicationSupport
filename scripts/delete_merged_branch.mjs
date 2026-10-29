@@ -3,7 +3,12 @@
  * and no other open PR uses it as a source or as the base of a stacked PR.
  * Runs only with trusted default-branch code. Never touches the default branch.
  */
-export function safeToDelete({pull, refSha, openPulls, defaultBranch = "main"}) {
+export function safeToDelete({pull, refSha, openPulls, defaultBranch = "main", verifiedNoActiveWorkerLease = false}) {
+  // GitHub merge/provenance checks cannot establish whether an autonomous
+  // developer still has a durable lease or live heartbeat on this branch.
+  // Until a trusted lease checker is wired, production calls intentionally
+  // omit this attestation and must always retain the branch.
+  if (verifiedNoActiveWorkerLease !== true) return false;
   if (!pull?.merged || pull.state !== "closed" || !pull.head?.ref || !pull.head?.sha) return false;
   if (pull.head.repo?.full_name !== pull.base.repo?.full_name) return false;
   if (pull.head.ref === defaultBranch || !/^(agent\/USI-|codex\/|usi-|ops\/USI-)/.test(pull.head.ref)) return false;
@@ -45,8 +50,13 @@ export async function cleanup(env = process.env) {
   const ref = await gh(prefix + "/git/ref/heads/" + branch.split("/").map(encodeURIComponent).join("/"), auth, {allow404: true});
   if (!ref) return;
   const repoData = await gh(prefix, auth);
-  if (!safeToDelete({pull, refSha: ref.object?.sha, openPulls, defaultBranch: repoData.default_branch})) {
-    console.log("Branch retained because source/stack/commit safety gate failed:", branch);
+  // USI-247: no authoritative durable worker-lease/heartbeat reader is wired.
+  // Do NOT replace this with an Actions variable or green CI as proof.
+  // A future independent orchestrator must verify inactivity for this exact
+  // branch/ref immediately before deletion and supply the verified result.
+  const verifiedNoActiveWorkerLease = false;
+  if (!safeToDelete({pull, refSha: ref.object?.sha, openPulls, defaultBranch: repoData.default_branch, verifiedNoActiveWorkerLease})) {
+    console.log("Branch retained: merged-ref/stack gate or verified inactive-worker lease missing:", branch);
     return;
   }
   // Re-read ref and PR just before deletion; any post-merge new commit blocks.
