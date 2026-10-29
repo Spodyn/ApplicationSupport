@@ -233,6 +233,94 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
   return { externalRequests, sends, uploads, retries, historyBefore, supportMessages }
 }
 
+async function prepareSettingsApi(page: Page, options: { forbidden?: boolean } = {}) {
+  const writes: Array<{ method: string; path: string; body?: unknown }> = []
+  let integration = {
+    id: "018f0000-0000-7000-8000-000000000301",
+    provider: "SLACK",
+    displayName: "Acme Slack",
+    status: "ENABLED",
+    health: "UNKNOWN",
+    workspaceExternalId: "T-ACME",
+    workspaceName: "Acme Workspace",
+    secretConfigured: true,
+    secretRef: "sandbox-secret-must-not-be-rendered",
+    lastEventAt: null,
+    lastErrorCode: null,
+    createdAt: "2026-10-01T08:00:00Z",
+    updatedAt: "2026-10-01T08:00:00Z",
+  }
+
+  await page.route("**/api/v1/admin/**", async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    const method = request.method()
+
+    if (path === "/api/v1/admin/integrations" && method === "GET") {
+      if (options.forbidden) {
+        await route.fulfill({
+          status: 403,
+          contentType: "application/problem+json",
+          body: JSON.stringify({ code: "ACCESS_DENIED", title: "Access denied", status: 403 }),
+        })
+        return
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([integration]) })
+      return
+    }
+    if (path.endsWith(`/integrations/${integration.id}/status`) && method === "PATCH") {
+      const body = request.postDataJSON() as { status: "ENABLED" | "DISABLED" }
+      writes.push({ method, path, body })
+      integration = { ...integration, status: body.status, updatedAt: "2026-10-01T08:05:00Z" }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(integration) })
+      return
+    }
+    if (path.endsWith(`/integrations/${integration.id}/test`) && method === "POST") {
+      writes.push({ method, path })
+      integration = { ...integration, health: "HEALTHY", updatedAt: "2026-10-01T08:06:00Z" }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ integration, outcome: "SUCCESS", errorCode: null }) })
+      return
+    }
+    if (path === "/api/v1/admin/channels" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+      return
+    }
+    if (path === "/api/v1/admin/business-hours" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        id: "018f0000-0000-7000-8000-000000000302", timezone: "Europe/Warsaw", active: true,
+        intervals: [], updatedBy: authenticatedSession.id, updatedAt: "2026-10-01T08:00:00Z",
+      }) })
+      return
+    }
+    if (path === "/api/v1/admin/notifications/destinations" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+      return
+    }
+    if (path === "/api/v1/admin/notifications/rules" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+      return
+    }
+    if (path === "/api/v1/admin/out-of-office" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        enabled: false, template: "Poza biurem", sendOncePerClosure: true, version: 1,
+        updatedAt: "2026-10-01T08:00:00Z", updatedBy: authenticatedSession.id,
+      }) })
+      return
+    }
+    if (path === "/api/v1/admin/sla-policy" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        id: "018f0000-0000-7000-8000-000000000303", name: "Default", firstResponseMinutes: 30,
+        unclaimedWarningMinutes: 10, unclaimedBreachMinutes: 30, inProgressWarningMinutes: 60,
+        inProgressBreachMinutes: 120, pauseWaiting: true, version: 1, updatedAt: "2026-10-01T08:00:00Z",
+      }) })
+      return
+    }
+    await route.fallback()
+  })
+
+  return { writes }
+}
+
 const smokeRoutes = [
   { path: "/cases", heading: "Czaty" },
   { path: "/statistics", heading: "Statystyki" },
@@ -440,6 +528,42 @@ test("formularz dodawania użytkownika otwiera się i resetuje po anulowaniu", a
   await expect(reopenedDialog.getByLabel("Imię i nazwisko")).toHaveValue("")
   await expect(reopenedDialog.getByLabel("E-mail")).toHaveValue("")
   expect(externalRequests).toEqual([])
+})
+
+test("Settings używa realnego common API do testowania i zmiany statusu integracji", async ({ page }) => {
+  const { externalRequests } = await preparePage(page)
+  const { writes } = await prepareSettingsApi(page)
+
+  await page.goto("/settings")
+  await expect(page.getByText("Konfiguracja hybrydowa")).toBeVisible()
+  await page.getByRole("tab", { name: "Integracje" }).click()
+
+  await expect(page.getByText("Acme Workspace").first()).toBeVisible()
+  await expect(page.getByText("sandbox-secret-must-not-be-rendered")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Konfiguruj" })).toHaveCount(0)
+
+  await page.getByRole("button", { name: "Testuj" }).click()
+  await expect.poll(() => writes.some((write) => write.method === "POST" && write.path.endsWith("/test"))).toBe(true)
+
+  await page.getByRole("button", { name: "Wyłącz" }).click()
+  await page.getByRole("alertdialog", { name: "Wyłączyć integrację?" }).getByRole("button", { name: "Wyłącz" }).click()
+  await expect(page.getByRole("button", { name: "Włącz" })).toBeVisible()
+  expect(writes).toContainEqual(expect.objectContaining({ method: "PATCH", body: { status: "DISABLED" } }))
+
+  await page.getByRole("button", { name: "Włącz" }).click()
+  await expect(page.getByRole("button", { name: "Wyłącz" })).toBeVisible()
+  expect(writes).toContainEqual(expect.objectContaining({ method: "PATCH", body: { status: "ENABLED" } }))
+  expect(externalRequests).toEqual([])
+})
+
+test("Settings pokazuje stan błędu, gdy backend odmawia dostępu do konfiguracji integracji", async ({ page }) => {
+  await preparePage(page)
+  await prepareSettingsApi(page, { forbidden: true })
+
+  await page.goto("/settings")
+
+  await expect(page.getByText("Wystąpił błąd")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Spróbuj ponownie" })).toBeVisible()
 })
 
 test("mobilny widok czatów przechodzi z listy do rozmowy i wraca", async ({ page }) => {
