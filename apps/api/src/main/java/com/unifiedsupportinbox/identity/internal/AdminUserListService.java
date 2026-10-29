@@ -63,7 +63,7 @@ class AdminUserListService {
             throw ApiProblemException.validationFailed("Page size must be between 1 and 100.");
         }
 
-        String scope = scope(normalizedSearch, role, active);
+        String scope = scope(actor.userId(), normalizedSearch, role, active);
         CursorPosition position = cursor == null ? null : cursors.decode(cursor, scope);
         if (position != null && !anchorStillExists(position)) {
             throw new InvalidCursorException(InvalidCursorException.Reason.SCOPE_MISMATCH);
@@ -149,8 +149,8 @@ class AdminUserListService {
         return value == null ? null : value.toInstant();
     }
 
-    private static String scope(String search, UserRole role, Boolean active) {
-        return "admin-users:v1:search=" + search + ":role=" + role + ":active=" + active;
+    private static String scope(UUID actorId, String search, UserRole role, Boolean active) {
+        return "admin-users:v1:actor=" + actorId + ":search=" + search + ":role=" + role + ":active=" + active;
     }
 
     private static UsiSessionPrincipal principal(Authentication authentication) {
