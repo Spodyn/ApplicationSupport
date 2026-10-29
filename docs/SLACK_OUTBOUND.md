@@ -28,6 +28,20 @@ For each SUPPORT Message the provider sends:
 - `mrkdwn=true` only for MARKDOWN messages;
 - the stable logical Message idempotency key as `client_msg_id` on every retry.
 
+For **USI-245** the HTTP client additionally supports the optional `reply_broadcast=true`
+argument in the **same** `chat.postMessage` request. It is emitted only when a support
+agent explicitly opts in **and** the message has a persisted nonblank `thread_ts`.
+Broadcast without a thread is rejected before any HTTP request; ordinary replies
+continue to omit the flag. The same logical `client_msg_id` is retained and only
+one provider post is sent.
+
+**Implementation checkpoint:** This PR initially adds the low-level safe Slack
+request support and focused tests; the composer switch, durable intent,
+server-side Slack-only validation, retry propagation, event deduplication,
+OpenAPI/client generation and UI acceptance are **not yet implemented**. Do not
+offer the option in production or mark USI-245 complete until the entire
+end-to-end path is green.
+
 A successful Slack response must contain `ok=true` and `ts`; that timestamp becomes the provider message reference in the common delivery lifecycle.
 
 ## Retry and repair contract
