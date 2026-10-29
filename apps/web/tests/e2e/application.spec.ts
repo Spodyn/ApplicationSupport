@@ -208,22 +208,47 @@ test("empty persisted conversation renders an empty state", async ({ page }) => 
   await expect(conversation.getByText("Nie udało się wczytać wiadomości.")).toHaveCount(0)
 })
 
-test("formularz dodawania użytkownika otwiera się i resetuje po anulowaniu", async ({ page }) => {
+test("API user directory is read-only until real user mutations exist", async ({ page }) => {
   const { externalRequests } = await preparePage(page)
+  // Verify the read-only guard under a *permitted administrator*; a disabled
+  // button due to missing permissions alone would be a false-positive test.
+  await page.route("**/api/v1/auth/me", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...authenticatedSession,
+        role: "ADMIN",
+        effectivePermissions: ["manage_users"],
+      }),
+    })
+  })
+  await page.route("**/api/v1/admin/users**", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        items: [{
+          id: authenticatedSession.id,
+          email: authenticatedSession.email,
+          fullName: authenticatedSession.displayName,
+          role: "ADMIN",
+          active: true,
+          presence: "online",
+          validFrom: null,
+          validUntil: null,
+          lastLoginAt: null,
+          activeAssignedCases: 0,
+          createdAt: authenticatedSession.createdAt,
+        }],
+        nextCursor: null,
+      }),
+    })
+  })
   await page.goto("/users")
-
-  await page.getByRole("button", { name: "Dodaj użytkownika" }).click()
-  const dialog = page.getByRole("dialog", { name: "Dodaj użytkownika" })
-  await expect(dialog).toBeVisible()
-
-  await dialog.getByLabel("Imię i nazwisko").fill("Test tymczasowy")
-  await dialog.getByLabel("E-mail").fill("test@example.invalid")
-  await dialog.getByRole("button", { name: "Anuluj" }).click()
-
-  await page.getByRole("button", { name: "Dodaj użytkownika" }).click()
-  const reopenedDialog = page.getByRole("dialog", { name: "Dodaj użytkownika" })
-  await expect(reopenedDialog.getByLabel("Imię i nazwisko")).toHaveValue("")
-  await expect(reopenedDialog.getByLabel("E-mail")).toHaveValue("")
+  await expect(page.getByRole("heading", { name: "Użytkownicy" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Dodaj użytkownika" }).first()).toBeDisabled()
+  await expect(page.getByRole("dialog", { name: "Dodaj użytkownika" })).toHaveCount(0)
   expect(externalRequests).toEqual([])
 })
 
