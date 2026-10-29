@@ -23,6 +23,7 @@ class CaseListController {
     CursorPage<CaseListService.CaseListItem> list(
             @RequestParam(name = ApiV1Conventions.CURSOR_QUERY_PARAMETER, required = false) String cursor,
             @RequestParam(name = ApiV1Conventions.LIMIT_QUERY_PARAMETER, required = false) Integer limit,
+            @RequestParam(name = "view", required = false) CaseListView view,
             Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
             throw ApiProblemException.authenticationRequired();
@@ -33,6 +34,6 @@ class CaseListController {
         } catch (IllegalArgumentException exception) {
             throw ApiProblemException.authenticationRequired();
         }
-        return cases.list(userId, cursor, limit);
+        return cases.list(userId, cursor, limit, view);
     }
 }

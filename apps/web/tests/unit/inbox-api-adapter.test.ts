@@ -52,6 +52,7 @@ describe("real inbox API adapter", () => {
     const page = await repository.list()
     expect(page.items).toMatchObject([{ id: caseId, reference: "CASE-00000002", platform: "slack", sourceChannel: "#new-channel", unreadForCurrentUser: true }])
     expect(page.nextCursor).toBe("cursor-2")
+    expect(requests[0]).toMatchObject({ method: "GET", query: { limit: 50, view: "ACTIVE" } })
     expect((await repository.getCase(caseId)).availableActions).toContain("CLAIM")
     expect((await repository.getMessages(caseId)).items).toMatchObject([{ id: messageId, kind: "customer", body: message.body }])
     expect(requests.map((item) => item.method)).toEqual(["GET", "GET", "GET"])
@@ -79,12 +80,30 @@ describe("real inbox API adapter", () => {
     await expect(repository.getMessages(caseId)).resolves.toEqual({ items: [], nextCursor: undefined })
   })
 
-  it("marks a rendered message read and rejects unavailable actions", async () => {
+  it("marks read and sends real personal Snooze/cancel commands", async () => {
     const { repository, requests } = fixture()
     await repository.markRead(caseId, messageId)
+    await repository.snooze(caseId, "2026-10-06T18:00:00Z")
+    await repository.cancelSnooze(caseId)
+
     expect(requests[0]).toMatchObject({ method: "PUT", body: { messageId } })
-    await expect(repository.snooze(caseId, "2026-10-06T00:00:00Z")).rejects.toBeInstanceOf(InboxActionUnavailableError)
+    const snooze = requests.find((item) => item.path.endsWith("/snooze") && item.method === "POST")
+    const cancel = requests.find((item) => item.path.endsWith("/snooze") && item.method === "DELETE")
+    expect(snooze).toMatchObject({ body: { until: "2026-10-06T18:00:00Z" } })
+    expect(snooze?.headers?.["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/)
+    expect(cancel?.headers?.["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/)
+
     await expect(repository.sendMessage(caseId, { body: "test", attachments: [{ fileName: "file", size: "1" }] })).rejects.toBeInstanceOf(InboxActionUnavailableError)
+  })
+
+  it("requests the dedicated current-user Snoozed projection", async () => {
+    const { repository, requests } = fixture()
+    await repository.list(undefined, "snoozed")
+    expect(requests[0]).toMatchObject({
+      method: "GET",
+      path: "/api/v1/cases",
+      query: { limit: 50, view: "SNOOZED" },
+    })
   })
   it("propagates API list errors without falling back to mock cases", async () => {
     const failure = new ApiHttpError(503)
