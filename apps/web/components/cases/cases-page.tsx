@@ -400,7 +400,7 @@ function ConversationPanel({
   useEffect(() => {
     if (!Number.isFinite(snoozedUntilMs)) return
 
-    let timeoutId: ReturnType<typeof setTimeout>
+    let timeoutId: number
     const refresh = () => {
       const now = Date.now()
       setSnoozeClockMs(now)
