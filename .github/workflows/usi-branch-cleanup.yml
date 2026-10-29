@@ -1,0 +1,35 @@
+name: USI merged branch cleanup
+on:
+  pull_request_target:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: usi-merged-branch-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted main only
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Run cleanup safeguard tests
+        run: node --test scripts/tests/delete_merged_branch.test.mjs
+      - name: Delete only safe merged source branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          USI_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/delete_merged_branch.mjs
