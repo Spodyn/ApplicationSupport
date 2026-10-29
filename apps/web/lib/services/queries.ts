@@ -208,7 +208,7 @@ export function useAdministrationUserActions() {
     mutationFn: (id: string) => serviceRegistry.administrationUsers.delete(id),
     onSuccess: invalidate,
   })
-  return { save, deactivate, delete: deleteUser }
+  return { save, deactivate, delete: deleteUser, supported: serviceRegistry.administrationUsers.supportsMutations !== false }
 }
 
 export function useAdministrationCustomers() {

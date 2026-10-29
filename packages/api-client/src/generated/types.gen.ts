@@ -14,6 +14,25 @@ export type AdminChannelView = {
   "lastMessageAt": string | null
 }
 
+export type AdminUserItem = {
+  "id": string
+  "email": string
+  "fullName": string
+  "role": UserRole
+  "active": boolean
+  "presence": "online" | "offline"
+  "validFrom": string | null
+  "validUntil": string | null
+  "lastLoginAt": string | null
+  "activeAssignedCases": number
+  "createdAt": string
+}
+
+export type AdminUserPage = {
+  "items": Array<AdminUserItem>
+  "nextCursor": string | null
+}
+
 export type ApiProblem = {
   "code": ApiProblemCode
   "title": string
