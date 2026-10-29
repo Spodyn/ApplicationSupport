@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.provider.slack.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -50,6 +51,38 @@ class HttpSlackWebApiClientTests {
         assertThat(requestJson.get().path("mrkdwn").asBoolean()).isTrue();
         assertThat(requestJson.get().path("client_msg_id").asText())
                 .isEqualTo("b796a792-702f-4b70-ae65-d73892d548ac");
+        assertThat(requestJson.get().has("reply_broadcast")).isFalse();
+    }
+
+    @Test
+    void broadcastsAnExplicitThreadReplyWithOneProviderPost() throws Exception {
+        AtomicReference<JsonNode> requestJson = new AtomicReference<>();
+        java.util.concurrent.atomic.AtomicInteger requests = new java.util.concurrent.atomic.AtomicInteger();
+        startServer(exchange -> {
+            requests.incrementAndGet();
+            requestJson.set(objectMapper.readTree(exchange.getRequestBody().readAllBytes()));
+            respond(exchange, 200, "{\"ok\":true,\"ts\":\"1712345678.123456\"}");
+        });
+
+        SlackWebApiClient.PostMessageResponse response = client().postMessage(
+                fixtureCredential(), "C123", "1712000000.000001", "Support reply",
+                MessageBodyFormat.PLAIN_TEXT, "stable-client-message-id", true);
+
+        assertThat(response.ok()).isTrue();
+        assertThat(requests.get()).isEqualTo(1);
+        assertThat(requestJson.get().path("channel").asText()).isEqualTo("C123");
+        assertThat(requestJson.get().path("thread_ts").asText()).isEqualTo("1712000000.000001");
+        assertThat(requestJson.get().path("reply_broadcast").asBoolean()).isTrue();
+        assertThat(requestJson.get().path("client_msg_id").asText()).isEqualTo("stable-client-message-id");
+    }
+
+    @Test
+    void refusesBroadcastWithoutThreadInsteadOfSendingAChannelRoot() {
+        assertThatThrownBy(() -> client().postMessage(
+                fixtureCredential(), "C123", null, "Support reply",
+                MessageBodyFormat.PLAIN_TEXT, "stable-client-message-id", true))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("requires an existing thread");
     }
 
     @Test
