@@ -26,7 +26,7 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
 
       - name: Test fail-closed auto-merge guard
-        run: node --test scripts/tests/ci_merge.test.mjs scripts/tests/delete_merged_branch.test.mjs
+        run: node --test scripts/tests/ci_merge.test.mjs scripts/tests/delete_merged_branch.test.mjs scripts/tests/prune_merged_branches.test.mjs
 
       - name: Validate checked-in development examples
         run: |
