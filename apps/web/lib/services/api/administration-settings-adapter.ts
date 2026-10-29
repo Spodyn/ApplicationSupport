@@ -1,7 +1,15 @@
+import { createApiClient } from "@usi/api-client/generated"
+import type {
+  Channel as ApiProvider,
+  IntegrationStatus as ApiIntegrationStatus,
+  IntegrationView as ApiIntegrationRecord,
+} from "@usi/api-client/generated"
 import type {
   AdministrationSettings,
   ChannelGroupingStrategy,
   ManagedChannel,
+  ManagedIntegration,
+  ManagedCustomerOption,
   NotificationDestination,
   NotificationType,
   ScheduleException,
@@ -13,7 +21,11 @@ import { mockAdministrationSettingsRepository } from "@/lib/services/administrat
 import { mapApiChannel } from "./channel-adapter"
 import { browserApiTransport } from "./http-transport"
 
-type ApiProvider = "SLACK" | "TEAMS" | "TELEGRAM"
+type ApiCustomerRecord = {
+  id: string
+  name: string
+  active: boolean
+}
 
 type ApiChannelRecord = {
   id: string
@@ -113,6 +125,23 @@ const supportedNotificationTypes = new Set<NotificationType>([
 const notificationDestinationVersions = new Map<string, number>()
 let outOfOfficeVersion: number | undefined
 let slaPolicyVersion: number | undefined
+const integrationApi = createApiClient(browserApiTransport)
+
+function mapIntegration(integration: ApiIntegrationRecord): ManagedIntegration {
+  return {
+    id: integration.id,
+    platform: mapApiChannel(integration.provider),
+    status: integration.status.toLowerCase() as ManagedIntegration["status"],
+    canEnable: integration.secretConfigured,
+    workspace:
+      integration.workspaceName ??
+      integration.workspaceExternalId ??
+      integration.displayName,
+    lastEventAt: integration.lastEventAt ?? undefined,
+    lastErrorCode: integration.lastErrorCode ?? undefined,
+    health: integration.health.toLowerCase() as ManagedIntegration["health"],
+  }
+}
 
 function mapChannel(channel: ApiChannelRecord): ManagedChannel {
   const activity = channel.active ? "Aktywny" : "Nieaktywny"
@@ -121,6 +150,7 @@ function mapChannel(channel: ApiChannelRecord): ManagedChannel {
     platform: mapApiChannel(channel.provider),
     externalChannelId: channel.externalChannelId,
     channelName: `${channel.name} · ${activity}`,
+    customerId: channel.customerId ?? undefined,
     customer: channel.customerName ?? "Nie przypisano",
     ignored: channel.ignored,
     groupingStrategy: channel.groupingStrategy,
@@ -133,6 +163,12 @@ function apiProvider(channel: Channel): ApiProvider {
   if (channel === "slack") return "SLACK"
   if (channel === "teams") return "TEAMS"
   return "TELEGRAM"
+}
+
+function apiIntegrationStatus(status: ManagedIntegration["status"]): ApiIntegrationStatus {
+  if (status === "configuring") return "CONFIGURING"
+  if (status === "enabled") return "ENABLED"
+  return "DISABLED"
 }
 
 function wallClock(value: string): string {
@@ -214,6 +250,21 @@ export function mapWorkScheduleToApiIntervals(
       { dayOfWeek, start: day.breakEnd, end: day.end },
     ]
   })
+}
+
+async function listIntegrations(): Promise<ManagedIntegration[]> {
+  const integrations = await integrationApi.listIntegrations()
+  return integrations.map(mapIntegration)
+}
+
+async function listCustomers(): Promise<ManagedCustomerOption[]> {
+  const customers = await browserApiTransport.request<ApiCustomerRecord[]>({
+    method: "GET",
+    path: "/api/v1/admin/customers",
+  })
+  return customers
+    .filter((customer) => customer.active)
+    .map((customer) => ({ id: customer.id, name: customer.name }))
 }
 
 async function listChannels(): Promise<ManagedChannel[]> {
@@ -418,8 +469,9 @@ async function saveNotifications(
 
 export const apiAdministrationSettingsRepository: AdministrationSettingsRepository = {
   async get() {
-    const [settings, channels, businessHours, notifications, outOfOffice, sla] = await Promise.all([
+    const [settings, integrations, channels, businessHours, notifications, outOfOffice, sla] = await Promise.all([
       mockAdministrationSettingsRepository.get(),
+      listIntegrations(),
       listChannels(),
       getBusinessHours(),
       listNotifications(),
@@ -429,6 +481,7 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     return {
       ...settings,
       schedule: mapApiBusinessHours(businessHours, settings.schedule.exceptions),
+      integrations,
       channels,
       notifications,
       outOfOffice: {
@@ -481,16 +534,28 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     return mockAdministrationSettingsRepository.saveSection(key, value)
   },
 
-  configureIntegration(id, workspace) {
-    return mockAdministrationSettingsRepository.configureIntegration(id, workspace)
+  async setIntegrationStatus(id, status) {
+    const integration = await integrationApi.setIntegrationStatus({
+      integrationId: id,
+      body: { status: apiIntegrationStatus(status) },
+    })
+    return mapIntegration(integration)
   },
 
-  setIntegrationStatus(id, status) {
-    return mockAdministrationSettingsRepository.setIntegrationStatus(id, status)
+  async testIntegration(id) {
+    const result = await integrationApi.testIntegrationConnection({ integrationId: id })
+    return mapIntegration(result.integration)
   },
 
-  testIntegration(id) {
-    return mockAdministrationSettingsRepository.testIntegration(id)
+  listCustomers,
+
+  async configureChannel(id, customerId, groupingStrategy) {
+    const updated = await browserApiTransport.request<ApiChannelRecord>({
+      method: "PATCH",
+      path: `/api/v1/admin/channels/${encodeURIComponent(id)}`,
+      body: { customerId, groupingStrategy },
+    })
+    return mapChannel(updated)
   },
 
   async setChannelIgnored(id, ignored) {

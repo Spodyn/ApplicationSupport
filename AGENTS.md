@@ -146,9 +146,13 @@ Keep synchronized where relevant:
 - focused legacy/current-state docs affected by the ticket
 
 ## Autonomous lifecycle discipline
-Developer workers do not merge and do not mark Jira `Gotowe`. Reviewer decisions are bound to the exact reviewed PR HEAD SHA. A changed SHA requires revalidation and re-review. Jira becomes `Gotowe` only after the reviewed change is actually merged to `main`.
+Developer workers do not merge and do not mark Jira `Gotowe`. The independent integrator/orchestrator (not the developer worker) alone checks the exact PR HEAD, all required CI/security checks, dependencies, conflicts, blockers and applicable repository rules before merge. Jira becomes `Gotowe` only after the change is actually merged to `main` and required acceptance is satisfied.
 
-On restart, reconcile Jira/GitHub/worktree reality before creating duplicate branches, PRs, comments or transitions. Dependency scheduling, leases, conflict recovery and exact merge gates are defined in `docs/ORCHESTRATOR_CONTRACT.md`.
+**Owner decision, 2026-10-29 (USI-247):** do not assign a human reviewer solely to unblock a PR. For ordinary development PRs, the target process is CI-gated automatic integration without a mandatory independent human approval. This is not permission to bypass active GitHub branch protection, applicable security controls or a still-effective operational policy: the policy must first be formally updated, the automation enabled and validated, and every actual required gate passed. Never fabricate reviews or mark unrun checks as passing. A material unresolved security, production or contract decision still blocks the affected PR.
+
+Where an environment, tenant, provider account or physical device is unavailable, implement and test the verifiable portion, record missing required validation as `BLOCKED` / `NOT RUN`, and continue a different independent ticket. A blocked mandatory acceptance test does not become a pass merely because CI is green.
+
+On restart, reconcile Jira/GitHub/worktree reality before creating duplicate branches, PRs, comments or transitions. Dependency scheduling, leases, conflict recovery, phased auto-merge activation and exact merge gates are defined in `docs/ORCHESTRATOR_CONTRACT.md`.
 
 ## Stop conditions
 Stop and create a clear blocker only if work would require an actual contract change under the human-decision boundary, production credentials/actions, an unresolved legal/compliance choice, or an irreconcilable conflict between equal/higher-precedence sources. Do not stop for ordinary implementation choices already delegated above.

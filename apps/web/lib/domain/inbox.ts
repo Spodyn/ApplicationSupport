@@ -99,6 +99,7 @@ export interface InboxAttachment {
   fileName: string
   size: string
   type: "image" | "document" | "archive"
+  downloadUrl?: string
 }
 
 export interface InboxMessage {

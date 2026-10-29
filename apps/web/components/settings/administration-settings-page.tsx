@@ -67,7 +67,9 @@ import type {
   AdministrationPermission,
   AdministrationSettings,
   GeneralSettings,
+  ChannelGroupingStrategy,
   ManagedChannel,
+  ManagedCustomerOption,
   ManagedIntegration,
   NotificationDestination,
   NotificationType,
@@ -80,6 +82,7 @@ import type {
 import { channelLabels } from "@/lib/domain/labels"
 import { formatDate, formatDateTime } from "@/lib/format"
 import {
+  useAdministrationCustomers,
   useAdministrationSettings,
   useAdministrationSettingsActions,
 } from "@/lib/services/queries"
@@ -98,6 +101,7 @@ const tabItems = [
 
 export function AdministrationSettingsPage() {
   const settingsQuery = useAdministrationSettings()
+  const customersQuery = useAdministrationCustomers()
   const actions = useAdministrationSettingsActions()
   const unavailableIntegrations =
     settingsQuery.data?.integrations.filter((item) => item.status !== "enabled") ?? []
@@ -111,8 +115,8 @@ export function AdministrationSettingsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void settingsQuery.refetch()}
-            disabled={settingsQuery.isFetching}
+            onClick={() => void Promise.all([settingsQuery.refetch(), customersQuery.refetch()])}
+            disabled={settingsQuery.isFetching || customersQuery.isFetching}
           >
             <RefreshCw className={settingsQuery.isFetching ? "animate-spin" : undefined} />
             <span className="hidden sm:inline">Odśwież</span>
@@ -124,9 +128,9 @@ export function AdministrationSettingsPage() {
         <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4 p-4 md:p-6">
           <Alert className="bg-info/5 text-info">
             <Info />
-            <AlertTitle>Konfiguracja demonstracyjna</AlertTitle>
+            <AlertTitle>Konfiguracja hybrydowa</AlertTitle>
             <AlertDescription>
-              Wszystkie zmiany są obsługiwane przez lokalne, typowane serwisy mock i nie łączą się z zewnętrznymi dostawcami.
+              Integracje, kanały, harmonogram, SLA i powiadomienia korzystają z trwałego API. Ustawienia ogólne i macierz ról pozostają lokalną konfiguracją demonstracyjną.
             </AlertDescription>
           </Alert>
 
@@ -161,7 +165,7 @@ export function AdministrationSettingsPage() {
               <TabsContent value="schedule"><SchedulePanel data={settingsQuery.data.schedule} actions={actions} /></TabsContent>
               <TabsContent value="out-of-office"><OutOfOfficePanel data={settingsQuery.data.outOfOffice} actions={actions} /></TabsContent>
               <TabsContent value="integrations"><IntegrationsPanel data={settingsQuery.data.integrations} actions={actions} /></TabsContent>
-              <TabsContent value="channels"><ChannelsPanel data={settingsQuery.data.channels} actions={actions} /></TabsContent>
+              <TabsContent value="channels"><ChannelsPanel data={settingsQuery.data.channels} customers={customersQuery.data ?? []} actions={actions} /></TabsContent>
               <TabsContent value="notifications"><NotificationsPanel data={settingsQuery.data.notifications} integrations={settingsQuery.data.integrations} actions={actions} /></TabsContent>
               <TabsContent value="permissions"><PermissionsPanel data={settingsQuery.data.rolePermissions} actions={actions} /></TabsContent>
             </Tabs>
@@ -345,14 +349,7 @@ const integrationHealthLabels: Record<ManagedIntegration["health"], string> = {
 }
 
 function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; actions: SettingsActions }) {
-  const [configured, setConfigured] = useState<ManagedIntegration | null>(null)
-  const [workspace, setWorkspace] = useState("")
   const [disabledIntegration, setDisabledIntegration] = useState<ManagedIntegration | null>(null)
-
-  const openConfiguration = (integration: ManagedIntegration) => {
-    setWorkspace(integration.workspace)
-    setConfigured(integration)
-  }
 
   const test = async (integration: ManagedIntegration) => {
     try {
@@ -363,7 +360,7 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
     }
   }
 
-  const completeConfiguration = async (integration: ManagedIntegration) => {
+  const enable = async (integration: ManagedIntegration) => {
     try {
       await actions.setIntegrationStatus.mutateAsync({ id: integration.id, status: "enabled" })
       notify.success("Integracja została włączona", channelLabels[integration.platform])
@@ -379,6 +376,14 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
         <AlertTitle>Zakres Microsoft Teams</AlertTitle>
         <AlertDescription>
           Początkowo obsługiwane są standardowe kanały i czaty grupowe z RSC. Kanały prywatne i udostępnione wymagają osobnej walidacji.
+        </AlertDescription>
+      </Alert>
+
+      <Alert>
+        <Info />
+        <AlertTitle>Onboarding dostawcy</AlertTitle>
+        <AlertDescription>
+          Ten widok zarządza istniejącymi instalacjami przez wspólne API. Dodanie obszaru roboczego i danych uwierzytelniających pozostaje w procesie instalacyjnym właściwym dla Slack, Teams lub Telegram.
         </AlertDescription>
       </Alert>
 
@@ -426,34 +431,15 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                 </div>
               </dl>
               <div className="flex flex-wrap gap-2 border-t pt-3">
-                <Button variant="outline" size="sm" onClick={() => openConfiguration(integration)}><Settings2 /> Konfiguruj</Button>
                 <Button variant="outline" size="sm" disabled={integration.status !== "enabled" || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> Testuj</Button>
-                {integration.status === "configuring" && <Button size="sm" onClick={() => void completeConfiguration(integration)}><RefreshCw /> Dokończ konfigurację</Button>}
+                {integration.status !== "enabled" && integration.canEnable && <Button size="sm" disabled={actions.setIntegrationStatus.isPending} onClick={() => void enable(integration)}><RefreshCw /> Włącz</Button>}
+                {!integration.canEnable && <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Info className="size-3.5" /> Brak skonfigurowanych danych uwierzytelniających</span>}
                 {integration.status !== "disabled" && <Button variant="destructive" size="sm" onClick={() => setDisabledIntegration(integration)}><Unplug /> Wyłącz</Button>}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
-
-      <Dialog open={Boolean(configured)} onOpenChange={(open) => !open && setConfigured(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Konfiguruj {configured ? channelLabels[configured.platform] : "integrację"}</DialogTitle><DialogDescription>W środowisku demonstracyjnym zapisujemy wyłącznie identyfikator obszaru roboczego, dzierżawy lub bota.</DialogDescription></DialogHeader>
-          <Field label="Obszar roboczy / dzierżawa / bot"><Input value={workspace} onChange={(event) => setWorkspace(event.target.value)} placeholder="np. firma.slack.com" /></Field>
-          <Alert><Info /><AlertDescription>Prawdziwy proces OAuth zostanie obsłużony przez docelowy backend.</AlertDescription></Alert>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose>
-            <Button disabled={!workspace.trim() || actions.configureIntegration.isPending} onClick={async () => {
-              if (!configured) return
-              try {
-                await actions.configureIntegration.mutateAsync({ id: configured.id, workspace })
-                notify.success("Zapisano konfigurację", channelLabels[configured.platform])
-                setConfigured(null)
-              } catch (error) { notify.error("Nie udało się zapisać konfiguracji", getErrorMessage(error)) }
-            }}>{actions.configureIntegration.isPending ? "Zapisywanie…" : "Zapisz konfigurację"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <ConfirmDialog
         open={Boolean(disabledIntegration)}
@@ -475,7 +461,30 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
   )
 }
 
-function ChannelsPanel({ data, actions }: { data: ManagedChannel[]; actions: SettingsActions }) {
+const channelGroupingOptions: Record<ManagedChannel["platform"], Array<{ value: ChannelGroupingStrategy; label: string }>> = {
+  slack: [{ value: "SLACK_ROOT_THREAD", label: "Wątek od wiadomości głównej" }],
+  teams: [{ value: "TEAMS_ROOT_REPLIES", label: "Wiadomość główna + odpowiedzi" }],
+  telegram: [
+    { value: "TELEGRAM_TOPIC", label: "Temat forum" },
+    { value: "TELEGRAM_CHAT_ACTIVE_CASE", label: "Aktywny case na czat" },
+  ],
+}
+
+function ChannelsPanel({
+  data,
+  customers,
+  actions,
+}: {
+  data: ManagedChannel[]
+  customers: ManagedCustomerOption[]
+  actions: SettingsActions
+}) {
+  const [edited, setEdited] = useState<{
+    channel: ManagedChannel
+    customerId: string
+    groupingStrategy: ChannelGroupingStrategy
+  } | null>(null)
+
   const setIgnored = async (channel: ManagedChannel, ignored: boolean) => {
     try {
       await actions.setChannelIgnored.mutateAsync({ id: channel.id, ignored })
@@ -485,31 +494,90 @@ function ChannelsPanel({ data, actions }: { data: ManagedChannel[]; actions: Set
     }
   }
 
+  const openEditor = (channel: ManagedChannel) => {
+    setEdited({
+      channel,
+      customerId: channel.customerId ?? customers[0]?.id ?? "",
+      groupingStrategy: channel.groupingStrategy,
+    })
+  }
+
+  const saveMapping = async () => {
+    if (!edited?.customerId) return
+    try {
+      await actions.configureChannel.mutateAsync({
+        id: edited.channel.id,
+        customerId: edited.customerId,
+        groupingStrategy: edited.groupingStrategy,
+      })
+      notify.success("Zapisano mapowanie kanału", edited.channel.channelName)
+      setEdited(null)
+    } catch (error) {
+      notify.error("Nie udało się zapisać mapowania kanału", getErrorMessage(error))
+    }
+  }
+
   return (
-    <SettingsCard title="Ignorowane kanały" description="Wybierz kanały, których wiadomości nie mają być kwalifikowane jako sprawy do zrobienia.">
-      <Alert>
-        <Info />
-        <AlertTitle>Wiadomości bez case’a i SLA</AlertTitle>
-        <AlertDescription>Wiadomość z ignorowanego kanału pozostaje zwykłą wiadomością. Nie tworzy sprawy do zrobienia i nie uruchamia dla niej SLA.</AlertDescription>
-      </Alert>
-      <div className="overflow-hidden rounded-lg border">
-        <Table>
-          <TableHeader><TableRow className="bg-muted/40"><TableHead>Platforma</TableHead><TableHead>Kanał</TableHead><TableHead>Klient</TableHead><TableHead>Ignoruj</TableHead><TableHead>Ostatnia wiadomość</TableHead></TableRow></TableHeader>
-          <TableBody>
-            {data.map((channel) => (
-              <TableRow key={channel.id}>
-                <TableCell><div className="flex items-center gap-2"><PlatformIcon channel={channel.platform} /> <span className="text-xs">{channelLabels[channel.platform]}</span></div></TableCell>
-                <TableCell className="font-medium">{channel.channelName}</TableCell>
-                <TableCell>{channel.customer}</TableCell>
-                <TableCell><div className="flex items-center gap-2"><Switch checked={channel.ignored} onCheckedChange={(checked) => void setIgnored(channel, checked)} aria-label={`${channel.channelName}: ${channel.ignored ? "ignorowany" : "kwalifikowany"}`} /><span className={`text-xs ${channel.ignored ? "text-warning-foreground" : "text-muted-foreground"}`}>{channel.ignored ? "Ignorowany" : "Kwalifikowany"}</span></div></TableCell>
-                <TableCell className="text-xs text-muted-foreground">{channel.lastMessageAt ? formatDateTime(channel.lastMessageAt) : "Brak"}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-      <p className="text-xs text-muted-foreground">Zmiana dotyczy nowych wiadomości przychodzących po zapisaniu reguły.</p>
-    </SettingsCard>
+    <>
+      <SettingsCard title="Kanały" description="Przypisz kanał do klienta, wybierz sposób grupowania wiadomości i zdecyduj, czy ma być ignorowany.">
+        <Alert>
+          <Info />
+          <AlertTitle>Zmiany dotyczą nowych wiadomości</AlertTitle>
+          <AlertDescription>Zmiana klienta lub sposobu grupowania nie przepisuje historycznych case’ów utworzonych wcześniej z tego kanału.</AlertDescription>
+        </Alert>
+        <div className="overflow-hidden rounded-lg border">
+          <Table>
+            <TableHeader><TableRow className="bg-muted/40"><TableHead>Platforma</TableHead><TableHead>Kanał</TableHead><TableHead>Klient</TableHead><TableHead>Grupowanie</TableHead><TableHead>Ignoruj</TableHead><TableHead>Ostatnia wiadomość</TableHead><TableHead><span className="sr-only">Akcje</span></TableHead></TableRow></TableHeader>
+            <TableBody>
+              {data.map((channel) => (
+                <TableRow key={channel.id}>
+                  <TableCell><div className="flex items-center gap-2"><PlatformIcon channel={channel.platform} /> <span className="text-xs">{channelLabels[channel.platform]}</span></div></TableCell>
+                  <TableCell className="font-medium">{channel.channelName}</TableCell>
+                  <TableCell>{channel.customer}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{channelGroupingOptions[channel.platform].find((item) => item.value === channel.groupingStrategy)?.label ?? channel.groupingStrategy}</TableCell>
+                  <TableCell><div className="flex items-center gap-2"><Switch checked={channel.ignored} onCheckedChange={(checked) => void setIgnored(channel, checked)} aria-label={`${channel.channelName}: ${channel.ignored ? "ignorowany" : "kwalifikowany"}`} /><span className={`text-xs ${channel.ignored ? "text-warning-foreground" : "text-muted-foreground"}`}>{channel.ignored ? "Ignorowany" : "Kwalifikowany"}</span></div></TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{channel.lastMessageAt ? formatDateTime(channel.lastMessageAt) : "Brak"}</TableCell>
+                  <TableCell><Button variant="ghost" size="icon-sm" disabled={customers.length === 0} aria-label={`Edytuj ${channel.channelName}`} onClick={() => openEditor(channel)}><Pencil /></Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        {customers.length === 0 && <p className="text-xs text-warning-foreground">Brak aktywnych klientów do przypisania. Dodaj lub aktywuj klienta przed zmianą mapowania.</p>}
+      </SettingsCard>
+
+      <Dialog open={Boolean(edited)} onOpenChange={(open) => !open && setEdited(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edytuj mapowanie kanału</DialogTitle>
+            <DialogDescription>{edited?.channel.channelName} · {edited ? channelLabels[edited.channel.platform] : ""}</DialogDescription>
+          </DialogHeader>
+          {edited && (
+            <div className="grid gap-4">
+              <Field label="Klient">
+                <Select value={edited.customerId} onValueChange={(value) => setEdited({ ...edited, customerId: String(value) })}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Wybierz klienta" /></SelectTrigger>
+                  <SelectContent>{customers.map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </Field>
+              <Field label="Sposób grupowania">
+                <Select value={edited.groupingStrategy} onValueChange={(value) => setEdited({ ...edited, groupingStrategy: String(value) as ChannelGroupingStrategy })}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>{channelGroupingOptions[edited.channel.platform].map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
+                </Select>
+              </Field>
+              <Alert><Info /><AlertDescription>Backend ponownie waliduje klienta i strategię dla danego providera. Istniejące case’y zachowują historyczne powiązanie.</AlertDescription></Alert>
+            </div>
+          )}
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose>
+            <Button disabled={!edited?.customerId || actions.configureChannel.isPending} onClick={() => void saveMapping()}>
+              {actions.configureChannel.isPending ? "Zapisywanie…" : "Zapisz mapowanie"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

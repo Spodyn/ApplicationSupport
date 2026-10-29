@@ -16,8 +16,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Provider-neutral inbound customer-message consumer. Slack root messages and thread replies use the
- * same thread identity so CaseCreationService can route activity to the current Case generation.
+ * Provider-neutral inbound customer-message consumer. Provider adapters supply their canonical
+ * conversation/thread identity so CaseCreationService can route activity to the current Case
+ * generation. A null thread key represents single-active-Case contexts such as Telegram chats
+ * without forum topics.
  */
 @Service
 class InboundRootMessageCommandService implements InboundMessageCommandHandler {
@@ -126,7 +128,9 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         Objects.requireNonNull(command.channelId(), "channelId");
         IntegrationProvider provider = Objects.requireNonNull(command.provider(), "provider");
         requiredText(command.externalMessageId(), "externalMessageId", 255);
-        requiredText(command.externalThreadKey(), "externalThreadKey", 255);
+        if (provider == IntegrationProvider.SLACK || command.externalThreadKey() != null) {
+            requiredText(command.externalThreadKey(), "externalThreadKey", 255);
+        }
         requiredText(command.externalChannelId(), "externalChannelId", 255);
         requiredText(command.authorExternalId(), "authorExternalId", 255);
         Objects.requireNonNull(command.body(), "body");
