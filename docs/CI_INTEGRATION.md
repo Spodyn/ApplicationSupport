@@ -47,3 +47,17 @@ GitHub REST/GraphQL verification is deliberately fail-closed for missing/paginat
 - the complete open PR set is available; on pagination ambiguity the script fails closed.
 
 The cleanup is designed for newly merged PR branches, **not blind deletion of old agent/feature branches**. Old branches without provable merged PR provenance, or with active leases/work in progress, must be retained until reconciled. The native GitHub `delete_branch_on_merge` setting was observed to be disabled; this workflow provides a guarded alternative.
+
+### Historical merged branches
+
+`.github/workflows/usi-branch-prune.yml` runs after updates to `main` and on a daily schedule. It does **not** blindly delete all `agent/*` branches. Its implementation `scripts/prune_merged_branches.mjs` fetches the complete open and closed PR lists and the branch list, and only removes a branch if all are true:
+
+- it matches the approved `agent/USI-*`, `codex/*`, `usi-*` or `ops/USI-*` feature patterns, is not protected and is not the default branch;
+- the matching PR was merged **at least 7 days ago** and the branch still points to **exactly the recorded merged head SHA**;
+- no open PR uses the branch as source or as the base of a stacked PR;
+- pagination is complete and the branch ref is re-checked just before the deletion;
+- no new commits have appeared. A branch that has diverged since merging is retained.
+
+The sweep deletes at most 40 branches per run. `workflow_dispatch` defaults to dry run, while the post-main-push/scheduled cleanup uses the safe live mode unless the repository variable `USI_BRANCH_SWEEP_DRY_RUN=true` is set. A separate unit suite `scripts/tests/prune_merged_branches.test.mjs` asserts negative, stale, protected, fork and stacked-PR cases. Failed REST requests do not get interpreted as deletions.
+
+At the 29 October 2026 audit, many older `agent/USI-*` branches still matched their already merged PR HEAD exactly. For example, `agent/USI-79` **did not** match and must not be removed by this sweep. The sweep only processes fully proven old merged states and never assumes that every branch is garbage.
