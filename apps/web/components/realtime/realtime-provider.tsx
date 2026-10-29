@@ -16,6 +16,13 @@ const CASE_LIFECYCLE_EVENTS = new Set([
   "case.claimed",
   "case.sla_changed",
 ])
+const PERSONAL_STATE_EVENTS = new Set([
+  "case.unread_changed",
+  "case.read_position_changed",
+  "case.snoozed",
+  "case.snooze_cancelled",
+  "case.snooze_due",
+])
 const CONVERSATION_EVENTS = new Set(["message.created", "message.delivery_updated"])
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -27,6 +34,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const unsubscribe = client.subscribe(setState)
     const unsubscribeCases = client.subscribeDestination("/topic/cases")
+    const unsubscribePersonal = client.subscribeDestination("/user/queue/personal")
     const unsubscribeFrames = client.subscribeFrames((destination, body) => {
       const event = parseRealtimeEventEnvelope(body)
       // Unknown/future/malformed notifications are deliberately a safe refetch, never a local patch.
@@ -37,6 +45,12 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (destination === "/topic/cases" && CASE_LIFECYCLE_EVENTS.has(event.eventType)) {
         // REST/DB remains the source of truth. Invalidation avoids overwriting a local pending
         // workflow mutation while still making changes from another browser visible promptly.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() })
+        return
+      }
+      if (destination === "/user/queue/personal" && PERSONAL_STATE_EVENTS.has(event.eventType)) {
+        // The server resolves this destination from the authenticated Principal. Personal state
+        // never carries or trusts a browser-supplied user id; refetch current-user projections only.
         void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() })
         return
       }
@@ -55,6 +69,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     client.start()
     return () => {
       unsubscribeFrames()
+      unsubscribePersonal()
       unsubscribeCases()
       unsubscribe()
       client.stop()
