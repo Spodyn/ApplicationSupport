@@ -391,7 +391,29 @@ function ConversationPanel({
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
   const canSnooze = Boolean(record?.availableActions?.includes("SNOOZE"))
-  const isSnoozed = Boolean(record?.snoozedForCurrentUserUntil && new Date(record.snoozedForCurrentUserUntil).getTime() > Date.now())
+  const [snoozeClockMs, setSnoozeClockMs] = useState(0)
+  const snoozedUntil = record?.snoozedForCurrentUserUntil
+  const snoozedUntilMs = snoozedUntil ? Date.parse(snoozedUntil) : Number.NaN
+
+  // Keep the expiry clock out of React render, and refresh when the Snooze is due.
+  // Long Snoozes are rechecked daily to avoid exceeding the browser timer limit.
+  useEffect(() => {
+    if (!Number.isFinite(snoozedUntilMs)) return
+
+    let timeoutId: ReturnType<typeof setTimeout>
+    const refresh = () => {
+      const now = Date.now()
+      setSnoozeClockMs(now)
+      const remaining = snoozedUntilMs - now
+      if (remaining > 0) {
+        timeoutId = window.setTimeout(refresh, Math.min(remaining + 1, 24 * 60 * 60_000))
+      }
+    }
+    timeoutId = window.setTimeout(refresh, 0)
+    return () => window.clearTimeout(timeoutId)
+  }, [snoozedUntilMs])
+
+  const isSnoozed = Number.isFinite(snoozedUntilMs) && snoozedUntilMs > snoozeClockMs
 
   const snoozeUntil = async (until: Date) => {
     try {
