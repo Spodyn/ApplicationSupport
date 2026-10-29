@@ -46,6 +46,8 @@ GitHub REST/GraphQL verification is deliberately fail-closed for missing/paginat
 - no other open PR still uses the branch as its **source or base**, preserving stacked PRs;
 - the complete open PR set is available; on pagination ambiguity the script fails closed.
 
+**Safety hold (2026-10-29, USI-247):** GitHub PR/ref checks are insufficient to prove that an independent developer worker does not still hold a durable lease/heartbeat. Both the merged-source and historical cleanup paths now **fail closed** without explicit independently verified no-active-lease evidence. No authoritative lease checker is currently wired, so the trusted workflows retain branches even if the PR/ref/age gates pass. Do not substitute CI success, a human-readable comment, or an Actions variable for lease evidence. A later Jira-scoped change must implement a fresh branch/ref-bound lease lookup, negative tests, and a verified end-to-end cleanup before deletion can resume.
+
 The cleanup is designed for newly merged PR branches, **not blind deletion of old agent/feature branches**. Old branches without provable merged PR provenance, or with active leases/work in progress, must be retained until reconciled. The native GitHub `delete_branch_on_merge` setting was observed to be disabled; this workflow provides a guarded alternative.
 
 ### Historical merged branches
@@ -58,6 +60,6 @@ The cleanup is designed for newly merged PR branches, **not blind deletion of ol
 - pagination is complete and the branch ref is re-checked just before the deletion;
 - no new commits have appeared. A branch that has diverged since merging is retained.
 
-The sweep deletes at most 40 branches per run. `workflow_dispatch` defaults to dry run, while the post-main-push/scheduled cleanup uses the safe live mode unless the repository variable `USI_BRANCH_SWEEP_DRY_RUN=true` is set. A separate unit suite `scripts/tests/prune_merged_branches.test.mjs` asserts negative, stale, protected, fork and stacked-PR cases. Failed REST requests do not get interpreted as deletions.
+When verified lease evidence is unavailable, the sweep reports `workerLeaseVerification: NOT_RUN` and deletes 0 branches. Once a trustworthy worker-lease check is implemented and tested, the sweep may delete at most 40 branches per run. `workflow_dispatch` defaults to dry run, while post-main-push/scheduled sweeps can request live mode but remain blocked by the mandatory worker-lease safety hold. A separate unit suite `scripts/tests/prune_merged_branches.test.mjs` asserts negative, stale, protected, fork and stacked-PR cases. Failed REST requests do not get interpreted as deletions.
 
 At the 29 October 2026 audit, 70 feature branches met the initial provenance/age/consumer criteria. A branch can have **more than one historical merged PR**: for example, `agent/USI-79` no longer matched merged PR #36, but did match the later merged PR #37. The sweep examines the complete merged PR history and only removes refs whose current HEAD matches a verified merged PR, with no open PR consumer. It never assumes every branch is garbage.
