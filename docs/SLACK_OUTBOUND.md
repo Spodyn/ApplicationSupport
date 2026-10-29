@@ -39,9 +39,13 @@ one provider post is sent.
 now carry an explicit opt-in flag without changing existing non-broadcast callers.
 The provider rejects broadcast without a persisted thread before reading credentials
 or sending any HTTP request. Focused provider and HTTP tests cover both paths.
+The Slack inbound normalizer now explicitly filters `thread_broadcast` channel echoes
+before message persistence, while preserving the original ordinary human thread reply;
+a focused regression test covers both paths. This is only a provider-event filter,
+**not** proof of complete echo/idempotency acceptance against a live Slack workspace.
 The composer switch, durable intent, command-level Slack-only validation, persistence
-and worker retry propagation, event deduplication, OpenAPI/client generation and UI
-acceptance are **not yet implemented**. Do not
+and worker retry propagation, OpenAPI/client generation and UI acceptance remain
+**not yet implemented**. Do not
 offer the option in production or mark USI-245 complete until the entire
 end-to-end path is green.
 
