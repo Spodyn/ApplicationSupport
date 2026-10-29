@@ -78,17 +78,31 @@ class AskCustomerService {
             Duration waiting,
             String correlationId) {
         CaseContext context = jdbc.query("""
-                SELECT owner_user_id, status, external_thread_key
-                FROM cases
-                WHERE id = ?
+                SELECT c.owner_user_id, c.status, c.external_thread_key,
+                       EXISTS (
+                           SELECT 1
+                           FROM users u
+                           WHERE u.id = ?
+                             AND u.active = TRUE
+                             AND u.role IN ('USER', 'ADMIN')
+                             AND (u.valid_from IS NULL OR u.valid_from <= CURRENT_TIMESTAMP)
+                             AND (u.valid_until IS NULL OR u.valid_until > CURRENT_TIMESTAMP)
+                       ) AS actor_eligible
+                FROM cases c
+                WHERE c.id = ?
                 FOR UPDATE
                 """, (rs, rowNum) -> new CaseContext(
                     rs.getObject("owner_user_id", UUID.class),
                     rs.getString("status"),
-                    rs.getString("external_thread_key")),
+                    rs.getString("external_thread_key"),
+                    rs.getBoolean("actor_eligible")),
+                userId,
                 caseId).stream().findFirst()
                 .orElseThrow(() -> ApiProblemException.notFound("Case was not found."));
 
+        if (!context.actorEligible()) {
+            throw ApiProblemException.accessDenied();
+        }
         if (!"VERIFICATION".equals(context.status())) {
             throw ApiProblemException.conflict("Ask Customer is only available while the Case is in VERIFICATION.");
         }
@@ -178,6 +192,6 @@ class AskCustomerService {
         return normalized;
     }
 
-    private record CaseContext(UUID ownerUserId, String status, String externalThreadKey) {}
+    private record CaseContext(UUID ownerUserId, String status, String externalThreadKey, boolean actorEligible) {}
     private record CanonicalAskRequest(UUID caseId, String message, String bodyFormat, long waitingSeconds) {}
 }

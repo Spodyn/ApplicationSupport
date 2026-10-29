@@ -139,6 +139,31 @@ class AskCustomerServiceIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isZero();
     }
 
+    @Test
+    void inactiveExpiredAndNotYetValidOwnersCannotAskCustomer() {
+        UUID inactiveOwner = createUser("ask-inactive");
+        jdbc.update("UPDATE users SET active = FALSE WHERE id = ?", inactiveOwner);
+        assertAskDenied(inactiveOwner, "inactive");
+
+        UUID expiredOwner = createUser("ask-expired");
+        jdbc.update("UPDATE users SET valid_until = CURRENT_TIMESTAMP - INTERVAL '1 minute' WHERE id = ?", expiredOwner);
+        assertAskDenied(expiredOwner, "expired");
+
+        UUID futureOwner = createUser("ask-future");
+        jdbc.update("UPDATE users SET valid_from = CURRENT_TIMESTAMP + INTERVAL '1 minute' WHERE id = ?", futureOwner);
+        assertAskDenied(futureOwner, "not-yet-valid");
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isZero();
+    }
+
+    private void assertAskDenied(UUID ownerId, String keySuffix) {
+        UUID caseId = createCase(ownerId);
+        assertThatThrownBy(() -> service.ask(
+                caseId, ownerId, "ask-" + keySuffix, "Question", null, null, "corr-" + keySuffix))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        problem -> assertThat(problem.status()).isEqualTo(HttpStatus.FORBIDDEN));
+    }
+
     private UUID createUser(String prefix) {
         return jdbc.queryForObject("""
                 INSERT INTO users (email, display_name, role, active)
