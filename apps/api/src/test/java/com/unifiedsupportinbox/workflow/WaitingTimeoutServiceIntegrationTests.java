@@ -2,7 +2,9 @@ package com.unifiedsupportinbox.workflow;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
+import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
@@ -26,6 +28,7 @@ class WaitingTimeoutServiceIntegrationTests {
     private static final PostgreSQLContainer POSTGRES = TestInfrastructure.postgres();
 
     @Autowired private WaitingTimeoutService service;
+    @Autowired private CaseSlaWaitingRecorder waitingSla;
     @Autowired private JdbcTemplate jdbc;
 
     @DynamicPropertySource
@@ -99,6 +102,36 @@ class WaitingTimeoutServiceIntegrationTests {
     }
 
     @Test
+    void timeoutResumesThePolicyPausedSlaClock() {
+        UUID caseId = createCase("WAITING_FOR_CUSTOMER", true);
+        seedCaseSla(caseId);
+        Instant pausedAt = Instant.now().minusSeconds(3600);
+        waitingSla.pauseForWaiting(caseId, pausedAt);
+
+        java.time.OffsetDateTime unclaimedWarningBefore = jdbc.queryForObject(
+                "SELECT unclaimed_warning_at FROM case_sla WHERE case_id = ?",
+                java.time.OffsetDateTime.class,
+                caseId);
+
+        assertThat(service.processDue(1)).isEqualTo(1);
+
+        java.time.OffsetDateTime unclaimedWarningAfter = jdbc.queryForObject(
+                "SELECT unclaimed_warning_at FROM case_sla WHERE case_id = ?",
+                java.time.OffsetDateTime.class,
+                caseId);
+        assertThat(jdbc.queryForObject(
+                "SELECT paused_at FROM case_sla WHERE case_id = ?", Object.class, caseId))
+                .isNull();
+        assertThat(jdbc.queryForObject(
+                "SELECT total_paused_seconds FROM case_sla WHERE case_id = ?", Long.class, caseId))
+                .isBetween(3590L, 3610L);
+        assertThat(java.time.Duration.between(
+                unclaimedWarningBefore,
+                unclaimedWarningAfter).getSeconds())
+                .isBetween(3590L, 3610L);
+    }
+
+    @Test
     void concurrentSchedulerRunsDoNotDoubleProcessOneDueCase() throws Exception {
         UUID caseId = createCase("WAITING_FOR_CUSTOMER", true);
         try (var executor = Executors.newFixedThreadPool(2)) {
@@ -168,5 +201,24 @@ class WaitingTimeoutServiceIntegrationTests {
                 status,
                 due,
                 status);
+    }
+
+    private void seedCaseSla(UUID caseId) {
+        jdbc.update("""
+                INSERT INTO case_sla (
+                    case_id, policy_id,
+                    first_response_started_at, first_response_due_at,
+                    unclaimed_started_at, unclaimed_warning_at, unclaimed_breach_at,
+                    in_progress_started_at, in_progress_warning_at, in_progress_breach_at
+                )
+                SELECT ?, id,
+                       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '1 hour',
+                       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '15 minutes',
+                       CURRENT_TIMESTAMP + INTERVAL '1 hour',
+                       CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '30 minutes',
+                       CURRENT_TIMESTAMP + INTERVAL '2 hours'
+                FROM sla_policies
+                WHERE active = TRUE
+                """, caseId);
     }
 }
