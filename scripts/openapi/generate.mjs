@@ -51,8 +51,12 @@ function successfulResponseSchema(operation) {
   return null
 }
 
-function requestSchema(operation) {
-  return operation.requestBody?.content?.['application/json']?.schema ?? null
+function requestBody(operation) {
+  const json = operation.requestBody?.content?.['application/json']?.schema
+  if (json) return { schema: json, mediaType: 'application/json' }
+  const multipart = operation.requestBody?.content?.['multipart/form-data']?.schema
+  if (multipart) return { schema: multipart, mediaType: 'multipart/form-data' }
+  return null
 }
 
 function collectRefs(schema, imports) {
@@ -80,15 +84,19 @@ function pascalCase(value) {
   return result
 }
 
-function generateOperationInput(operationId, parameters, bodySchema, bodyRequired, imports) {
+function generateOperationInput(operationId, parameters, body, bodyRequired, imports) {
   const lines = []
   for (const parameter of parameters) {
     collectRefs(parameter.schema, imports)
     lines.push(`  ${tsString(parameter.name)}${parameter.required ? '' : '?'}: ${schemaType(parameter.schema)}`)
   }
-  if (bodySchema) {
-    collectRefs(bodySchema, imports)
-    lines.push(`  "body"${bodyRequired ? '' : '?'}: ${schemaType(bodySchema)}`)
+  if (body) {
+    if (body.mediaType === 'multipart/form-data') {
+      lines.push(`  "body"${bodyRequired ? '' : '?'}: FormData`)
+    } else {
+      collectRefs(body.schema, imports)
+      lines.push(`  "body"${bodyRequired ? '' : '?'}: ${schemaType(body.schema)}`)
+    }
   }
   if (!lines.length) return null
   return `export interface ${pascalCase(operationId)}Input {\n${lines.join('\n')}\n}`
@@ -99,11 +107,11 @@ function generatedOperation(route, method, operation, pathItem, imports, inputBl
   collectRefs(responseSchema, imports)
   const responseType = schemaRefName(responseSchema) ?? (responseSchema ? schemaType(responseSchema) : 'void')
   const parameters = operationParameters(pathItem, operation)
-  const bodySchema = requestSchema(operation)
+  const body = requestBody(operation)
   const inputBlock = generateOperationInput(
     operation.operationId,
     parameters,
-    bodySchema,
+    body,
     Boolean(operation.requestBody?.required),
     imports,
   )
@@ -128,7 +136,7 @@ function generatedOperation(route, method, operation, pathItem, imports, inputBl
     const values = headerParameters.map((parameter) => `${tsString(parameter.name)}: input[${tsString(parameter.name)}]`).join(', ')
     requestFields.push(`headers: { ${values} }`)
   }
-  if (bodySchema) requestFields.push('body: input.body')
+  if (body) requestFields.push('body: input.body')
 
   const argument = inputType ? `input: ${inputType}` : ''
   return `  ${operation.operationId}: (${argument}) => transport.request<${responseType}>({ ${requestFields.join(', ')} }),`
