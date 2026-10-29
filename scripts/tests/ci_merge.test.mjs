@@ -179,6 +179,20 @@ test("rejects incomplete evidence and partial comment pagination", () => {
   assert.match(checkEligibility(partial).join(" "), /history incomplete/);
 });
 
+test("rejects evidence that aged out since issuance even when attestation is unexpired", () => {
+  const d = data();
+  d.now = Date.parse("2026-10-29T21:03:30.000Z");
+  assert.match(checkEligibility(d).join(" "), /Missing or stale independent evidence: jira_dependencies/);
+  const renewed = data();
+  renewed.now = d.now;
+  editProof(renewed, proof => {
+    for (const evidence of Object.values(proof.evidence)) {
+      evidence.checked_at = "2026-10-29T21:02:00.000Z";
+    }
+  });
+  assert.deepEqual(checkEligibility(renewed), []);
+});
+
 test("requires a matching Jira key and unmodified attestation body", () => {
   const d = data();
   editProof(d, proof => {proof.jira_key = "USI-999";});
