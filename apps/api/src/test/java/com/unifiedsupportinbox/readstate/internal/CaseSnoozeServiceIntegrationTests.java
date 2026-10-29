@@ -8,6 +8,7 @@ import com.unifiedsupportinbox.UsiApiApplication;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -108,7 +109,8 @@ class CaseSnoozeServiceIntegrationTests {
         Instant stored = jdbc.queryForObject(
                 "SELECT until_at FROM case_snoozes WHERE case_id = ? AND user_id = ?",
                 Timestamp.class, fixture.caseId(), user).toInstant();
-        assertThat(stored).isEqualTo(secondUntil);
+        // PostgreSQL timestamp(6) rounds Java nanoseconds to the nearest microsecond.
+        assertThat(stored).isEqualTo(secondUntil.plusNanos(500).truncatedTo(ChronoUnit.MICROS));
         assertThat(countOutbox("case.snoozed", fixture.caseId())).isEqualTo(2);
     }
 
