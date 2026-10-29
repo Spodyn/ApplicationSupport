@@ -67,6 +67,10 @@ class AdminUserListIntegrationTests {
         jdbc.update("DELETE FROM spring_session_attributes");
         jdbc.update("DELETE FROM spring_session");
         jdbc.update("DELETE FROM user_permissions");
+        jdbc.update("DELETE FROM cases");
+        jdbc.update("DELETE FROM channels");
+        jdbc.update("DELETE FROM integrations");
+        jdbc.update("DELETE FROM customers");
         jdbc.update("DELETE FROM users");
     }
 
@@ -120,6 +124,29 @@ class AdminUserListIntegrationTests {
     }
 
     @Test
+    void countsOnlyNonTerminalCasesAssignedToEachUser() throws Exception {
+        createUser("admin@example.com", UserRole.ADMIN, true);
+        UUID agent = createUser("agent@example.com", UserRole.USER, true);
+        UUID activeCase = newCase();
+        UUID resolvedCase = newCase();
+        jdbc.update("""
+                UPDATE cases SET status = 'VERIFICATION', owner_user_id = ?, claimed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """, agent, activeCase);
+        jdbc.update("""
+                UPDATE cases SET status = 'RESOLVED', owner_user_id = ?, claimed_at = CURRENT_TIMESTAMP,
+                    resolved_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """, agent, resolvedCase);
+
+        HttpResponse<String> response = get(client(login("admin@example.com")),
+                "/api/v1/admin/users?search=agent@example.com");
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode item = JSON.readTree(response.body()).get("items").get(0);
+        assertThat(item.get("activeAssignedCases").asLong()).isEqualTo(1L);
+    }
+
+    @Test
     void cursorCannotBeReusedByAnotherAdministrator() throws Exception {
         createUser("first-admin@example.com", UserRole.ADMIN, true);
         createUser("second-admin@example.com", UserRole.ADMIN, true);
@@ -155,6 +182,25 @@ class AdminUserListIntegrationTests {
                 client(new CookieManager(null, CookiePolicy.ACCEPT_ALL)),
                 "/api/v1/admin/users");
         assertThat(response.statusCode()).isEqualTo(401);
+    }
+
+    private static UUID newCase() {
+        String external = UUID.randomUUID().toString();
+        UUID customer = jdbc.queryForObject(
+                "INSERT INTO customers (name, external_ref) VALUES (?, ?) RETURNING id",
+                UUID.class, "Customer " + external, external);
+        UUID integration = jdbc.queryForObject("""
+                INSERT INTO integrations (provider, display_name, status, health, workspace_external_id)
+                VALUES ('SLACK', 'Slack', 'ENABLED', 'HEALTHY', ?) RETURNING id
+                """, UUID.class, external);
+        UUID channel = jdbc.queryForObject("""
+                INSERT INTO channels (integration_id, external_channel_id, name, customer_id, ignored, grouping_strategy, active)
+                VALUES (?, ?, 'support', ?, FALSE, 'SLACK_ROOT_THREAD', TRUE) RETURNING id
+                """, UUID.class, integration, external, customer);
+        return jdbc.queryForObject("""
+                INSERT INTO cases (customer_id, integration_id, channel_id, provider, external_conversation_id)
+                VALUES (?, ?, ?, 'SLACK', ?) RETURNING id
+                """, UUID.class, customer, integration, channel, external);
     }
 
     private static UUID createUser(String email, UserRole role, boolean active) {
