@@ -9,6 +9,39 @@ The **integrator**, not the developer worker, owns the final `main` merge and Ji
 - GitHub job checks six exact-HEAD CI jobs: `configuration`, `backend`, `integration`, `infrastructure`, `openapi`, `validate`; all must finish successfully. Any extra failing/pending job blocks.
 - The PR must be open, non-draft, mergeable, same-repository, target `main`, with CI bound to its current SHA and current base, and without unresolved review/security findings. GitHub's effective ruleset must permit squash and no approval requirements may remain.
 - An independent trusted orchestrator must set `usi/merge-ready` **only after checking live Jira dependencies, any required external/manual acceptance, DoD, security findings and an exclusive worker lease.** This label is not a reviewer approval. **Do not apply it on the basis of green CI alone.** PR authors should not self-attest. Remove the label when any of these facts changes.
+
+### Bound independent eligibility evidence (security hold)
+
+The label \`usi/merge-ready\` is **not sufficient**. Before the trusted-main runner may qualify a PR, an independent attestor must publish a new, **unedited** top-level PR issue comment using a **dedicated GitHub App bot account**. The runner checks that comment's GitHub-supplied \`user.id\` and \`user.type=Bot\` against the repository Actions variable \`USI_ATTESTOR_USER_ID\`. An unset/invalid ID, unknown issuer, edited comment, missing history, duplicate newest timestamp, malformed JSON or stale evidence blocks merging. Do **not** configure a generic developer account or shared \`github-actions[bot]\` as the trusted issuer.
+
+The comment starts with the exact marker \`<!-- usi-pr-eligibility-v1 -->\` followed by one JSON object. Its schema is:
+
+\`\`\`json
+{
+  "schema": "usi-pr-eligibility-v1",
+  "status": "ready",
+  "pr_number": 42,
+  "jira_key": "USI-247",
+  "head_sha": "<exact 40-hex PR head>",
+  "base_sha": "<exact 40-hex main base>",
+  "issued_at": "<UTC ISO timestamp>",
+  "expires_at": "<UTC ISO timestamp, at most 10 minutes later>",
+  "evidence": {
+    "jira_dependencies": {"result": "PASS", "reference": "<durable audit reference>", "checked_at": "<UTC ISO timestamp>"},
+    "jira_dod": {"result": "PASS", "reference": "<durable audit reference>", "checked_at": "<UTC ISO timestamp>"},
+    "external_verification": {"result": "PASS", "reference": "<durable audit reference>", "checked_at": "<UTC ISO timestamp>"},
+    "security": {"result": "PASS", "reference": "<durable audit reference>", "checked_at": "<UTC ISO timestamp>"},
+    "worker_lease": {"result": "PASS", "reference": "<authoritative lease-store audit reference>", "checked_at": "<UTC ISO timestamp>"}
+  }
+}
+\`\`\`
+
+This is **schema documentation, not a real attestation**. The independent attestor must actually read current Jira dependency/DoD and external acceptance evidence, security findings, and authoritative active worker leases before issuing any PASS. Each evidence check must be no more than five minutes older than issuance. An explicit non-applicable acceptance condition may be recorded as a verified PASS **only when the Jira contract truly has no such mandatory condition**, with the reason in its audit reference. Unknown, unavailable, NOT_RUN or BLOCKED verification must never be converted to PASS.
+
+A new trusted comment with \`status: "revoked"\` revokes previous readiness; the most recent trusted comment controls. Publish a new comment after every HEAD/base change or relevant Jira/security/lease change; never edit an old comment. The workflow re-reads the comment and PR immediately before merge. The runner validates the trusted GitHub issuer, SHA binding, expiry and evidence shape, **not** the underlying external facts; those remain the responsibility of a separately implemented and audited attestor.
+
+**Activation remains blocked:** no dedicated verified attestor identity, authoritative Jira/lease evidence publisher, positive non-production merge/Jira handoff or authorized \`USI_AUTO_MERGE_ENABLED=true\` activation has been proven. This hardening does not enable unattended merging or branch deletion.
+
 - The runner never declares Jira `Gotowe` itself. The orchestrator must verify the actual merged SHA in `main` and then update Jira only if all required DoD and verification are complete.
 - Serialize all integration workflows through `usi-main-integration`. A changed SHA/base requalifies immediately before the merge API call.
 
