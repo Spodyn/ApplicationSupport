@@ -10,7 +10,7 @@ const candidate=()=>({
     head:{ref:"agent/USI-41",sha:"a".repeat(40),repo:{full_name:"Spodyn/ApplicationSupport"}},
     base:{ref:"main",repo:{full_name:"Spodyn/ApplicationSupport"}}
   }],
-  openPRs:[],now:NOW
+  openPRs:[],now:NOW,verifiedNoActiveWorkerLease:true
 });
 test("qualifies a safely merged branch older than 7 days",()=>{
   assert.equal(eligibleStaleBranch(candidate()),true);
@@ -46,4 +46,12 @@ test("a later merged PR can prove eligibility even when the earlier PR SHA diffe
   const earlier={...d.mergedPRs[0],number:9,head:{...d.mergedPRs[0].head,sha:"b".repeat(40)}};
   d.mergedPRs.unshift(earlier);
   assert.equal(eligibleStaleBranch(d),true);
+});
+
+test("retains historically merged branch without authoritative worker-lease clearance",()=>{
+  const d=candidate();
+  delete d.verifiedNoActiveWorkerLease;
+  assert.equal(eligibleStaleBranch(d),false);
+  d.verifiedNoActiveWorkerLease=false;
+  assert.equal(eligibleStaleBranch(d),false);
 });
