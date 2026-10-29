@@ -449,6 +449,7 @@ function ConversationPanel({
       try {
         const uploaded = await workflow.uploadAttachment.mutateAsync(file)
         setPendingAttachments((current) => [...current, uploaded])
+        idempotencyKey.current = null
         if (uploaded.scanStatus !== "clean") {
           setAttachmentError(`Załącznik ${uploaded.fileName} nie przeszedł kontroli bezpieczeństwa.`)
         }
@@ -464,6 +465,7 @@ function ConversationPanel({
     try {
       await workflow.removePendingAttachment.mutateAsync(attachmentId)
       setPendingAttachments((current) => current.filter((attachment) => attachment.id !== attachmentId))
+      idempotencyKey.current = null
     } catch (error) {
       setAttachmentError(error instanceof Error ? error.message : "Nie udało się usunąć załącznika.")
     }
@@ -482,7 +484,7 @@ function ConversationPanel({
   }
 
   const send = async () => {
-    if (!canReply || !draft.trim() || workflow.sendMessage.isPending) return
+    if (!canReply || !draft.trim() || workflow.removePendingAttachment.isPending || workflow.sendMessage.isPending) return
     if (!attachmentsReady) {
       setAttachmentError("Usuń załączniki, które nie przeszły kontroli bezpieczeństwa.")
       return
@@ -621,7 +623,7 @@ function ConversationPanel({
             <button
               type="button"
               onClick={send}
-              disabled={!canReply || !draft.trim() || !attachmentsReady || workflow.uploadAttachment.isPending || workflow.sendMessage.isPending}
+              disabled={!canReply || !draft.trim() || !attachmentsReady || workflow.uploadAttachment.isPending || workflow.removePendingAttachment.isPending || workflow.sendMessage.isPending}
               className="h-[45px] w-[117px] rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
             >
               {workflow.sendMessage.isPending ? "Wysyłanie…" : "Wyślij"}

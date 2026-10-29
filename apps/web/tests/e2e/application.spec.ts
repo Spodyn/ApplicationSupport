@@ -318,6 +318,56 @@ test("current owner uploads an attachment and sends it with the persisted messag
   expect(uploads).toEqual(["evidence.txt"])
 })
 
+test("changing attachments after a failed send uses a fresh idempotency key", async ({ page }) => {
+  await preparePage(page)
+  const sendKeys: string[] = []
+  let rejectFirstSend = true
+  await page.route(`**/api/v1/cases/${caseId}/messages`, async (route) => {
+    const request = route.request()
+    if (request.method() !== "POST") {
+      await route.fallback()
+      return
+    }
+    sendKeys.push(request.headers()["idempotency-key"] ?? "")
+    if (!rejectFirstSend) {
+      await route.fallback()
+      return
+    }
+    rejectFirstSend = false
+    await route.fulfill({
+      status: 503,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        code: "APPLICATION_FAILURE",
+        title: "Unavailable",
+        status: 503,
+        detail: "Message send failed",
+        correlationId: "e2e-send-retry",
+      }),
+    })
+  })
+
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await conversation.getByRole("button", { name: "Przejmij" }).click()
+  await conversation.getByLabel("Treść odpowiedzi").fill("Retry with evidence")
+  await conversation.getByRole("button", { name: "Wyślij" }).click()
+  await expect(conversation.getByText("Message send failed")).toBeVisible()
+
+  await conversation.locator('input[type="file"]').setInputFiles({
+    name: "evidence.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("test"),
+  })
+  await conversation.getByRole("button", { name: "Wyślij" }).click()
+  await expect(conversation.getByText("Retry with evidence")).toBeVisible()
+
+  expect(sendKeys).toHaveLength(2)
+  expect(sendKeys[0]).toMatch(/^[0-9a-f-]{36}$/)
+  expect(sendKeys[1]).toMatch(/^[0-9a-f-]{36}$/)
+  expect(sendKeys[1]).not.toBe(sendKeys[0])
+})
+
 test("failed outbound message can be retried without creating duplicate content", async ({ page }) => {
   const { retries, supportMessages } = await preparePage(page)
   const failedId = "018f0000-0000-7000-8000-000000000204"
