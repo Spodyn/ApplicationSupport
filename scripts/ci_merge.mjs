@@ -103,6 +103,10 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
   if (run?.head_sha !== pull?.head?.sha) errors.push("CI SHA != current PR HEAD");
   const belongs = (run?.pull_requests || []).some(x => x.number === pull?.number && x.head?.sha === pull.head.sha);
   if (!belongs) errors.push("CI run is not proven to belong to this PR and HEAD");
+  const currentBaseProven = (run?.pull_requests || []).some(x =>
+    x.number === pull?.number && x.head?.sha === pull?.head?.sha && x.base?.sha === expectedBaseSha
+  );
+  if (!currentBaseProven) errors.push("CI run is not proven against current main base SHA");
   if (run?.pull_requests?.some(x => x.number === pull?.number && x.base?.sha && x.base.sha !== expectedBaseSha)) errors.push("CI was tested against an outdated base");
   if (!expectedBaseSha || expectedBaseSha !== pull?.base?.sha) errors.push("Main base changed during qualification");
   for (const job of REQUIRED_JOBS) {
@@ -124,6 +128,9 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
   if ((prRule?.required_approving_review_count ?? 1) !== 0) errors.push("An effective human approval is still required");
   if (!prRule?.allowed_merge_methods?.includes("squash")) errors.push("Squash is not permitted");
   if (!ciRule?.required_status_checks?.some(x => x.context === "validate")) errors.push("Required validate check missing");
+  // The merge API atomically checks HEAD but not main SHA. Strict GitHub
+  // protection must reject a base race between our final read and PUT merge.
+  if (ciRule?.strict_required_status_checks_policy !== true) errors.push("Strict up-to-date CI branch protection required for unattended merge");
   return errors;
 }
 
