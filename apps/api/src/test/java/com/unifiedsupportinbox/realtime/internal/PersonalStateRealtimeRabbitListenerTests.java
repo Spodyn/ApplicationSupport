@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.nio.charset.StandardCharsets;
@@ -36,6 +37,7 @@ class PersonalStateRealtimeRabbitListenerTests {
         UUID caseId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
+        allowExplicitRecipient(userId);
 
         listener.onPersonalState(message(
                 PersonalStateRealtimeRabbitConfiguration.READ_POSITION_CHANGED_ROUTING_KEY,
@@ -84,10 +86,28 @@ class PersonalStateRealtimeRabbitListenerTests {
     }
 
     @Test
+    void inactiveOrExpiredExplicitRecipientReceivesNoPersonalHint() {
+        UUID caseId = UUID.randomUUID();
+        UUID userId = UUID.randomUUID();
+        when(jdbc.queryForList(anyString(), eq(UUID.class), eq(userId)))
+                .thenReturn(List.of());
+
+        listener.onPersonalState(message(
+                PersonalStateRealtimeRabbitConfiguration.READ_POSITION_CHANGED_ROUTING_KEY,
+                "corr-ineligible",
+                """
+                {"caseId":"%s","messageId":"%s","userId":"%s"}
+                """.formatted(caseId, UUID.randomUUID(), userId)));
+
+        verifyNoInteractions(messaging);
+    }
+
+    @Test
     void snoozeChangeIsSentOnlyToTheSnoozingUser() {
         UUID caseId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         String until = "2026-09-30T09:30:00Z";
+        allowExplicitRecipient(userId);
 
         listener.onPersonalState(message(
                 PersonalStateRealtimeRabbitConfiguration.SNOOZED_ROUTING_KEY,
@@ -112,6 +132,7 @@ class PersonalStateRealtimeRabbitListenerTests {
     void snoozeCancelIsSentOnlyToTheUserNamedByServerSideEvent() {
         UUID caseId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
+        allowExplicitRecipient(userId);
         listener.onPersonalState(message(
                 PersonalStateRealtimeRabbitConfiguration.SNOOZE_CANCELLED_ROUTING_KEY,
                 "corr-cancel",
@@ -130,6 +151,7 @@ class PersonalStateRealtimeRabbitListenerTests {
         UUID caseId = UUID.randomUUID();
         UUID userId = UUID.randomUUID();
         String until = "2026-09-30T09:30:00Z";
+        allowExplicitRecipient(userId);
 
         listener.onPersonalState(message(
                 PersonalStateRealtimeRabbitConfiguration.SNOOZE_DUE_ROUTING_KEY,
@@ -173,6 +195,12 @@ class PersonalStateRealtimeRabbitListenerTests {
                 "corr",
                 "{\"caseId\":\"" + UUID.randomUUID() + "\"}")))
                 .isInstanceOf(AmqpRejectAndDontRequeueException.class);
+
+        assertThatThrownBy(() -> listener.onPersonalState(message(
+                null,
+                "corr",
+                "{\"caseId\":\"" + UUID.randomUUID() + "\"}")))
+                .isInstanceOf(AmqpRejectAndDontRequeueException.class);
     }
 
     @Test
@@ -189,6 +217,13 @@ class PersonalStateRealtimeRabbitListenerTests {
                 .isEqualTo("case.snooze_due");
         assertThatThrownBy(() -> PersonalStateRealtimeRabbitListener.mapEventType("case.updated"))
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> PersonalStateRealtimeRabbitListener.mapEventType(null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private void allowExplicitRecipient(UUID userId) {
+        when(jdbc.queryForList(anyString(), eq(UUID.class), eq(userId)))
+                .thenReturn(List.of(userId));
     }
 
     private static Message message(String routingKey, String correlationId, String body) {

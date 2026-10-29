@@ -152,12 +152,27 @@ class PersonalStateRealtimeRabbitListener {
     }
 
     private List<UUID> recipients(ParsedEvent event) {
-        if (event.userId() != null) return List.of(event.userId());
+        if (event.userId() != null) {
+            return jdbc.queryForList("""
+                    SELECT id
+                    FROM users
+                    WHERE id = ?
+                      AND active = TRUE
+                      AND role IN ('USER', 'ADMIN')
+                      AND (valid_from IS NULL OR valid_from <= CURRENT_TIMESTAMP)
+                      AND (valid_until IS NULL OR valid_until > CURRENT_TIMESTAMP)
+                    """, UUID.class, event.userId());
+        }
         return jdbc.queryForList("""
-                SELECT user_id
-                FROM case_read_states
-                WHERE case_id = ?
-                ORDER BY user_id
+                SELECT state.user_id
+                FROM case_read_states state
+                JOIN users recipient ON recipient.id = state.user_id
+                WHERE state.case_id = ?
+                  AND recipient.active = TRUE
+                  AND recipient.role IN ('USER', 'ADMIN')
+                  AND (recipient.valid_from IS NULL OR recipient.valid_from <= CURRENT_TIMESTAMP)
+                  AND (recipient.valid_until IS NULL OR recipient.valid_until > CURRENT_TIMESTAMP)
+                ORDER BY state.user_id
                 """, UUID.class, event.caseId());
     }
 
@@ -191,6 +206,7 @@ class PersonalStateRealtimeRabbitListener {
     }
 
     static String mapEventType(String sourceType) {
+        if (sourceType == null) throw new IllegalArgumentException("Personal-state event type is required.");
         return switch (sourceType) {
             case PersonalStateRealtimeRabbitConfiguration.UNREAD_CHANGED_ROUTING_KEY -> "case.unread_changed";
             case PersonalStateRealtimeRabbitConfiguration.READ_POSITION_CHANGED_ROUTING_KEY ->
@@ -217,7 +233,9 @@ class PersonalStateRealtimeRabbitListener {
 
     private static UUID optionalUuid(JsonNode root, String field) {
         JsonNode value = root.get(field);
-        return value == null || value.isNull() ? null : UUID.fromString(value.stringValue());
+        if (value == null || value.isNull()) return null;
+        if (!value.isTextual()) throw new IllegalArgumentException(field + " must be text.");
+        return UUID.fromString(value.stringValue());
     }
 
     private static String optionalText(JsonNode root, String field) {
