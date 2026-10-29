@@ -47,6 +47,21 @@ class HttpSlackWebApiClient implements SlackWebApiClient {
             String text,
             MessageBodyFormat bodyFormat,
             String clientMessageId) {
+        return postMessage(botToken, channelId, threadTs, text, bodyFormat, clientMessageId, false);
+    }
+
+    @Override
+    public PostMessageResponse postMessage(
+            byte[] botToken,
+            String channelId,
+            String threadTs,
+            String text,
+            MessageBodyFormat bodyFormat,
+            String clientMessageId,
+            boolean replyBroadcast) {
+        if (replyBroadcast && (threadTs == null || threadTs.isBlank())) {
+            throw new IllegalArgumentException("Slack reply broadcast requires an existing thread.");
+        }
         if (botToken == null || botToken.length == 0) {
             throw new IllegalArgumentException("Slack bot token is required.");
         }
@@ -58,6 +73,7 @@ class HttpSlackWebApiClient implements SlackWebApiClient {
             payload.put("text", text);
             payload.put("mrkdwn", bodyFormat == MessageBodyFormat.MARKDOWN);
             if (threadTs != null && !threadTs.isBlank()) payload.put("thread_ts", threadTs);
+            if (replyBroadcast) payload.put("reply_broadcast", true);
             if (clientMessageId != null && !clientMessageId.isBlank()) payload.put("client_msg_id", clientMessageId);
 
             byte[] body = objectMapper.writeValueAsBytes(payload);
