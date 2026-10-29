@@ -48,6 +48,22 @@ class OrchestratorPolicyContractTest(unittest.TestCase):
         self.assertIn("Do przeglądu", self.contract)
         self.assertIn("BLOCKED", self.contract)
 
+    def test_trusted_attestor_comment_rechecks_existing_pr_safely(self):
+        workflow = (ROOT / ".github/workflows/usi-integration.yml").read_text(encoding="utf-8")
+        self.assertRegex(workflow, r"(?m)^  issue_comment:\\n    types: \\[created\\]")
+        self.assertIn("github.event_name == 'issue_comment'", workflow)
+        self.assertIn("github.event.issue.pull_request != null", workflow)
+        self.assertIn("github.event.comment.user.type == 'Bot'", workflow)
+        self.assertIn("vars.USI_ATTESTOR_USER_ID != ''", workflow)
+        self.assertIn("format('{0}', github.event.comment.user.id) == vars.USI_ATTESTOR_USER_ID", workflow)
+        self.assertIn("startsWith(github.event.comment.body, '<!-- usi-pr-eligibility-v1 -->')", workflow)
+        self.assertIn("github.event.issue.number || inputs.pr_number", workflow)
+        # A trusted comment only re-triggers the existing exact-revision guard.
+        # Neither PR content nor a comment body may be evaluated as a command.
+        self.assertIn("ref: main", workflow)
+        self.assertIn("node scripts/ci_merge.mjs", workflow)
+        self.assertIn("USI_AUTO_MERGE_ENABLED", workflow)
+
     def test_yaml_has_no_tabs_or_duplicate_top_level_keys(self):
         self.assertNotIn(chr(9), self.policy)
         top_level = re.findall(r"(?m)^([a-z][a-z0-9_]*):", self.policy)
