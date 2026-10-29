@@ -58,7 +58,7 @@ automation:
   guard_script: scripts/ci_merge.mjs
   eligibility_attestation_label: usi/merge-ready
   eligibility_attestation_source: trusted_immutable_pr_issue_comment
-  attestor_identity_from_protected_actions_variable: USI_ATTESTOR_USER_ID
+  attestor_identity_from_authorized_repository_variable: USI_ATTESTOR_USER_ID
   attestation_binding: [pr_number, head_sha, base_sha, jira_key]
   attestation_required_evidence: [jira_dependencies, jira_dod, external_verification, security, worker_lease]
   attestation_max_lifetime_minutes: 10
