@@ -50,7 +50,7 @@ class OrchestratorPolicyContractTest(unittest.TestCase):
 
     def test_trusted_attestor_comment_rechecks_existing_pr_safely(self):
         workflow = (ROOT / ".github/workflows/usi-integration.yml").read_text(encoding="utf-8")
-        self.assertRegex(workflow, r"(?m)^  issue_comment:\\n    types: \\[created\\]")
+        self.assertIn("  issue_comment:\n    types: [created]", workflow)
         self.assertIn("github.event_name == 'issue_comment'", workflow)
         self.assertIn("github.event.issue.pull_request != null", workflow)
         self.assertIn("github.event.comment.user.type == 'Bot'", workflow)
