@@ -190,13 +190,13 @@ class ChannelIntegrationTests {
                 Instant.parse("2026-08-29T06:30:00Z"),
                 "{}"));
 
-        UUID delegatedId = createUser("delegated@example.com", "USER");
+        UUID administratorId = createUser("channel-admin@example.com", "ADMIN");
         jdbc.update(
                 "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations')",
-                delegatedId);
-        CookieManager delegated = login("delegated@example.com");
+                administratorId);
+        CookieManager administrator = login("channel-admin@example.com");
 
-        HttpResponse<String> listed = get(client(delegated), "/api/v1/admin/channels");
+        HttpResponse<String> listed = get(client(administrator), "/api/v1/admin/channels");
         assertThat(listed.statusCode()).isEqualTo(200);
         assertThat(listed.body())
                 .contains("\"externalChannelId\":\"C789\"")
@@ -206,7 +206,7 @@ class ChannelIntegrationTests {
                 .doesNotContain("metadataJson");
 
         HttpResponse<String> updated = mutate(
-                delegated,
+                administrator,
                 "PATCH",
                 "/api/v1/admin/channels/" + channel.id(),
                 "{\"ignored\":true}");
@@ -237,6 +237,67 @@ class ChannelIntegrationTests {
         HttpResponse<String> denied = get(client(plain), "/api/v1/admin/channels");
         assertThat(denied.statusCode()).isEqualTo(403);
         assertThat(denied.body()).contains("\"code\":\"ACCESS_DENIED\"");
+    }
+
+    @Test
+    void userWithManageIntegrationsCannotListOrUpdateChannels() throws Exception {
+        UUID integrationId = createIntegration("SLACK", "Support Slack");
+        ChannelView channel = discovery.upsert(new DiscoveredChannel(
+                integrationId,
+                "C789",
+                "triage",
+                ChannelGroupingStrategy.SLACK_ROOT_THREAD,
+                true,
+                null,
+                "{}"));
+
+        UUID userId = createUser("delegated@example.com", "USER");
+        jdbc.update(
+                "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations')",
+                userId);
+        CookieManager delegated = login("delegated@example.com");
+
+        HttpResponse<String> listed = get(client(delegated), "/api/v1/admin/channels");
+        assertThat(listed.statusCode()).isEqualTo(403);
+        assertThat(listed.body()).contains("\"code\":\"ACCESS_DENIED\"");
+
+        HttpResponse<String> updated = mutate(
+                delegated,
+                "PATCH",
+                "/api/v1/admin/channels/" + channel.id(),
+                "{\"ignored\":true}");
+        assertThat(updated.statusCode()).isEqualTo(403);
+        assertThat(updated.body()).contains("\"code\":\"ACCESS_DENIED\"");
+        assertThat(jdbc.queryForObject(
+                "SELECT ignored FROM channels WHERE id = ?", Boolean.class, channel.id())).isFalse();
+    }
+
+    @Test
+    void adminWithoutExplicitPermissionRowsUsesDefaultManageIntegrations() throws Exception {
+        UUID integrationId = createIntegration("SLACK", "Support Slack");
+        ChannelView channel = discovery.upsert(new DiscoveredChannel(
+                integrationId,
+                "C790",
+                "triage",
+                ChannelGroupingStrategy.SLACK_ROOT_THREAD,
+                true,
+                null,
+                "{}"));
+
+        UUID adminId = createUser("default-admin@example.com", "ADMIN");
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM user_permissions WHERE user_id = ?", Integer.class, adminId)).isZero();
+        CookieManager administrator = login("default-admin@example.com");
+
+        assertThat(get(client(administrator), "/api/v1/admin/channels").statusCode()).isEqualTo(200);
+        HttpResponse<String> updated = mutate(
+                administrator,
+                "PATCH",
+                "/api/v1/admin/channels/" + channel.id(),
+                "{\"ignored\":true}");
+        assertThat(updated.statusCode()).isEqualTo(200);
+        assertThat(jdbc.queryForObject(
+                "SELECT ignored FROM channels WHERE id = ?", Boolean.class, channel.id())).isTrue();
     }
 
     private static UUID createIntegration(String provider, String name) {

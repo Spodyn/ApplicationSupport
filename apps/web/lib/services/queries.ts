@@ -129,13 +129,36 @@ export function useInboxWorkflow(caseId?: string) {
       serviceRegistry.inbox.snooze(requireCaseId(), until),
     onSuccess: invalidateCases,
   })
+  const uploadAttachment = useMutation({
+    mutationFn: (file: File) =>
+      serviceRegistry.inbox.uploadAttachment(requireCaseId(), file),
+  })
+  const removePendingAttachment = useMutation({
+    mutationFn: (attachmentId: string) =>
+      serviceRegistry.inbox.removePendingAttachment(requireCaseId(), attachmentId),
+  })
+  const retryMessage = useMutation({
+    mutationFn: ({ messageId, idempotencyKey }: { messageId: string; idempotencyKey?: string }) =>
+      serviceRegistry.inbox.retryMessage(messageId, idempotencyKey),
+    onSuccess: invalidateConversation,
+  })
   const sendMessage = useMutation({
     mutationFn: (input: InboxSendInput) =>
       serviceRegistry.inbox.sendMessage(requireCaseId(), input),
     onSuccess: invalidateConversation,
   })
 
-  return { claim, ignore, askCustomer, resolve, snooze, sendMessage }
+  return {
+    claim,
+    ignore,
+    askCustomer,
+    resolve,
+    snooze,
+    uploadAttachment,
+    removePendingAttachment,
+    retryMessage,
+    sendMessage,
+  }
 }
 
 export function useMarkAllResolvedRead() {
@@ -207,11 +230,6 @@ export function useAdministrationSettingsActions() {
       ),
     onSuccess: invalidate,
   })
-  const configureIntegration = useMutation({
-    mutationFn: ({ id, workspace }: { id: string; workspace: string }) =>
-      serviceRegistry.administrationSettings.configureIntegration(id, workspace),
-    onSuccess: invalidate,
-  })
   const setIntegrationStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: ManagedIntegration["status"] }) =>
       serviceRegistry.administrationSettings.setIntegrationStatus(id, status),
@@ -234,7 +252,6 @@ export function useAdministrationSettingsActions() {
 
   return {
     saveSection,
-    configureIntegration,
     setIntegrationStatus,
     testIntegration,
     setChannelIgnored,

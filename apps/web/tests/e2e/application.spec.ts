@@ -25,7 +25,15 @@ const caseListItem = {
 const inboundMessage = {
   id: inboundMessageId, kind: "CUSTOMER", body: "Hello from Slack - USI test 1", bodyFormat: "PLAIN_TEXT",
   inbound: true, deliveryStatus: null, providerCreatedAt: caseListItem.createdAt,
-  createdAt: caseListItem.createdAt, editedAt: null, deletedAt: null, authorName: "Customer", attachments: [],
+  createdAt: caseListItem.createdAt, editedAt: null, deletedAt: null, authorName: "Customer",
+  attachments: [] as Array<{
+    id: string
+    fileName: string
+    sizeBytes: number
+    contentType: string | null
+    detectedContentType: string | null
+    scanStatus: string
+  }>,
 }
 
 async function preparePage(page: Page, initiallyAuthenticated = true) {
@@ -35,6 +43,9 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
   let read = false
   const supportMessages: Array<Omit<typeof inboundMessage, "deliveryStatus"> & { deliveryStatus: string | null }> = []
   const sends: string[] = []
+  const uploads: string[] = []
+  const retries: string[] = []
+  const historyBefore: Array<string | null> = []
   await page.context().addCookies([{ name: "XSRF-TOKEN", value: "e2e-csrf", url: localOrigin }])
 
   await page.route("**/*", async (route) => {
@@ -115,7 +126,31 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
       return
     }
     if (requestUrl.pathname === `/api/v1/cases/${caseId}/messages` && request.method() === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [...supportMessages].reverse().concat(inboundMessage), nextCursor: null }) })
+      const before = requestUrl.searchParams.get("before")
+      historyBefore.push(before)
+      if (before === "older-cursor") {
+        const olderMessage = {
+          ...inboundMessage,
+          id: "018f0000-0000-7000-8000-000000000199",
+          body: "Older persisted message",
+          providerCreatedAt: "2026-10-05T09:00:00Z",
+          createdAt: "2026-10-05T09:00:00Z",
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ items: [inboundMessage, olderMessage], nextCursor: null }),
+        })
+        return
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          items: [...supportMessages].reverse().concat(inboundMessage),
+          nextCursor: "older-cursor",
+        }),
+      })
       return
     }
     if (requestUrl.pathname === `/api/v1/cases/${caseId}/read-position` && request.method() === "PUT") {
@@ -130,19 +165,160 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ caseId, status: "VERIFICATION", ownerUserId: authenticatedSession.id, version: 2 }) })
       return
     }
+    if (requestUrl.pathname === `/api/v1/cases/${caseId}/attachments` && request.method() === "POST") {
+      expect(request.headers()["x-xsrf-token"]).toBe("e2e-csrf")
+      expect(request.headers()["content-type"]).toContain("multipart/form-data")
+      uploads.push("evidence.txt")
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          attachmentId: "018f0000-0000-7000-8000-000000000205",
+          filename: "evidence.txt",
+          contentType: "text/plain",
+          sizeBytes: 4,
+          scanStatus: "CLEAN",
+          scanError: null,
+        }),
+      })
+      return
+    }
+    if (requestUrl.pathname === `/api/v1/cases/${caseId}/attachments/018f0000-0000-7000-8000-000000000205` && request.method() === "DELETE") {
+      await route.fulfill({ status: 204 })
+      return
+    }
     if (requestUrl.pathname === `/api/v1/cases/${caseId}/messages` && request.method() === "POST") {
       expect(request.headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/)
       expect(request.headers()["x-xsrf-token"]).toBe("e2e-csrf")
-      const body = request.postDataJSON() as { body: string }
+      const body = request.postDataJSON() as { body: string; attachmentIds?: string[] }
       sends.push(body.body)
-      supportMessages.push({ ...inboundMessage, id: "018f0000-0000-7000-8000-000000000203", kind: "SUPPORT", inbound: false, body: body.body, authorName: authenticatedSession.displayName, deliveryStatus: "QUEUED" })
-      await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ messageId: supportMessages[0].id }) })
+      const id = `018f0000-0000-7000-8000-00000000020${3 + supportMessages.length}`
+      supportMessages.push({
+        ...inboundMessage,
+        id,
+        kind: "SUPPORT",
+        inbound: false,
+        body: body.body,
+        authorName: authenticatedSession.displayName,
+        deliveryStatus: "QUEUED",
+        attachments: body.attachmentIds?.map((attachmentId) => ({
+          id: attachmentId,
+          fileName: "evidence.txt",
+          sizeBytes: 4,
+          contentType: "text/plain",
+          detectedContentType: "text/plain",
+          scanStatus: "CLEAN",
+        })) ?? [],
+      })
+      await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ messageId: id, deliveryStatus: "QUEUED" }) })
+      return
+    }
+    const retryMatch = requestUrl.pathname.match(/^\/api\/v1\/messages\/([^/]+)\/retry$/)
+    if (retryMatch && request.method() === "POST") {
+      const messageId = retryMatch[1]
+      expect(request.headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/)
+      const message = supportMessages.find((candidate) => candidate.id === messageId)
+      if (message) message.deliveryStatus = "QUEUED"
+      retries.push(messageId)
+      await route.fulfill({
+        status: 202,
+        contentType: "application/json",
+        body: JSON.stringify({ messageId, deliveryStatus: "QUEUED" }),
+      })
       return
     }
     await route.continue()
   })
 
-  return { externalRequests, sends }
+  return { externalRequests, sends, uploads, retries, historyBefore, supportMessages }
+}
+
+async function prepareSettingsApi(page: Page, options: { forbidden?: boolean } = {}) {
+  const writes: Array<{ method: string; path: string; body?: unknown }> = []
+  let integration = {
+    id: "018f0000-0000-7000-8000-000000000301",
+    provider: "SLACK",
+    displayName: "Acme Slack",
+    status: "ENABLED",
+    health: "UNKNOWN",
+    workspaceExternalId: "T-ACME",
+    workspaceName: "Acme Workspace",
+    secretConfigured: true,
+    secretRef: "sandbox-secret-must-not-be-rendered",
+    lastEventAt: null,
+    lastErrorCode: null,
+    createdAt: "2026-10-01T08:00:00Z",
+    updatedAt: "2026-10-01T08:00:00Z",
+  }
+
+  await page.route("**/api/v1/admin/**", async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    const method = request.method()
+
+    if (path === "/api/v1/admin/integrations" && method === "GET") {
+      if (options.forbidden) {
+        await route.fulfill({
+          status: 403,
+          contentType: "application/problem+json",
+          body: JSON.stringify({ code: "ACCESS_DENIED", title: "Access denied", status: 403 }),
+        })
+        return
+      }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify([integration]) })
+      return
+    }
+    if (path.endsWith(`/integrations/${integration.id}/status`) && method === "PATCH") {
+      const body = request.postDataJSON() as { status: "ENABLED" | "DISABLED" }
+      writes.push({ method, path, body })
+      integration = { ...integration, status: body.status, updatedAt: "2026-10-01T08:05:00Z" }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(integration) })
+      return
+    }
+    if (path.endsWith(`/integrations/${integration.id}/test`) && method === "POST") {
+      writes.push({ method, path })
+      integration = { ...integration, health: "HEALTHY", updatedAt: "2026-10-01T08:06:00Z" }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ integration, outcome: "SUCCESS", errorCode: null }) })
+      return
+    }
+    if (path === "/api/v1/admin/channels" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+      return
+    }
+    if (path === "/api/v1/admin/business-hours" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        id: "018f0000-0000-7000-8000-000000000302", timezone: "Europe/Warsaw", active: true,
+        intervals: [], updatedBy: authenticatedSession.id, updatedAt: "2026-10-01T08:00:00Z",
+      }) })
+      return
+    }
+    if (path === "/api/v1/admin/notifications/destinations" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+      return
+    }
+    if (path === "/api/v1/admin/notifications/rules" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+      return
+    }
+    if (path === "/api/v1/admin/out-of-office" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        enabled: false, template: "Poza biurem", sendOncePerClosure: true, version: 1,
+        updatedAt: "2026-10-01T08:00:00Z", updatedBy: authenticatedSession.id,
+      }) })
+      return
+    }
+    if (path === "/api/v1/admin/sla-policy" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        id: "018f0000-0000-7000-8000-000000000303", name: "Default", firstResponseMinutes: 30,
+        unclaimedWarningMinutes: 10, unclaimedBreachMinutes: 30, inProgressWarningMinutes: 60,
+        inProgressBreachMinutes: 120, pauseWaiting: true, version: 1, updatedAt: "2026-10-01T08:00:00Z",
+      }) })
+      return
+    }
+    await route.fallback()
+  })
+
+  return { writes }
 }
 
 const smokeRoutes = [
@@ -195,6 +371,133 @@ test("real API Case opens, is marked read, claimed, and receives one persisted s
   await expect(conversation.getByText("USI test reply")).toBeVisible()
   expect(sends).toEqual(["USI test reply"])
   expect(externalRequests).toEqual([])
+})
+
+test("conversation lazy-loads older history without duplicating overlapping messages", async ({ page }) => {
+  const { historyBefore } = await preparePage(page)
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await conversation.getByRole("button", { name: "Wczytaj starsze wiadomości" }).click()
+  await expect(conversation.getByText("Older persisted message")).toBeVisible()
+  await expect(conversation.getByText("Hello from Slack - USI test 1")).toHaveCount(1)
+  expect(historyBefore).toContain("older-cursor")
+})
+
+test("current owner uploads an attachment and sends it with the persisted message", async ({ page }) => {
+  const { uploads } = await preparePage(page)
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await conversation.getByRole("button", { name: "Przejmij" }).click()
+
+  await conversation.locator('input[type="file"]').setInputFiles({
+    name: "evidence.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("test"),
+  })
+  await expect(conversation.getByText("evidence.txt")).toBeVisible()
+  await conversation.getByLabel("Treść odpowiedzi").fill("Reply with evidence")
+  await conversation.getByRole("button", { name: "Wyślij" }).click()
+
+  await expect(conversation.getByText("Reply with evidence")).toBeVisible()
+  await expect(conversation.getByRole("link", { name: /evidence\.txt/ })).toHaveAttribute(
+    "href",
+    `/api/v1/cases/${caseId}/attachments/018f0000-0000-7000-8000-000000000205`,
+  )
+  expect(uploads).toEqual(["evidence.txt"])
+})
+
+test("changing attachments after a failed send uses a fresh idempotency key", async ({ page }) => {
+  await preparePage(page)
+  const sendKeys: string[] = []
+  let rejectFirstSend = true
+  await page.route(`**/api/v1/cases/${caseId}/messages`, async (route) => {
+    const request = route.request()
+    if (request.method() !== "POST") {
+      await route.fallback()
+      return
+    }
+    sendKeys.push(request.headers()["idempotency-key"] ?? "")
+    if (!rejectFirstSend) {
+      await route.fallback()
+      return
+    }
+    rejectFirstSend = false
+    await route.fulfill({
+      status: 503,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        code: "APPLICATION_FAILURE",
+        title: "Unavailable",
+        status: 503,
+        detail: "Message send failed",
+        correlationId: "e2e-send-retry",
+      }),
+    })
+  })
+
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await conversation.getByRole("button", { name: "Przejmij" }).click()
+  await conversation.getByLabel("Treść odpowiedzi").fill("Retry with evidence")
+  await conversation.getByRole("button", { name: "Wyślij" }).click()
+  await expect(conversation.getByText("Message send failed")).toBeVisible()
+
+  await conversation.locator('input[type="file"]').setInputFiles({
+    name: "evidence.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("test"),
+  })
+  await conversation.getByRole("button", { name: "Wyślij" }).click()
+  await expect(conversation.getByText("Retry with evidence")).toBeVisible()
+
+  expect(sendKeys).toHaveLength(2)
+  expect(sendKeys[0]).toMatch(/^[0-9a-f-]{36}$/)
+  expect(sendKeys[1]).toMatch(/^[0-9a-f-]{36}$/)
+  expect(sendKeys[1]).not.toBe(sendKeys[0])
+})
+
+test("failed outbound message can be retried without creating duplicate content", async ({ page }) => {
+  const { retries, supportMessages } = await preparePage(page)
+  const failedId = "018f0000-0000-7000-8000-000000000204"
+  supportMessages.push({
+    ...inboundMessage,
+    id: failedId,
+    kind: "SUPPORT",
+    inbound: false,
+    body: "Retry me",
+    authorName: authenticatedSession.displayName,
+    deliveryStatus: "FAILED",
+    attachments: [],
+  })
+
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await conversation.getByRole("button", { name: "Przejmij" }).click()
+  await expect(conversation.getByText("Retry me")).toBeVisible()
+  await conversation.getByRole("button", { name: "Ponów" }).click()
+  await expect(conversation.getByRole("button", { name: "Ponów" })).toHaveCount(0)
+  await expect(conversation.getByText(/W kolejce/)).toBeVisible()
+  expect(retries).toEqual([failedId])
+})
+
+test("message API failure renders the conversation error state", async ({ page }) => {
+  await preparePage(page)
+  await page.route("**/api/v1/cases/*/messages*", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        code: "APPLICATION_FAILURE",
+        title: "Unavailable",
+        status: 503,
+        detail: "Messages unavailable",
+        correlationId: "e2e-message-error",
+      }),
+    })
+  })
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await expect(conversation.getByText("Nie udało się wczytać wiadomości.")).toBeVisible()
 })
 
 test("empty persisted conversation renders an empty state", async ({ page }) => {
@@ -250,6 +553,42 @@ test("API user directory is read-only until real user mutations exist", async ({
   await expect(page.getByRole("button", { name: "Dodaj użytkownika" }).first()).toBeDisabled()
   await expect(page.getByRole("dialog", { name: "Dodaj użytkownika" })).toHaveCount(0)
   expect(externalRequests).toEqual([])
+})
+
+test("Settings używa realnego common API do testowania i zmiany statusu integracji", async ({ page }) => {
+  const { externalRequests } = await preparePage(page)
+  const { writes } = await prepareSettingsApi(page)
+
+  await page.goto("/settings")
+  await expect(page.getByText("Konfiguracja hybrydowa")).toBeVisible()
+  await page.getByRole("tab", { name: "Integracje" }).click()
+
+  await expect(page.getByText("Acme Workspace").first()).toBeVisible()
+  await expect(page.getByText("sandbox-secret-must-not-be-rendered")).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Konfiguruj" })).toHaveCount(0)
+
+  await page.getByRole("button", { name: "Testuj" }).click()
+  await expect.poll(() => writes.some((write) => write.method === "POST" && write.path.endsWith("/test"))).toBe(true)
+
+  await page.getByRole("button", { name: "Wyłącz" }).click()
+  await page.getByRole("alertdialog", { name: "Wyłączyć integrację?" }).getByRole("button", { name: "Wyłącz" }).click()
+  await expect(page.getByRole("button", { name: "Włącz" })).toBeVisible()
+  expect(writes).toContainEqual(expect.objectContaining({ method: "PATCH", body: { status: "DISABLED" } }))
+
+  await page.getByRole("button", { name: "Włącz" }).click()
+  await expect(page.getByRole("button", { name: "Wyłącz" })).toBeVisible()
+  expect(writes).toContainEqual(expect.objectContaining({ method: "PATCH", body: { status: "ENABLED" } }))
+  expect(externalRequests).toEqual([])
+})
+
+test("Settings pokazuje stan błędu, gdy backend odmawia dostępu do konfiguracji integracji", async ({ page }) => {
+  await preparePage(page)
+  await prepareSettingsApi(page, { forbidden: true })
+
+  await page.goto("/settings")
+
+  await expect(page.getByText("Wystąpił błąd")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Spróbuj ponownie" })).toBeVisible()
 })
 
 test("mobilny widok czatów przechodzi z listy do rozmowy i wraca", async ({ page }) => {

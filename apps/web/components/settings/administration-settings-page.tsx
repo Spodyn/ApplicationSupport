@@ -124,9 +124,9 @@ export function AdministrationSettingsPage() {
         <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4 p-4 md:p-6">
           <Alert className="bg-info/5 text-info">
             <Info />
-            <AlertTitle>Konfiguracja demonstracyjna</AlertTitle>
+            <AlertTitle>Konfiguracja hybrydowa</AlertTitle>
             <AlertDescription>
-              Wszystkie zmiany są obsługiwane przez lokalne, typowane serwisy mock i nie łączą się z zewnętrznymi dostawcami.
+              Integracje, kanały, harmonogram, SLA i powiadomienia korzystają z trwałego API. Ustawienia ogólne i macierz ról pozostają lokalną konfiguracją demonstracyjną.
             </AlertDescription>
           </Alert>
 
@@ -345,14 +345,7 @@ const integrationHealthLabels: Record<ManagedIntegration["health"], string> = {
 }
 
 function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; actions: SettingsActions }) {
-  const [configured, setConfigured] = useState<ManagedIntegration | null>(null)
-  const [workspace, setWorkspace] = useState("")
   const [disabledIntegration, setDisabledIntegration] = useState<ManagedIntegration | null>(null)
-
-  const openConfiguration = (integration: ManagedIntegration) => {
-    setWorkspace(integration.workspace)
-    setConfigured(integration)
-  }
 
   const test = async (integration: ManagedIntegration) => {
     try {
@@ -363,7 +356,7 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
     }
   }
 
-  const completeConfiguration = async (integration: ManagedIntegration) => {
+  const enable = async (integration: ManagedIntegration) => {
     try {
       await actions.setIntegrationStatus.mutateAsync({ id: integration.id, status: "enabled" })
       notify.success("Integracja została włączona", channelLabels[integration.platform])
@@ -379,6 +372,14 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
         <AlertTitle>Zakres Microsoft Teams</AlertTitle>
         <AlertDescription>
           Początkowo obsługiwane są standardowe kanały i czaty grupowe z RSC. Kanały prywatne i udostępnione wymagają osobnej walidacji.
+        </AlertDescription>
+      </Alert>
+
+      <Alert>
+        <Info />
+        <AlertTitle>Onboarding dostawcy</AlertTitle>
+        <AlertDescription>
+          Ten widok zarządza istniejącymi instalacjami przez wspólne API. Dodanie obszaru roboczego i danych uwierzytelniających pozostaje w procesie instalacyjnym właściwym dla Slack, Teams lub Telegram.
         </AlertDescription>
       </Alert>
 
@@ -426,34 +427,15 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                 </div>
               </dl>
               <div className="flex flex-wrap gap-2 border-t pt-3">
-                <Button variant="outline" size="sm" onClick={() => openConfiguration(integration)}><Settings2 /> Konfiguruj</Button>
                 <Button variant="outline" size="sm" disabled={integration.status !== "enabled" || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> Testuj</Button>
-                {integration.status === "configuring" && <Button size="sm" onClick={() => void completeConfiguration(integration)}><RefreshCw /> Dokończ konfigurację</Button>}
+                {integration.status !== "enabled" && integration.canEnable && <Button size="sm" disabled={actions.setIntegrationStatus.isPending} onClick={() => void enable(integration)}><RefreshCw /> Włącz</Button>}
+                {!integration.canEnable && <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Info className="size-3.5" /> Brak skonfigurowanych danych uwierzytelniających</span>}
                 {integration.status !== "disabled" && <Button variant="destructive" size="sm" onClick={() => setDisabledIntegration(integration)}><Unplug /> Wyłącz</Button>}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
-
-      <Dialog open={Boolean(configured)} onOpenChange={(open) => !open && setConfigured(null)}>
-        <DialogContent>
-          <DialogHeader><DialogTitle>Konfiguruj {configured ? channelLabels[configured.platform] : "integrację"}</DialogTitle><DialogDescription>W środowisku demonstracyjnym zapisujemy wyłącznie identyfikator obszaru roboczego, dzierżawy lub bota.</DialogDescription></DialogHeader>
-          <Field label="Obszar roboczy / dzierżawa / bot"><Input value={workspace} onChange={(event) => setWorkspace(event.target.value)} placeholder="np. firma.slack.com" /></Field>
-          <Alert><Info /><AlertDescription>Prawdziwy proces OAuth zostanie obsłużony przez docelowy backend.</AlertDescription></Alert>
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose>
-            <Button disabled={!workspace.trim() || actions.configureIntegration.isPending} onClick={async () => {
-              if (!configured) return
-              try {
-                await actions.configureIntegration.mutateAsync({ id: configured.id, workspace })
-                notify.success("Zapisano konfigurację", channelLabels[configured.platform])
-                setConfigured(null)
-              } catch (error) { notify.error("Nie udało się zapisać konfiguracji", getErrorMessage(error)) }
-            }}>{actions.configureIntegration.isPending ? "Zapisywanie…" : "Zapisz konfigurację"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <ConfirmDialog
         open={Boolean(disabledIntegration)}

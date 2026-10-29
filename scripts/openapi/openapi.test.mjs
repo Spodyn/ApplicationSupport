@@ -90,6 +90,39 @@ test('generated client carries header parameters into transport requests', () =>
   assert.deepEqual(lintContract(next), [])
 })
 
+test('generated client supports multipart FormData request bodies', () => {
+  const next = structuredClone(base)
+  next.paths['/api/v1/examples/{exampleId}/attachments'] = {
+    post: {
+      operationId: 'uploadExampleAttachment',
+      parameters: [
+        { in: 'path', name: 'exampleId', required: true, schema: { type: 'string', format: 'uuid' } },
+      ],
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: {
+              type: 'object',
+              additionalProperties: false,
+              required: ['file'],
+              properties: { file: { type: 'string', format: 'binary' } },
+            },
+          },
+        },
+      },
+      responses: {
+        201: { content: { 'application/json': { schema: { $ref: '#/components/schemas/Example' } } } },
+      },
+    },
+  }
+  const client = generatedFiles(next).get('client.gen.ts')
+  assert.match(client, /export interface UploadExampleAttachmentInput/)
+  assert.match(client, /"body": FormData/)
+  assert.match(client, /body: input\.body/)
+  assert.deepEqual(lintContract(next), [])
+})
+
 test('generated client recursively imports component refs from container schemas', () => {
   const next = structuredClone(base)
   next.paths['/api/v1/examples'].get.responses[200].content['application/json'].schema = {

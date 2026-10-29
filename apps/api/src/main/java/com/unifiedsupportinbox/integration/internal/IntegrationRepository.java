@@ -174,6 +174,41 @@ class IntegrationRepository {
                 .orElseThrow(() -> new IllegalArgumentException("Integration was not found."));
     }
 
+    IntegrationRecord updateHealthPreservingLastEvent(
+            UUID id,
+            IntegrationHealth health,
+            String lastErrorCode) {
+        Objects.requireNonNull(id, "id");
+        Objects.requireNonNull(health, "health");
+        String normalizedError = optionalText(lastErrorCode, "lastErrorCode", 128);
+
+        return jdbc.query("""
+                UPDATE integrations
+                SET health = ?,
+                    last_error_code = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                RETURNING id,
+                          provider,
+                          display_name,
+                          status,
+                          health,
+                          workspace_external_id,
+                          workspace_name,
+                          secret_ref,
+                          config_json::text AS config_json,
+                          last_event_at,
+                          last_error_code,
+                          created_at,
+                          updated_at
+                """, preparedStatement -> {
+            preparedStatement.setString(1, health.name());
+            preparedStatement.setString(2, normalizedError);
+            preparedStatement.setObject(3, id);
+        }, ROW_MAPPER).stream().findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Integration was not found."));
+    }
+
     private IntegrationRecord updateSingle(String sql, String value, UUID id) {
         return jdbc.query(sql, ROW_MAPPER, value, id).stream()
                 .findFirst()
