@@ -95,6 +95,7 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers(HttpMethod.PUT, "/api/v1/cases/*/read-position").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/v1/users/*/permissions")
                                 .hasAuthority(PermissionCatalog.MANAGE_USERS)
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/users").hasRole("ADMIN")
                         .requestMatchers("/api/v1/admin/customers/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/admin/integrations/**").hasAuthority("manage_integrations")
                         .requestMatchers("/api/v1/admin/channels/**").hasAuthority("manage_integrations")
