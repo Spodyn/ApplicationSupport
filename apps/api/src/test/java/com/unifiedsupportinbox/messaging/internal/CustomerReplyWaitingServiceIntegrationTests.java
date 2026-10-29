@@ -56,6 +56,11 @@ class CustomerReplyWaitingServiceIntegrationTests {
     void waitingCaseReturnsToNewAndClearsWaitingStateExactlyOnce() {
         UUID caseId = createWaitingCase();
         UUID messageId = UUID.randomUUID();
+        UUID snoozingUserId = createUser();
+        jdbc.update("""
+                INSERT INTO case_snoozes (case_id, user_id, until_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP + INTERVAL '2 hours')
+                """, caseId, snoozingUserId);
 
         boolean transitioned = service.customerReplied(
                 caseId,
@@ -84,6 +89,10 @@ class CustomerReplyWaitingServiceIntegrationTests {
                 "SELECT count(*) FROM audit_events WHERE action = 'CASE_CUSTOMER_REPLY' AND entity_id = ?",
                 Integer.class,
                 caseId)).isEqualTo(1);
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM case_snoozes WHERE case_id = ?",
+                Integer.class,
+                caseId)).isZero();
 
         assertThat(service.customerReplied(
                 caseId,
@@ -97,15 +106,48 @@ class CustomerReplyWaitingServiceIntegrationTests {
     }
 
     @Test
+    void replyAtTheWaitingDeadlineDoesNotBeatTheTimeoutBoundary() {
+        Instant deadline = Instant.parse("2026-10-06T10:00:00Z");
+        UUID caseId = createWaitingCase(deadline);
+
+        assertThat(service.customerReplied(
+                caseId,
+                UUID.randomUUID(),
+                deadline,
+                "corr-deadline-reply")).isFalse();
+        assertThat(jdbc.queryForObject(
+                "SELECT status FROM cases WHERE id = ?", String.class, caseId))
+                .isEqualTo("WAITING_FOR_CUSTOMER");
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE entity_id = ?",
+                Integer.class,
+                caseId)).isZero();
+    }
+
+    @Test
     void customerReplyResumesPolicyPausedSlaAndAccountsForWaitingTime() {
         UUID caseId = createWaitingCase();
         seedCaseSla(caseId);
         Instant pausedAt = Instant.now().minusSeconds(3600);
         Instant resumedAt = Instant.now();
+        jdbc.update("""
+                UPDATE case_sla
+                SET unclaimed_warning_at = ?::timestamptz - INTERVAL '2 hours',
+                    unclaimed_breach_at = ?::timestamptz + INTERVAL '2 hours',
+                    state = 'WARNING'
+                WHERE case_id = ?
+                """,
+                java.time.OffsetDateTime.ofInstant(resumedAt, java.time.ZoneOffset.UTC),
+                java.time.OffsetDateTime.ofInstant(resumedAt, java.time.ZoneOffset.UTC),
+                caseId);
         waitingSla.pauseForWaiting(caseId, pausedAt);
 
         java.time.OffsetDateTime dueBefore = jdbc.queryForObject(
                 "SELECT first_response_due_at FROM case_sla WHERE case_id = ?",
+                java.time.OffsetDateTime.class,
+                caseId);
+        java.time.OffsetDateTime unclaimedWarningBefore = jdbc.queryForObject(
+                "SELECT unclaimed_warning_at FROM case_sla WHERE case_id = ?",
                 java.time.OffsetDateTime.class,
                 caseId);
 
@@ -119,18 +161,26 @@ class CustomerReplyWaitingServiceIntegrationTests {
                 "SELECT first_response_due_at FROM case_sla WHERE case_id = ?",
                 java.time.OffsetDateTime.class,
                 caseId);
+        java.time.OffsetDateTime unclaimedWarningAfter = jdbc.queryForObject(
+                "SELECT unclaimed_warning_at FROM case_sla WHERE case_id = ?",
+                java.time.OffsetDateTime.class,
+                caseId);
         long shiftedSeconds = java.time.Duration.between(dueBefore, dueAfter).getSeconds();
+        long unclaimedShiftedSeconds = java.time.Duration.between(
+                unclaimedWarningBefore,
+                unclaimedWarningAfter).getSeconds();
 
         assertThat(jdbc.queryForObject(
                 "SELECT paused_at FROM case_sla WHERE case_id = ?", Object.class, caseId))
                 .isNull();
         assertThat(jdbc.queryForObject(
                 "SELECT state FROM case_sla WHERE case_id = ?", String.class, caseId))
-                .isEqualTo("ON_TRACK");
+                .isEqualTo("WARNING");
         assertThat(jdbc.queryForObject(
                 "SELECT total_paused_seconds FROM case_sla WHERE case_id = ?", Long.class, caseId))
                 .isBetween(3590L, 3610L);
         assertThat(shiftedSeconds).isBetween(3590L, 3610L);
+        assertThat(unclaimedShiftedSeconds).isBetween(3590L, 3610L);
     }
 
     private void seedCaseSla(UUID caseId) {
@@ -153,6 +203,10 @@ class CustomerReplyWaitingServiceIntegrationTests {
     }
 
     private UUID createWaitingCase() {
+        return createWaitingCase(Instant.now().plusSeconds(24 * 60 * 60));
+    }
+
+    private UUID createWaitingCase(Instant waitingUntil) {
         UUID customerId = jdbc.queryForObject(
                 "INSERT INTO customers (name, external_ref) VALUES (?, ?) RETURNING id",
                 UUID.class,
@@ -179,9 +233,18 @@ class CustomerReplyWaitingServiceIntegrationTests {
                     owner_user_id, waiting_until, version
                 ) VALUES (
                     ?, ?, ?, 'SLACK', 'C-waiting', 'thread-waiting',
-                    'WAITING_FOR_CUSTOMER', NULL, CURRENT_TIMESTAMP + INTERVAL '24 hours', 1
+                    'WAITING_FOR_CUSTOMER', NULL, ?, 1
                 )
                 RETURNING id
-                """, UUID.class, customerId, integrationId, channelId);
+                """, UUID.class, customerId, integrationId, channelId,
+                java.time.OffsetDateTime.ofInstant(waitingUntil, java.time.ZoneOffset.UTC));
+    }
+
+    private UUID createUser() {
+        return jdbc.queryForObject("""
+                INSERT INTO users (email, display_name, role, active)
+                VALUES (?, 'Snoozing agent', 'USER', TRUE)
+                RETURNING id
+                """, UUID.class, "snooze-" + UUID.randomUUID() + "@example.test");
     }
 }

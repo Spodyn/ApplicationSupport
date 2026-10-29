@@ -5,6 +5,8 @@ import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -58,12 +60,16 @@ class CustomerReplyWaitingService {
                 WHERE id = ?
                   AND status = 'WAITING_FOR_CUSTOMER'
                   AND waiting_until IS NOT NULL
+                  AND waiting_until > ?
                 RETURNING version
-                """, (rs, rowNum) -> rs.getLong("version"), caseId)
+                """, (rs, rowNum) -> rs.getLong("version"),
+                caseId,
+                OffsetDateTime.ofInstant(providerOccurredAt, ZoneOffset.UTC))
                 .stream().findFirst().orElse(null);
 
         if (version == null) return false;
 
+        jdbc.update("DELETE FROM case_snoozes WHERE case_id = ?", caseId);
         sla.resumeAfterWaiting(caseId, providerOccurredAt);
         audit.append(
                 AuditActorType.PROVIDER,

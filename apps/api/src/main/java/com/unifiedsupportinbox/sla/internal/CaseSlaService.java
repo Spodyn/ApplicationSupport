@@ -97,30 +97,55 @@ class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder, CaseSl
     public void resumeAfterWaiting(UUID caseId, Instant resumedAt) {
         OffsetDateTime resumed = OffsetDateTime.ofInstant(resumedAt, ZoneOffset.UTC);
         jdbc.update("""
+                WITH timing AS (
+                    SELECT ?::timestamptz AS resumed_at
+                )
                 UPDATE case_sla s
                 SET total_paused_seconds = s.total_paused_seconds
-                        + GREATEST(0, EXTRACT(EPOCH FROM (?::timestamptz - s.paused_at))::bigint),
+                        + EXTRACT(EPOCH FROM GREATEST(
+                            INTERVAL '0 seconds', timing.resumed_at - s.paused_at
+                        ))::bigint,
                     first_response_due_at = CASE
                         WHEN s.first_response_completed_at IS NULL
-                            THEN s.first_response_due_at + (?::timestamptz - s.paused_at)
+                            THEN s.first_response_due_at + GREATEST(
+                                INTERVAL '0 seconds', timing.resumed_at - s.paused_at
+                            )
                         ELSE s.first_response_due_at
                     END,
+                    unclaimed_warning_at = s.unclaimed_warning_at + GREATEST(
+                        INTERVAL '0 seconds', timing.resumed_at - s.paused_at
+                    ),
+                    unclaimed_breach_at = s.unclaimed_breach_at + GREATEST(
+                        INTERVAL '0 seconds', timing.resumed_at - s.paused_at
+                    ),
                     in_progress_warning_at = CASE
                         WHEN s.in_progress_warning_at IS NULL THEN NULL
-                        ELSE s.in_progress_warning_at + (?::timestamptz - s.paused_at)
+                        ELSE s.in_progress_warning_at + GREATEST(
+                            INTERVAL '0 seconds', timing.resumed_at - s.paused_at
+                        )
                     END,
                     in_progress_breach_at = CASE
                         WHEN s.in_progress_breach_at IS NULL THEN NULL
-                        ELSE s.in_progress_breach_at + (?::timestamptz - s.paused_at)
+                        ELSE s.in_progress_breach_at + GREATEST(
+                            INTERVAL '0 seconds', timing.resumed_at - s.paused_at
+                        )
                     END,
                     paused_at = NULL,
-                    state = 'ON_TRACK',
-                    updated_at = ?
-                FROM sla_policies p
+                    state = CASE
+                        WHEN timing.resumed_at >= s.unclaimed_breach_at + GREATEST(
+                            INTERVAL '0 seconds', timing.resumed_at - s.paused_at
+                        ) THEN 'BREACHED'
+                        WHEN timing.resumed_at >= s.unclaimed_warning_at + GREATEST(
+                            INTERVAL '0 seconds', timing.resumed_at - s.paused_at
+                        ) THEN 'WARNING'
+                        ELSE 'ON_TRACK'
+                    END,
+                    updated_at = timing.resumed_at
+                FROM sla_policies p, timing
                 WHERE s.case_id = ?
                   AND s.policy_id = p.id
                   AND p.pause_waiting = TRUE
                   AND s.paused_at IS NOT NULL
-                """, resumed, resumed, resumed, resumed, resumed, caseId);
+                """, resumed, caseId);
     }
 }
