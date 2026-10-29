@@ -9,6 +9,7 @@ import type {
   ChannelGroupingStrategy,
   ManagedChannel,
   ManagedIntegration,
+  ManagedCustomerOption,
   NotificationDestination,
   NotificationType,
   ScheduleException,
@@ -19,6 +20,12 @@ import type { AdministrationSettingsRepository } from "@/lib/services/administra
 import { mockAdministrationSettingsRepository } from "@/lib/services/administration"
 import { mapApiChannel } from "./channel-adapter"
 import { browserApiTransport } from "./http-transport"
+
+type ApiCustomerRecord = {
+  id: string
+  name: string
+  active: boolean
+}
 
 type ApiChannelRecord = {
   id: string
@@ -143,6 +150,7 @@ function mapChannel(channel: ApiChannelRecord): ManagedChannel {
     platform: mapApiChannel(channel.provider),
     externalChannelId: channel.externalChannelId,
     channelName: `${channel.name} · ${activity}`,
+    customerId: channel.customerId ?? undefined,
     customer: channel.customerName ?? "Nie przypisano",
     ignored: channel.ignored,
     groupingStrategy: channel.groupingStrategy,
@@ -247,6 +255,16 @@ export function mapWorkScheduleToApiIntervals(
 async function listIntegrations(): Promise<ManagedIntegration[]> {
   const integrations = await integrationApi.listIntegrations()
   return integrations.map(mapIntegration)
+}
+
+async function listCustomers(): Promise<ManagedCustomerOption[]> {
+  const customers = await browserApiTransport.request<ApiCustomerRecord[]>({
+    method: "GET",
+    path: "/api/v1/admin/customers",
+  })
+  return customers
+    .filter((customer) => customer.active)
+    .map((customer) => ({ id: customer.id, name: customer.name }))
 }
 
 async function listChannels(): Promise<ManagedChannel[]> {
@@ -527,6 +545,17 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
   async testIntegration(id) {
     const result = await integrationApi.testIntegrationConnection({ integrationId: id })
     return mapIntegration(result.integration)
+  },
+
+  listCustomers,
+
+  async configureChannel(id, customerId, groupingStrategy) {
+    const updated = await browserApiTransport.request<ApiChannelRecord>({
+      method: "PATCH",
+      path: `/api/v1/admin/channels/${encodeURIComponent(id)}`,
+      body: { customerId, groupingStrategy },
+    })
+    return mapChannel(updated)
   },
 
   async setChannelIgnored(id, ignored) {
