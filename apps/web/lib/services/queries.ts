@@ -215,11 +215,6 @@ export function useAdministrationSettingsActions() {
       ),
     onSuccess: invalidate,
   })
-  const configureIntegration = useMutation({
-    mutationFn: ({ id, workspace }: { id: string; workspace: string }) =>
-      serviceRegistry.administrationSettings.configureIntegration(id, workspace),
-    onSuccess: invalidate,
-  })
   const setIntegrationStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: ManagedIntegration["status"] }) =>
       serviceRegistry.administrationSettings.setIntegrationStatus(id, status),
@@ -259,7 +254,6 @@ export function useAdministrationSettingsActions() {
 
   return {
     saveSection,
-    configureIntegration,
     setIntegrationStatus,
     testIntegration,
     configureChannel,

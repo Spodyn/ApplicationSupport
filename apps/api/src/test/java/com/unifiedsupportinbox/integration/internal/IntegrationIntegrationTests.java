@@ -18,6 +18,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -31,6 +32,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Tag("integration")
@@ -192,7 +194,115 @@ class IntegrationIntegrationTests {
     }
 
     @Test
-    void integrationReadRoutesRequireManageIntegrationsPermission() throws Exception {
+    void adminCanEnableAndDisableIntegrationThroughCommonStatusEndpoint() throws Exception {
+        IntegrationRecord integration = integrations.create(
+                IntegrationProvider.SLACK,
+                "Acme Slack",
+                IntegrationStatus.CONFIGURING,
+                IntegrationHealth.UNKNOWN,
+                "T-status",
+                "Acme",
+                "configured-secret-ref",
+                "{}");
+        createUser("status-admin@example.com", "ADMIN");
+        CookieManager cookies = login("status-admin@example.com");
+
+        HttpResponse<String> enabled = mutate(
+                cookies,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{\"status\":\"ENABLED\"}");
+        assertThat(enabled.statusCode()).isEqualTo(200);
+        assertThat(enabled.body())
+                .contains("\"status\":\"ENABLED\"")
+                .contains("\"secretConfigured\":true")
+                .doesNotContain("configured-secret-ref");
+
+        HttpResponse<String> disabled = mutate(
+                cookies,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{\"status\":\"DISABLED\"}");
+        assertThat(disabled.statusCode()).isEqualTo(200);
+        assertThat(disabled.body()).contains("\"status\":\"DISABLED\"");
+
+        HttpResponse<String> configuring = mutate(
+                cookies,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{\"status\":\"CONFIGURING\"}");
+        assertThat(configuring.statusCode()).isEqualTo(400);
+        assertThat(integrations.findById(integration.id()).orElseThrow().status())
+                .isEqualTo(IntegrationStatus.DISABLED);
+    }
+
+    @Test
+    void integrationStatusMutationRequiresManageIntegrationsPermission() throws Exception {
+        IntegrationRecord integration = integrations.create(
+                IntegrationProvider.TELEGRAM,
+                "Telegram",
+                IntegrationStatus.CONFIGURING,
+                IntegrationHealth.UNKNOWN,
+                "bot-status",
+                "@bot",
+                "configured-secret-ref",
+                "{}");
+        createUser("status-user@example.com", "USER");
+        CookieManager plainUser = login("status-user@example.com");
+
+        HttpResponse<String> denied = mutate(
+                plainUser,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{\"status\":\"ENABLED\"}");
+        assertThat(denied.statusCode()).isEqualTo(403);
+        assertThat(integrations.findById(integration.id()).orElseThrow().status())
+                .isEqualTo(IntegrationStatus.CONFIGURING);
+
+        UUID delegatedUserId = createUser("delegated-status-user@example.com", "USER");
+        jdbc.update(
+                "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations')",
+                delegatedUserId);
+        CookieManager delegatedUser = login("delegated-status-user@example.com");
+
+        HttpResponse<String> delegatedDenied = mutate(
+                delegatedUser,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{\"status\":\"ENABLED\"}");
+        assertThat(delegatedDenied.statusCode()).isEqualTo(403);
+        assertThat(integrations.findById(integration.id()).orElseThrow().status())
+                .isEqualTo(IntegrationStatus.CONFIGURING);
+    }
+
+    @Test
+    void integrationCannotBeEnabledBeforeCredentialsAreConfigured() throws Exception {
+        IntegrationRecord integration = integrations.create(
+                IntegrationProvider.TEAMS,
+                "Teams without credentials",
+                IntegrationStatus.CONFIGURING,
+                IntegrationHealth.UNKNOWN,
+                "tenant-without-credentials",
+                "Acme",
+                null,
+                "{}");
+        createUser("credential-admin@example.com", "ADMIN");
+        CookieManager cookies = login("credential-admin@example.com");
+
+        HttpResponse<String> response = mutate(
+                cookies,
+                "PATCH",
+                "/api/v1/admin/integrations/" + integration.id() + "/status",
+                "{\"status\":\"ENABLED\"}");
+
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(response.body()).contains("credentials must be configured");
+        assertThat(integrations.findById(integration.id()).orElseThrow().status())
+                .isEqualTo(IntegrationStatus.CONFIGURING);
+    }
+
+    @Test
+    void integrationReadRoutesRequireAdminRoleAndManageIntegrationsPermission() throws Exception {
         integrations.create(
                 IntegrationProvider.SLACK,
                 "Acme Slack",
@@ -218,7 +328,7 @@ class IntegrationIntegrationTests {
                 "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations')",
                 delegatedUserId);
         CookieManager delegated = login("delegated@example.com");
-        assertThat(get(client(delegated), "/api/v1/admin/integrations").statusCode()).isEqualTo(200);
+        assertThat(get(client(delegated), "/api/v1/admin/integrations").statusCode()).isEqualTo(403);
 
         createUser("admin@example.com", "ADMIN");
         CookieManager admin = login("admin@example.com");
@@ -239,6 +349,7 @@ class IntegrationIntegrationTests {
         HttpResponse<String> success = mutate(cookies, "POST", "/api/v1/admin/integrations/" + integration.id() + "/test", null);
         assertThat(success.statusCode()).isEqualTo(200);
         assertThat(success.body()).contains("\"outcome\":\"SUCCESS\"").contains("\"health\":\"HEALTHY\"");
+        assertThat(connectionTester.calledInsideTransaction()).isFalse();
         assertThat(integrations.findById(integration.id()).orElseThrow().lastEventAt()).isEqualTo(eventAt);
 
         connectionTester.result(IntegrationConnectionTester.Result.timeout());
@@ -266,11 +377,19 @@ class IntegrationIntegrationTests {
 
     static final class FakeConnectionTester implements IntegrationConnectionTester {
         private final AtomicReference<Result> result = new AtomicReference<>(Result.success());
+        private final AtomicBoolean calledInsideTransaction = new AtomicBoolean();
 
-        void reset() { result.set(Result.success()); }
+        void reset() {
+            result.set(Result.success());
+            calledInsideTransaction.set(false);
+        }
         void result(Result value) { result.set(value); }
+        boolean calledInsideTransaction() { return calledInsideTransaction.get(); }
         @Override public boolean supports(IntegrationProvider provider) { return true; }
-        @Override public Result test(Request request) { return result.get(); }
+        @Override public Result test(Request request) {
+            calledInsideTransaction.set(TransactionSynchronizationManager.isActualTransactionActive());
+            return result.get();
+        }
     }
 
     private static UUID createUser(String email, String role) {

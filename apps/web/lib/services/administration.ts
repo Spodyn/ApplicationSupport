@@ -39,7 +39,6 @@ export interface AdministrationSettingsRepository {
     key: K,
     value: AdministrationSettings[K],
   ): Promise<AdministrationSettings[K]>
-  configureIntegration(id: string, workspace: string): Promise<ManagedIntegration>
   setIntegrationStatus(
     id: string,
     status: ManagedIntegration["status"],
@@ -216,16 +215,6 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     }
     settingsState[key] = structuredClone(value) as never
     return delay(settingsState[key])
-  },
-
-  async configureIntegration(id, workspace) {
-    requireCurrentAdministrationPermission("manage_integrations")
-    const integration = settingsState.integrations.find((item) => item.id === id)
-    if (!integration) throw new Error("Nie znaleziono integracji.")
-    integration.workspace = workspace.trim()
-    integration.status = "configuring"
-    integration.health = "unknown"
-    return delay(integration)
   },
 
   async setIntegrationStatus(id, status) {
