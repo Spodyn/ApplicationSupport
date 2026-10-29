@@ -39,3 +39,11 @@ test("does not select arbitrary or forked branch families",()=>{
   d.branch.name="agent/USI-41";d.mergedPRs[0].head.ref=d.branch.name;d.mergedPRs[0].head.repo.full_name="a/fork";
   assert.equal(eligibleStaleBranch(d),false);
 });
+
+
+test("a later merged PR can prove eligibility even when the earlier PR SHA differs",()=>{
+  const d=candidate();
+  const earlier={...d.mergedPRs[0],number:9,head:{...d.mergedPRs[0].head,sha:"b".repeat(40)}};
+  d.mergedPRs.unshift(earlier);
+  assert.equal(eligibleStaleBranch(d),true);
+});
