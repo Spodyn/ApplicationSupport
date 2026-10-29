@@ -61,7 +61,7 @@ export function validateIndependentAttestation({pull, expectedBaseSha, comments,
     errors.push("Attestation base SHA mismatch");
   }
   if (!/^USI-[1-9]\d*$/.test(proof?.jira_key || "") ||
-      !pull?.title?.includes(proof.jira_key)) {
+      !pull?.title?.includes(proof?.jira_key)) {
     errors.push("Attestation Jira key not bound to PR title");
   }
   const issued = Date.parse(proof?.issued_at);
@@ -149,6 +149,10 @@ const pickCI = (runs, pr) => runs.find(run =>
 export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }) {
   const api = "https://api.github.com/repos/" + owner + "/" + repo;
   const pull = await asJson(api + "/pulls/" + number, auth);
+  // The PR base field can lag the real main ref. Read the authoritative ref.
+  const mainRef = await asJson(api + "/git/ref/heads/main", auth);
+  const currentMainSha = mainRef?.object?.sha;
+  if (!/^[0-9a-f]{40}$/.test(currentMainSha || "")) throw Error("Current main ref could not be verified");
   const allRuns = await asJson(api + "/actions/runs?event=pull_request&head_sha=" + encodeURIComponent(pull.head.sha) + "&per_page=100", auth);
   const run = pickCI(allRuns.workflow_runs || [], pull);
   const jobs = run ? (await asJson(api + "/actions/runs/" + run.id + "/jobs?per_page=100", auth)).jobs : [];
@@ -171,7 +175,7 @@ export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }
   if (jobs.length === 100) throw Error("CI job pagination incomplete");
   const errors = checkEligibility({
     pull, run, jobs, reviews, threads: threadConnection.nodes,
-    ruleset, expectedBaseSha: pull.base.sha, comments, trustedAttestorId
+    ruleset, expectedBaseSha: currentMainSha, comments, trustedAttestorId
   });
   return {errors, pull, run};
 }
