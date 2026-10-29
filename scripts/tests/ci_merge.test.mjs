@@ -186,3 +186,11 @@ test("requires a matching Jira key and unmodified attestation body", () => {
   malformed.comments[0].body = ATTESTATION_MARKER + "\nnot-json";
   assert.match(checkEligibility(malformed).join(" "), /Malformed/);
 });
+
+
+test("refuses a stale PR base when the authoritative main ref has moved", () => {
+  const d = data();
+  d.expectedBaseSha = "e".repeat(40);
+  assert.match(checkEligibility(d).join(" "), /Main base changed during qualification/);
+  assert.match(checkEligibility(d).join(" "), /Attestation base SHA mismatch/);
+});
