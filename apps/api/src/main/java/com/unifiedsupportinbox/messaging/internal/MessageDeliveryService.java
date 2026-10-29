@@ -35,6 +35,7 @@ class MessageDeliveryService {
     private final IdempotentCommandExecutor idempotency;
     private final ObjectMapper json;
     private final ApplicationEventPublisher events;
+    private final AskCustomerDeliveryFinalizer askFinalizer;
 
     MessageDeliveryService(
             MessageDeliveryRepository repository,
@@ -42,13 +43,15 @@ class MessageDeliveryService {
             OutboxEventStore outbox,
             IdempotentCommandExecutor idempotency,
             ObjectMapper json,
-            ApplicationEventPublisher events) {
+            ApplicationEventPublisher events,
+            AskCustomerDeliveryFinalizer askFinalizer) {
         this.repository = repository;
         this.properties = properties;
         this.outbox = outbox;
         this.idempotency = idempotency;
         this.json = json;
         this.events = events;
+        this.askFinalizer = askFinalizer;
     }
 
     @Transactional
@@ -87,6 +90,8 @@ class MessageDeliveryService {
                 || !repository.markSuccess(current.messageId(), status, normalizedRef)) {
             throw new IllegalStateException("Message delivery claim was lost before success checkpoint: " + current.messageId());
         }
+        Instant sentAt = Instant.now();
+        askFinalizer.finalizeIfAsk(current, sentAt);
         publish(current, status, null, null, null);
     }
 

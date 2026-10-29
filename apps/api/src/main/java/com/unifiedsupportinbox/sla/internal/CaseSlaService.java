@@ -2,6 +2,7 @@ package com.unifiedsupportinbox.sla.internal;
 
 import com.unifiedsupportinbox.sla.CaseSlaInitializer;
 import com.unifiedsupportinbox.sla.CaseSlaClaimRecorder;
+import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import com.unifiedsupportinbox.sla.BusinessHoursScheduleCatalog;
 import com.unifiedsupportinbox.sla.BusinessHoursScheduleView;
 import com.unifiedsupportinbox.sla.BusinessTimeCalculator;
@@ -16,7 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder {
+class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder, CaseSlaWaitingRecorder {
     private final JdbcTemplate jdbc;
     private final SlaPolicyRepository policies;
     private final BusinessHoursScheduleCatalog schedules;
@@ -74,4 +75,21 @@ class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder {
                 WHERE case_id = ? AND unclaimed_completed_at IS NULL
                 """, completedAt, completedAt, completedAt, completedAt, completedAt, completedAt, caseId);
     }
+
+    @Override
+    @Transactional
+    public void pauseForWaiting(UUID caseId, Instant pausedAt) {
+        OffsetDateTime paused = OffsetDateTime.ofInstant(pausedAt, ZoneOffset.UTC);
+        jdbc.update("""
+                UPDATE case_sla s
+                SET paused_at = COALESCE(s.paused_at, ?),
+                    state = 'PAUSED',
+                    updated_at = ?
+                FROM sla_policies p
+                WHERE s.case_id = ?
+                  AND s.policy_id = p.id
+                  AND p.pause_waiting = TRUE
+                """, paused, paused, caseId);
+    }
+
 }
