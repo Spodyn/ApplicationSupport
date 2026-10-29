@@ -25,6 +25,9 @@ jobs:
       - name: Test environment and secret-handling contract
         run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
 
+      - name: Test fail-closed auto-merge guard
+        run: node --test scripts/tests/ci_merge.test.mjs scripts/tests/delete_merged_branch.test.mjs
+
       - name: Validate checked-in development examples
         run: |
           python3 scripts/validate_environment.py api --env-file .env.example
