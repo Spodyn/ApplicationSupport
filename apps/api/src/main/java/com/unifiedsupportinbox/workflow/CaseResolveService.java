@@ -68,7 +68,7 @@ public class CaseResolveService {
             CaseResolutionCategory category,
             String correlationId) {
         Actor actor = loadActor(userId);
-        if (!actor.active()) throw ApiProblemException.accessDenied();
+        if (!actor.eligible()) throw ApiProblemException.accessDenied();
 
         CaseSnapshot snapshot = jdbc.query("""
                 SELECT status, owner_user_id, version
@@ -149,11 +149,15 @@ public class CaseResolveService {
 
     private Actor loadActor(UUID userId) {
         return jdbc.query("""
-                SELECT active, role
+                SELECT active
+                           AND role IN ('USER', 'ADMIN')
+                           AND (valid_from IS NULL OR valid_from <= CURRENT_TIMESTAMP)
+                           AND (valid_until IS NULL OR valid_until > CURRENT_TIMESTAMP) AS eligible,
+                       role
                 FROM users
                 WHERE id = ?
                 """, (rs, rowNum) -> new Actor(
-                    rs.getBoolean("active"),
+                    rs.getBoolean("eligible"),
                     UserRole.valueOf(rs.getString("role"))),
                 userId).stream().findFirst()
                 .orElseThrow(ApiProblemException::authenticationRequired);
@@ -180,7 +184,7 @@ public class CaseResolveService {
         }
     }
 
-    private record Actor(boolean active, UserRole role) {}
+    private record Actor(boolean eligible, UserRole role) {}
     private record CaseSnapshot(String status, UUID ownerUserId, long version) {}
     private record Resolved(long version, OffsetDateTime resolvedAt) {}
     private record CanonicalResolveRequest(String resolutionCategory) {}

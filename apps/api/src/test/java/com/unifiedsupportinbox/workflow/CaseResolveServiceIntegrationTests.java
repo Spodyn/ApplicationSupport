@@ -100,6 +100,20 @@ class CaseResolveServiceIntegrationTests {
                 .isInstanceOfSatisfying(ApiProblemException.class,
                         error -> assertThat(error.code()).isEqualTo(ApiProblemCode.ACCESS_DENIED));
 
+        UUID expiredOwner = newUser(true);
+        jdbc.update("UPDATE users SET valid_until = CURRENT_TIMESTAMP - INTERVAL '1 minute' WHERE id = ?", expiredOwner);
+        UUID expiredCase = claimedCase(expiredOwner);
+        assertThatThrownBy(() -> resolves.resolve(expiredCase, expiredOwner, "expired", null, "resolve-correlation"))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        error -> assertThat(error.code()).isEqualTo(ApiProblemCode.ACCESS_DENIED));
+
+        UUID futureOwner = newUser(true);
+        jdbc.update("UPDATE users SET valid_from = CURRENT_TIMESTAMP + INTERVAL '1 minute' WHERE id = ?", futureOwner);
+        UUID futureCase = claimedCase(futureOwner);
+        assertThatThrownBy(() -> resolves.resolve(futureCase, futureOwner, "not-yet-valid", null, "resolve-correlation"))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        error -> assertThat(error.code()).isEqualTo(ApiProblemCode.ACCESS_DENIED));
+
         var resolved = resolves.resolve(caseId, owner, "no-category", null, "resolve-correlation");
         assertThat(resolved.body().get("resolutionCategory").isNull()).isTrue();
 
