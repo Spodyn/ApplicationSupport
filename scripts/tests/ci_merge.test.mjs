@@ -51,7 +51,7 @@ const data = () => ({
   comments: [comment()], trustedAttestorId: attestorId, now,
   ruleset: {enforcement: "active", rules: [
     {type: "pull_request", parameters: {required_approving_review_count: 0, allowed_merge_methods: ["squash"]}},
-    {type: "required_status_checks", parameters: {required_status_checks: [{context: "validate"}]}}
+    {type: "required_status_checks", parameters: {strict_required_status_checks_policy: true, required_status_checks: [{context: "validate"}]}}
   ]}
 });
 
@@ -193,4 +193,14 @@ test("refuses a stale PR base when the authoritative main ref has moved", () => 
   d.expectedBaseSha = "e".repeat(40);
   assert.match(checkEligibility(d).join(" "), /Main base changed during qualification/);
   assert.match(checkEligibility(d).join(" "), /Attestation base SHA mismatch/);
+});
+
+
+test("rejects missing current-base CI provenance and non-strict GitHub protection", () => {
+  const d = data();
+  delete d.run.pull_requests[0].base.sha;
+  assert.match(checkEligibility(d).join(" "), /not proven against current main/);
+  const nonStrict = data();
+  nonStrict.ruleset.rules[1].parameters.strict_required_status_checks_policy = false;
+  assert.match(checkEligibility(nonStrict).join(" "), /Strict up-to-date CI/);
 });
