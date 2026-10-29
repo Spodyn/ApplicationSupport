@@ -1,0 +1,188 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {checkEligibility, REQUIRED_JOBS, READY_LABEL, ATTESTATION_MARKER} from "../ci_merge.mjs";
+
+const sha = "a".repeat(40), base = "b".repeat(40);
+
+const now = Date.parse("2026-10-29T21:00:00.000Z");
+const attestorId = 123456789;
+const issuedAt = "2026-10-29T20:59:00.000Z";
+const checkedAt = "2026-10-29T20:58:00.000Z";
+const attestation = () => ({
+  schema: "usi-pr-eligibility-v1",
+  status: "ready",
+  pr_number: 42,
+  jira_key: "USI-247",
+  head_sha: sha,
+  base_sha: base,
+  issued_at: issuedAt,
+  expires_at: "2026-10-29T21:04:00.000Z",
+  evidence: Object.fromEntries([
+    "jira_dependencies", "jira_dod", "external_verification", "security", "worker_lease"
+  ].map(name => [name, {
+    result: "PASS", reference: "jira://USI-247/" + name,
+    checked_at: checkedAt
+  }]))
+});
+const comment = (proof = attestation(), createdAt = "2026-10-29T20:59:01.000Z") => ({
+  user: {id: attestorId, type: "Bot"},
+  created_at: createdAt, updated_at: createdAt,
+  body: ATTESTATION_MARKER + "\n" + JSON.stringify(proof)
+});
+const editProof = (d, mutate) => {
+  const proof = JSON.parse(d.comments[0].body.slice(ATTESTATION_MARKER.length).trim());
+  mutate(proof);
+  d.comments[0].body = ATTESTATION_MARKER + "\n" + JSON.stringify(proof);
+};
+
+const data = () => ({
+  pull: {
+    number: 42, title: "USI-247: Secure merge gate", state: "open", draft: false, mergeable: true,
+    labels: [{name: READY_LABEL}],
+    base: {ref: "main", sha: base, repo: {full_name: "Spodyn/ApplicationSupport"}},
+    head: {sha, repo: {full_name: "Spodyn/ApplicationSupport"}}
+  },
+  run: {
+    event: "pull_request", status: "completed", conclusion: "success",
+    head_sha: sha, pull_requests: [{number: 42, head: {sha}, base: {sha: base}}]
+  },
+  jobs: REQUIRED_JOBS.map(name => ({name, status: "completed", conclusion: "success"})),
+  reviews: [], threads: [], expectedBaseSha: base,
+  comments: [comment()], trustedAttestorId: attestorId, now,
+  ruleset: {enforcement: "active", rules: [
+    {type: "pull_request", parameters: {required_approving_review_count: 0, allowed_merge_methods: ["squash"]}},
+    {type: "required_status_checks", parameters: {required_status_checks: [{context: "validate"}]}}
+  ]}
+});
+
+test("eligible only with complete six-job exact SHA and readiness attestation", () => {
+  assert.deepEqual(checkEligibility(data()), []);
+});
+test("fails closed for a draft, mismatch, and missing eligibility label", () => {
+  const d = data();
+  d.pull.draft = true;
+  d.run.head_sha = "c".repeat(40);
+  d.pull.labels = [];
+  assert.ok(checkEligibility(d).length >= 3);
+});
+test("all required jobs, not just validate, must pass", () => {
+  const d = data();
+  d.jobs.find(j => j.name === "integration").conclusion = "failure";
+  assert.match(checkEligibility(d).join(" "), /integration/);
+  d.jobs = d.jobs.filter(j => j.name !== "integration");
+  assert.match(checkEligibility(d).join(" "), /integration/);
+});
+test("blocks pending and unrecognized additional failing checks", () => {
+  const d = data();
+  d.jobs.push({name: "security", status: "completed", conclusion: "failure"});
+  assert.match(checkEligibility(d).join(" "), /security/);
+});
+test("refuses old base, wrong PR or head, and fork", () => {
+  const d = data();
+  d.run.pull_requests = [{number: 99, head: {sha}}];
+  assert.match(checkEligibility(d).join(" "), /not proven/);
+  d.run.pull_requests = [{number: 42, head: {sha}, base: {sha: "c".repeat(40)}}];
+  assert.match(checkEligibility(d).join(" "), /outdated base/);
+  d.pull.head.repo.full_name = "untrusted/fork";
+  assert.match(checkEligibility(d).join(" "), /External/);
+});
+test("fails closed on conflicting or unknown mergeability", () => {
+  for (const mergeable of [false, null]) {
+    const d = data();
+    d.pull.mergeable = mergeable;
+    assert.match(checkEligibility(d).join(" "), /mergeability/);
+  }
+});
+test("blocks security, change requests and unresolved discussions", () => {
+  const d = data();
+  d.pull.labels.push({name: "security-blocker"});
+  d.reviews.push({state: "CHANGES_REQUESTED"});
+  d.threads.push({isResolved: false, isOutdated: false});
+  const all = checkEligibility(d).join(" ");
+  assert.match(all, /security-blocker/);
+  assert.match(all, /requested changes/);
+  assert.match(all, /Unresolved review thread/);
+});
+test("does not bypass required approvals, missing rules or invalid squash policy", () => {
+  const d = data();
+  d.ruleset.rules[0].parameters.required_approving_review_count = 1;
+  assert.match(checkEligibility(d).join(" "), /approval/);
+  d.ruleset.rules[0].parameters.allowed_merge_methods = ["merge"];
+  assert.match(checkEligibility(d).join(" "), /Squash/);
+  d.ruleset.enforcement = "disabled";
+  assert.match(checkEligibility(d).join(" "), /Branch protection/);
+});
+
+
+test("fails closed when attestation is absent, issuer is unknown or untrusted", () => {
+  const missing = data();
+  missing.comments = [];
+  assert.match(checkEligibility(missing).join(" "), /No trusted bound/);
+  const unconfigured = data();
+  unconfigured.trustedAttestorId = undefined;
+  assert.match(checkEligibility(unconfigured).join(" "), /not configured/);
+  const untrusted = data();
+  untrusted.comments[0].user.id = 999;
+  assert.match(checkEligibility(untrusted).join(" "), /No trusted bound/);
+  const human = data();
+  human.comments[0].user.type = "User";
+  assert.match(checkEligibility(human).join(" "), /No trusted bound/);
+});
+
+test("invalidates a previously valid attestation after head or base changes", () => {
+  const head = data();
+  head.pull.head.sha = "c".repeat(40);
+  head.run.head_sha = head.pull.head.sha;
+  head.run.pull_requests[0].head.sha = head.pull.head.sha;
+  assert.match(checkEligibility(head).join(" "), /Attestation PR\/HEAD mismatch/);
+  const baseChange = data();
+  baseChange.pull.base.sha = "d".repeat(40);
+  baseChange.expectedBaseSha = baseChange.pull.base.sha;
+  baseChange.run.pull_requests[0].base.sha = baseChange.pull.base.sha;
+  assert.match(checkEligibility(baseChange).join(" "), /Attestation base SHA mismatch/);
+});
+
+test("rejects expired, replayed, future or excessively long-lived attestations", () => {
+  const expired = data();
+  expired.now = Date.parse("2026-10-29T21:05:00.000Z");
+  assert.match(checkEligibility(expired).join(" "), /expired, replayed/);
+  const long = data();
+  editProof(long, proof => {proof.expires_at = "2026-10-29T22:00:00.000Z";});
+  assert.match(checkEligibility(long).join(" "), /expired, replayed/);
+  const future = data();
+  editProof(future, proof => {proof.issued_at = "2026-10-29T21:10:00.000Z";});
+  assert.match(checkEligibility(future).join(" "), /expired, replayed/);
+});
+
+test("latest trusted revocation wins; edits and ambiguous events fail closed", () => {
+  const revoked = data();
+  revoked.comments.push(comment({...attestation(), status: "revoked"}, "2026-10-29T21:00:00.000Z"));
+  assert.match(checkEligibility(revoked).join(" "), /revoked/);
+  const edited = data();
+  edited.comments[0].updated_at = "2026-10-29T21:00:00.000Z";
+  assert.match(checkEligibility(edited).join(" "), /was edited/);
+  const ambiguous = data();
+  ambiguous.comments.push(comment(attestation()));
+  assert.match(checkEligibility(ambiguous).join(" "), /Ambiguous/);
+});
+
+test("rejects incomplete evidence and partial comment pagination", () => {
+  const d = data();
+  editProof(d, proof => {delete proof.evidence.worker_lease;});
+  assert.match(checkEligibility(d).join(" "), /worker_lease/);
+  const stale = data();
+  editProof(stale, proof => {proof.evidence.security.checked_at = "2026-10-29T20:00:00.000Z";});
+  assert.match(checkEligibility(stale).join(" "), /security/);
+  const partial = data();
+  partial.comments = Array.from({length: 100}, () => comment());
+  assert.match(checkEligibility(partial).join(" "), /history incomplete/);
+});
+
+test("requires a matching Jira key and unmodified attestation body", () => {
+  const d = data();
+  editProof(d, proof => {proof.jira_key = "USI-999";});
+  assert.match(checkEligibility(d).join(" "), /Jira key/);
+  const malformed = data();
+  malformed.comments[0].body = ATTESTATION_MARKER + "\nnot-json";
+  assert.match(checkEligibility(malformed).join(" "), /Malformed/);
+});
