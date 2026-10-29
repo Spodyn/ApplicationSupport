@@ -32,6 +32,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
   const externalRequests: string[] = []
   let authenticated = initiallyAuthenticated
   let claimed = false
+  let resolved = false
   let read = false
   const supportMessages: Array<Omit<typeof inboundMessage, "deliveryStatus"> & { deliveryStatus: string | null }> = []
   const sends: string[] = []
@@ -93,7 +94,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
 
     if (requestUrl.pathname === "/api/v1/cases" && request.method() === "GET") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-        items: [{ ...caseListItem, status: claimed ? "VERIFICATION" : "NEW",
+        items: [{ ...caseListItem, status: resolved ? "RESOLVED" : claimed ? "VERIFICATION" : "NEW",
           ownerUserId: claimed ? authenticatedSession.id : null,
           ownerDisplayName: claimed ? authenticatedSession.displayName : null,
           unreadForCurrentUser: !read }], nextCursor: null,
@@ -102,15 +103,16 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
     }
     if (requestUrl.pathname === `/api/v1/cases/${caseId}` && request.method() === "GET") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-        id: caseId, reference: caseListItem.reference, status: claimed ? "VERIFICATION" : "NEW",
+        id: caseId, reference: caseListItem.reference, status: resolved ? "RESOLVED" : claimed ? "VERIFICATION" : "NEW",
         customer: { id: "customer", name: caseListItem.customerName, externalRef: "slack-test" },
         owner: { id: claimed ? authenticatedSession.id : null, displayName: claimed ? authenticatedSession.displayName : null },
         channel: { id: "channel", name: "new-channel", externalChannelId: "C0C6N61M4HZ", groupingStrategy: "SLACK_ROOT_THREAD" },
         integration: { id: "integration", provider: "SLACK", displayName: "TestApp", workspaceExternalId: "team", workspaceName: "TestApp" },
         relatedCase: { id: null, reference: null }, personalState: { lastReadMessageId: read ? inboundMessageId : null, lastReadAt: null, snoozedUntil: null },
-        sla: null, ignoreScore: 0, availableActions: claimed ? ["REPLY", "MARK_READ"] : ["CLAIM", "MARK_READ"],
-        claimedAt: null, waitingUntil: null, resolvedAt: null, ignoredAt: null, resolutionCategory: null,
-        createdAt: caseListItem.createdAt, updatedAt: caseListItem.updatedAt, lastActivityAt: caseListItem.lastActivityAt, version: claimed ? 2 : 1,
+        sla: null, ignoreScore: 0, availableActions: resolved ? ["MARK_READ"] : claimed ? ["REPLY", "RESOLVE", "MARK_READ"] : ["CLAIM", "MARK_READ"],
+        claimedAt: claimed ? caseListItem.updatedAt : null, waitingUntil: null,
+        resolvedAt: resolved ? new Date().toISOString() : null, ignoredAt: null, resolutionCategory: null,
+        createdAt: caseListItem.createdAt, updatedAt: caseListItem.updatedAt, lastActivityAt: caseListItem.lastActivityAt, version: resolved ? 3 : claimed ? 2 : 1,
       }) })
       return
     }
@@ -137,6 +139,17 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
       sends.push(body.body)
       supportMessages.push({ ...inboundMessage, id: "018f0000-0000-7000-8000-000000000203", kind: "SUPPORT", inbound: false, body: body.body, authorName: authenticatedSession.displayName, deliveryStatus: "QUEUED" })
       await route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ messageId: supportMessages[0].id }) })
+      return
+    }
+    if (requestUrl.pathname === `/api/v1/cases/${caseId}/resolve` && request.method() === "POST") {
+      expect(request.headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/)
+      expect(request.headers()["x-xsrf-token"]).toBe("e2e-csrf")
+      expect(request.postDataJSON()).toEqual({ resolutionCategory: null })
+      resolved = true
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        caseId, status: "RESOLVED", ownerUserId: authenticatedSession.id,
+        resolutionCategory: null, version: 3, resolvedAt: new Date().toISOString(),
+      }) })
       return
     }
     await route.continue()
@@ -194,6 +207,23 @@ test("real API Case opens, is marked read, claimed, and receives one persisted s
   await conversation.getByRole("button", { name: "Wyślij" }).click()
   await expect(conversation.getByText("USI test reply")).toBeVisible()
   expect(sends).toEqual(["USI test reply"])
+  expect(externalRequests).toEqual([])
+})
+
+test("current owner can confirm and resolve a Case", async ({ page }) => {
+  const { externalRequests } = await preparePage(page)
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await conversation.getByRole("button", { name: "Przejmij" }).click()
+  await expect(conversation.getByText("Anna Kowalska")).toBeVisible()
+
+  await conversation.getByRole("button", { name: "Zamknij sprawę" }).click()
+  const dialog = page.getByRole("alertdialog", { name: "Zamknąć sprawę?" })
+  await expect(dialog).toBeVisible()
+  await dialog.getByRole("button", { name: "Zamknij sprawę" }).click()
+
+  await expect(conversation.getByText("Rozwiązane")).toBeVisible()
+  await expect(conversation.getByRole("button", { name: "Zamknij sprawę" })).toBeDisabled()
   expect(externalRequests).toEqual([])
 })
 

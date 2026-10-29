@@ -86,6 +86,22 @@ describe("real inbox API adapter", () => {
     await expect(repository.snooze(caseId, "2026-10-06T00:00:00Z")).rejects.toBeInstanceOf(InboxActionUnavailableError)
     await expect(repository.sendMessage(caseId, { body: "test", attachments: [{ fileName: "file", size: "1" }] })).rejects.toBeInstanceOf(InboxActionUnavailableError)
   })
+
+  it("resolves a Case through the real API with an optional controlled category", async () => {
+    const { repository, requests } = fixture()
+    await repository.resolve(caseId, { category: "NO_ACTION_REQUIRED" })
+    const resolve = requests.find((item) => item.path.endsWith("/resolve"))
+    expect(resolve).toMatchObject({
+      method: "POST",
+      body: { resolutionCategory: "NO_ACTION_REQUIRED" },
+    })
+    expect(resolve?.headers?.["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/)
+
+    const uncategorized = fixture()
+    await uncategorized.repository.resolve(caseId, {})
+    expect(uncategorized.requests.find((item) => item.path.endsWith("/resolve"))?.body)
+      .toEqual({ resolutionCategory: null })
+  })
   it("propagates API list errors without falling back to mock cases", async () => {
     const failure = new ApiHttpError(503)
     const repository = createApiInboxRepository({ request: vi.fn().mockRejectedValue(failure) } as ApiTransport)

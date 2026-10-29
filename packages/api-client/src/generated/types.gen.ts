@@ -122,6 +122,8 @@ export type CaseRelated = {
   "reference": string | null
 }
 
+export type CaseResolutionCategory = "SOLVED" | "NO_ACTION_REQUIRED" | "DUPLICATE" | "OTHER"
+
 export type CaseSla = {
   "policyId": string
   "firstResponseStartedAt": string | null
@@ -215,6 +217,19 @@ export type ReadPositionResponse = {
   "caseId": string
   "messageId": string
   "readAt": string
+}
+
+export type ResolveCaseRequest = {
+  "resolutionCategory"?: CaseResolutionCategory | null
+}
+
+export type ResolveCaseResponse = {
+  "caseId": string
+  "status": "RESOLVED"
+  "ownerUserId": string
+  "resolutionCategory": CaseResolutionCategory | null
+  "version": number
+  "resolvedAt": string
 }
 
 export type SendMessageRequest = {
