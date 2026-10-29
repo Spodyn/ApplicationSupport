@@ -71,6 +71,7 @@ automation:
   activation_requires:
     - authorized_operational_policy_change_landed
     - effective_github_rulesets_verified
+    - strict_up_to_date_required_status_checks_enabled
     - automation_identity_and_permissions_verified
     - end_to_end_nonproduction_merge_path_validated
   unavailable_verification: record_and_continue_independent_ticket
