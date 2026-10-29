@@ -23,6 +23,8 @@ export interface AdministrationUserQuery {
 }
 
 export interface AdministrationUserRepository {
+  /** False until the real create/edit/deactivate/delete commands are implemented. */
+  supportsMutations?: boolean
   list(query?: AdministrationUserQuery): Promise<AdministrationUser[]>
   getCurrent(): Promise<AdministrationUser | undefined>
   save(input: AdministrationUserInput, id?: string): Promise<AdministrationUser>
@@ -110,6 +112,7 @@ export function requireCurrentAdministrator() {
 }
 
 export const mockAdministrationUserRepository: AdministrationUserRepository = {
+  supportsMutations: true,
   async list(query = {}) {
     requireCurrentAdministrationPermission("manage_users")
     let result = [...usersState]
