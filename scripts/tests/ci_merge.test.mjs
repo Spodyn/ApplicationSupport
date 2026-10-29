@@ -49,6 +49,7 @@ const data = () => ({
   jobs: REQUIRED_JOBS.map(name => ({name, status: "completed", conclusion: "success"})),
   reviews: [], threads: [], expectedBaseSha: base,
   comments: [comment()], trustedAttestorId: attestorId, now,
+  effectiveRulesets: [{id: 21055765, target: "branch", enforcement: "active"}],
   ruleset: {enforcement: "active", rules: [
     {type: "pull_request", parameters: {required_approving_review_count: 0, allowed_merge_methods: ["squash"]}},
     {type: "required_status_checks", parameters: {strict_required_status_checks_policy: true, required_status_checks: [{context: "validate"}]}}
@@ -203,4 +204,23 @@ test("rejects missing current-base CI provenance and non-strict GitHub protectio
   const nonStrict = data();
   nonStrict.ruleset.rules[1].parameters.strict_required_status_checks_policy = false;
   assert.match(checkEligibility(nonStrict).join(" "), /Strict up-to-date CI/);
+});
+
+test("fails closed when inherited branch ruleset inventory is missing or changes", () => {
+  const missing = data();
+  delete missing.effectiveRulesets;
+  assert.match(checkEligibility(missing).join(" "), /inventory unavailable/);
+  const extra = data();
+  extra.effectiveRulesets.push({id: 987654, target: "branch", enforcement: "active"});
+  assert.match(checkEligibility(extra).join(" "), /rulesets changed/);
+  const incomplete = data();
+  incomplete.effectiveRulesets = Array.from({length: 100}, (_, id) =>
+    ({id, target: "branch", enforcement: "evaluate"}));
+  assert.match(checkEligibility(incomplete).join(" "), /inventory unavailable/);
+});
+
+test("blocks unresolved outdated review threads until explicitly resolved", () => {
+  const d = data();
+  d.threads.push({isResolved: false, isOutdated: true});
+  assert.match(checkEligibility(d).join(" "), /Unresolved review thread/);
 });

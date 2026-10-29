@@ -8,6 +8,7 @@
  */
 export const REQUIRED_JOBS = Object.freeze(["configuration", "backend", "integration", "infrastructure", "openapi", "validate"]);
 export const READY_LABEL = "usi/merge-ready";
+const EXPECTED_MAIN_RULESET_ID = 21055765;
 
 /**
  * A PR label is only a routing hint, not evidence. The independent attestor
@@ -87,7 +88,7 @@ export function validateIndependentAttestation({pull, expectedBaseSha, comments,
 }
 
 
-export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], ruleset, expectedBaseSha, comments = [], trustedAttestorId, now }) {
+export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], ruleset, effectiveRulesets, expectedBaseSha, comments = [], trustedAttestorId, now }) {
   const errors = [];
   if (!pull || pull.state !== "open" || pull.draft) errors.push("PR is not open and ready");
   if (pull?.base?.ref !== "main") errors.push("PR does not target main");
@@ -120,7 +121,21 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
     if (review.state === "CHANGES_REQUESTED" && !review.dismissedAt) errors.push("Unresolved requested changes");
   }
   for (const thread of threads) {
-    if (!thread.isResolved && !thread.isOutdated) errors.push("Unresolved review thread");
+    // Even outdated threads may contain unresolved security findings.
+    if (!thread.isResolved) errors.push("Unresolved review thread");
+  }
+  // Inspect the inherited repository/organization ruleset inventory, not only
+  // a single hard-coded ruleset. Fail closed if another active branch policy
+  // appears until an independent integrator has reconciled its requirements.
+  if (!Array.isArray(effectiveRulesets) || !effectiveRulesets.length || effectiveRulesets.length >= 100) {
+    errors.push("Effective branch ruleset inventory unavailable or incomplete");
+  } else {
+    const activeBranchRulesets = effectiveRulesets.filter(x =>
+      x?.target === "branch" && x?.enforcement === "active");
+    if (activeBranchRulesets.length !== 1 ||
+        activeBranchRulesets[0].id !== EXPECTED_MAIN_RULESET_ID) {
+      errors.push("Effective active branch rulesets changed; independent policy reconciliation required");
+    }
   }
   const prRule = ruleset?.rules?.find(x => x.type === "pull_request")?.parameters;
   const ciRule = ruleset?.rules?.find(x => x.type === "required_status_checks")?.parameters;
@@ -165,7 +180,8 @@ export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }
   const jobs = run ? (await asJson(api + "/actions/runs/" + run.id + "/jobs?per_page=100", auth)).jobs : [];
   const reviews = await asJson(api + "/pulls/" + number + "/reviews?per_page=100", auth);
   const comments = await asJson(api + "/issues/" + number + "/comments?per_page=100", auth);
-  const ruleset = await asJson(api + "/rulesets/21055765", auth);
+  const effectiveRulesets = await asJson(api + "/rulesets?includes_parents=true&per_page=100", auth);
+  const ruleset = await asJson(api + "/rulesets/" + EXPECTED_MAIN_RULESET_ID, auth);
   const graphql = await asJson("https://api.github.com/graphql", auth, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
@@ -182,7 +198,7 @@ export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }
   if (jobs.length === 100) throw Error("CI job pagination incomplete");
   const errors = checkEligibility({
     pull, run, jobs, reviews, threads: threadConnection.nodes,
-    ruleset, expectedBaseSha: currentMainSha, comments, trustedAttestorId
+    ruleset, effectiveRulesets, expectedBaseSha: currentMainSha, comments, trustedAttestorId
   });
   return {errors, pull, run};
 }

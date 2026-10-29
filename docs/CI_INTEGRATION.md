@@ -98,3 +98,15 @@ The cleanup is designed for newly merged PR branches, **not blind deletion of ol
 When verified lease evidence is unavailable, the sweep reports `workerLeaseVerification: NOT_RUN` and deletes 0 branches. Once a trustworthy worker-lease check is implemented and tested, the sweep may delete at most 40 branches per run. `workflow_dispatch` defaults to dry run, while post-main-push/scheduled sweeps can request live mode but remain blocked by the mandatory worker-lease safety hold. A separate unit suite `scripts/tests/prune_merged_branches.test.mjs` asserts negative, stale, protected, fork and stacked-PR cases. Failed REST requests do not get interpreted as deletions.
 
 At the 29 October 2026 audit, 70 feature branches met the initial provenance/age/consumer criteria. A branch can have **more than one historical merged PR**: for example, `agent/USI-79` no longer matched merged PR #36, but did match the later merged PR #37. The sweep examines the complete merged PR history and only removes refs whose current HEAD matches a verified merged PR, with no open PR consumer. It never assumes every branch is garbage.
+
+
+### Effective ruleset inventory hold (2026-10-29 follow-up)
+
+The trusted runner now fetches the repository's ruleset inventory with inherited
+organization policies included, as well as the reviewed `Protect main` ruleset.
+If the inventory is missing/incomplete or an additional active branch ruleset
+appears, unattended qualification fails closed until its effective scope and
+requirements are independently reconciled. An outdated but unresolved review
+thread also remains blocking; it cannot be silently treated as resolved.
+This is deliberately conservative and does **not** enable unattended merging,
+change branch protection, or replace the separate Jira/DoD/lease attestor.
