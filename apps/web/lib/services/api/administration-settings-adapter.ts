@@ -265,6 +265,8 @@ async function listCustomers(): Promise<ManagedCustomerOption[]> {
   return customers
     .filter((customer) => customer.active)
     .map((customer) => ({ id: customer.id, name: customer.name }))
+}
+
 async function listChannels(): Promise<ManagedChannel[]> {
   const channels = await browserApiTransport.request<ApiChannelRecord[]>({
     method: "GET",
