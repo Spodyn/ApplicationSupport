@@ -77,12 +77,19 @@ class HttpSlackWebApiClientTests {
     }
 
     @Test
-    void refusesBroadcastWithoutThreadInsteadOfSendingAChannelRoot() {
+    void refusesBroadcastWithoutThreadInsteadOfSendingAChannelRoot() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger requests = new java.util.concurrent.atomic.AtomicInteger();
+        startServer(exchange -> {
+            requests.incrementAndGet();
+            respond(exchange, 200, "{\"ok\":true,\"ts\":\"1712345678.123456\"}");
+        });
+
         assertThatThrownBy(() -> client().postMessage(
                 fixtureCredential(), "C123", null, "Support reply",
                 MessageBodyFormat.PLAIN_TEXT, "stable-client-message-id", true))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("requires an existing thread");
+        assertThat(requests.get()).isZero();
     }
 
     @Test
