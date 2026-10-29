@@ -35,10 +35,13 @@ Broadcast without a thread is rejected before any HTTP request; ordinary replies
 continue to omit the flag. The same logical `client_msg_id` is retained and only
 one provider post is sent.
 
-**Implementation checkpoint:** This PR initially adds the low-level safe Slack
-request support and focused tests; the composer switch, durable intent,
-server-side Slack-only validation, retry propagation, event deduplication,
-OpenAPI/client generation and UI acceptance are **not yet implemented**. Do not
+**Implementation checkpoint:** The HTTP client and provider delivery-command boundary
+now carry an explicit opt-in flag without changing existing non-broadcast callers.
+The provider rejects broadcast without a persisted thread before reading credentials
+or sending any HTTP request. Focused provider and HTTP tests cover both paths.
+The composer switch, durable intent, command-level Slack-only validation, persistence
+and worker retry propagation, event deduplication, OpenAPI/client generation and UI
+acceptance are **not yet implemented**. Do not
 offer the option in production or mark USI-245 complete until the entire
 end-to-end path is green.
 

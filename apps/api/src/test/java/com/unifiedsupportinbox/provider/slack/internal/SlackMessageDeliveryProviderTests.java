@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -64,6 +65,48 @@ class SlackMessageDeliveryProviderTests {
                 any(byte[].class), eq("C123"), eq("1712000000.000001"), eq("Support reply"),
                 eq(MessageBodyFormat.PLAIN_TEXT), eq("stable-message-id"));
         verify(health).providerRecovered(integrationId);
+    }
+
+    @Test
+    void explicitBroadcastReachesOneThreadPostWithStableMessageId() {
+        byte[] token = fixtureCredential();
+        when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
+                .thenReturn(Optional.of(token));
+        when(slack.postMessage(
+                any(byte[].class), eq("C123"), eq("1712000000.000001"), eq("Support reply"),
+                eq(MessageBodyFormat.PLAIN_TEXT), eq("stable-message-id"), eq(true)))
+                .thenReturn(new SlackWebApiClient.PostMessageResponse(
+                        200, true, "1712345678.123456", null, null));
+
+        MessageDeliveryProvider.DeliveryCommand regular = command();
+        MessageDeliveryProvider.DeliveryCommand broadcast = new MessageDeliveryProvider.DeliveryCommand(
+                regular.messageId(), regular.idempotencyKey(), regular.caseId(), regular.provider(),
+                regular.integrationId(), regular.externalConversationId(), regular.externalThreadKey(),
+                regular.body(), regular.bodyFormat(), regular.correlationId(), true);
+        MessageDeliveryProvider.DeliveryResult result = provider.deliver(broadcast);
+
+        assertThat(result.outcome()).isEqualTo(MessageDeliveryProvider.Outcome.SENT);
+        assertThat(result.providerMessageRef()).isEqualTo("1712345678.123456");
+        assertThat(token).containsOnly((byte) 0);
+        verify(slack).postMessage(
+                any(byte[].class), eq("C123"), eq("1712000000.000001"), eq("Support reply"),
+                eq(MessageBodyFormat.PLAIN_TEXT), eq("stable-message-id"), eq(true));
+        verify(health).providerRecovered(integrationId);
+    }
+
+    @Test
+    void broadcastWithoutThreadIsRejectedBeforeCredentialOrProviderIO() {
+        MessageDeliveryProvider.DeliveryCommand regular = command();
+        MessageDeliveryProvider.DeliveryCommand invalid = new MessageDeliveryProvider.DeliveryCommand(
+                regular.messageId(), regular.idempotencyKey(), regular.caseId(), regular.provider(),
+                regular.integrationId(), regular.externalConversationId(), null,
+                regular.body(), regular.bodyFormat(), regular.correlationId(), true);
+
+        MessageDeliveryProvider.DeliveryResult result = provider.deliver(invalid);
+
+        assertThat(result.outcome()).isEqualTo(MessageDeliveryProvider.Outcome.PERMANENT_FAILURE);
+        assertThat(result.errorCode()).isEqualTo("SLACK_REPLY_BROADCAST_THREAD_REQUIRED");
+        verifyNoInteractions(secrets, slack);
     }
 
     @Test
