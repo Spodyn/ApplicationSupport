@@ -120,6 +120,22 @@ class AdminUserListIntegrationTests {
     }
 
     @Test
+    void cursorCannotBeReusedByAnotherAdministrator() throws Exception {
+        createUser("first-admin@example.com", UserRole.ADMIN, true);
+        createUser("second-admin@example.com", UserRole.ADMIN, true);
+        createUser("agent@example.com", UserRole.USER, true);
+
+        HttpResponse<String> first = get(client(login("first-admin@example.com")),
+                "/api/v1/admin/users?limit=1");
+        assertThat(first.statusCode()).isEqualTo(200);
+        String cursor = JSON.readTree(first.body()).get("nextCursor").asString();
+
+        HttpResponse<String> reused = get(client(login("second-admin@example.com")),
+                "/api/v1/admin/users?limit=1&cursor=" + cursor);
+        assertThat(reused.statusCode()).isEqualTo(400);
+    }
+
+    @Test
     void userWithManageUsersPermissionCannotReadAdminDirectory() throws Exception {
         createUser("admin@example.com", UserRole.ADMIN, true);
         UUID delegatedId = createUser("delegated@example.com", UserRole.USER, true);
