@@ -282,14 +282,42 @@ test("rejects evidence that aged out since issuance even when attestation is une
   const d = data();
   d.now = Date.parse("2026-10-29T21:03:30.000Z");
   assert.match(checkEligibility(d).join(" "), /Missing or stale independent evidence: jira_dependencies/);
-  const renewed = data();
-  renewed.now = d.now;
-  editProof(renewed, proof => {
+  // Evidence dated after an already posted proof is not a real renewal.
+  const fabricatedRenewal = data();
+  fabricatedRenewal.now = d.now;
+  editProof(fabricatedRenewal, proof => {
     for (const evidence of Object.values(proof.evidence)) {
       evidence.checked_at = "2026-10-29T21:02:00.000Z";
     }
   });
+  assert.match(checkEligibility(fabricatedRenewal).join(" "), /Missing or stale independent evidence/);
+
+  // A genuinely new attestation with checks performed before issuance is valid.
+  const renewed = data();
+  renewed.now = d.now;
+  editProof(renewed, proof => {
+    proof.issued_at = "2026-10-29T21:02:30.000Z";
+    proof.expires_at = "2026-10-29T21:06:00.000Z";
+    for (const evidence of Object.values(proof.evidence)) {
+      evidence.checked_at = "2026-10-29T21:02:20.000Z";
+    }
+  });
+  renewed.comments[0].created_at = "2026-10-29T21:02:31.000Z";
+  renewed.comments[0].updated_at = renewed.comments[0].created_at;
   assert.deepEqual(checkEligibility(renewed), []);
+});
+
+test("rejects postdated evidence even while it appears fresh at merge time", () => {
+  const d = data();
+  d.now = Date.parse("2026-10-29T21:00:00.000Z");
+  editProof(d, proof => {
+    for (const evidence of Object.values(proof.evidence)) {
+      evidence.checked_at = "2026-10-29T21:00:20.000Z";
+    }
+  });
+  // Evidence is only 20 seconds in the future relative to now, but 80 seconds
+  // after the immutable comment's issuance; it cannot have been audited then.
+  assert.match(checkEligibility(d).join(" "), /Missing or stale independent evidence/);
 });
 
 test("requires a matching Jira key and unmodified attestation body", () => {
