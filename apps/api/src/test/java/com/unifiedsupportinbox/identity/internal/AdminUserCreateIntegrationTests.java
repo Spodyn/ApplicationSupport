@@ -95,7 +95,7 @@ class AdminUserCreateIntegrationTests {
         assertThat(loggedIn.statusCode()).isEqualTo(200);
         assertThat(JSON.readTree(loggedIn.body()).path("role").asString()).isEqualTo("USER");
         String audit = jdbc.queryForObject(
-                "SELECT metadata_json::text FROM audit_events WHERE action = 'USER_CREATED' ORDER BY created_at DESC LIMIT 1",
+                "SELECT metadata_json::text FROM audit_events WHERE action = 'USER_CREATED' ORDER BY occurred_at DESC LIMIT 1",
                 String.class);
         assertThat(audit).contains("INITIAL_PASSWORD").doesNotContain(PASSWORD, created.passwordHash());
     }
