@@ -40,8 +40,9 @@ now carry an explicit opt-in flag without changing existing non-broadcast caller
 The provider rejects broadcast without a persisted thread before reading credentials
 or sending any HTTP request. Focused provider and HTTP tests cover both paths.
 The Slack inbound normalizer now explicitly filters `thread_broadcast` channel echoes
-before message persistence, while preserving the original ordinary human thread reply;
-a focused regression test covers both paths. This is only a provider-event filter,
+before message persistence, including nested `thread_broadcast` subtypes in
+`message_changed` and `message_deleted` events, while preserving ordinary human
+thread replies and edits/deletes. Focused regressions cover these paths. This is only a provider-event filter,
 **not** proof of complete echo/idempotency acceptance against a live Slack workspace.
 The send command now validates Slack thread eligibility, persists the opt-in flag
 on the Message row, includes the true intent in the idempotency fingerprint, and
