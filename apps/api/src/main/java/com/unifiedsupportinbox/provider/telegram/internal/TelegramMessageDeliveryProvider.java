@@ -72,6 +72,10 @@ class TelegramMessageDeliveryProvider implements MessageDeliveryProvider {
         try {
             TelegramBotApiClient.SendResponse response = telegram.sendMessage(token, chatId, topic, command.body());
             return map(response);
+        } catch (RuntimeException unexpected) {
+            // HTTP libraries can include a token-bearing URL in exception messages.
+            // Never propagate such details to the common worker logger.
+            return DeliveryResult.transientFailure("TELEGRAM_REQUEST_FAILED", null);
         } finally {
             Arrays.fill(token, (byte) 0);
         }
