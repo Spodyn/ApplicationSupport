@@ -21,10 +21,13 @@ class UserStatisticsService {
     private static final int DEFAULT_RANGE_DAYS = 30;
     private final UserStatisticsRepository users;
     private final StatisticsOverviewRepository statistics;
+    private final SlaAnalyticsService sla;
 
-    UserStatisticsService(UserStatisticsRepository users, StatisticsOverviewRepository statistics) {
+    UserStatisticsService(UserStatisticsRepository users, StatisticsOverviewRepository statistics,
+            SlaAnalyticsService sla) {
         this.users = users;
         this.statistics = statistics;
+        this.sla = sla;
     }
 
     @Transactional(readOnly = true)
@@ -43,7 +46,8 @@ class UserStatisticsService {
         String normalizedProvider = normalizeProvider(provider);
         Metrics metrics = users.find(targetUserId, from, to, timezone, normalizedProvider, customerId)
                 .orElseThrow(() -> ApiProblemException.notFound("Requested user was not found."));
-        return new Report(from, to, timezone, normalizedProvider, customerId, metrics);
+        return new Report(from, to, timezone, normalizedProvider, customerId, metrics,
+                sla.report(from, to, normalizedProvider, customerId, targetUserId).breakdowns());
     }
 
     static void authorize(Authentication authentication, UUID targetUserId) {
@@ -75,7 +79,8 @@ class UserStatisticsService {
     }
 
     record Report(LocalDate from, LocalDate to, String timezone, String provider,
-                  UUID customerId, Metrics metrics) {
+                  UUID customerId, Metrics metrics,
+                  List<SlaAnalyticsService.Breakdown> slaOutcomes) {
     }
 
     record Metrics(UUID userId, String displayName, boolean active, long claimed,
