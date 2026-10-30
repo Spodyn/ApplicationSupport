@@ -42,7 +42,13 @@ const PROTECTED_CONTROL_FILES = new Set([
 const CI_EXECUTION_FILES = new Set([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc", ".nvmrc",
   "apps/api/pom.xml", "apps/api/mvnw", "apps/api/mvnw.cmd",
-  "infra/compose.yaml", "infra/.env.example"
+  "infra/compose.yaml", "infra/.env.example",
+  // Git checkout attributes and shared test bootstrap/profile files can alter
+  // what CI executes without changing the workflow definition itself.
+  ".gitattributes",
+  "apps/api/src/main/resources/application-test.properties",
+  "apps/api/src/test/java/com/unifiedsupportinbox/testing/TestInfrastructure.java",
+  "apps/web/tests/unit/setup.ts"
 ]);
 const isProtectedControlFile = path =>
   path.startsWith(".github/workflows/") || path.startsWith(".github/actions/") ||
