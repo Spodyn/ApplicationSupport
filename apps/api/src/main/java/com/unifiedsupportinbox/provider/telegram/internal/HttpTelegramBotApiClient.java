@@ -66,10 +66,15 @@ class HttpTelegramBotApiClient implements TelegramBotApiClient {
                 return new SendResponse(status >= 200 && status < 300 ? 502 : status,
                         false, null, null, headerRetryAfter(response));
             }
-            // A successful HTTP response without a valid Bot API envelope is not
-            // a definitive provider rejection; do not mark the durable send failed forever.
+            // A 2xx body with ok=false but no plausible Telegram error code is
+            // ambiguous, not a definitive rejection. Retrying preserves the durable
+            // intent instead of permanently discarding an unconfirmed send.
+            JsonNode errorField = body == null ? null : body.path("error_code");
+            boolean validErrorCode = errorField != null && errorField.isIntegralNumber()
+                    && errorField.asInt() >= 400 && errorField.asInt() <= 599;
             if (response.statusCode() >= 200 && response.statusCode() < 300 &&
-                    (body == null || !body.isObject() || !body.path("ok").isBoolean())) {
+                    (body == null || !body.isObject() || !body.path("ok").isBoolean()
+                            || (!body.path("ok").asBoolean() && !validErrorCode))) {
                 return new SendResponse(502, false, null, null, null);
             }
             boolean ok = body != null && body.path("ok").asBoolean(false);
