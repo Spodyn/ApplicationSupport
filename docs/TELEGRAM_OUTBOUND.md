@@ -24,6 +24,16 @@ response was lost, retrying may create another provider-side message. Do not
 claim exactly-once remote delivery without an additional reviewed reconciliation
 mechanism. Existing durable attempts remain the source of truth.
 
+## Safe activation
+
+The outbound delivery bean is **disabled by default**. Enable it explicitly with
+`usi.providers.telegram.outbound.enabled=true` only in a configured Telegram
+sandbox where the durable message worker, credentials, and delivery permissions
+have been validated. This setting is an application configuration key, not a
+secret. No production rollout is authorized by this PR. Without this opt-in,
+Telegram inbound handling can be tested without implicitly activating outbound
+Bot API sends.
+
 ## Credentials and failure handling
 
 The credential is resolved only from:
@@ -55,7 +65,7 @@ exception text. The adapter translates failures into stable, non-sensitive
 
 ## Verification and remaining acceptance
 
-Focused JUnit tests cover forum/no-topic payloads, returned provider IDs,
+Focused JUnit tests cover explicit activation opt-in, forum/no-topic payloads, returned provider IDs,
 429 retry delays, permanent auth errors, missing credentials, malformed
 identifiers, malformed responses and token-bearing exception redaction.
 
