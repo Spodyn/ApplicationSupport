@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
 
 /** Sends one Telegram message per durable delivery attempt, without creating another local Message. */
 @Component
-@ConditionalOnProperty(name = "usi.providers.telegram.outbound.enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(name = "usi.providers.telegram.outbound.enabled", havingValue = "true", matchIfMissing = false)
 class TelegramMessageDeliveryProvider implements MessageDeliveryProvider {
 
     static final String BOT_TOKEN_CREDENTIAL_FILE = "telegram-bot-token";
