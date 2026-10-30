@@ -82,13 +82,20 @@ without matching events returns zero counts and `null` averages, never a
 fabricated duration. The reporting timezone follows the deployed active
 business-hours configuration.
 
+Completed first-response and unclaimed SLA **outcomes** also use historical
+attribution: the first actually SENT human-support Message author and the
+first successful Claim audit actor, rather than mutable `cases.owner_user_id`.
+This attribution is tested after a simulated ownership transfer. An unclaimed
+outcome is not an agent's claim when no corresponding Claim audit exists.
+
 **Still outstanding for USI-166 DoD:** the complete business-time duration
-distributions and historical per-user SLA outcome/force-resolve dimensions
-defined above. The current aggregate only contains elapsed-second sums, not
-the underlying business-time duration distribution or immutable actor-linked
-SLA outcome events. No current-owner fallback or made-up SLA attribution may
-be presented as a completed KPI. The PR remains draft until the full contract
-and all necessary test evidence are implemented.
+distributions (count, p90, p95) and durable actor-qualified live SLA warning /
+breach event counts and force-resolved dimensions defined above. The current
+daily aggregate contains elapsed-second sums rather than business-time
+duration distributions; current E13 scheduling prerequisites may still be
+unavailable. Do not invent unavailable events or count current ownership as
+historic SLA credit. The PR remains draft until the remaining contract and
+necessary acceptance evidence are implemented.
 
 ## Contract examples
 
