@@ -119,6 +119,45 @@ class SupportSendMessageServiceIntegrationTests {
     }
 
     @Test
+    void broadcastIntentPersistsAndIdempotentReplayRetainsIt() {
+        UUID owner = createUser("broadcast");
+        UUID caseId = createCase(owner, "VERIFICATION");
+        IdempotencyResult first = service.send(caseId, owner, "broadcast-key", "Announcement",
+                MessageBodyFormat.PLAIN_TEXT, List.of(), true, "corr-broadcast");
+        IdempotencyResult replay = service.send(caseId, owner, "broadcast-key", "Announcement",
+                MessageBodyFormat.PLAIN_TEXT, List.of(), true, "corr-broadcast-retry");
+        UUID messageId = UUID.fromString(first.body().get("messageId").asText());
+        assertThat(replay.replayed()).isTrue();
+        assertThat(replay.body()).isEqualTo(first.body());
+        assertThat(jdbc.queryForObject(
+                "SELECT reply_broadcast FROM messages WHERE id = ?", Boolean.class, messageId)).isTrue();
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM outbox_events WHERE type = 'message.send_requested' AND aggregate_id = ?",
+                Integer.class, messageId)).isEqualTo(1);
+        assertThatThrownBy(() -> service.send(caseId, owner, "broadcast-key", "Announcement",
+                MessageBodyFormat.PLAIN_TEXT, List.of(), false, "corr-different-intent"))
+                .isInstanceOf(ApiProblemException.class);
+    }
+
+    @Test
+    void broadcastRejectsNonSlackOrMissingThreadWithoutPersistence() {
+        UUID owner = createUser("broadcast-validation");
+        UUID caseId = createCase(owner, "VERIFICATION");
+        jdbc.update("UPDATE cases SET external_thread_key = NULL WHERE id = ?", caseId);
+        assertThatThrownBy(() -> service.send(caseId, owner, "missing-thread", "Announcement",
+                MessageBodyFormat.PLAIN_TEXT, List.of(), true, "corr-missing-thread"))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        problem -> assertThat(problem.status()).isEqualTo(HttpStatus.BAD_REQUEST));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isZero();
+        jdbc.update("UPDATE cases SET external_thread_key = 'thread-1', provider = 'TEAMS' WHERE id = ?", caseId);
+        assertThatThrownBy(() -> service.send(caseId, owner, "wrong-provider", "Announcement",
+                MessageBodyFormat.PLAIN_TEXT, List.of(), true, "corr-wrong-provider"))
+                .isInstanceOfSatisfying(ApiProblemException.class,
+                        problem -> assertThat(problem.status()).isEqualTo(HttpStatus.BAD_REQUEST));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages", Integer.class)).isZero();
+    }
+
+    @Test
     void crossCaseAttachmentIsRejectedWithoutCreatingMessage() {
         UUID ownerId = createUser("owner-cross-case");
         UUID caseId = createCase(ownerId, "VERIFICATION");
