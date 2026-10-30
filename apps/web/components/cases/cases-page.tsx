@@ -258,7 +258,7 @@ export function CasesPage({
       </section>
 
       {selectedPresentation ? <ConversationPanel
-        key={selectedId}
+        key={`${selectedId}:${detailQuery.data?.canReplyBroadcast === true ? "broadcast" : "standard"}`}
         item={selectedPresentation}
         record={detailQuery.data}
         detailError={detailQuery.isError}
