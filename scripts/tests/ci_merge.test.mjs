@@ -417,6 +417,9 @@ test("requires the reviewed ruleset to actually protect main, not just retain it
   const excluded = data();
   excluded.ruleset.conditions.ref_name.exclude = ["~DEFAULT_BRANCH"];
   assert.match(checkEligibility(excluded).join(" "), /not proven to apply to main/);
+  const wildcardExclusion = data();
+  wildcardExclusion.ruleset.conditions.ref_name.exclude = ["refs/heads/mai*"];
+  assert.match(checkEligibility(wildcardExclusion).join(" "), /not proven to apply to main/);
   const unknown = data();
   delete unknown.ruleset.conditions;
   assert.match(checkEligibility(unknown).join(" "), /not proven to apply to main/);
