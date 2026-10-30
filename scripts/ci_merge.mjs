@@ -89,7 +89,9 @@ export function validateIndependentAttestation({pull, expectedBaseSha, comments,
   if (!events.length) return ["No trusted bound Jira/DoD/lease attestation"];
   const latest = events.at(-1);
   const posted = Date.parse(latest.created_at);
-  if (!Number.isFinite(posted)) return ["Attestation creation time invalid"];
+  if (!Number.isFinite(posted) || !Number.isFinite(Number(now)) || posted > Number(now) + 30000) {
+    return ["Attestation creation time invalid or future-dated"];
+  }
   if (events.length > 1 && Date.parse(events.at(-2).created_at) === posted) {
     return ["Ambiguous trusted attestation events"];
   }
