@@ -22,6 +22,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 class TelegramMessageDeliveryProviderTests {
     private ProviderIntegrationCredentialLookup integrations;
@@ -29,6 +30,16 @@ class TelegramMessageDeliveryProviderTests {
     private TelegramBotApiClient api;
     private TelegramMessageDeliveryProvider provider;
     private UUID integrationId;
+
+    @Test
+    void outboundDeliveryRequiresExplicitConfigurationOptIn() {
+        ConditionalOnProperty gate =
+                TelegramMessageDeliveryProvider.class.getAnnotation(ConditionalOnProperty.class);
+        assertThat(gate).isNotNull();
+        assertThat(gate.name()).containsExactly("usi.providers.telegram.outbound.enabled");
+        assertThat(gate.havingValue()).isEqualTo("true");
+        assertThat(gate.matchIfMissing()).isFalse();
+    }
 
     @BeforeEach
     void setUp() {
