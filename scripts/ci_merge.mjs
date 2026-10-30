@@ -8,8 +8,175 @@
  */
 export const REQUIRED_JOBS = Object.freeze(["configuration", "backend", "integration", "infrastructure", "openapi", "validate"]);
 export const READY_LABEL = "usi/merge-ready";
+const EXPECTED_MAIN_RULESET_ID = 21055765;
+// Bind eligibility to the actual repository CI workflow, not an arbitrary PR workflow.
+const EXPECTED_CI_WORKFLOW_ID = 330478347;
+const EXPECTED_CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
+const PROTECTED_CONTROL_FILES = new Set([
+  "scripts/ci_merge.mjs",
+  "scripts/tests/ci_merge.test.mjs",
+  "scripts/tests/test_orchestrator_policy.py",
+  // These trusted-main scripts run with write permissions or enforce CI safety.
+  "scripts/delete_merged_branch.mjs",
+  "scripts/prune_merged_branches.mjs",
+  "scripts/tests/delete_merged_branch.test.mjs",
+  "scripts/tests/prune_merged_branches.test.mjs",
+  "scripts/secret_scan.py",
+  "scripts/validate_environment.py",
+  "docs/orchestrator-policy.yaml",
+  "docs/ORCHESTRATOR_CONTRACT.md",
+  "docs/PRODUCT_CONTRACT.md",
+  "docs/PRODUCT_SPEC.md",
+  "docs/WORKFLOW_MATRIX.md",
+  "docs/ARCHITECTURE.md",
+  "docs/INTEGRATIONS.md",
+  "docs/SECURITY.md",
+  "docs/OPERATIONS.md",
+  "docs/DECISION_REGISTRY.md",
+  "docs/decision-registry.yaml",
+  ".github/CODEOWNERS"
+]);
+// CI checks out the PR revision. A green job name is not trustworthy if the
+// PR can replace the build/test commands that job invokes with successful no-ops.
+// These harness/configuration changes require separate independent review.
+const CI_EXECUTION_FILES = new Set([
+  "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc", ".nvmrc",
+  "apps/api/pom.xml", "apps/api/mvnw", "apps/api/mvnw.cmd",
+  "infra/compose.yaml", "infra/.env.example",
+  // Git checkout attributes and shared test bootstrap/profile files can alter
+  // what CI executes without changing the workflow definition itself.
+  ".gitattributes",
+  "apps/api/src/main/resources/application-test.properties",
+  "apps/api/src/test/java/com/unifiedsupportinbox/testing/TestInfrastructure.java",
+  "apps/web/tests/unit/setup.ts"
+]);
+const isProtectedControlFile = path =>
+  path.startsWith(".github/workflows/") || path.startsWith(".github/actions/") ||
+  path.startsWith("scripts/") || path.startsWith("infra/tests/") ||
+  path.startsWith("infra/minio/") || path.startsWith("apps/api/.mvn/") ||
+  path === "AGENTS.md" || path.endsWith("/AGENTS.md") ||
+  path.endsWith("/package.json") ||
+  /(?:^|\/)(?:playwright|vitest|eslint|next)\.config\.[^/]+$/.test(path) ||
+  /(?:^|\/)tsconfig(?:\.[^/]+)?\.json$/.test(path) ||
+  CI_EXECUTION_FILES.has(path) || PROTECTED_CONTROL_FILES.has(path);
 
-export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], ruleset, expectedBaseSha }) {
+/**
+ * A PR label is only a routing hint, not evidence. The independent attestor
+ * must publish an immutable, short-lived issue comment under a dedicated
+ * trusted GitHub App bot identity. This runner never issues attestations.
+ */
+export const ATTESTATION_MARKER = "<!-- usi-pr-eligibility-v1 -->";
+const ATTESTATION_CHECKS = Object.freeze([
+  "jira_dependencies", "jira_dod", "external_verification", "security", "worker_lease"
+]);
+const MAX_ATTESTATION_MS = 10 * 60 * 1000;
+const MAX_EVIDENCE_AGE_MS = 5 * 60 * 1000;
+
+export function validateIndependentAttestation({pull, expectedBaseSha, comments, reviews, reviewComments, trustedAttestorId, now = Date.now()}) {
+  const trustedId = Number(trustedAttestorId);
+  if (!Number.isSafeInteger(trustedId) || trustedId <= 0) {
+    return ["Trusted independent attestor identity is not configured"];
+  }
+  if (!Array.isArray(comments) || comments.length >= 100) {
+    return ["Independent attestation comment history incomplete"];
+  }
+  if (!Array.isArray(reviews) || !Array.isArray(reviewComments) ||
+      reviews.length >= 100 || reviewComments.length >= 100) {
+    return ["PR review discussion inventory incomplete"];
+  }
+  const events = comments.filter(comment =>
+    comment?.user?.type === "Bot" &&
+    Number(comment.user.id) === trustedId &&
+    typeof comment.body === "string" &&
+    comment.body.trimStart().startsWith(ATTESTATION_MARKER)
+  ).sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
+  if (!events.length) return ["No trusted bound Jira/DoD/lease attestation"];
+  const latest = events.at(-1);
+  const posted = Date.parse(latest.created_at);
+  const qualificationTime = typeof now === "number" ? now : Date.parse(now);
+  if (!Number.isFinite(posted) || !Number.isFinite(qualificationTime) || posted > qualificationTime + 30000) {
+    return ["Attestation creation time invalid or future-dated"];
+  }
+  if (events.length > 1 && Date.parse(events.at(-2).created_at) === posted) {
+    return ["Ambiguous trusted attestation events"];
+  }
+  // Edits are not accepted: publish a new trusted comment to revoke or renew.
+  if (latest.updated_at !== latest.created_at) return ["Attestation comment was edited"];
+  // Any subsequent PR discussion can introduce a new security/DoD blocker.
+  // GitHub timestamps have second precision, so also compare immutable issue
+  // comment IDs to catch comments created in the same second as the proof.
+  const proofCommentId = Number(latest.id);
+  const laterDiscussion = comments.some(comment => comment !== latest &&
+    ((Number.isSafeInteger(proofCommentId) && proofCommentId > 0 &&
+      Number.isSafeInteger(Number(comment?.id)) && Number(comment.id) > proofCommentId) ||
+      Date.parse(comment?.created_at) > posted ||
+      Date.parse(comment?.updated_at) > posted));
+  if (laterDiscussion) return ["PR discussion changed after independent attestation; requalification required"];
+  // Top-level issue comments do not include review submissions or inline review
+  // comments. A COMMENTED review (or a comment on a resolved thread) can still
+  // introduce a security/DoD blocker after the trusted proof was issued.
+  // Without a reliable cross-API event ordering, same-second activity also
+  // requires a new independent proof rather than risking a false authorization.
+  const reviewActivity = [
+    ...reviews.map(review => ({
+      created: review.submitted_at ?? review.submittedAt ?? review.created_at,
+      updated: review.updated_at ?? review.updatedAt
+    })),
+    ...reviewComments.map(comment => ({created: comment.created_at, updated: comment.updated_at}))
+  ];
+  if (reviewActivity.some(({created, updated}) => {
+    const createdMs = Date.parse(created);
+    const updatedMs = Date.parse(updated);
+    return !Number.isFinite(createdMs) || createdMs >= posted ||
+      (Number.isFinite(updatedMs) && updatedMs >= posted);
+  })) return ["PR review discussion changed after independent attestation; requalification required"];
+  let proof;
+  try {
+    proof = JSON.parse(latest.body.trimStart().slice(ATTESTATION_MARKER.length).trim());
+  } catch {
+    return ["Malformed trusted attestation"];
+  }
+  const errors = [];
+  if (proof?.schema !== "usi-pr-eligibility-v1" || proof?.status !== "ready") {
+    errors.push("Trusted attestation is revoked or has an invalid schema/status");
+  }
+  if (proof?.pr_number !== pull?.number || proof?.head_sha !== pull?.head?.sha) {
+    errors.push("Attestation PR/HEAD mismatch");
+  }
+  if (proof?.base_sha !== expectedBaseSha || proof?.base_sha !== pull?.base?.sha) {
+    errors.push("Attestation base SHA mismatch");
+  }
+  // Match exactly one whole Jira key: USI-24 must not authorize USI-247.
+  const titleJiraKeys = pull?.title?.match(/\bUSI-[1-9]\d*\b/g) || [];
+  if (!/^USI-[1-9]\d*$/.test(proof?.jira_key || "") ||
+      titleJiraKeys.length !== 1 || titleJiraKeys[0] !== proof.jira_key) {
+    errors.push("Attestation Jira key not bound to PR title");
+  }
+  const issued = Date.parse(proof?.issued_at);
+  const expires = Date.parse(proof?.expires_at);
+  const current = typeof now === "number" ? now : Date.parse(now);
+  if (![issued, expires, current].every(Number.isFinite) ||
+      Math.abs(posted - issued) > 120000 ||
+      issued > current + 30000 || expires <= current ||
+      expires <= issued || expires - issued > MAX_ATTESTATION_MS) {
+    errors.push("Attestation expired, replayed, future-dated or not freshly issued");
+  }
+  for (const name of ATTESTATION_CHECKS) {
+    const evidence = proof?.evidence?.[name];
+    const checked = Date.parse(evidence?.checked_at);
+    if (evidence?.result !== "PASS" ||
+        typeof evidence?.reference !== "string" || evidence.reference.trim().length < 12 ||
+        !Number.isFinite(checked) || !Number.isFinite(issued) ||
+        checked < current - MAX_EVIDENCE_AGE_MS ||
+        checked > issued + 30000 || checked > current + 30000) {
+      errors.push("Missing or stale independent evidence: " + name);
+    }
+  }
+  return errors;
+}
+
+
+export function checkEligibility({ pull, run, jobs, reviews = [], reviewComments, threads = [], ruleset, effectiveRulesets, expectedBaseSha, comments = [], trustedAttestorId, changedFiles, now }) {
   const errors = [];
   if (!pull || pull.state !== "open" || pull.draft) errors.push("PR is not open and ready");
   if (pull?.base?.ref !== "main") errors.push("PR does not target main");
@@ -17,13 +184,27 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
   if (pull?.mergeable !== true) errors.push("PR conflicts or mergeability is unknown");
   const labels = new Set((pull?.labels || []).map(x => x.name));
   if (!labels.has(READY_LABEL)) errors.push("No independent Jira/DoD/lease eligibility attestation");
+  errors.push(...validateIndependentAttestation({pull, expectedBaseSha, comments, reviews, reviewComments, trustedAttestorId, now}));
   for (const name of ["do-not-merge", "blocked", "security-blocker"]) {
     if (labels.has(name)) errors.push("Blocked by label: " + name);
   }
   if (!run || run.event !== "pull_request" || run.status !== "completed" || run.conclusion !== "success") errors.push("Exact successful pull_request CI run missing");
+  if (run?.workflow_id !== EXPECTED_CI_WORKFLOW_ID || run?.path !== EXPECTED_CI_WORKFLOW_PATH || run?.name !== "CI") {
+    errors.push("CI run is not from the trusted repository workflow");
+  }
+  // A PR can edit its own pull_request workflow to make six no-op jobs pass.
+  // Never let such a workflow attest to its own security; require separate review.
+  if (!Array.isArray(changedFiles) || changedFiles.length >= 100 ||
+      changedFiles.some(path => typeof path !== "string" || isProtectedControlFile(path))) {
+    errors.push("PR trusted workflow/control changes or incomplete file inventory require independent review");
+  }
   if (run?.head_sha !== pull?.head?.sha) errors.push("CI SHA != current PR HEAD");
   const belongs = (run?.pull_requests || []).some(x => x.number === pull?.number && x.head?.sha === pull.head.sha);
   if (!belongs) errors.push("CI run is not proven to belong to this PR and HEAD");
+  const currentBaseProven = (run?.pull_requests || []).some(x =>
+    x.number === pull?.number && x.head?.sha === pull?.head?.sha && x.base?.sha === expectedBaseSha
+  );
+  if (!currentBaseProven) errors.push("CI run is not proven against current main base SHA");
   if (run?.pull_requests?.some(x => x.number === pull?.number && x.base?.sha && x.base.sha !== expectedBaseSha)) errors.push("CI was tested against an outdated base");
   if (!expectedBaseSha || expectedBaseSha !== pull?.base?.sha) errors.push("Main base changed during qualification");
   for (const job of REQUIRED_JOBS) {
@@ -37,7 +218,35 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
     if (review.state === "CHANGES_REQUESTED" && !review.dismissedAt) errors.push("Unresolved requested changes");
   }
   for (const thread of threads) {
-    if (!thread.isResolved && !thread.isOutdated) errors.push("Unresolved review thread");
+    // Even outdated threads may contain unresolved security findings.
+    if (!thread.isResolved) errors.push("Unresolved review thread");
+  }
+  // Inspect the inherited repository/organization ruleset inventory, not only
+  // a single hard-coded ruleset. Fail closed if another active branch policy
+  // appears until an independent integrator has reconciled its requirements.
+  if (!Array.isArray(effectiveRulesets) || !effectiveRulesets.length || effectiveRulesets.length >= 100) {
+    errors.push("Effective branch ruleset inventory unavailable or incomplete");
+  } else {
+    const activeBranchRulesets = effectiveRulesets.filter(x =>
+      x?.target === "branch" && x?.enforcement === "active");
+    if (activeBranchRulesets.length !== 1 ||
+        activeBranchRulesets[0].id !== EXPECTED_MAIN_RULESET_ID) {
+      errors.push("Effective active branch rulesets changed; independent policy reconciliation required");
+    }
+  }
+  // The expected ruleset ID alone is insufficient: an administrator could
+  // retarget that ruleset away from main without changing its ID or rules.
+  // Only unambiguous exact/default/all ref selectors are accepted here.
+  const selectors = ruleset?.conditions?.ref_name;
+  const recognized = new Set(["~DEFAULT_BRANCH", "~ALL", "refs/heads/main"]);
+  const includesMain = Array.isArray(selectors?.include) &&
+    selectors.include.some(ref => recognized.has(ref));
+  // A wildcard or future selector syntax could also exclude main. Until an
+  // independent policy parser verifies it, any exclusion is a hard stop.
+  const excludesMain = !Array.isArray(selectors?.exclude) ||
+    selectors.exclude.length !== 0;
+  if (ruleset?.target !== "branch" || !includesMain || excludesMain) {
+    errors.push("Protect main ruleset is not proven to apply to main");
   }
   const prRule = ruleset?.rules?.find(x => x.type === "pull_request")?.parameters;
   const ciRule = ruleset?.rules?.find(x => x.type === "required_status_checks")?.parameters;
@@ -45,6 +254,9 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
   if ((prRule?.required_approving_review_count ?? 1) !== 0) errors.push("An effective human approval is still required");
   if (!prRule?.allowed_merge_methods?.includes("squash")) errors.push("Squash is not permitted");
   if (!ciRule?.required_status_checks?.some(x => x.context === "validate")) errors.push("Required validate check missing");
+  // The merge API atomically checks HEAD but not main SHA. Strict GitHub
+  // protection must reject a base race between our final read and PUT merge.
+  if (ciRule?.strict_required_status_checks_policy !== true) errors.push("Strict up-to-date CI branch protection required for unattended merge");
   return errors;
 }
 
@@ -62,19 +274,32 @@ const asJson = async (url, auth, opts = {}) => {
   return await response.json();
 };
 
+export const changedPathsFromFiles = files => files.flatMap(file =>
+  [file.filename, file.previous_filename].filter(Boolean)
+);
+
 const pickCI = (runs, pr) => runs.find(run =>
   run.event === "pull_request" && run.head_sha === pr.head.sha &&
+  run.workflow_id === EXPECTED_CI_WORKFLOW_ID && run.path === EXPECTED_CI_WORKFLOW_PATH && run.name === "CI" &&
   (run.pull_requests || []).some(p => p.number === pr.number && p.head?.sha === pr.head.sha)
 );
 
-export async function qualifyPR({ owner, repo, number, auth }) {
+export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }) {
   const api = "https://api.github.com/repos/" + owner + "/" + repo;
   const pull = await asJson(api + "/pulls/" + number, auth);
+  // The PR base field can lag the real main ref. Read the authoritative ref.
+  const mainRef = await asJson(api + "/git/ref/heads/main", auth);
+  const currentMainSha = mainRef?.object?.sha;
+  if (!/^[0-9a-f]{40}$/.test(currentMainSha || "")) throw Error("Current main ref could not be verified");
   const allRuns = await asJson(api + "/actions/runs?event=pull_request&head_sha=" + encodeURIComponent(pull.head.sha) + "&per_page=100", auth);
   const run = pickCI(allRuns.workflow_runs || [], pull);
   const jobs = run ? (await asJson(api + "/actions/runs/" + run.id + "/jobs?per_page=100", auth)).jobs : [];
   const reviews = await asJson(api + "/pulls/" + number + "/reviews?per_page=100", auth);
-  const ruleset = await asJson(api + "/rulesets/21055765", auth);
+  const reviewComments = await asJson(api + "/pulls/" + number + "/comments?per_page=100", auth);
+  const comments = await asJson(api + "/issues/" + number + "/comments?per_page=100", auth);
+  const files = await asJson(api + "/pulls/" + number + "/files?per_page=100", auth);
+  const effectiveRulesets = await asJson(api + "/rulesets?includes_parents=true&per_page=100", auth);
+  const ruleset = await asJson(api + "/rulesets/" + EXPECTED_MAIN_RULESET_ID, auth);
   const graphql = await asJson("https://api.github.com/graphql", auth, {
     method: "POST",
     headers: {"Content-Type": "application/json"},
@@ -86,11 +311,16 @@ export async function qualifyPR({ owner, repo, number, auth }) {
   if (graphql.errors?.length) throw Error("Cannot verify review threads");
   const threadConnection = graphql.data?.repository?.pullRequest?.reviewThreads;
   if (!threadConnection || threadConnection.pageInfo?.hasNextPage) throw Error("Review-thread inspection incomplete");
-  if (reviews.length === 100) throw Error("Review pagination incomplete");
+  if (!Array.isArray(reviews) || reviews.length >= 100) throw Error("Review pagination incomplete");
+  if (!Array.isArray(reviewComments) || reviewComments.length >= 100) throw Error("Inline review comment pagination incomplete");
+  if (comments.length === 100) throw Error("Attestation comment pagination incomplete");
   if (jobs.length === 100) throw Error("CI job pagination incomplete");
+  if (!Array.isArray(files) || files.length >= 100) throw Error("PR file inventory incomplete");
   const errors = checkEligibility({
-    pull, run, jobs, reviews, threads: threadConnection.nodes,
-    ruleset, expectedBaseSha: pull.base.sha
+    pull, run, jobs, reviews, reviewComments, threads: threadConnection.nodes,
+    ruleset, effectiveRulesets, expectedBaseSha: currentMainSha, comments, trustedAttestorId,
+    // Renames can hide a protected workflow in previous_filename.
+    changedFiles: changedPathsFromFiles(files)
   });
   return {errors, pull, run};
 }
@@ -101,7 +331,8 @@ export async function main(env = process.env) {
   const repository = env.GITHUB_REPOSITORY || "";
   if (!auth || !Number.isInteger(number) || number <= 0 || !/^[^/]+\/[^/]+$/.test(repository)) throw Error("Missing GitHub inputs");
   const [owner, repo] = repository.split("/");
-  const check = await qualifyPR({owner, repo, number, auth});
+  const trustedAttestorId = Number(env.USI_ATTESTOR_USER_ID);
+  const check = await qualifyPR({owner, repo, number, auth, trustedAttestorId});
   if (check.errors.length) {
     console.log("BLOCKED PR #" + number + ": " + check.errors.join("; "));
     return; // Fail closed: never auto-merge this PR
@@ -112,7 +343,7 @@ export async function main(env = process.env) {
     return;
   }
   // Requalify immediately before mutation to prevent stale HEAD/base/rule races.
-  const latest = await qualifyPR({owner, repo, number, auth});
+  const latest = await qualifyPR({owner, repo, number, auth, trustedAttestorId});
   if (latest.errors.length || latest.pull.head.sha !== check.pull.head.sha || latest.pull.base.sha !== check.pull.base.sha) {
     throw Error("PR changed after gate evaluation; merge refused");
   }

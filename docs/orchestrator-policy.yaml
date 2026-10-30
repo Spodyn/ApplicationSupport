@@ -57,6 +57,13 @@ automation:
   runner_workflow: .github/workflows/usi-integration.yml
   guard_script: scripts/ci_merge.mjs
   eligibility_attestation_label: usi/merge-ready
+  eligibility_attestation_source: trusted_immutable_pr_issue_comment
+  attestor_identity_from_authorized_repository_variable: USI_ATTESTOR_USER_ID
+  attestation_binding: [pr_number, head_sha, base_sha, jira_key]
+  attestation_required_evidence: [jira_dependencies, jira_dod, external_verification, security, worker_lease]
+  attestation_max_lifetime_minutes: 10
+  attestation_evidence_max_age_minutes: 5
+  attestation_revocation_and_recheck_required: true
   external_jira_dod_and_lease_verification_required: true
   repository_actions_activation_variable: USI_AUTO_MERGE_ENABLED
   unattended_merge_enabled: false
@@ -64,6 +71,7 @@ automation:
   activation_requires:
     - authorized_operational_policy_change_landed
     - effective_github_rulesets_verified
+    - strict_up_to_date_required_status_checks_enabled
     - automation_identity_and_permissions_verified
     - end_to_end_nonproduction_merge_path_validated
   unavailable_verification: record_and_continue_independent_ticket
