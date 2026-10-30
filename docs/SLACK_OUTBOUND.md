@@ -46,7 +46,7 @@ a focused regression test covers both paths. This is only a provider-event filte
 The send command now validates Slack thread eligibility, persists the opt-in flag
 on the Message row, includes the true intent in the idempotency fingerprint, and
 hydrates it for every delivery attempt (including durable retries). Existing
-false/default request fingerprints are unchanged. The new V39 migration is held
+false/default request fingerprints are unchanged. The reserved V41 migration is held
 in this draft until competing V35 migrations from PRs #126 and #133 have been
 sequenced without Flyway out-of-order upgrades. Tests cover invalid broadcast,
 idempotent replay and transient retry preservation. The composer switch,
