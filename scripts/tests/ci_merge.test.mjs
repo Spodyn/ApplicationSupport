@@ -384,7 +384,10 @@ test("CI command, build harness and test-runner edits cannot self-qualify on gre
     "apps/web/tsconfig.json", "packages/api-client/tsconfig.build.json",
     "scripts/generate-openapi.mjs", "scripts/tests/test_secret_scan.py",
     "infra/tests/verify-compose-lifecycle.sh",
-    "infra/minio/build-source-images.sh", "infra/compose.yaml", "infra/.env.example"
+    "infra/minio/build-source-images.sh", "infra/compose.yaml", "infra/.env.example",
+    ".gitattributes", "apps/api/src/main/resources/application-test.properties",
+    "apps/api/src/test/java/com/unifiedsupportinbox/testing/TestInfrastructure.java",
+    "apps/web/tests/unit/setup.ts"
   ];
   for (const path of protectedPaths) {
     const d = data();
