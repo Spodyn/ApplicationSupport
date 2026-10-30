@@ -591,6 +591,94 @@ test("Settings pokazuje stan błędu, gdy backend odmawia dostępu do konfigurac
   await expect(page.getByRole("button", { name: "Spróbuj ponownie" })).toBeVisible()
 })
 
+test("USI-153 zapisuje wyjątki harmonogramu i pobiera prawdziwy podgląd OOO", async ({ page }) => {
+  await preparePage(page)
+  await prepareSettingsApi(page)
+
+  const schedule = {
+    id: "018f0000-0000-7000-8000-000000000302",
+    timezone: "Europe/Warsaw",
+    active: true,
+    intervals: [{ dayOfWeek: 1, start: "09:00", end: "17:00" }],
+    exceptions: [{ date: "2026-12-24", type: "CLOSED", start: null, end: null, note: "Wigilia" }],
+    updatedBy: authenticatedSession.id,
+    updatedAt: "2026-10-30T12:00:00Z",
+  }
+  const writes: Array<{ path: string; body: unknown }> = []
+  await page.route("**/api/v1/admin/business-hours**", async (route) => {
+    const request = route.request()
+    const path = new URL(request.url()).pathname
+    if (request.method() === "PUT") {
+      const body = request.postDataJSON() as unknown
+      writes.push({ path, body })
+      if (path.endsWith("/exceptions")) {
+        schedule.exceptions = body as typeof schedule.exceptions
+      } else {
+        schedule.intervals = (body as { intervals: typeof schedule.intervals }).intervals
+      }
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(schedule) })
+  })
+  await page.route("**/api/v1/admin/out-of-office/preview**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      message: "Nie znaleziono przyszłego otwarcia.", nextOpening: null, timezone: "Europe/Warsaw",
+    }) })
+  })
+
+  await page.goto("/settings")
+  await page.getByRole("tab", { name: "Godziny pracy" }).click()
+  await expect(page.getByText("Wigilia")).toBeVisible()
+  await page.getByRole("row").filter({ hasText: "Poniedziałek" })
+    .locator('input[type="time"]').first().fill("10:00")
+  await page.getByRole("button", { name: "Zapisz zmiany" }).click()
+  await expect.poll(() => writes.find((item) => item.path === "/api/v1/admin/business-hours")?.body)
+    .toMatchObject({ timezone: "Europe/Warsaw", intervals: [{ dayOfWeek: 1, start: "10:00", end: "17:00" }] })
+  await expect.poll(() => writes.find((item) => item.path.endsWith("/exceptions"))?.body).toEqual([
+    { date: "2026-12-24", type: "CLOSED", start: null, end: null, note: "Wigilia" },
+  ])
+  await page.getByRole("tab", { name: "Poza biurem" }).click()
+  await page.getByRole("button", { name: "Pokaż zapisany podgląd" }).click()
+  await expect(page.getByText("Nie znaleziono przyszłego otwarcia.")).toBeVisible()
+  await expect(page.getByText(/Brak przyszłego otwarcia/)).toBeVisible()
+})
+
+test("USI-153 pokazuje konflikt wersji OOO bez pozornego sukcesu", async ({ page }) => {
+  await preparePage(page)
+  await prepareSettingsApi(page)
+  await page.route("**/api/v1/admin/out-of-office", async (route) => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON() as { version: number }
+      expect(body.version).toBe(2)
+      await route.fulfill({ status: 409, contentType: "application/problem+json", body: JSON.stringify({
+        code: "CONFLICT", status: 409, detail: "Polityka zmieniona przez innego administratora.",
+      }) })
+      return
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      enabled: true, template: "Pozdrawiamy", sendOncePerClosure: true, version: 2,
+      updatedAt: "2026-10-30T12:00:00Z", updatedBy: authenticatedSession.id,
+    }) })
+  })
+  await page.goto("/settings")
+  await page.getByRole("tab", { name: "Poza biurem" }).click()
+  await page.getByRole("button", { name: "Zapisz zmiany" }).click()
+  await expect(page.getByText("Polityka zmieniona przez innego administratora.")).toBeVisible()
+  await expect(page.getByText("Zapisano ustawienia nieobecności")).toHaveCount(0)
+})
+
+test("USI-153 odmawia dostępu do harmonogramu przy braku manage_schedule", async ({ page }) => {
+  await preparePage(page)
+  await prepareSettingsApi(page)
+  await page.route("**/api/v1/admin/business-hours", async (route) => {
+    await route.fulfill({ status: 403, contentType: "application/problem+json", body: JSON.stringify({
+      code: "ACCESS_DENIED", status: 403, detail: "Brak uprawnień do zarządzania harmonogramem.",
+    }) })
+  })
+  await page.goto("/settings")
+  await expect(page.getByText("Wystąpił błąd")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Spróbuj ponownie" })).toBeVisible()
+})
+
 test("mobilny widok czatów przechodzi z listy do rozmowy i wraca", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const { externalRequests } = await preparePage(page)

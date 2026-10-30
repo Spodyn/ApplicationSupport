@@ -52,8 +52,23 @@ export type ApiBusinessHoursSchedule = {
   timezone: string
   active: boolean
   intervals: ApiBusinessHoursInterval[]
+  exceptions?: ApiScheduleException[]
   updatedBy: string
   updatedAt: string
+}
+
+export type ApiScheduleException = {
+  date: string
+  type: "CLOSED" | "OPEN" | "OVERRIDE"
+  start: string | null
+  end: string | null
+  note: string | null
+}
+
+export type ApiOutOfOfficePreview = {
+  message: string
+  nextOpening: string | null
+  timezone: string
 }
 
 type ApiNotificationDestination = {
@@ -191,7 +206,15 @@ function coalesceAdjacentIntervals(intervals: ApiBusinessHoursInterval[]) {
 
 export function mapApiBusinessHours(
   schedule: ApiBusinessHoursSchedule,
-  exceptions: ScheduleException[] = [],
+  exceptions: ScheduleException[] = (schedule.exceptions ?? []).map((item) => ({
+    id: `${item.date}:${item.type}:${item.start ?? ""}:${item.end ?? ""}`,
+    date: item.date,
+    name: item.note?.trim() || item.type,
+    closed: item.type === "CLOSED",
+    type: item.type,
+    start: item.start == null ? undefined : wallClock(item.start),
+    end: item.end == null ? undefined : wallClock(item.end),
+  })),
 ): WorkScheduleSettings {
   const days = scheduleDays.map(({ dayOfWeek, key, label }) => {
     const intervals = coalesceAdjacentIntervals(
@@ -252,6 +275,21 @@ export function mapWorkScheduleToApiIntervals(
   })
 }
 
+export function mapScheduleExceptionsToApi(exceptions: ScheduleException[]): ApiScheduleException[] {
+  return exceptions.map((item) => {
+    if (!item.date || !/^\d{4}-\d{2}-\d{2}$/.test(item.date)) {
+      throw new Error("Data wyjątku musi mieć format RRRR-MM-DD.")
+    }
+    const type = item.closed ? "CLOSED" : item.type === "OPEN" ? "OPEN" : "OVERRIDE"
+    const start = type === "CLOSED" ? null : item.start || null
+    const end = type === "CLOSED" ? null : item.end || null
+    if (type !== "CLOSED" && (!start || !end || start >= end)) {
+      throw new Error("Wyjątek otwarcia wymaga poprawnych godzin od–do.")
+    }
+    return { date: item.date, type, start, end, note: item.name.trim() || null }
+  })
+}
+
 async function listIntegrations(): Promise<ManagedIntegration[]> {
   const integrations = await integrationApi.listIntegrations()
   return integrations.map(mapIntegration)
@@ -276,18 +314,13 @@ async function listChannels(): Promise<ManagedChannel[]> {
 }
 
 async function getBusinessHours(): Promise<ApiBusinessHoursSchedule> {
-  return browserApiTransport.request<ApiBusinessHoursSchedule>({
-    method: "GET",
-    path: "/api/v1/admin/business-hours",
-  })
+  return integrationApi.getBusinessHours()
 }
 
 async function saveBusinessHours(
   schedule: WorkScheduleSettings,
 ): Promise<ApiBusinessHoursSchedule> {
-  return browserApiTransport.request<ApiBusinessHoursSchedule>({
-    method: "PUT",
-    path: "/api/v1/admin/business-hours",
+  return integrationApi.replaceBusinessHours({
     body: {
       timezone: schedule.timezone,
       intervals: mapWorkScheduleToApiIntervals(schedule),
@@ -296,10 +329,10 @@ async function saveBusinessHours(
 }
 
 async function getOutOfOffice(): Promise<ApiOutOfOfficePolicy> {
-  return browserApiTransport.request<ApiOutOfOfficePolicy>({
-    method: "GET",
-    path: "/api/v1/admin/out-of-office",
-  })
+  const current = await integrationApi.getOutOfOffice()
+  // A refresh must update the optimistic-lock version, including after a 409.
+  outOfOfficeVersion = current.version
+  return current
 }
 
 async function saveOutOfOffice(
@@ -308,9 +341,7 @@ async function saveOutOfOffice(
   if (outOfOfficeVersion === undefined) {
     outOfOfficeVersion = (await getOutOfOffice()).version
   }
-  const saved = await browserApiTransport.request<ApiOutOfOfficePolicy>({
-    method: "PUT",
-    path: "/api/v1/admin/out-of-office",
+  const saved = await integrationApi.replaceOutOfOffice({
     body: { ...policy, version: outOfOfficeVersion },
   })
   outOfOfficeVersion = saved.version
@@ -480,7 +511,7 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     ])
     return {
       ...settings,
-      schedule: mapApiBusinessHours(businessHours, settings.schedule.exceptions),
+      schedule: mapApiBusinessHours(businessHours),
       integrations,
       channels,
       notifications,
@@ -506,10 +537,15 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
   ) {
     if (key === "schedule") {
       const schedule = value as WorkScheduleSettings
-      const saved = await saveBusinessHours(schedule)
-      const mapped = mapApiBusinessHours(saved, schedule.exceptions)
-      await mockAdministrationSettingsRepository.saveSection("schedule", mapped)
-      return mapped as AdministrationSettings[K]
+      await saveBusinessHours(schedule)
+      try {
+        await integrationApi.replaceBusinessHoursExceptions({
+          body: mapScheduleExceptionsToApi(schedule.exceptions),
+        })
+      } catch (error) {
+        throw new Error("Zapisano godziny tygodnia, ale nie zapisano wyjątków. Odśwież ustawienia przed ponowną próbą.", { cause: error })
+      }
+      return mapApiBusinessHours(await getBusinessHours()) as AdministrationSettings[K]
     }
     if (key === "notifications") {
       return (await saveNotifications(value as NotificationDestination[])) as AdministrationSettings[K]
@@ -532,6 +568,10 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
         pauseWhileWaiting: saved.pauseWaiting } as AdministrationSettings[K]
     }
     return mockAdministrationSettingsRepository.saveSection(key, value)
+  },
+
+  async previewOutOfOffice(customerName) {
+    return integrationApi.previewOutOfOffice({ customerName })
   },
 
   async setIntegrationStatus(id, status) {
