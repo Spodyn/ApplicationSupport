@@ -102,7 +102,8 @@ export function validateIndependentAttestation({pull, expectedBaseSha, comments,
   const laterDiscussion = comments.some(comment => comment !== latest &&
     ((Number.isSafeInteger(proofCommentId) && proofCommentId > 0 &&
       Number.isSafeInteger(Number(comment?.id)) && Number(comment.id) > proofCommentId) ||
-      Date.parse(comment?.created_at) > posted));
+      Date.parse(comment?.created_at) > posted ||
+      Date.parse(comment?.updated_at) > posted));
   if (laterDiscussion) return ["PR discussion changed after independent attestation; requalification required"];
   let proof;
   try {
