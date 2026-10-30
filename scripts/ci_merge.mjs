@@ -95,6 +95,15 @@ export function validateIndependentAttestation({pull, expectedBaseSha, comments,
   }
   // Edits are not accepted: publish a new trusted comment to revoke or renew.
   if (latest.updated_at !== latest.created_at) return ["Attestation comment was edited"];
+  // Any subsequent PR discussion can introduce a new security/DoD blocker.
+  // GitHub timestamps have second precision, so also compare immutable issue
+  // comment IDs to catch comments created in the same second as the proof.
+  const proofCommentId = Number(latest.id);
+  const laterDiscussion = comments.some(comment => comment !== latest &&
+    ((Number.isSafeInteger(proofCommentId) && proofCommentId > 0 &&
+      Number.isSafeInteger(Number(comment?.id)) && Number(comment.id) > proofCommentId) ||
+      Date.parse(comment?.created_at) > posted));
+  if (laterDiscussion) return ["PR discussion changed after independent attestation; requalification required"];
   let proof;
   try {
     proof = JSON.parse(latest.body.trimStart().slice(ATTESTATION_MARKER.length).trim());
