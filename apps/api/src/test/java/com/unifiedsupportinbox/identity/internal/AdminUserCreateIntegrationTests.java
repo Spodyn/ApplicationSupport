@@ -174,7 +174,7 @@ class AdminUserCreateIntegrationTests {
                     "SELECT count(*) FROM user_permissions p JOIN users u ON u.id = p.user_id WHERE u.email = ?",
                     Integer.class, email)).isZero();
             assertThat(jdbc.queryForObject(
-                    "SELECT count(*) FROM idempotency_keys WHERE command_scope = 'admin.users.create' AND \\"key\\" = ?",
+                    "SELECT count(*) FROM idempotency_keys WHERE command_scope = 'admin.users.create' AND \"key\" = ?",
                     Integer.class, key)).isZero();
             assertThat(jdbc.queryForObject(
                     "SELECT count(*) FROM audit_events WHERE action = 'USER_CREATED'", Integer.class))
