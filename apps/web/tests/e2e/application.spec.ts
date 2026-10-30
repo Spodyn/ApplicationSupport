@@ -636,6 +636,43 @@ test("USI-153 zapisuje wyjątki harmonogramu i pobiera prawdziwy podgląd OOO", 
   await expect(page.getByText(/Brak przyszłego otwarcia/)).toBeVisible()
 })
 
+test("USI-153 pokazuje konflikt wersji OOO bez pozornego sukcesu", async ({ page }) => {
+  await preparePage(page)
+  await prepareSettingsApi(page)
+  await page.route("**/api/v1/admin/out-of-office", async (route) => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON() as { version: number }
+      expect(body.version).toBe(2)
+      await route.fulfill({ status: 409, contentType: "application/problem+json", body: JSON.stringify({
+        code: "CONFLICT", status: 409, detail: "Polityka zmieniona przez innego administratora.",
+      }) })
+      return
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      enabled: true, template: "Pozdrawiamy", sendOncePerClosure: true, version: 2,
+      updatedAt: "2026-10-30T12:00:00Z", updatedBy: authenticatedSession.id,
+    }) })
+  })
+  await page.goto("/settings")
+  await page.getByRole("tab", { name: "Poza biurem" }).click()
+  await page.getByRole("button", { name: "Zapisz zmiany" }).click()
+  await expect(page.getByText("Polityka zmieniona przez innego administratora.")).toBeVisible()
+  await expect(page.getByText("Zapisano ustawienia nieobecności")).toHaveCount(0)
+})
+
+test("USI-153 odmawia dostępu do harmonogramu przy braku manage_schedule", async ({ page }) => {
+  await preparePage(page)
+  await prepareSettingsApi(page)
+  await page.route("**/api/v1/admin/business-hours", async (route) => {
+    await route.fulfill({ status: 403, contentType: "application/problem+json", body: JSON.stringify({
+      code: "ACCESS_DENIED", status: 403, detail: "Brak uprawnień do zarządzania harmonogramem.",
+    }) })
+  })
+  await page.goto("/settings")
+  await expect(page.getByText("Wystąpił błąd")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Spróbuj ponownie" })).toBeVisible()
+})
+
 test("mobilny widok czatów przechodzi z listy do rozmowy i wraca", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const { externalRequests } = await preparePage(page)
