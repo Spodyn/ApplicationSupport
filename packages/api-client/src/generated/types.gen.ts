@@ -300,6 +300,7 @@ export type SendMessageRequest = {
   "body": string
   "bodyFormat"?: MessageBodyFormat
   "attachmentIds"?: Array<string>
+  "replyBroadcast"?: boolean
 }
 
 export type SendMessageResponse = {

@@ -81,6 +81,24 @@ describe("real inbox API adapter", () => {
     expect(send?.body).toEqual({ body: "USI test reply", bodyFormat: "PLAIN_TEXT" })
   })
 
+  it("forwards opt-in Slack reply broadcast without changing default sends or idempotency keys", async () => {
+    const { repository, requests } = fixture()
+    await repository.sendMessage(caseId, {
+      body: "Broadcast to channel", replyBroadcast: true, idempotencyKey: "broadcast-key",
+    })
+    await repository.sendMessage(caseId, {
+      body: "Ordinary thread reply", replyBroadcast: false, idempotencyKey: "ordinary-key",
+    })
+    const posts = requests.filter((item) => item.path.endsWith("/messages") && item.method === "POST")
+    expect(posts).toHaveLength(2)
+    expect(posts[0].body).toEqual({
+      body: "Broadcast to channel", bodyFormat: "PLAIN_TEXT", replyBroadcast: true,
+    })
+    expect(posts[0].headers?.["Idempotency-Key"]).toBe("broadcast-key")
+    expect(posts[1].body).toEqual({ body: "Ordinary thread reply", bodyFormat: "PLAIN_TEXT" })
+    expect(posts[1].headers?.["Idempotency-Key"]).toBe("ordinary-key")
+  })
+
   it("maps persisted support messages as agent messages and accepts an empty real history page", async () => {
     expect(mapCaseMessage(caseId, {
       ...message, kind: "SUPPORT", inbound: false, providerCreatedAt: null,

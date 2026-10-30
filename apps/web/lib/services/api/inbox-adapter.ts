@@ -232,6 +232,7 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
           body,
           bodyFormat: "PLAIN_TEXT",
           ...(attachmentIds.length ? { attachmentIds } : {}),
+          ...(input.replyBroadcast ? { replyBroadcast: true } : {}),
         },
       })
       const history = await client.getCaseMessages({ caseId, limit: 50 })
