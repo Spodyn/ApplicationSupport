@@ -372,3 +372,34 @@ test("blocks unresolved outdated review threads until explicitly resolved", () =
   d.threads.push({isResolved: false, isOutdated: true});
   assert.match(checkEligibility(d).join(" "), /Unresolved review thread/);
 });
+
+test("CI command, build harness and test-runner edits cannot self-qualify on green jobs", () => {
+  const protectedPaths = [
+    "package.json", "apps/web/package.json", "packages/api-client/package.json",
+    "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc", ".nvmrc",
+    "apps/api/pom.xml", "apps/api/mvnw", "apps/api/mvnw.cmd",
+    "apps/api/.mvn/maven.config", "apps/api/.mvn/wrapper/maven-wrapper.properties",
+    "apps/web/playwright.config.ts", "apps/web/vitest.config.ts",
+    "apps/web/eslint.config.mjs", "apps/web/next.config.ts",
+    "apps/web/tsconfig.json", "packages/api-client/tsconfig.build.json",
+    "scripts/generate-openapi.mjs", "scripts/tests/test_secret_scan.py",
+    "infra/tests/verify-compose-lifecycle.sh",
+    "infra/minio/build-source-images.sh", "infra/compose.yaml", "infra/.env.example"
+  ];
+  for (const path of protectedPaths) {
+    const d = data();
+    d.changedFiles = [path];
+    assert.match(checkEligibility(d).join(" "), /independent review/, path);
+  }
+
+  // A rename can hide the old path in previous_filename; inspect both.
+  const renamed = data();
+  renamed.changedFiles = changedPathsFromFiles([
+    {filename: "apps/web/src/harmless.ts", previous_filename: "apps/web/package.json"}
+  ]);
+  assert.match(checkEligibility(renamed).join(" "), /independent review/);
+
+  const ordinary = data();
+  ordinary.changedFiles = ["apps/api/src/main/java/example/Handler.java", "apps/web/components/example.tsx"];
+  assert.deepEqual(checkEligibility(ordinary), []);
+});
