@@ -51,7 +51,7 @@ const data = () => ({
   reviews: [], threads: [], expectedBaseSha: base,
   comments: [comment()], trustedAttestorId: attestorId, changedFiles: [], now,
   effectiveRulesets: [{id: 21055765, target: "branch", enforcement: "active"}],
-  ruleset: {enforcement: "active", rules: [
+  ruleset: {target: "branch", enforcement: "active", conditions: {ref_name: {include: ["~DEFAULT_BRANCH"], exclude: []}}, rules: [
     {type: "pull_request", parameters: {required_approving_review_count: 0, allowed_merge_methods: ["squash"]}},
     {type: "required_status_checks", parameters: {strict_required_status_checks_policy: true, required_status_checks: [{context: "validate"}]}}
   ]}
@@ -408,6 +408,24 @@ test("rejects missing current-base CI provenance and non-strict GitHub protectio
   const nonStrict = data();
   nonStrict.ruleset.rules[1].parameters.strict_required_status_checks_policy = false;
   assert.match(checkEligibility(nonStrict).join(" "), /Strict up-to-date CI/);
+});
+
+test("requires the reviewed ruleset to actually protect main, not just retain its ID", () => {
+  const moved = data();
+  moved.ruleset.conditions.ref_name.include = ["refs/heads/release"];
+  assert.match(checkEligibility(moved).join(" "), /not proven to apply to main/);
+  const excluded = data();
+  excluded.ruleset.conditions.ref_name.exclude = ["~DEFAULT_BRANCH"];
+  assert.match(checkEligibility(excluded).join(" "), /not proven to apply to main/);
+  const unknown = data();
+  delete unknown.ruleset.conditions;
+  assert.match(checkEligibility(unknown).join(" "), /not proven to apply to main/);
+  const nonBranch = data();
+  nonBranch.ruleset.target = "tag";
+  assert.match(checkEligibility(nonBranch).join(" "), /not proven to apply to main/);
+  const exactMain = data();
+  exactMain.ruleset.conditions.ref_name.include = ["refs/heads/main"];
+  assert.deepEqual(checkEligibility(exactMain), []);
 });
 
 test("fails closed when inherited branch ruleset inventory is missing or changes", () => {
