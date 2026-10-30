@@ -2,6 +2,7 @@ package com.unifiedsupportinbox.provider.telegram.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -74,7 +75,7 @@ class TelegramMessageDeliveryProviderTests {
         byte[] token = token();
         when(secrets.resolve("telegram/development-bot", TelegramMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .thenReturn(Optional.of(token));
-        when(api.sendMessage(any(), any(Long.class), any(), any()))
+        when(api.sendMessage(any(), anyLong(), any(), any()))
                 .thenReturn(new TelegramBotApiClient.SendResponse(429, false, null, 429, Duration.ofSeconds(11)));
         MessageDeliveryProvider.DeliveryResult result = provider.deliver(command("42"));
         assertThat(result.outcome()).isEqualTo(MessageDeliveryProvider.Outcome.TRANSIENT_FAILURE);
@@ -88,7 +89,7 @@ class TelegramMessageDeliveryProviderTests {
         byte[] token = token();
         when(secrets.resolve("telegram/development-bot", TelegramMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .thenReturn(Optional.of(token));
-        when(api.sendMessage(any(), any(Long.class), any(), any()))
+        when(api.sendMessage(any(), anyLong(), any(), any()))
                 .thenReturn(new TelegramBotApiClient.SendResponse(403, false, null, 403, null));
         MessageDeliveryProvider.DeliveryResult result = provider.deliver(command("42"));
         assertThat(result.outcome()).isEqualTo(MessageDeliveryProvider.Outcome.PERMANENT_FAILURE);
@@ -106,7 +107,7 @@ class TelegramMessageDeliveryProviderTests {
         assertThat(provider.deliver(invalidChat).errorCode()).isEqualTo("TELEGRAM_CHAT_INVALID");
         assertThat(provider.deliver(command("not-a-topic")).errorCode()).isEqualTo("TELEGRAM_TOPIC_INVALID");
         verify(secrets, never()).resolve(any(), any());
-        verify(api, never()).sendMessage(any(), any(Long.class), any(), any());
+        verify(api, never()).sendMessage(any(), anyLong(), any(), any());
     }
 
     @Test
@@ -114,7 +115,7 @@ class TelegramMessageDeliveryProviderTests {
         when(secrets.resolve("telegram/development-bot", TelegramMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .thenReturn(Optional.empty());
         assertThat(provider.deliver(command(null)).errorCode()).isEqualTo("TELEGRAM_BOT_TOKEN_MISSING");
-        verify(api, never()).sendMessage(any(), any(Long.class), any(), any());
+        verify(api, never()).sendMessage(any(), anyLong(), any(), any());
     }
 
     private MessageDeliveryProvider.DeliveryCommand command(String topic) {
