@@ -144,15 +144,16 @@ class AdminUserCreateIntegrationTests {
     void rejectsInvertedValidityWindowWithoutReservingIdempotencyKey() throws Exception {
         user("admin@example.com", UserRole.ADMIN);
         CookieManager cookies = login("admin@example.com");
-        String payload = body("bad-dates@example.com", "USER", "[]", PASSWORD)
-                .replace("\\"active\\":true",
-                        "\\"active\\":true,\\"validFrom\\":\\"2099-01-02T00:00:00Z\\","
-                                + "\\"validUntil\\":\\"2099-01-01T00:00:00Z\\"");
+        String payload = """
+                {"email":"bad-dates@example.com","fullName":"Invalid Dates","role":"USER",
+                 "active":true,"permissions":[],"initialPassword":"%s",
+                 "validFrom":"2099-01-02T00:00:00Z","validUntil":"2099-01-01T00:00:00Z"}
+                """.formatted(PASSWORD);
         assertThat(post(client(cookies), cookies, payload, "bad-dates-key").statusCode())
                 .isEqualTo(400);
         assertThat(users.findByEmailIgnoreCase("bad-dates@example.com")).isEmpty();
         assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM idempotency_keys WHERE command_scope = 'admin.users.create' AND \\"key\\" = ?",
+                "SELECT count(*) FROM idempotency_keys WHERE command_scope = 'admin.users.create' AND \"key\" = ?",
                 Integer.class, "bad-dates-key")).isZero();
     }
 
