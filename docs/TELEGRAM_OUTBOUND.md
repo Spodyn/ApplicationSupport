@@ -46,8 +46,9 @@ exception text. The adapter translates failures into stable, non-sensitive
   configuration/permissions or content repair.
 - Missing credentials, invalid chat/topic and invalid/oversize text are
   permanent validation failures before provider I/O.
-- Missing `result.message_id` or invalid JSON on a successful HTTP response is
-  transient. Malformed JSON on an HTTP error preserves the original status:
+- Missing `result.message_id`, missing/invalid Bot API `ok` envelope, or
+  invalid JSON on a successful HTTP response is transient (synthetic 502),
+  never a permanent `TELEGRAM_HTTP_200`. Malformed JSON on an HTTP error preserves the original status:
   `429` remains retryable with `Retry-After`, `5xx` remains retryable, and
   `400`/`401`/`403` remains permanent. Transport exceptions are transient.
   No provider error description or token-bearing URL is logged.
