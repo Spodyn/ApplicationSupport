@@ -53,6 +53,30 @@ export type AttachmentUploadResponse = {
   "scanError": string | null
 }
 
+export type BusinessHoursException = {
+  "date": string
+  "type": "CLOSED" | "OPEN" | "OVERRIDE"
+  "start": string | null
+  "end": string | null
+  "note": string | null
+}
+
+export type BusinessHoursInterval = {
+  "dayOfWeek": number
+  "start": string
+  "end": string
+}
+
+export type BusinessHoursSchedule = {
+  "id": string
+  "timezone": string
+  "active": boolean
+  "intervals": Array<BusinessHoursInterval>
+  "exceptions": Array<BusinessHoursException>
+  "updatedBy": string
+  "updatedAt": string
+}
+
 export type CaseChannel = {
   "id": string
   "name": string
@@ -280,6 +304,21 @@ export type MessageBodyFormat = "PLAIN_TEXT" | "MARKDOWN"
 
 export type MessageDeliveryStatus = "QUEUED" | "SENDING" | "SENT" | "DELIVERED" | "FAILED"
 
+export type OutOfOfficePolicy = {
+  "enabled": boolean
+  "template": string
+  "sendOncePerClosure": boolean
+  "version": number
+  "updatedAt": string
+  "updatedBy": string
+}
+
+export type OutOfOfficePreview = {
+  "message": string
+  "nextOpening": string | null
+  "timezone": string
+}
+
 export type PermissionCode = "manage_users" | "manage_integrations" | "manage_sla" | "manage_schedule" | "manage_notifications" | "view_global_statistics" | "reassign_cases" | "force_resolve" | "view_audit"
 
 export type PermissionUpdateRequest = {
@@ -294,6 +333,18 @@ export type ReadPositionResponse = {
   "caseId": string
   "messageId": string
   "readAt": string
+}
+
+export type ReplaceBusinessHoursRequest = {
+  "timezone": string
+  "intervals": Array<BusinessHoursInterval>
+}
+
+export type ReplaceOutOfOfficeRequest = {
+  "enabled": boolean
+  "template": string
+  "sendOncePerClosure": boolean
+  "version": number
 }
 
 export type SendMessageRequest = {
