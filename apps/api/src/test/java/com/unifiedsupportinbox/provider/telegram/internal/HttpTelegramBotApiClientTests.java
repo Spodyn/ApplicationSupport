@@ -76,6 +76,14 @@ class HttpTelegramBotApiClientTests {
     }
 
     @Test
+    void missingOkEnvelopeOnHttp200IsRetryableInsteadOfPermanent() throws Exception {
+        start(exchange -> respond(exchange, 200, "{}"));
+        TelegramBotApiClient.SendResponse response = client().sendMessage(token(), 12345L, null, "Reply");
+        assertThat(response.ok()).isFalse();
+        assertThat(response.httpStatus()).isEqualTo(502);
+    }
+
+    @Test
     void malformedRateLimitBodyStillPreservesHttp429AndRetryAfterHeader() throws Exception {
         start(exchange -> {
             exchange.getResponseHeaders().add("Retry-After", "17");
