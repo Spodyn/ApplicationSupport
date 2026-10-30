@@ -69,8 +69,16 @@ export interface ScheduleException {
   date: string
   name: string
   closed: boolean
+  /** Preserve the server's distinction between exceptional opening and override. */
+  type?: "CLOSED" | "OPEN" | "OVERRIDE"
   start?: string
   end?: string
+}
+
+export interface OutOfOfficePreview {
+  message: string
+  nextOpening: string | null
+  timezone: string
 }
 
 export interface WorkScheduleSettings {
