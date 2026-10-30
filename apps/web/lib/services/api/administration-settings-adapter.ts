@@ -277,7 +277,7 @@ export function mapWorkScheduleToApiIntervals(
 
 export function mapScheduleExceptionsToApi(exceptions: ScheduleException[]): ApiScheduleException[] {
   return exceptions.map((item) => {
-    if (!item.date || !/^\\d{4}-\\d{2}-\\d{2}$/.test(item.date)) {
+    if (!item.date || !/^\d{4}-\d{2}-\d{2}$/.test(item.date)) {
       throw new Error("Data wyjątku musi mieć format RRRR-MM-DD.")
     }
     const type = item.closed ? "CLOSED" : item.type === "OPEN" ? "OPEN" : "OVERRIDE"
