@@ -212,6 +212,18 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
       errors.push("Effective active branch rulesets changed; independent policy reconciliation required");
     }
   }
+  // The expected ruleset ID alone is insufficient: an administrator could
+  // retarget that ruleset away from main without changing its ID or rules.
+  // Only unambiguous exact/default/all ref selectors are accepted here.
+  const selectors = ruleset?.conditions?.ref_name;
+  const recognized = new Set(["~DEFAULT_BRANCH", "~ALL", "refs/heads/main"]);
+  const includesMain = Array.isArray(selectors?.include) &&
+    selectors.include.some(ref => recognized.has(ref));
+  const excludesMain = !Array.isArray(selectors?.exclude) ||
+    selectors.exclude.some(ref => recognized.has(ref));
+  if (ruleset?.target !== "branch" || !includesMain || excludesMain) {
+    errors.push("Protect main ruleset is not proven to apply to main");
+  }
   const prRule = ruleset?.rules?.find(x => x.type === "pull_request")?.parameters;
   const ciRule = ruleset?.rules?.find(x => x.type === "required_status_checks")?.parameters;
   if (ruleset?.enforcement !== "active" || !prRule) errors.push("Branch protection not verified");
