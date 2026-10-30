@@ -113,7 +113,8 @@ export function validateIndependentAttestation({pull, expectedBaseSha, comments,
     if (evidence?.result !== "PASS" ||
         typeof evidence?.reference !== "string" || evidence.reference.trim().length < 12 ||
         !Number.isFinite(checked) || !Number.isFinite(issued) ||
-        checked < current - MAX_EVIDENCE_AGE_MS || checked > current + 30000) {
+        checked < current - MAX_EVIDENCE_AGE_MS ||
+        checked > issued + 30000 || checked > current + 30000) {
       errors.push("Missing or stale independent evidence: " + name);
     }
   }
