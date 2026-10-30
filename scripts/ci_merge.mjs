@@ -85,8 +85,10 @@ export function validateIndependentAttestation({pull, expectedBaseSha, comments,
   if (proof?.base_sha !== expectedBaseSha || proof?.base_sha !== pull?.base?.sha) {
     errors.push("Attestation base SHA mismatch");
   }
+  // Match exactly one whole Jira key: USI-24 must not authorize USI-247.
+  const titleJiraKeys = pull?.title?.match(/\bUSI-[1-9]\d*\b/g) || [];
   if (!/^USI-[1-9]\d*$/.test(proof?.jira_key || "") ||
-      !pull?.title?.includes(proof?.jira_key)) {
+      titleJiraKeys.length !== 1 || titleJiraKeys[0] !== proof.jira_key) {
     errors.push("Attestation Jira key not bound to PR title");
   }
   const issued = Date.parse(proof?.issued_at);
