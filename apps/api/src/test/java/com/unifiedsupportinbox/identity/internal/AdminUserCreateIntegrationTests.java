@@ -38,6 +38,7 @@ class AdminUserCreateIntegrationTests {
     private static JdbcTemplate jdbc;
     private static PasswordEncoder encoder;
     private static URI baseUri;
+    private static int initialUserCreatedAudits;
 
     @BeforeAll
     static void startApplication() {
@@ -70,7 +71,9 @@ class AdminUserCreateIntegrationTests {
         jdbc.update("DELETE FROM spring_session_attributes");
         jdbc.update("DELETE FROM spring_session");
         jdbc.update("DELETE FROM user_permissions");
-        jdbc.update("DELETE FROM audit_events");
+        // Audit is append-only: do not bypass its database mutation guard in tests.
+        initialUserCreatedAudits = jdbc.queryForObject(
+                "SELECT count(*) FROM audit_events WHERE action = 'USER_CREATED'", Integer.class);
         jdbc.update("DELETE FROM idempotency_keys");
         jdbc.update("DELETE FROM users");
     }
@@ -92,7 +95,7 @@ class AdminUserCreateIntegrationTests {
         assertThat(loggedIn.statusCode()).isEqualTo(200);
         assertThat(JSON.readTree(loggedIn.body()).path("role").asString()).isEqualTo("USER");
         String audit = jdbc.queryForObject(
-                "SELECT metadata_json::text FROM audit_events WHERE action = 'USER_CREATED'",
+                "SELECT metadata_json::text FROM audit_events WHERE action = 'USER_CREATED' ORDER BY created_at DESC LIMIT 1",
                 String.class);
         assertThat(audit).contains("INITIAL_PASSWORD").doesNotContain(PASSWORD, created.passwordHash());
     }
@@ -112,7 +115,8 @@ class AdminUserCreateIntegrationTests {
         assertThat(jdbc.queryForObject(
                 "SELECT count(*) FROM users WHERE email = 'new@example.com'", Integer.class)).isEqualTo(1);
         assertThat(jdbc.queryForObject(
-                "SELECT count(*) FROM audit_events WHERE action = 'USER_CREATED'", Integer.class)).isEqualTo(1);
+                "SELECT count(*) FROM audit_events WHERE action = 'USER_CREATED'", Integer.class))
+                .isEqualTo(initialUserCreatedAudits + 1);
         HttpResponse<String> mismatch = post(http, cookies,
                 body("different@example.com", "USER", "[]", PASSWORD), "same-create-key");
         assertThat(mismatch.statusCode()).isEqualTo(409);
