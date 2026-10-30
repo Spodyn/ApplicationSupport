@@ -219,8 +219,10 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
   const recognized = new Set(["~DEFAULT_BRANCH", "~ALL", "refs/heads/main"]);
   const includesMain = Array.isArray(selectors?.include) &&
     selectors.include.some(ref => recognized.has(ref));
+  // A wildcard or future selector syntax could also exclude main. Until an
+  // independent policy parser verifies it, any exclusion is a hard stop.
   const excludesMain = !Array.isArray(selectors?.exclude) ||
-    selectors.exclude.some(ref => recognized.has(ref));
+    selectors.exclude.length !== 0;
   if (ruleset?.target !== "branch" || !includesMain || excludesMain) {
     errors.push("Protect main ruleset is not proven to apply to main");
   }
