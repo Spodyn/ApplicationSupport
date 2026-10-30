@@ -9,6 +9,9 @@
 export const REQUIRED_JOBS = Object.freeze(["configuration", "backend", "integration", "infrastructure", "openapi", "validate"]);
 export const READY_LABEL = "usi/merge-ready";
 const EXPECTED_MAIN_RULESET_ID = 21055765;
+// Bind eligibility to the actual repository CI workflow, not an arbitrary PR workflow.
+const EXPECTED_CI_WORKFLOW_ID = 330478347;
+const EXPECTED_CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 
 /**
  * A PR label is only a routing hint, not evidence. The independent attestor
@@ -88,7 +91,7 @@ export function validateIndependentAttestation({pull, expectedBaseSha, comments,
 }
 
 
-export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], ruleset, effectiveRulesets, expectedBaseSha, comments = [], trustedAttestorId, now }) {
+export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], ruleset, effectiveRulesets, expectedBaseSha, comments = [], trustedAttestorId, changedFiles, now }) {
   const errors = [];
   if (!pull || pull.state !== "open" || pull.draft) errors.push("PR is not open and ready");
   if (pull?.base?.ref !== "main") errors.push("PR does not target main");
@@ -101,6 +104,15 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
     if (labels.has(name)) errors.push("Blocked by label: " + name);
   }
   if (!run || run.event !== "pull_request" || run.status !== "completed" || run.conclusion !== "success") errors.push("Exact successful pull_request CI run missing");
+  if (run?.workflow_id !== EXPECTED_CI_WORKFLOW_ID || run?.path !== EXPECTED_CI_WORKFLOW_PATH || run?.name !== "CI") {
+    errors.push("CI run is not from the trusted repository workflow");
+  }
+  // A PR can edit its own pull_request workflow to make six no-op jobs pass.
+  // Never let such a workflow attest to its own security; require separate review.
+  if (!Array.isArray(changedFiles) || changedFiles.length >= 100 ||
+      changedFiles.some(path => typeof path !== "string" || path.startsWith(".github/workflows/"))) {
+    errors.push("PR workflow changes or incomplete file inventory require independent review");
+  }
   if (run?.head_sha !== pull?.head?.sha) errors.push("CI SHA != current PR HEAD");
   const belongs = (run?.pull_requests || []).some(x => x.number === pull?.number && x.head?.sha === pull.head.sha);
   if (!belongs) errors.push("CI run is not proven to belong to this PR and HEAD");
@@ -165,6 +177,7 @@ const asJson = async (url, auth, opts = {}) => {
 
 const pickCI = (runs, pr) => runs.find(run =>
   run.event === "pull_request" && run.head_sha === pr.head.sha &&
+  run.workflow_id === EXPECTED_CI_WORKFLOW_ID && run.path === EXPECTED_CI_WORKFLOW_PATH && run.name === "CI" &&
   (run.pull_requests || []).some(p => p.number === pr.number && p.head?.sha === pr.head.sha)
 );
 
@@ -180,6 +193,7 @@ export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }
   const jobs = run ? (await asJson(api + "/actions/runs/" + run.id + "/jobs?per_page=100", auth)).jobs : [];
   const reviews = await asJson(api + "/pulls/" + number + "/reviews?per_page=100", auth);
   const comments = await asJson(api + "/issues/" + number + "/comments?per_page=100", auth);
+  const files = await asJson(api + "/pulls/" + number + "/files?per_page=100", auth);
   const effectiveRulesets = await asJson(api + "/rulesets?includes_parents=true&per_page=100", auth);
   const ruleset = await asJson(api + "/rulesets/" + EXPECTED_MAIN_RULESET_ID, auth);
   const graphql = await asJson("https://api.github.com/graphql", auth, {
@@ -196,9 +210,11 @@ export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }
   if (reviews.length === 100) throw Error("Review pagination incomplete");
   if (comments.length === 100) throw Error("Attestation comment pagination incomplete");
   if (jobs.length === 100) throw Error("CI job pagination incomplete");
+  if (!Array.isArray(files) || files.length >= 100) throw Error("PR file inventory incomplete");
   const errors = checkEligibility({
     pull, run, jobs, reviews, threads: threadConnection.nodes,
-    ruleset, effectiveRulesets, expectedBaseSha: currentMainSha, comments, trustedAttestorId
+    ruleset, effectiveRulesets, expectedBaseSha: currentMainSha, comments, trustedAttestorId,
+    changedFiles: files.map(file => file.filename)
   });
   return {errors, pull, run};
 }
