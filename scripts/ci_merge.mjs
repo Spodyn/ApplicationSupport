@@ -19,10 +19,18 @@ const PROTECTED_CONTROL_FILES = new Set([
   "docs/orchestrator-policy.yaml",
   "docs/ORCHESTRATOR_CONTRACT.md",
   "docs/PRODUCT_CONTRACT.md",
-  "docs/decision-registry.yaml"
+  "docs/PRODUCT_SPEC.md",
+  "docs/WORKFLOW_MATRIX.md",
+  "docs/ARCHITECTURE.md",
+  "docs/INTEGRATIONS.md",
+  "docs/SECURITY.md",
+  "docs/OPERATIONS.md",
+  "docs/DECISION_REGISTRY.md",
+  "docs/decision-registry.yaml",
+  ".github/CODEOWNERS"
 ]);
 const isProtectedControlFile = path =>
-  path.startsWith(".github/workflows/") ||
+  path.startsWith(".github/workflows/") || path.startsWith(".github/actions/") ||
   path === "AGENTS.md" || path.endsWith("/AGENTS.md") ||
   PROTECTED_CONTROL_FILES.has(path);
 
