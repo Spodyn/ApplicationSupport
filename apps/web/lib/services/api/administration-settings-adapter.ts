@@ -334,10 +334,13 @@ async function saveBusinessHours(
 }
 
 async function getOutOfOffice(): Promise<ApiOutOfOfficePolicy> {
-  return browserApiTransport.request<ApiOutOfOfficePolicy>({
+  const current = await browserApiTransport.request<ApiOutOfOfficePolicy>({
     method: "GET",
     path: "/api/v1/admin/out-of-office",
   })
+  // A refresh must update the optimistic-lock version, including after a 409.
+  outOfOfficeVersion = current.version
+  return current
 }
 
 async function saveOutOfOffice(
