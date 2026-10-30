@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react"
+import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
 import {
   MoreHorizontal,
   CheckCircle2,
@@ -80,9 +80,10 @@ const emptyForm: AdministrationUserInput = {
   email: "",
   role: "USER",
   active: true,
-  validFrom: "2026-08-03",
+  validFrom: new Date().toISOString().slice(0, 10),
   validUntil: undefined,
   permissions: [],
+  initialPassword: "",
 }
 
 export default function UsersRoute() {
@@ -106,10 +107,12 @@ export default function UsersRoute() {
   const currentAdministrationUserQuery = useCurrentAdministrationUser()
   const actions = useAdministrationUserActions()
   const users = usersQuery.data ?? []
-  const canManageUsers = actions.supported && hasAdministrationPermission(
+  const permittedToManageUsers = hasAdministrationPermission(
     currentAdministrationUserQuery.data,
     "manage_users",
   )
+  const canManageUsers = actions.supported && permittedToManageUsers
+  const canCreateUsers = actions.createSupported && permittedToManageUsers
 
   const openCreate = () => {
     setEditedUser(null)
@@ -274,7 +277,7 @@ export default function UsersRoute() {
               <RefreshCw className={usersQuery.isFetching ? "animate-spin" : undefined} />
               <span className="hidden sm:inline">Odśwież</span>
             </Button>
-            <Button size="sm" onClick={openCreate} disabled={!canManageUsers}>
+            <Button size="sm" onClick={openCreate} disabled={!canCreateUsers}>
               <Plus /> Dodaj użytkownika
             </Button>
           </div>
@@ -334,7 +337,7 @@ export default function UsersRoute() {
                     icon={Users}
                     title="Nie znaleziono użytkowników"
                     description="Zmień kryteria wyszukiwania albo dodaj pierwsze konto."
-                    action={<Button onClick={openCreate} disabled={!canManageUsers}><Plus /> Dodaj użytkownika</Button>}
+                    action={<Button onClick={openCreate} disabled={!canCreateUsers}><Plus /> Dodaj użytkownika</Button>}
                   />
                 }
               />
@@ -350,9 +353,9 @@ export default function UsersRoute() {
           onOpenChange={setDialogOpen}
           user={editedUser}
           saving={actions.save.isPending}
-          onSave={async (input) => {
+          onSave={async (input, idempotencyKey) => {
             try {
-              await actions.save.mutateAsync({ input, id: editedUser?.id })
+              await actions.save.mutateAsync({ input, id: editedUser?.id, idempotencyKey })
               notify.success(editedUser ? "Zapisano zmiany użytkownika" : "Dodano użytkownika", input.fullName)
               setDialogOpen(false)
             } catch (error) {
@@ -396,7 +399,7 @@ function UserDialog({
   onOpenChange: (open: boolean) => void
   user: AdministrationUser | null
   saving: boolean
-  onSave: (input: AdministrationUserInput) => Promise<void>
+  onSave: (input: AdministrationUserInput, idempotencyKey: string) => Promise<void>
 }) {
   const [form, setForm] = useState<AdministrationUserInput>(() =>
     user
@@ -411,6 +414,8 @@ function UserDialog({
         }
       : structuredClone(emptyForm),
   )
+
+  const requestRef = useRef<{ payload: string; key: string } | null>(null)
 
   const togglePermission = (permission: AdministrationPermission, checked: boolean) => {
     setForm((current) => ({
@@ -427,7 +432,15 @@ function UserDialog({
       notify.warning("Uzupełnij wymagane pola", "Nazwa i adres e-mail są wymagane.")
       return
     }
-    void onSave(form)
+    if (!user && (!form.initialPassword || [...form.initialPassword].length < 12 || [...form.initialPassword].length > 128)) {
+      notify.warning("Nieprawidłowe hasło", "Hasło początkowe musi mieć od 12 do 128 znaków.")
+      return
+    }
+    const payload = JSON.stringify(form)
+    if (requestRef.current?.payload !== payload) {
+      requestRef.current = { payload, key: crypto.randomUUID() }
+    }
+    void onSave(form, requestRef.current.key)
   }
 
   return (
@@ -440,7 +453,9 @@ function UserDialog({
           <DialogHeader>
             <DialogTitle>{user ? "Edytuj użytkownika" : "Dodaj użytkownika"}</DialogTitle>
             <DialogDescription>
-              Dane są zapisywane w lokalnym serwisie demonstracyjnym.
+              {user
+                ? "Edycja użytkownika będzie dostępna po wdrożeniu operacji administracyjnych."
+                : "Nowe konto zostanie utworzone w systemie. Hasło nie będzie pokazywane ponownie."}
             </DialogDescription>
           </DialogHeader>
 
@@ -471,6 +486,22 @@ function UserDialog({
                 </SelectContent>
               </Select>
             </Field>
+            {!user ? (
+              <Field label="Hasło początkowe" required>
+                <Input
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={12}
+                  maxLength={256}
+                  value={form.initialPassword ?? ""}
+                  onChange={(event) => {
+                    const next = { ...form }
+                    next["initialPassword"] = event.target.value
+                    setForm(next)
+                  }}
+                />
+              </Field>
+            ) : null}
             <Field label="Ważny od">
               <Input type="date" value={form.validFrom} onChange={(event) => setForm({ ...form, validFrom: event.target.value })} />
             </Field>
@@ -489,7 +520,11 @@ function UserDialog({
 
           <fieldset className="grid gap-2 rounded-lg border p-3">
             <legend className="px-1 text-sm font-medium">Uprawnienia indywidualne</legend>
-            <p className="text-xs text-muted-foreground">Uprawnienia administracyjne można nadać wyłącznie roli Administrator. Rola Użytkownik nie uzyskuje dostępu przez indywidualny grant.</p>
+            <p className="text-xs text-muted-foreground">
+              {user
+                ? "Uprawnienia można modyfikować w ramach edycji administratora."
+                : "Nowy administrator otrzymuje pełny zestaw uprawnień; ograniczanie będzie dostępne po wdrożeniu edycji kont."}
+            </p>
             <div className="grid gap-2 sm:grid-cols-2">
               {allAdministrationPermissions.map((permission) => (
                 <label key={permission} className="flex items-center gap-2 rounded-md p-2 text-sm hover:bg-muted/50">
@@ -497,7 +532,7 @@ function UserDialog({
                     type="checkbox"
                     className="size-4 accent-primary"
                     checked={form.permissions.includes(permission)}
-                    disabled={form.role !== "ADMIN"}
+                    disabled={form.role !== "ADMIN" || !user}
                     onChange={(event) => togglePermission(permission, event.target.checked)}
                   />
                   {administrationPermissionLabels[permission]}

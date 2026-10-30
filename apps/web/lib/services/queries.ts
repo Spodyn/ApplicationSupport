@@ -196,8 +196,8 @@ export function useAdministrationUserActions() {
     ])
 
   const save = useMutation({
-    mutationFn: ({ input, id }: { input: AdministrationUserInput; id?: string }) =>
-      serviceRegistry.administrationUsers.save(input, id),
+    mutationFn: ({ input, id, idempotencyKey }: { input: AdministrationUserInput; id?: string; idempotencyKey?: string }) =>
+      serviceRegistry.administrationUsers.save(input, id, idempotencyKey),
     onSuccess: invalidate,
   })
   const deactivate = useMutation({
@@ -208,7 +208,12 @@ export function useAdministrationUserActions() {
     mutationFn: (id: string) => serviceRegistry.administrationUsers.delete(id),
     onSuccess: invalidate,
   })
-  return { save, deactivate, delete: deleteUser, supported: serviceRegistry.administrationUsers.supportsMutations !== false }
+  return {
+    save, deactivate, delete: deleteUser,
+    supported: serviceRegistry.administrationUsers.supportsMutations !== false,
+    createSupported: serviceRegistry.administrationUsers.supportsCreation
+      ?? serviceRegistry.administrationUsers.supportsMutations !== false,
+  }
 }
 
 export function useAdministrationCustomers() {

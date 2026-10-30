@@ -43,6 +43,14 @@ Logout natychmiast unieważnia server session. Session fixation protection i rot
 
 Plaintext password nie trafia do DB, logów, audit, events ani command line.
 
+## Admin-created accounts (USI-72 / decision 2026-10-06)
+
+- Only an authenticated `ADMIN` holding `manage_users` may create an account.
+- The creation request may carry an initial password (not a hash). Validate 12–128 Unicode code points and hash via the existing Argon2id encoder; plaintext must never appear in persistence, events, audit, logs or response.
+- An account created with an initial password does not require an invitation. An omitted-password invitation is a separate USI-66 implementation and must not be silently replaced by a weak credential or an unusable active account.
+- A new ADMIN receives the complete permission catalog by default. Any consciously reduced ADMIN permission state is governed by USI-73; do not confuse absence of explicit grants with an intentionally empty grant set.
+- Atomic creation, audit and replay-safe `Idempotency-Key` are required. Existing sessions are unaffected.
+
 ## Invitation
 
 - minimum 256-bit CSPRNG entropy,

@@ -52,6 +52,7 @@ Rules:
 - Password reset tokens use at least 256 bits of CSPRNG entropy, are stored only as a hash, expire after 30 minutes, and a successful reset invalidates all reset tokens and all sessions for that user.
 - The first administrator is created by a controlled local/server bootstrap command, not a public endpoint. It only works when no active ADMIN exists; the password must not be placed on the command line or in logs.
 - Future OIDC/SSO, if introduced, maps to the same canonical user/session model and must not grant permissions from untrusted identity-provider claims by default.
+- ADMIN with `manage_users` may create a user with an initial plaintext password. The server validates the established password policy, stores only the Argon2id hash and never returns, logs or audits the password. This direct-password path is independent of the optional one-time invitation path used when an initial password is omitted (USI-66).
 
 ## 4. Canonical Case state machine
 

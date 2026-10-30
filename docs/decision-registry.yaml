@@ -77,6 +77,19 @@ decisions:
       password_reset_ttl_minutes: 30
       reset_invalidates_all_sessions: true
 
+  - id: DEC-AUTH-ADMIN-CREATE-001
+    area: authentication
+    status: frozen
+    source: [USI-72, USI-66]
+    decision:
+      admin_create_role: ADMIN_PLUS_manage_users
+      initial_password_supported: true
+      auth_rules: inherited_argon2id_12_to_128_unicode_code_points
+      initial_password_plaintext_persisted_logged_audited_or_returned: false
+      invitation_flow: separate_USI_66_path_if_no_initial_credential
+      initial_password_path_waits_for_invite: false
+      creation_idempotency_required: true
+
   - id: DEC-WF-001
     area: case_workflow
     status: frozen

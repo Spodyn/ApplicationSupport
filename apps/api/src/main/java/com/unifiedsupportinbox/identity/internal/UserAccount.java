@@ -177,8 +177,8 @@ class UserAccount {
     }
 
     private void validateValidityWindow() {
-        if (validFrom != null && validUntil != null && !validFrom.isBefore(validUntil)) {
-            throw new IllegalArgumentException("valid_from must be before valid_until");
+        if (validFrom != null && validUntil != null && validFrom.isAfter(validUntil)) {
+            throw new IllegalArgumentException("valid_from must not be after valid_until");
         }
     }
 

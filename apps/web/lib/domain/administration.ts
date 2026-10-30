@@ -35,7 +35,7 @@ export interface AdministrationUser {
 export type AdministrationUserInput = Omit<
   AdministrationUser,
   "id" | "presence" | "activeAssignedCases" | "lastLoginAt"
->
+> & { initialPassword?: string }
 
 export interface GeneralSettings {
   organizationName: string
