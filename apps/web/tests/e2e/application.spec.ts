@@ -613,6 +613,8 @@ test("USI-153 zapisuje wyjątki harmonogramu i pobiera prawdziwy podgląd OOO", 
       writes.push({ path, body })
       if (path.endsWith("/exceptions")) {
         schedule.exceptions = body as typeof schedule.exceptions
+      } else {
+        schedule.intervals = (body as { intervals: typeof schedule.intervals }).intervals
       }
     }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(schedule) })
@@ -626,7 +628,11 @@ test("USI-153 zapisuje wyjątki harmonogramu i pobiera prawdziwy podgląd OOO", 
   await page.goto("/settings")
   await page.getByRole("tab", { name: "Godziny pracy" }).click()
   await expect(page.getByText("Wigilia")).toBeVisible()
+  await page.getByRole("row").filter({ hasText: "Poniedziałek" })
+    .locator('input[type="time"]').first().fill("10:00")
   await page.getByRole("button", { name: "Zapisz zmiany" }).click()
+  await expect.poll(() => writes.find((item) => item.path === "/api/v1/admin/business-hours")?.body)
+    .toMatchObject({ timezone: "Europe/Warsaw", intervals: [{ dayOfWeek: 1, start: "10:00", end: "17:00" }] })
   await expect.poll(() => writes.find((item) => item.path.endsWith("/exceptions"))?.body).toEqual([
     { date: "2026-12-24", type: "CLOSED", start: null, end: null, note: "Wigilia" },
   ])
