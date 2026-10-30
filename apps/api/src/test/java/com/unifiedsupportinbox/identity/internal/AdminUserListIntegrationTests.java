@@ -194,6 +194,39 @@ class AdminUserListIntegrationTests {
     }
 
     @Test
+    void workloadTracksReassignmentAndTerminalTransitionWithoutPresenceCoupling() throws Exception {
+        createUser("admin@example.com", UserRole.ADMIN, true);
+        UUID first = createUser("first-agent@example.com", UserRole.USER, true);
+        UUID second = createUser("second-agent@example.com", UserRole.USER, true);
+        UUID caseId = newCase();
+
+        jdbc.update("""
+                UPDATE cases SET status = 'VERIFICATION', owner_user_id = ?,
+                    claimed_at = CURRENT_TIMESTAMP WHERE id = ?
+                """, first, caseId);
+        HttpClient admin = client(login("admin@example.com"));
+        assertThat(workload(admin, "first-agent@example.com")).isEqualTo(1);
+        assertThat(workload(admin, "second-agent@example.com")).isZero();
+
+        jdbc.update("UPDATE cases SET owner_user_id = ? WHERE id = ?", second, caseId);
+        assertThat(workload(admin, "first-agent@example.com")).isZero();
+        assertThat(workload(admin, "second-agent@example.com")).isEqualTo(1);
+
+        jdbc.update("""
+                UPDATE cases SET status = 'RESOLVED', resolved_at = CURRENT_TIMESTAMP WHERE id = ?
+                """, caseId);
+        assertThat(workload(admin, "second-agent@example.com")).isZero();
+    }
+
+    private static long workload(HttpClient admin, String email) throws Exception {
+        HttpResponse<String> response = get(admin, "/api/v1/admin/users?search=" + email);
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode items = JSON.readTree(response.body()).get("items");
+        assertThat(items.size()).isEqualTo(1);
+        return items.get(0).get("activeAssignedCases").asLong();
+    }
+
+    @Test
     void cursorCannotBeReusedByAnotherAdministrator() throws Exception {
         createUser("first-admin@example.com", UserRole.ADMIN, true);
         createUser("second-admin@example.com", UserRole.ADMIN, true);
