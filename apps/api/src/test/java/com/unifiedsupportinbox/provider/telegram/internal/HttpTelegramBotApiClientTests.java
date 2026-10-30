@@ -84,6 +84,32 @@ class HttpTelegramBotApiClientTests {
     }
 
     @Test
+    void incompleteFalseEnvelopeOnHttp200IsRetryableRatherThanPermanent() throws Exception {
+        start(exchange -> respond(exchange, 200, "{\"ok\":false}"));
+        TelegramBotApiClient.SendResponse response = client().sendMessage(token(), 12345L, null, "Reply");
+        assertThat(response.ok()).isFalse();
+        assertThat(response.httpStatus()).isEqualTo(502);
+        assertThat(response.apiErrorCode()).isNull();
+    }
+
+    @Test
+    void invalidErrorCodeOnHttp200IsNotTrustedAsProviderRejection() throws Exception {
+        start(exchange -> respond(exchange, 200, "{\"ok\":false,\"error_code\":200}"));
+        TelegramBotApiClient.SendResponse response = client().sendMessage(token(), 12345L, null, "Reply");
+        assertThat(response.httpStatus()).isEqualTo(502);
+        assertThat(response.apiErrorCode()).isNull();
+    }
+
+    @Test
+    void explicitErrorCodeOnHttp200PreservesDefinitiveRejection() throws Exception {
+        start(exchange -> respond(exchange, 200, "{\"ok\":false,\"error_code\":403}"));
+        TelegramBotApiClient.SendResponse response = client().sendMessage(token(), 12345L, null, "Reply");
+        assertThat(response.httpStatus()).isEqualTo(200);
+        assertThat(response.apiErrorCode()).isEqualTo(403);
+        assertThat(response.ok()).isFalse();
+    }
+
+    @Test
     void malformedRateLimitBodyStillPreservesHttp429AndRetryAfterHeader() throws Exception {
         start(exchange -> {
             exchange.getResponseHeaders().add("Retry-After", "17");
