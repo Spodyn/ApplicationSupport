@@ -72,13 +72,17 @@ const ATTESTATION_CHECKS = Object.freeze([
 const MAX_ATTESTATION_MS = 10 * 60 * 1000;
 const MAX_EVIDENCE_AGE_MS = 5 * 60 * 1000;
 
-export function validateIndependentAttestation({pull, expectedBaseSha, comments, trustedAttestorId, now = Date.now()}) {
+export function validateIndependentAttestation({pull, expectedBaseSha, comments, reviews, reviewComments, trustedAttestorId, now = Date.now()}) {
   const trustedId = Number(trustedAttestorId);
   if (!Number.isSafeInteger(trustedId) || trustedId <= 0) {
     return ["Trusted independent attestor identity is not configured"];
   }
   if (!Array.isArray(comments) || comments.length >= 100) {
     return ["Independent attestation comment history incomplete"];
+  }
+  if (!Array.isArray(reviews) || !Array.isArray(reviewComments) ||
+      reviews.length >= 100 || reviewComments.length >= 100) {
+    return ["PR review discussion inventory incomplete"];
   }
   const events = comments.filter(comment =>
     comment?.user?.type === "Bot" &&
@@ -108,6 +112,24 @@ export function validateIndependentAttestation({pull, expectedBaseSha, comments,
       Date.parse(comment?.created_at) > posted ||
       Date.parse(comment?.updated_at) > posted));
   if (laterDiscussion) return ["PR discussion changed after independent attestation; requalification required"];
+  // Top-level issue comments do not include review submissions or inline review
+  // comments. A COMMENTED review (or a comment on a resolved thread) can still
+  // introduce a security/DoD blocker after the trusted proof was issued.
+  // Without a reliable cross-API event ordering, same-second activity also
+  // requires a new independent proof rather than risking a false authorization.
+  const reviewActivity = [
+    ...reviews.map(review => ({
+      created: review.submitted_at ?? review.submittedAt ?? review.created_at,
+      updated: review.updated_at ?? review.updatedAt
+    })),
+    ...reviewComments.map(comment => ({created: comment.created_at, updated: comment.updated_at}))
+  ];
+  if (reviewActivity.some(({created, updated}) => {
+    const createdMs = Date.parse(created);
+    const updatedMs = Date.parse(updated);
+    return !Number.isFinite(createdMs) || createdMs >= posted ||
+      (Number.isFinite(updatedMs) && updatedMs >= posted);
+  })) return ["PR review discussion changed after independent attestation; requalification required"];
   let proof;
   try {
     proof = JSON.parse(latest.body.trimStart().slice(ATTESTATION_MARKER.length).trim());
@@ -154,7 +176,7 @@ export function validateIndependentAttestation({pull, expectedBaseSha, comments,
 }
 
 
-export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], ruleset, effectiveRulesets, expectedBaseSha, comments = [], trustedAttestorId, changedFiles, now }) {
+export function checkEligibility({ pull, run, jobs, reviews = [], reviewComments, threads = [], ruleset, effectiveRulesets, expectedBaseSha, comments = [], trustedAttestorId, changedFiles, now }) {
   const errors = [];
   if (!pull || pull.state !== "open" || pull.draft) errors.push("PR is not open and ready");
   if (pull?.base?.ref !== "main") errors.push("PR does not target main");
@@ -162,7 +184,7 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
   if (pull?.mergeable !== true) errors.push("PR conflicts or mergeability is unknown");
   const labels = new Set((pull?.labels || []).map(x => x.name));
   if (!labels.has(READY_LABEL)) errors.push("No independent Jira/DoD/lease eligibility attestation");
-  errors.push(...validateIndependentAttestation({pull, expectedBaseSha, comments, trustedAttestorId, now}));
+  errors.push(...validateIndependentAttestation({pull, expectedBaseSha, comments, reviews, reviewComments, trustedAttestorId, now}));
   for (const name of ["do-not-merge", "blocked", "security-blocker"]) {
     if (labels.has(name)) errors.push("Blocked by label: " + name);
   }
@@ -273,6 +295,7 @@ export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }
   const run = pickCI(allRuns.workflow_runs || [], pull);
   const jobs = run ? (await asJson(api + "/actions/runs/" + run.id + "/jobs?per_page=100", auth)).jobs : [];
   const reviews = await asJson(api + "/pulls/" + number + "/reviews?per_page=100", auth);
+  const reviewComments = await asJson(api + "/pulls/" + number + "/comments?per_page=100", auth);
   const comments = await asJson(api + "/issues/" + number + "/comments?per_page=100", auth);
   const files = await asJson(api + "/pulls/" + number + "/files?per_page=100", auth);
   const effectiveRulesets = await asJson(api + "/rulesets?includes_parents=true&per_page=100", auth);
@@ -288,12 +311,13 @@ export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }
   if (graphql.errors?.length) throw Error("Cannot verify review threads");
   const threadConnection = graphql.data?.repository?.pullRequest?.reviewThreads;
   if (!threadConnection || threadConnection.pageInfo?.hasNextPage) throw Error("Review-thread inspection incomplete");
-  if (reviews.length === 100) throw Error("Review pagination incomplete");
+  if (!Array.isArray(reviews) || reviews.length >= 100) throw Error("Review pagination incomplete");
+  if (!Array.isArray(reviewComments) || reviewComments.length >= 100) throw Error("Inline review comment pagination incomplete");
   if (comments.length === 100) throw Error("Attestation comment pagination incomplete");
   if (jobs.length === 100) throw Error("CI job pagination incomplete");
   if (!Array.isArray(files) || files.length >= 100) throw Error("PR file inventory incomplete");
   const errors = checkEligibility({
-    pull, run, jobs, reviews, threads: threadConnection.nodes,
+    pull, run, jobs, reviews, reviewComments, threads: threadConnection.nodes,
     ruleset, effectiveRulesets, expectedBaseSha: currentMainSha, comments, trustedAttestorId,
     // Renames can hide a protected workflow in previous_filename.
     changedFiles: changedPathsFromFiles(files)

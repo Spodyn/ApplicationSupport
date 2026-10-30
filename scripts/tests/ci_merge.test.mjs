@@ -48,7 +48,7 @@ const data = () => ({
     head_sha: sha, pull_requests: [{number: 42, head: {sha}, base: {sha: base}}]
   },
   jobs: REQUIRED_JOBS.map(name => ({name, status: "completed", conclusion: "success"})),
-  reviews: [], threads: [], expectedBaseSha: base,
+  reviews: [], reviewComments: [], threads: [], expectedBaseSha: base,
   comments: [comment()], trustedAttestorId: attestorId, changedFiles: [], now,
   effectiveRulesets: [{id: 21055765, target: "branch", enforcement: "active"}],
   ruleset: {target: "branch", enforcement: "active", conditions: {ref_name: {include: ["~DEFAULT_BRANCH"], exclude: []}}, rules: [
@@ -482,4 +482,50 @@ test("CI command, build harness and test-runner edits cannot self-qualify on gre
   const ordinary = data();
   ordinary.changedFiles = ["apps/api/src/main/java/example/Handler.java", "apps/web/components/example.tsx"];
   assert.deepEqual(checkEligibility(ordinary), []);
+});
+
+test("new review submissions and inline comments invalidate prior trusted proof", () => {
+  const submitted = data();
+  submitted.reviews = [{state: "COMMENTED", submitted_at: "2026-10-29T20:59:02.000Z"}];
+  assert.match(checkEligibility(submitted).join(" "), /review discussion changed/);
+
+  const inline = data();
+  inline.reviewComments = [{
+    created_at: "2026-10-29T20:59:03.000Z",
+    updated_at: "2026-10-29T20:59:03.000Z",
+    body: "New security concern on a previously resolved thread"
+  }];
+  inline.threads = [{isResolved: true, isOutdated: false}];
+  assert.match(checkEligibility(inline).join(" "), /review discussion changed/);
+
+  const sameSecond = data();
+  sameSecond.reviewComments = [{
+    created_at: sameSecond.comments[0].created_at,
+    updated_at: sameSecond.comments[0].created_at
+  }];
+  assert.match(checkEligibility(sameSecond).join(" "), /review discussion changed/);
+
+  const edited = data();
+  edited.reviewComments = [{
+    created_at: "2026-10-29T20:57:00.000Z",
+    updated_at: "2026-10-29T20:59:05.000Z"
+  }];
+  assert.match(checkEligibility(edited).join(" "), /review discussion changed/);
+
+  const prior = data();
+  prior.reviews = [{state: "COMMENTED", submitted_at: "2026-10-29T20:58:00.000Z"}];
+  prior.reviewComments = [{
+    created_at: "2026-10-29T20:58:30.000Z",
+    updated_at: "2026-10-29T20:58:30.000Z"
+  }];
+  assert.deepEqual(checkEligibility(prior), []);
+
+  const incomplete = data();
+  delete incomplete.reviewComments;
+  assert.match(checkEligibility(incomplete).join(" "), /review discussion inventory incomplete/);
+  const paginated = data();
+  paginated.reviewComments = Array.from({length: 100}, () => ({
+    created_at: "2026-10-29T20:58:00.000Z"
+  }));
+  assert.match(checkEligibility(paginated).join(" "), /review discussion inventory incomplete/);
 });
