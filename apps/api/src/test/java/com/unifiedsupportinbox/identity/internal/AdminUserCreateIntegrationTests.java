@@ -141,6 +141,57 @@ class AdminUserCreateIntegrationTests {
     }
 
     @Test
+    void auditFailureRollsBackUserGrantsAndIdempotencyReservation() throws Exception {
+        user("admin@example.com", UserRole.ADMIN);
+        CookieManager cookies = login("admin@example.com");
+        String key = "rollback-create-key";
+        String email = "rollback@example.com";
+
+        // Inject a test-only failure at the final audit write. The command must
+        // not leave a created account or a consumed idempotency key behind.
+        jdbc.execute("""
+                CREATE FUNCTION reject_test_user_created_audit()
+                RETURNS trigger LANGUAGE plpgsql AS $
+                BEGIN
+                    IF NEW.action = 'USER_CREATED' THEN
+                        RAISE EXCEPTION 'test-only USER_CREATED audit failure';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $
+                """);
+        jdbc.execute("""
+                CREATE TRIGGER reject_test_user_created_audit_insert
+                BEFORE INSERT ON audit_events FOR EACH ROW
+                EXECUTE FUNCTION reject_test_user_created_audit()
+                """);
+        try {
+            HttpResponse<String> failed = post(client(cookies), cookies,
+                    body(email, "ADMIN", "null", PASSWORD), key);
+            assertThat(failed.statusCode()).isBetween(500, 599);
+            assertThat(users.findByEmailIgnoreCase(email)).isEmpty();
+            assertThat(jdbc.queryForObject(
+                    "SELECT count(*) FROM user_permissions p JOIN users u ON u.id = p.user_id WHERE u.email = ?",
+                    Integer.class, email)).isZero();
+            assertThat(jdbc.queryForObject(
+                    "SELECT count(*) FROM idempotency_keys WHERE command_scope = 'admin.users.create' AND \\"key\\" = ?",
+                    Integer.class, key)).isZero();
+            assertThat(jdbc.queryForObject(
+                    "SELECT count(*) FROM audit_events WHERE action = 'USER_CREATED'", Integer.class))
+                    .isEqualTo(initialUserCreatedAudits);
+        } finally {
+            jdbc.execute("DROP TRIGGER IF EXISTS reject_test_user_created_audit_insert ON audit_events");
+            jdbc.execute("DROP FUNCTION IF EXISTS reject_test_user_created_audit()");
+        }
+
+        // Once the test-only fault is gone, the same key must be usable.
+        HttpResponse<String> recovered = post(client(cookies), cookies,
+                body(email, "ADMIN", "null", PASSWORD), key);
+        assertThat(recovered.statusCode()).isEqualTo(201);
+        assertThat(users.findByEmailIgnoreCase(email)).isPresent();
+    }
+
+    @Test
     void userCannotCreateAccountsEvenWithManageUsersPermission() throws Exception {
         user("admin@example.com", UserRole.ADMIN);
         UUID userId = user("delegated@example.com", UserRole.USER);
