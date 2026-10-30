@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {checkEligibility, REQUIRED_JOBS, READY_LABEL, ATTESTATION_MARKER} from "../ci_merge.mjs";
+import {checkEligibility, changedPathsFromFiles, REQUIRED_JOBS, READY_LABEL, ATTESTATION_MARKER} from "../ci_merge.mjs";
 
 const sha = "a".repeat(40), base = "b".repeat(40);
 
@@ -95,6 +95,14 @@ test("rejects green jobs from a lookalike workflow or PR-modified CI definition"
   const regularCodeChange = data();
   regularCodeChange.changedFiles = ["apps/api/src/main/java/Example.java"];
   assert.deepEqual(checkEligibility(regularCodeChange), []);
+});
+
+test("renaming a workflow out of the protected directory cannot evade review", () => {
+  const files = [{filename: "docs/archived-ci.yml", previous_filename: ".github/workflows/ci.yml", status: "renamed"}];
+  const d = data();
+  d.changedFiles = changedPathsFromFiles(files);
+  assert.deepEqual(d.changedFiles, ["docs/archived-ci.yml", ".github/workflows/ci.yml"]);
+  assert.match(checkEligibility(d).join(" "), /independent review/);
 });
 
 test("all required jobs, not just validate, must pass", () => {
