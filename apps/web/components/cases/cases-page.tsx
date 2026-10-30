@@ -431,19 +431,13 @@ function ConversationPanel({
   const [attachmentError, setAttachmentError] = useState("")
   const [pendingAttachments, setPendingAttachments] = useState<InboxPendingAttachment[]>([])
   const idempotencyKey = useRef<string | null>(null)
+  const lastSendBroadcastIntent = useRef<boolean | null>(null)
   const retryKeys = useRef(new Map<string, string>())
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
   const canReplyBroadcast = canReply && record?.canReplyBroadcast === true
   const attachmentsReady = pendingAttachments.every((attachment) => attachment.scanStatus === "clean")
-
-  useEffect(() => {
-    if (!canReplyBroadcast && replyBroadcast) {
-      setReplyBroadcast(false)
-      idempotencyKey.current = null
-    }
-  }, [canReplyBroadcast, replyBroadcast])
 
   const uploadFiles = async (files: FileList | null) => {
     if (!canReply || !files?.length) return
@@ -498,6 +492,11 @@ function ConversationPanel({
       setAttachmentError("Usuń załączniki, które nie przeszły kontroli bezpieczeństwa.")
       return
     }
+    const sendBroadcast = canReplyBroadcast && replyBroadcast
+    if (lastSendBroadcastIntent.current !== sendBroadcast) {
+      idempotencyKey.current = null
+      lastSendBroadcastIntent.current = sendBroadcast
+    }
     idempotencyKey.current ??= crypto.randomUUID()
     setSendError("")
     try {
@@ -505,7 +504,7 @@ function ConversationPanel({
         body: draft,
         attachments: pendingAttachments,
         idempotencyKey: idempotencyKey.current,
-        replyBroadcast: canReplyBroadcast && replyBroadcast,
+        replyBroadcast: sendBroadcast,
       })
       setDraft("")
       setReplyBroadcast(false)
@@ -593,7 +592,7 @@ function ConversationPanel({
             <label className="flex items-center gap-2 border-t border-white/[0.06] px-[23px] py-2 text-xs text-[#d8dde7]">
               <input
                 type="checkbox"
-                checked={replyBroadcast}
+                checked={canReplyBroadcast && replyBroadcast}
                 disabled={workflow.sendMessage.isPending}
                 onChange={(event) => {
                   setReplyBroadcast(event.target.checked)
