@@ -273,6 +273,13 @@ test("requires a matching Jira key and unmodified attestation body", () => {
   const d = data();
   editProof(d, proof => {proof.jira_key = "USI-999";});
   assert.match(checkEligibility(d).join(" "), /Jira key/);
+  const prefixCollision = data();
+  prefixCollision.pull.title = "USI-247: unrelated ticket";
+  editProof(prefixCollision, proof => {proof.jira_key = "USI-24";});
+  assert.match(checkEligibility(prefixCollision).join(" "), /Jira key/);
+  const ambiguousTitle = data();
+  ambiguousTitle.pull.title = "USI-247 and USI-248: combined work";
+  assert.match(checkEligibility(ambiguousTitle).join(" "), /Jira key/);
   const malformed = data();
   malformed.comments[0].body = ATTESTATION_MARKER + "\nnot-json";
   assert.match(checkEligibility(malformed).join(" "), /Malformed/);
