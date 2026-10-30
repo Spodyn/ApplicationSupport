@@ -67,7 +67,7 @@ class AdminUserCreateService {
         String email = normalizeEmail(request.email());
         String fullName = normalizeName(request.fullName());
         if (request.validFrom() != null && request.validUntil() != null
-                && !request.validFrom().isBefore(request.validUntil())) {
+                && request.validFrom().isAfter(request.validUntil())) {
             throw ApiProblemException.validationFailed("Validity start must be before validity end.");
         }
         if (request.validUntil() != null && !request.validUntil().isAfter(Instant.now())
