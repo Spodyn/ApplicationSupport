@@ -2,6 +2,7 @@ import type {
   AdministrationPermission,
   AdministrationRole,
   AdministrationSettings,
+  OutOfOfficePreview,
   AdministrationUser,
   AdministrationUserInput,
   ManagedIntegration,
@@ -37,6 +38,7 @@ export interface AdministrationUserRepository {
 
 export interface AdministrationSettingsRepository {
   get(): Promise<AdministrationSettings>
+  previewOutOfOffice(customerName?: string): Promise<OutOfOfficePreview>
   saveSection<K extends keyof AdministrationSettings>(
     key: K,
     value: AdministrationSettings[K],
@@ -193,6 +195,16 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
 }
 
 export const mockAdministrationSettingsRepository: AdministrationSettingsRepository = {
+  async previewOutOfOffice(customerName) {
+    requireCurrentAdministrationPermission("manage_schedule")
+    const name = customerName || "Kliencie"
+    const message = settingsState.outOfOffice.template
+      .replaceAll("{{customer_name}}", name)
+      .replaceAll("{{next_opening_date}}", "brak dostępnej daty")
+      .replaceAll("{{next_opening_time}}", "brak godziny")
+      .replaceAll("{{timezone}}", settingsState.schedule.timezone)
+    return delay({ message, nextOpening: null, timezone: settingsState.schedule.timezone })
+  },
   async get() {
     requireCurrentAdministrator()
     return delay(settingsState)
