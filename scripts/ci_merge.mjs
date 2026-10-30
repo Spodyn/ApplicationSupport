@@ -36,10 +36,23 @@ const PROTECTED_CONTROL_FILES = new Set([
   "docs/decision-registry.yaml",
   ".github/CODEOWNERS"
 ]);
+// CI checks out the PR revision. A green job name is not trustworthy if the
+// PR can replace the build/test commands that job invokes with successful no-ops.
+// These harness/configuration changes require separate independent review.
+const CI_EXECUTION_FILES = new Set([
+  "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc", ".nvmrc",
+  "apps/api/pom.xml", "apps/api/mvnw", "apps/api/mvnw.cmd",
+  "infra/compose.yaml", "infra/.env.example"
+]);
 const isProtectedControlFile = path =>
   path.startsWith(".github/workflows/") || path.startsWith(".github/actions/") ||
+  path.startsWith("scripts/") || path.startsWith("infra/tests/") ||
+  path.startsWith("infra/minio/") || path.startsWith("apps/api/.mvn/") ||
   path === "AGENTS.md" || path.endsWith("/AGENTS.md") ||
-  PROTECTED_CONTROL_FILES.has(path);
+  path.endsWith("/package.json") ||
+  /(?:^|\/)(?:playwright|vitest|eslint|next)\.config\.[^/]+$/.test(path) ||
+  /(?:^|\/)tsconfig(?:\.[^/]+)?\.json$/.test(path) ||
+  CI_EXECUTION_FILES.has(path) || PROTECTED_CONTROL_FILES.has(path);
 
 /**
  * A PR label is only a routing hint, not evidence. The independent attestor
