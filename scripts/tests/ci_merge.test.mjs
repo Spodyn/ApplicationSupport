@@ -254,6 +254,18 @@ test("rejects expired, replayed, future or excessively long-lived attestations",
   assert.match(checkEligibility(future).join(" "), /expired, replayed/);
 });
 
+test("future-dated attestation comment is rejected even if proof timestamps are otherwise fresh", () => {
+  const future = data();
+  future.comments[0].created_at = "2026-10-29T21:01:00.000Z";
+  future.comments[0].updated_at = future.comments[0].created_at;
+  assert.match(checkEligibility(future).join(" "), /creation time invalid or future-dated/);
+
+  const toleratedClockSkew = data();
+  toleratedClockSkew.comments[0].created_at = "2026-10-29T21:00:20.000Z";
+  toleratedClockSkew.comments[0].updated_at = toleratedClockSkew.comments[0].created_at;
+  assert.deepEqual(checkEligibility(toleratedClockSkew), []);
+});
+
 test("latest trusted revocation wins; edits and ambiguous events fail closed", () => {
   const revoked = data();
   revoked.comments.push(comment({...attestation(), status: "revoked"}, "2026-10-29T21:00:00.000Z"));
