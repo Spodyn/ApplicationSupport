@@ -214,7 +214,8 @@ export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }
   const errors = checkEligibility({
     pull, run, jobs, reviews, threads: threadConnection.nodes,
     ruleset, effectiveRulesets, expectedBaseSha: currentMainSha, comments, trustedAttestorId,
-    changedFiles: files.map(file => file.filename)
+    // Renames can hide a protected workflow in previous_filename.
+    changedFiles: files.flatMap(file => [file.filename, file.previous_filename].filter(Boolean))
   });
   return {errors, pull, run};
 }
