@@ -244,7 +244,7 @@ function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActio
 function SchedulePanel({ data, actions }: { data: WorkScheduleSettings; actions: SettingsActions }) {
   const [form, setForm] = useState(data)
   const [exceptionOpen, setExceptionOpen] = useState(false)
-  const [exception, setException] = useState<Omit<ScheduleException, "id">>({ date: "", name: "", closed: true })
+  const [exception, setException] = useState<Omit<ScheduleException, "id">>({ date: "", name: "", closed: true, type: "CLOSED" })
 
   const updateDay = (index: number, patch: Partial<WorkScheduleSettings["days"][number]>) => {
     setForm((current) => ({ ...current, days: current.days.map((day, dayIndex) => dayIndex === index ? { ...day, ...patch } : day) }))
@@ -297,10 +297,11 @@ function SchedulePanel({ data, actions }: { data: WorkScheduleSettings; actions:
           <div className="grid gap-3">
             <Field label="Nazwa"><Input value={exception.name} onChange={(event) => setException({ ...exception, name: event.target.value })} /></Field>
             <Field label="Data"><Input type="date" value={exception.date} onChange={(event) => setException({ ...exception, date: event.target.value })} /></Field>
-            <SettingSwitch label="Dzień zamknięty" description="W tym dniu SLA nie będzie naliczane." checked={exception.closed} onChange={(checked) => setException({ ...exception, closed: checked })} />
+            <SettingSwitch label="Dzień zamknięty" description="W tym dniu SLA nie będzie naliczane." checked={exception.closed} onChange={(checked) => setException({ ...exception, closed: checked, type: checked ? "CLOSED" : "OVERRIDE", start: checked ? undefined : (exception.start ?? "08:00"), end: checked ? undefined : (exception.end ?? "16:00") })} />
+            {!exception.closed && <Field label="Rodzaj wyjątku"><Select value={exception.type === "OPEN" ? "OPEN" : "OVERRIDE"} onValueChange={(value) => setException({ ...exception, type: value === "OPEN" ? "OPEN" : "OVERRIDE" })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="OVERRIDE">Zastąp godziny tygodniowe</SelectItem><SelectItem value="OPEN">Dodatkowe otwarcie</SelectItem></SelectContent></Select></Field>}
             {!exception.closed && <div className="grid grid-cols-2 gap-3"><Field label="Od"><Input type="time" value={exception.start ?? "08:00"} onChange={(event) => setException({ ...exception, start: event.target.value })} /></Field><Field label="Do"><Input type="time" value={exception.end ?? "16:00"} onChange={(event) => setException({ ...exception, end: event.target.value })} /></Field></div>}
           </div>
-          <DialogFooter><DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose><Button onClick={() => { if (!exception.date || !exception.name.trim()) { notify.warning("Uzupełnij nazwę i datę"); return }; setForm({ ...form, exceptions: [...form.exceptions, { ...exception, id: `ex-${Date.now()}` }] }); setExceptionOpen(false); setException({ date: "", name: "", closed: true }); notify.success("Dodano wyjątek", "Zapisz harmonogram, aby utrwalić zmianę.") }}>Dodaj wyjątek</Button></DialogFooter>
+          <DialogFooter><DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose><Button onClick={() => { if (!exception.date || !exception.name.trim()) { notify.warning("Uzupełnij nazwę i datę"); return }; setForm({ ...form, exceptions: [...form.exceptions, { ...exception, id: `ex-${Date.now()}` }] }); setExceptionOpen(false); setException({ date: "", name: "", closed: true, type: "CLOSED" }); notify.success("Dodano wyjątek", "Zapisz harmonogram, aby utrwalić zmianę.") }}>Dodaj wyjątek</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -311,11 +312,8 @@ const placeholders = ["customer_name", "next_opening_date", "next_opening_time",
 
 function OutOfOfficePanel({ data, actions }: { data: OutOfOfficeSettings; actions: SettingsActions }) {
   const [form, setForm] = useState(data)
-  const preview = form.template
-    .replaceAll("{{customer_name}}", "Joanno")
-    .replaceAll("{{next_opening_date}}", "4 sierpnia 2026")
-    .replaceAll("{{next_opening_time}}", "08:00")
-    .replaceAll("{{timezone}}", "Europe/Warsaw")
+  // Only the server knows the real schedule, exceptions and NO_FUTURE_OPENING state.
+  const preview = actions.previewOutOfOffice.data
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -328,9 +326,14 @@ function OutOfOfficePanel({ data, actions }: { data: OutOfOfficeSettings; action
           {placeholders.map((placeholder) => <Button key={placeholder} variant="secondary" size="xs" onClick={() => setForm({ ...form, template: `${form.template}${form.template.endsWith(" ") ? "" : " "}{{${placeholder}}}` })}>{`{{${placeholder}}}`}</Button>)}
         </div>
         <SettingSwitch label="Wyślij raz na okres zamknięcia" description="Klient nie otrzyma wielu identycznych wiadomości przed kolejnym otwarciem." checked={form.sendOncePerClosure} onChange={(checked) => setForm({ ...form, sendOncePerClosure: checked })} />
-        <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "outOfOffice", form, "Zapisano ustawienia nieobecności")} />
+        <SaveButton pending={actions.saveSection.isPending} onClick={() => { actions.previewOutOfOffice.reset(); void saveSection(actions, "outOfOffice", form, "Zapisano ustawienia nieobecności") }} />
       </SettingsCard>
-      <Card className="h-fit"><CardHeader><CardTitle className="flex items-center gap-2"><MessageSquareText className="size-4 text-primary" /> Podgląd</CardTitle><CardDescription>Przykładowa wiadomość dla klienta.</CardDescription></CardHeader><CardContent><div className="rounded-2xl rounded-bl-sm bg-muted p-4 text-sm leading-relaxed">{preview}</div><p className="mt-3 text-xs text-muted-foreground">Zmienne zostaną uzupełnione na podstawie klienta i aktywnego harmonogramu.</p></CardContent></Card>
+      <Card className="h-fit"><CardHeader><CardTitle className="flex items-center gap-2"><MessageSquareText className="size-4 text-primary" /> Podgląd serwera</CardTitle><CardDescription>Odpowiedź wygenerowana z zapisanej konfiguracji i aktualnych godzin pracy.</CardDescription></CardHeader><CardContent className="grid gap-3">
+        <Button variant="outline" disabled={actions.previewOutOfOffice.isPending} onClick={() => { void actions.previewOutOfOffice.mutateAsync("Joanno").catch((error: unknown) => notify.error("Nie można pobrać podglądu", getErrorMessage(error))) }}>{actions.previewOutOfOffice.isPending ? "Pobieranie…" : "Pokaż zapisany podgląd"}</Button>
+        <div className="rounded-2xl rounded-bl-sm bg-muted p-4 text-sm leading-relaxed">{preview?.message ?? "Zapisz zmiany, a następnie pobierz podgląd z serwera."}</div>
+        {preview?.nextOpening === null && <p className="text-xs text-warning-foreground">Brak przyszłego otwarcia w harmonogramie — serwer użyje bezpiecznej wiadomości bez wymyślonej daty.</p>}
+        {preview && <p className="text-xs text-muted-foreground">Strefa: {preview.timezone}. Ten podgląd dotyczy ostatnio zapisanej wersji szablonu.</p>}
+      </CardContent></Card>
     </div>
   )
 }
