@@ -307,6 +307,22 @@ export type SendMessageResponse = {
   "deliveryStatus": MessageDeliveryStatus
 }
 
+export type SlaOutcomeBreakdown = {
+  "type": "FIRST_RESPONSE" | "UNCLAIMED"
+  "completed": number
+  "achieved": number
+  "warnings": number
+  "breaches": number
+  "attainmentPercent": number | null
+  "durationSeconds": SlaOutcomeDistribution
+}
+
+export type SlaOutcomeDistribution = {
+  "average": number | null
+  "p50": number | null
+  "p95": number | null
+}
+
 export type UpdateCustomerRequest = {
   "name": string
   "externalRef"?: string | null
@@ -338,4 +354,5 @@ export type UserStatisticsReport = {
   "provider": string | null
   "customerId": string | null
   "metrics": UserStatisticsMetrics
+  "slaOutcomes": Array<SlaOutcomeBreakdown>
 }
