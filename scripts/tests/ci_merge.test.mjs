@@ -97,6 +97,34 @@ test("rejects green jobs from a lookalike workflow or PR-modified CI definition"
   assert.deepEqual(checkEligibility(regularCodeChange), []);
 });
 
+test("trusted merge guard, policy, contract and nested agent instructions require independent review", () => {
+  for (const path of [
+    "scripts/ci_merge.mjs",
+    "scripts/tests/ci_merge.test.mjs",
+    "scripts/tests/test_orchestrator_policy.py",
+    "docs/orchestrator-policy.yaml",
+    "docs/ORCHESTRATOR_CONTRACT.md",
+    "docs/PRODUCT_CONTRACT.md",
+    "docs/decision-registry.yaml",
+    "AGENTS.md",
+    "apps/web/AGENTS.md"
+  ]) {
+    const d = data();
+    d.changedFiles = [path];
+    assert.match(checkEligibility(d).join(" "), /independent review/, path);
+  }
+  const renamed = data();
+  renamed.changedFiles = changedPathsFromFiles([{
+    filename: "docs/archived-merge-guard.mjs",
+    previous_filename: "scripts/ci_merge.mjs",
+    status: "renamed"
+  }]);
+  assert.match(checkEligibility(renamed).join(" "), /independent review/);
+  const normal = data();
+  normal.changedFiles = ["apps/web/components/cases/cases-page.tsx"];
+  assert.deepEqual(checkEligibility(normal), []);
+});
+
 test("renaming a workflow out of the protected directory cannot evade review", () => {
   const files = [{filename: "docs/archived-ci.yml", previous_filename: ".github/workflows/ci.yml", status: "renamed"}];
   const d = data();
