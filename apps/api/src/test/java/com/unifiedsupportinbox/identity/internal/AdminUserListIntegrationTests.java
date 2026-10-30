@@ -92,6 +92,53 @@ class AdminUserListIntegrationTests {
     }
 
     @Test
+    void presenceIsRecentSessionOnlyAndNeverOverridesAccountEligibility() throws Exception {
+        createUser("admin@example.com", UserRole.ADMIN, true);
+        UUID agent = createUser("agent@example.com", UserRole.USER, true);
+
+        // Keep the agent's session separate from the administrator querying the
+        // directory. There is no artificial sleep or reliance on test ordering.
+        CookieManager agentCookies = login("agent@example.com");
+        assertThat(get(client(agentCookies), "/api/v1/auth/me").statusCode()).isEqualTo(200);
+        CookieManager adminCookies = login("admin@example.com");
+        HttpClient admin = client(adminCookies);
+
+        assertThat(jdbc.queryForObject(
+                "SELECT count(*) FROM spring_session WHERE principal_name = ?",
+                Integer.class, agent.toString())).isPositive();
+        assertThat(presence(admin, "agent@example.com")).isEqualTo("online");
+
+        jdbc.update("""
+                UPDATE spring_session
+                SET last_access_time = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::bigint - 301000
+                WHERE principal_name = ?
+                """, agent.toString());
+        assertThat(presence(admin, "agent@example.com")).isEqualTo("offline");
+
+        jdbc.update("""
+                UPDATE spring_session
+                SET last_access_time = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::bigint
+                WHERE principal_name = ?
+                """, agent.toString());
+        jdbc.update("UPDATE users SET active = false WHERE id = ?", agent);
+        assertThat(presence(admin, "agent@example.com")).isEqualTo("offline");
+
+        jdbc.update("UPDATE users SET active = true, valid_from = CURRENT_TIMESTAMP + INTERVAL '1 day' WHERE id = ?", agent);
+        assertThat(presence(admin, "agent@example.com")).isEqualTo("offline");
+
+        jdbc.update("UPDATE users SET valid_from = NULL, valid_until = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE id = ?", agent);
+        assertThat(presence(admin, "agent@example.com")).isEqualTo("offline");
+    }
+
+    private static String presence(HttpClient admin, String email) throws Exception {
+        HttpResponse<String> response = get(admin, "/api/v1/admin/users?search=" + email);
+        assertThat(response.statusCode()).isEqualTo(200);
+        JsonNode items = JSON.readTree(response.body()).get("items");
+        assertThat(items.size()).isEqualTo(1);
+        return items.get(0).get("presence").asString();
+    }
+
+    @Test
     void searchAndCursorPaginationHaveNoDuplicateUsers() throws Exception {
         createUser("admin@example.com", UserRole.ADMIN, true);
         createUser("alice@example.com", UserRole.USER, true);
