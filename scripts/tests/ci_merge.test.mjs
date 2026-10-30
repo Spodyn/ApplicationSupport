@@ -44,11 +44,12 @@ const data = () => ({
   },
   run: {
     event: "pull_request", status: "completed", conclusion: "success",
+    name: "CI", workflow_id: 330478347, path: ".github/workflows/ci.yml",
     head_sha: sha, pull_requests: [{number: 42, head: {sha}, base: {sha: base}}]
   },
   jobs: REQUIRED_JOBS.map(name => ({name, status: "completed", conclusion: "success"})),
   reviews: [], threads: [], expectedBaseSha: base,
-  comments: [comment()], trustedAttestorId: attestorId, now,
+  comments: [comment()], trustedAttestorId: attestorId, changedFiles: [], now,
   effectiveRulesets: [{id: 21055765, target: "branch", enforcement: "active"}],
   ruleset: {enforcement: "active", rules: [
     {type: "pull_request", parameters: {required_approving_review_count: 0, allowed_merge_methods: ["squash"]}},
@@ -66,6 +67,36 @@ test("fails closed for a draft, mismatch, and missing eligibility label", () => 
   d.pull.labels = [];
   assert.ok(checkEligibility(d).length >= 3);
 });
+test("rejects green jobs from a lookalike workflow or PR-modified CI definition", () => {
+  const spoofedId = data();
+  spoofedId.run.workflow_id = 999999999;
+  assert.match(checkEligibility(spoofedId).join(" "), /trusted repository workflow/);
+
+  const spoofedPath = data();
+  spoofedPath.run.path = ".github/workflows/fake-ci.yml";
+  assert.match(checkEligibility(spoofedPath).join(" "), /trusted repository workflow/);
+
+  const spoofedName = data();
+  spoofedName.run.name = "Pretend CI";
+  assert.match(checkEligibility(spoofedName).join(" "), /trusted repository workflow/);
+
+  const modifiedWorkflow = data();
+  modifiedWorkflow.changedFiles = [".github/workflows/ci.yml"];
+  assert.match(checkEligibility(modifiedWorkflow).join(" "), /independent review/);
+
+  const modifiedOtherWorkflow = data();
+  modifiedOtherWorkflow.changedFiles = [".github/workflows/usi-integration.yml"];
+  assert.match(checkEligibility(modifiedOtherWorkflow).join(" "), /independent review/);
+
+  const missingInventory = data();
+  delete missingInventory.changedFiles;
+  assert.match(checkEligibility(missingInventory).join(" "), /file inventory/);
+
+  const regularCodeChange = data();
+  regularCodeChange.changedFiles = ["apps/api/src/main/java/Example.java"];
+  assert.deepEqual(checkEligibility(regularCodeChange), []);
+});
+
 test("all required jobs, not just validate, must pass", () => {
   const d = data();
   d.jobs.find(j => j.name === "integration").conclusion = "failure";
