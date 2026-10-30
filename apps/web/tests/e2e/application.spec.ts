@@ -36,13 +36,14 @@ const inboundMessage = {
   }>,
 }
 
-async function preparePage(page: Page, initiallyAuthenticated = true) {
+async function preparePage(page: Page, initiallyAuthenticated = true, broadcastEligible = false) {
   const externalRequests: string[] = []
   let authenticated = initiallyAuthenticated
   let claimed = false
   let read = false
   const supportMessages: Array<Omit<typeof inboundMessage, "deliveryStatus"> & { deliveryStatus: string | null }> = []
   const sends: string[] = []
+  const sendIntents: Array<{ body: string; replyBroadcast?: boolean; idempotencyKey: string }> = []
   const uploads: string[] = []
   const retries: string[] = []
   const historyBefore: Array<string | null> = []
@@ -120,6 +121,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
         integration: { id: "integration", provider: "SLACK", displayName: "TestApp", workspaceExternalId: "team", workspaceName: "TestApp" },
         relatedCase: { id: null, reference: null }, personalState: { lastReadMessageId: read ? inboundMessageId : null, lastReadAt: null, snoozedUntil: null },
         sla: null, ignoreScore: 0, availableActions: claimed ? ["REPLY", "MARK_READ"] : ["CLAIM", "MARK_READ"],
+        canReplyBroadcast: claimed && broadcastEligible,
         claimedAt: null, waitingUntil: null, resolvedAt: null, ignoredAt: null, resolutionCategory: null,
         createdAt: caseListItem.createdAt, updatedAt: caseListItem.updatedAt, lastActivityAt: caseListItem.lastActivityAt, version: claimed ? 2 : 1,
       }) })
@@ -190,8 +192,9 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
     if (requestUrl.pathname === `/api/v1/cases/${caseId}/messages` && request.method() === "POST") {
       expect(request.headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/)
       expect(request.headers()["x-xsrf-token"]).toBe("e2e-csrf")
-      const body = request.postDataJSON() as { body: string; attachmentIds?: string[] }
+      const body = request.postDataJSON() as { body: string; attachmentIds?: string[]; replyBroadcast?: boolean }
       sends.push(body.body)
+      sendIntents.push({ body: body.body, replyBroadcast: body.replyBroadcast, idempotencyKey: request.headers()["idempotency-key"] ?? "" })
       const id = `018f0000-0000-7000-8000-00000000020${3 + supportMessages.length}`
       supportMessages.push({
         ...inboundMessage,
@@ -230,7 +233,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
     await route.continue()
   })
 
-  return { externalRequests, sends, uploads, retries, historyBefore, supportMessages }
+  return { externalRequests, sends, sendIntents, uploads, retries, historyBefore, supportMessages }
 }
 
 async function prepareSettingsApi(page: Page, options: { forbidden?: boolean } = {}) {
@@ -371,6 +374,70 @@ test("real API Case opens, is marked read, claimed, and receives one persisted s
   await expect(conversation.getByText("USI test reply")).toBeVisible()
   expect(sends).toEqual(["USI test reply"])
   expect(externalRequests).toEqual([])
+})
+
+test("Slack broadcast composer is server-gated, defaults off and sends only one logical reply", async ({ page }) => {
+  const { sendIntents, externalRequests } = await preparePage(page, true, true)
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await expect(conversation.getByRole("checkbox", { name: "Send also to channel" })).toHaveCount(0)
+  await conversation.getByRole("button", { name: "Przejmij" }).click()
+  const broadcast = conversation.getByRole("checkbox", { name: "Send also to channel" })
+  await expect(broadcast).toBeVisible()
+  await expect(broadcast).not.toBeChecked()
+
+  await conversation.getByLabel("Treść odpowiedzi").fill("Ordinary thread reply")
+  await conversation.getByRole("button", { name: "Wyślij" }).click()
+  await expect(conversation.getByText("Ordinary thread reply")).toBeVisible()
+  await expect(broadcast).not.toBeChecked()
+
+  await conversation.getByLabel("Treść odpowiedzi").fill("Broadcast thread reply")
+  await broadcast.check()
+  await conversation.getByRole("button", { name: "Wyślij" }).click()
+  await expect(conversation.getByText("Broadcast thread reply")).toBeVisible()
+  await expect(broadcast).not.toBeChecked()
+
+  expect(sendIntents).toHaveLength(2)
+  expect(sendIntents.map((intent) => intent.replyBroadcast)).toEqual([undefined, true])
+  expect(sendIntents.every((intent) => intent.idempotencyKey.length > 0)).toBe(true)
+  expect(externalRequests).toEqual([])
+})
+
+test("Slack broadcast choice and idempotency survive a failed send and reset after retry", async ({ page }) => {
+  const { sendIntents } = await preparePage(page, true, true)
+  const attemptKeys: string[] = []
+  let failFirst = true
+  await page.route(`**/api/v1/cases/${caseId}/messages`, async (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    attemptKeys.push(route.request().headers()["idempotency-key"] ?? "")
+    if (!failFirst) return route.fallback()
+    failFirst = false
+    await route.fulfill({
+      status: 503,
+      contentType: "application/problem+json",
+      body: JSON.stringify({
+        code: "APPLICATION_FAILURE", title: "Unavailable", status: 503,
+        detail: "Message send failed", correlationId: "broadcast-retry",
+      }),
+    })
+  })
+
+  await page.goto("/cases")
+  const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
+  await conversation.getByRole("button", { name: "Przejmij" }).click()
+  const broadcast = conversation.getByRole("checkbox", { name: "Send also to channel" })
+  await broadcast.check()
+  await conversation.getByLabel("Treść odpowiedzi").fill("Retry broadcast")
+  await conversation.getByRole("button", { name: "Wyślij" }).click()
+  await expect(conversation.getByText("Message send failed")).toBeVisible()
+  await expect(broadcast).toBeChecked()
+  await conversation.getByRole("button", { name: "Wyślij" }).click()
+  await expect(conversation.getByText("Retry broadcast")).toBeVisible()
+  await expect(broadcast).not.toBeChecked()
+  expect(attemptKeys).toHaveLength(2)
+  expect(attemptKeys[0]).toBe(attemptKeys[1])
+  expect(sendIntents).toHaveLength(1)
+  expect(sendIntents[0].replyBroadcast).toBe(true)
 })
 
 test("conversation lazy-loads older history without duplicating overlapping messages", async ({ page }) => {

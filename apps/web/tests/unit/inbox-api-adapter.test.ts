@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
-import type { ApiTransport, ApiTransportRequest, CaseMessage } from "@usi/api-client/generated"
+import type { ApiTransport, ApiTransportRequest, CaseDetail, CaseMessage } from "@usi/api-client/generated"
 import { ApiHttpError } from "@/lib/services/api/http-transport"
 import { InboxConflictError } from "@/lib/services/inbox"
-import { createApiInboxRepository, InboxActionUnavailableError, mapCaseMessage } from "@/lib/services/api/inbox-adapter"
+import { createApiInboxRepository, InboxActionUnavailableError, mapCaseDetail, mapCaseMessage } from "@/lib/services/api/inbox-adapter"
 
 const caseId = "01a10d64-2d99-7627-813d-2bad1ab9ab55"
 const messageId = "01a10d64-2da1-7555-a8cf-a27e56abbc35"
@@ -16,7 +16,7 @@ const listItem = {
   ignoreScore: 0, waitingUntil: null, createdAt: "2026-10-05T10:00:00Z",
   updatedAt: "2026-10-05T10:00:00Z", lastActivityAt: "2026-10-05T10:00:00Z",
 }
-const detail = {
+const detail: CaseDetail = {
   id: caseId, reference: listItem.reference, status: "NEW",
   customer: { id: "customer", name: listItem.customerName, externalRef: "slack-test" },
   owner: { id: null, displayName: null },
@@ -65,7 +65,9 @@ describe("real inbox API adapter", () => {
     const page = await repository.list()
     expect(page.items).toMatchObject([{ id: caseId, reference: "CASE-00000002", platform: "slack", sourceChannel: "#new-channel", unreadForCurrentUser: true }])
     expect(page.nextCursor).toBe("cursor-2")
-    expect((await repository.getCase(caseId)).availableActions).toContain("CLAIM")
+    const caseDetail = await repository.getCase(caseId)
+    expect(caseDetail.availableActions).toContain("CLAIM")
+    expect(caseDetail.canReplyBroadcast).toBe(false)
     expect((await repository.getMessages(caseId)).items).toMatchObject([{ id: messageId, kind: "customer", body: message.body }])
     expect(requests.map((item) => item.method)).toEqual(["GET", "GET", "GET"])
   })
@@ -79,6 +81,29 @@ describe("real inbox API adapter", () => {
     expect(claim?.headers?.["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/)
     expect(send?.headers?.["Idempotency-Key"]).toBe("fixed-retry-key")
     expect(send?.body).toEqual({ body: "USI test reply", bodyFormat: "PLAIN_TEXT" })
+  })
+
+  it("maps server-authoritative Slack broadcast capability into the case view model", () => {
+    expect(mapCaseDetail({ ...detail, canReplyBroadcast: true }).canReplyBroadcast).toBe(true)
+    expect(mapCaseDetail({ ...detail, canReplyBroadcast: false }).canReplyBroadcast).toBe(false)
+  })
+
+  it("forwards opt-in Slack reply broadcast without changing default sends or idempotency keys", async () => {
+    const { repository, requests } = fixture()
+    await repository.sendMessage(caseId, {
+      body: "Broadcast to channel", replyBroadcast: true, idempotencyKey: "broadcast-key",
+    })
+    await repository.sendMessage(caseId, {
+      body: "Ordinary thread reply", replyBroadcast: false, idempotencyKey: "ordinary-key",
+    })
+    const posts = requests.filter((item) => item.path.endsWith("/messages") && item.method === "POST")
+    expect(posts).toHaveLength(2)
+    expect(posts[0].body).toEqual({
+      body: "Broadcast to channel", bodyFormat: "PLAIN_TEXT", replyBroadcast: true,
+    })
+    expect(posts[0].headers?.["Idempotency-Key"]).toBe("broadcast-key")
+    expect(posts[1].body).toEqual({ body: "Ordinary thread reply", bodyFormat: "PLAIN_TEXT" })
+    expect(posts[1].headers?.["Idempotency-Key"]).toBe("ordinary-key")
   })
 
   it("maps persisted support messages as agent messages and accepts an empty real history page", async () => {

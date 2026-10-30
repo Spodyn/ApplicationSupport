@@ -258,7 +258,7 @@ export function CasesPage({
       </section>
 
       {selectedPresentation ? <ConversationPanel
-        key={selectedId}
+        key={`${selectedId}:${detailQuery.data?.canReplyBroadcast === true ? "broadcast" : "standard"}`}
         item={selectedPresentation}
         record={detailQuery.data}
         detailError={detailQuery.isError}
@@ -426,14 +426,17 @@ function ConversationPanel({
   className: string
 }) {
   const [draft, setDraft] = useState("")
+  const [replyBroadcast, setReplyBroadcast] = useState(false)
   const [sendError, setSendError] = useState("")
   const [attachmentError, setAttachmentError] = useState("")
   const [pendingAttachments, setPendingAttachments] = useState<InboxPendingAttachment[]>([])
   const idempotencyKey = useRef<string | null>(null)
+  const lastSendBroadcastIntent = useRef<boolean | null>(null)
   const retryKeys = useRef(new Map<string, string>())
   const fileInputRef = useRef<HTMLInputElement>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
+  const canReplyBroadcast = canReply && record?.canReplyBroadcast === true
   const attachmentsReady = pendingAttachments.every((attachment) => attachment.scanStatus === "clean")
 
   const uploadFiles = async (files: FileList | null) => {
@@ -489,6 +492,11 @@ function ConversationPanel({
       setAttachmentError("Usuń załączniki, które nie przeszły kontroli bezpieczeństwa.")
       return
     }
+    const sendBroadcast = canReplyBroadcast && replyBroadcast
+    if (lastSendBroadcastIntent.current !== sendBroadcast) {
+      idempotencyKey.current = null
+      lastSendBroadcastIntent.current = sendBroadcast
+    }
     idempotencyKey.current ??= crypto.randomUUID()
     setSendError("")
     try {
@@ -496,8 +504,10 @@ function ConversationPanel({
         body: draft,
         attachments: pendingAttachments,
         idempotencyKey: idempotencyKey.current,
+        replyBroadcast: sendBroadcast,
       })
       setDraft("")
+      setReplyBroadcast(false)
       setPendingAttachments([])
       setAttachmentError("")
       idempotencyKey.current = null
@@ -578,6 +588,21 @@ function ConversationPanel({
       <div className="shrink-0 pb-[22px] pl-[18px] pr-[22px]">
         <div className="rounded-[11px] border border-white/[0.085] bg-[linear-gradient(110deg,#0d1725,#0b1522)]">
           <textarea value={draft} onChange={(event) => { setDraft(event.target.value); idempotencyKey.current = null }} disabled={!canReply} placeholder={canReply ? "Napisz odpowiedź..." : "Przejmij case, aby odpowiedzieć"} aria-label="Treść odpowiedzi" className="block h-[80px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa] disabled:cursor-not-allowed" />
+          {canReplyBroadcast && (
+            <label className="flex items-center gap-2 border-t border-white/[0.06] px-[23px] py-2 text-xs text-[#d8dde7]">
+              <input
+                type="checkbox"
+                checked={canReplyBroadcast && replyBroadcast}
+                disabled={workflow.sendMessage.isPending}
+                onChange={(event) => {
+                  setReplyBroadcast(event.target.checked)
+                  idempotencyKey.current = null
+                }}
+                className="size-4 accent-violet-600"
+              />
+              Send also to channel
+            </label>
+          )}
           {pendingAttachments.length > 0 && (
             <div className="flex flex-wrap gap-2 border-t border-white/[0.06] px-[19px] py-2.5">
               {pendingAttachments.map((attachment) => (

@@ -80,6 +80,11 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
             return DeliveryResult.permanentFailure("SLACK_CHANNEL_MISSING");
         }
 
+        if (command.replyBroadcast()
+                && (command.externalThreadKey() == null || command.externalThreadKey().isBlank())) {
+            return DeliveryResult.permanentFailure("SLACK_REPLY_BROADCAST_THREAD_REQUIRED");
+        }
+
         CredentialReference integration = credentialFor(command);
         if (integration == null) {
             reportFailure(command.integrationId(), "SLACK_CREDENTIAL_REFERENCE_MISSING");
@@ -93,13 +98,22 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
         }
 
         try {
-            SlackWebApiClient.PostMessageResponse response = slack.postMessage(
-                    token,
-                    command.externalConversationId(),
-                    command.externalThreadKey(),
-                    command.body(),
-                    command.bodyFormat(),
-                    command.idempotencyKey());
+            SlackWebApiClient.PostMessageResponse response = command.replyBroadcast()
+                    ? slack.postMessage(
+                            token,
+                            command.externalConversationId(),
+                            command.externalThreadKey(),
+                            command.body(),
+                            command.bodyFormat(),
+                            command.idempotencyKey(),
+                            true)
+                    : slack.postMessage(
+                            token,
+                            command.externalConversationId(),
+                            command.externalThreadKey(),
+                            command.body(),
+                            command.bodyFormat(),
+                            command.idempotencyKey());
             DeliveryResult messageResult = map(response);
             if (messageResult.outcome() != MessageDeliveryProvider.Outcome.SENT
                     && messageResult.outcome() != MessageDeliveryProvider.Outcome.DELIVERED) {

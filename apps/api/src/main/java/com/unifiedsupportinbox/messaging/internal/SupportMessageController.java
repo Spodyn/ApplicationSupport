@@ -64,6 +64,7 @@ class SupportMessageController {
                 request.body(),
                 request.bodyFormat(),
                 request.attachmentIds(),
+                Boolean.TRUE.equals(request.replyBroadcast()),
                 correlationId);
         return ResponseEntity.status(result.status()).body(result.body());
     }
@@ -82,6 +83,7 @@ class SupportMessageController {
     record SendMessageRequest(
             @NotBlank String body,
             MessageBodyFormat bodyFormat,
-            List<UUID> attachmentIds) {
+            List<UUID> attachmentIds,
+            Boolean replyBroadcast) {
     }
 }

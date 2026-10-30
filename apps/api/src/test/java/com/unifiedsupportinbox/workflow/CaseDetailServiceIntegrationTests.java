@@ -81,6 +81,29 @@ class CaseDetailServiceIntegrationTests {
     }
 
     @Test
+    void offersSlackBroadcastOnlyForAuthorizedRepliesWithPersistedThread() {
+        UUID owner = user("USER");
+        UUID other = user("USER");
+        UUID caseId = caseId("broadcast-capability-" + UUID.randomUUID());
+
+        jdbc.update("UPDATE cases SET external_thread_key = '1720000000.123456' WHERE id = ?", caseId);
+        assertThat(details.detail(caseId, owner).canReplyBroadcast()).isFalse();
+
+        jdbc.update("""
+                UPDATE cases SET status = 'VERIFICATION', owner_user_id = ?,
+                                 claimed_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """, owner, caseId);
+        var owned = details.detail(caseId, owner);
+        assertThat(owned.availableActions()).contains("REPLY");
+        assertThat(owned.canReplyBroadcast()).isTrue();
+        assertThat(details.detail(caseId, other).canReplyBroadcast()).isFalse();
+
+        jdbc.update("UPDATE cases SET external_thread_key = NULL WHERE id = ?", caseId);
+        assertThat(details.detail(caseId, owner).canReplyBroadcast()).isFalse();
+    }
+
+    @Test
     void rejectsMissingCaseAndUnknownAuthenticatedUser() {
         assertThatThrownBy(() -> details.detail(UUID.randomUUID(), UUID.randomUUID()))
                 .isInstanceOf(ApiProblemException.class);

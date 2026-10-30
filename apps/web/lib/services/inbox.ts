@@ -27,6 +27,7 @@ export interface InboxSendInput {
   attachments?: InboxPendingAttachment[]
   simulateFailure?: boolean
   idempotencyKey?: string
+  replyBroadcast?: boolean
 }
 
 export interface InboxPage<T> {

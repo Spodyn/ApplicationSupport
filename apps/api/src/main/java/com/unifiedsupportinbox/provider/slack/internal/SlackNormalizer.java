@@ -32,7 +32,7 @@ class SlackNormalizer {
         }
         return switch (subtype) {
             case "file_share" -> normalizeCreate(inbound, channelId, channel, event);
-            case "bot_message" -> new Filtered(FilterReason.BOT_OR_APP_MESSAGE);
+            case "bot_message", "thread_broadcast" -> new Filtered(FilterReason.BOT_OR_APP_MESSAGE);
             case "message_changed" -> normalizeEdit(inbound, channelId, channel, event);
             case "message_deleted" -> normalizeDelete(inbound, channelId, channel, event);
             default -> new Filtered(FilterReason.UNSUPPORTED_EVENT);
@@ -144,7 +144,9 @@ class SlackNormalizer {
             return true;
         }
         String subtype = optionalText(message, "subtype");
-        if ("bot_message".equals(subtype)) return true;
+        // Slack may wrap a channel broadcast echo inside message_changed/message_deleted.
+        // Filtering the nested subtype prevents an outbound reply from being ingested as an edit or delete.
+        if ("bot_message".equals(subtype) || "thread_broadcast".equals(subtype)) return true;
         if (author == null) return false;
 
         JsonNode authorizations = inbound.callback().get("authorizations");

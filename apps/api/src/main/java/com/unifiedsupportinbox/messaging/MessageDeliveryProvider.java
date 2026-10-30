@@ -24,7 +24,24 @@ public interface MessageDeliveryProvider {
             String externalThreadKey,
             String body,
             MessageBodyFormat bodyFormat,
-            String correlationId) {
+            String correlationId,
+            boolean replyBroadcast) {
+
+        // Preserve non-broadcast behavior for all existing delivery callers.
+        public DeliveryCommand(
+                UUID messageId,
+                String idempotencyKey,
+                UUID caseId,
+                IntegrationProvider provider,
+                UUID integrationId,
+                String externalConversationId,
+                String externalThreadKey,
+                String body,
+                MessageBodyFormat bodyFormat,
+                String correlationId) {
+            this(messageId, idempotencyKey, caseId, provider, integrationId,
+                    externalConversationId, externalThreadKey, body, bodyFormat, correlationId, false);
+        }
     }
 
     record DeliveryResult(

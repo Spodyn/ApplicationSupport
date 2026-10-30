@@ -28,6 +28,45 @@ For each SUPPORT Message the provider sends:
 - `mrkdwn=true` only for MARKDOWN messages;
 - the stable logical Message idempotency key as `client_msg_id` on every retry.
 
+For **USI-245** the HTTP client additionally supports the optional `reply_broadcast=true`
+argument in the **same** `chat.postMessage` request. It is emitted only when a support
+agent explicitly opts in **and** the message has a persisted nonblank `thread_ts`.
+Broadcast without a thread is rejected before any HTTP request; ordinary replies
+continue to omit the flag. The same logical `client_msg_id` is retained and only
+one provider post is sent.
+
+**Implementation checkpoint:** The HTTP client and provider delivery-command boundary
+now carry an explicit opt-in flag without changing existing non-broadcast callers.
+The provider rejects broadcast without a persisted thread before reading credentials
+or sending any HTTP request. Focused provider and HTTP tests cover both paths.
+The Slack inbound normalizer now explicitly filters `thread_broadcast` channel echoes
+before message persistence, including nested `thread_broadcast` subtypes in
+`message_changed` and `message_deleted` events, while preserving ordinary human
+thread replies and edits/deletes. Focused regressions cover these paths. This is only a provider-event filter,
+**not** proof of complete echo/idempotency acceptance against a live Slack workspace.
+The send command now validates Slack thread eligibility, persists the opt-in flag
+on the Message row, includes the true intent in the idempotency fingerprint, and
+hydrates it for every delivery attempt (including durable retries). Existing
+false/default request fingerprints are unchanged. The reserved V41 migration is held
+in this draft until competing V35 migrations from PRs #126 and #133 have been
+sequenced without Flyway out-of-order upgrades. Tests cover invalid broadcast,
+idempotent replay and transient retry preservation. The existing composer now
+offers a server-gated, unchecked-by-default **Send also to channel** option
+only for eligible Slack thread replies. A successful send resets the option;
+a failed send retains the selected intent and stable idempotency key for retry.
+Changing the option or losing server eligibility invalidates that key.
+Playwright coverage exercises ordinary/broadcast sends and failed-send retry;
+exact-HEAD CI and live Slack sandbox acceptance remain required.
+The OpenAPI request schema, deterministic generated
+TypeScript transport type and inbox API adapter now carry optional
+`replyBroadcast` with a false-by-default wire contract; adapter tests cover
+both opt-in and legacy sends. The Case detail projection additionally returns
+server-calculated `canReplyBroadcast` only for a permitted Slack reply with a
+persisted root thread; frontend mapping preserves this capability without
+exposing the raw Slack thread timestamp. Do not
+offer the option in production or mark USI-245 complete until the entire
+end-to-end path is green.
+
 A successful Slack response must contain `ok=true` and `ts`; that timestamp becomes the provider message reference in the common delivery lifecycle.
 
 ## Retry and repair contract

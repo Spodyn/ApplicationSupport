@@ -64,6 +64,13 @@ class SupportSendMessageService {
             MessageBodyFormat bodyFormat,
             List<UUID> attachmentIds,
             String correlationId) {
+        return send(caseId, userId, idempotencyKey, body, bodyFormat, attachmentIds, false, correlationId);
+    }
+
+    IdempotencyResult send(
+            UUID caseId, UUID userId, String idempotencyKey, String body,
+            MessageBodyFormat bodyFormat, List<UUID> attachmentIds,
+            boolean replyBroadcast, String correlationId) {
         Objects.requireNonNull(caseId, "caseId");
         Objects.requireNonNull(userId, "userId");
         String normalizedBody = requireBody(body);
@@ -77,6 +84,12 @@ class SupportSendMessageService {
                 "bodyFormat", normalizedFormat.name(),
                 "attachmentIds", normalizedAttachments.stream().map(UUID::toString).toList());
 
+        // Do not change the canonical hash of existing non-broadcast retries.
+        if (replyBroadcast) {
+            canonicalRequest = new java.util.HashMap<>(canonicalRequest);
+            canonicalRequest.put("replyBroadcast", true);
+        }
+
         return idempotency.execute(
                 userId,
                 COMMAND_SCOPE + ":" + caseId,
@@ -88,6 +101,7 @@ class SupportSendMessageService {
                         normalizedBody,
                         normalizedFormat,
                         normalizedAttachments,
+                        replyBroadcast,
                         normalizedCorrelationId));
     }
 
@@ -97,16 +111,18 @@ class SupportSendMessageService {
             String body,
             MessageBodyFormat bodyFormat,
             List<UUID> attachmentIds,
+            boolean replyBroadcast,
             String correlationId) {
         CaseSendContext context = jdbc.query("""
-                SELECT owner_user_id, status, external_thread_key
+                SELECT owner_user_id, status, external_thread_key, provider
                 FROM cases
                 WHERE id = ?
                 FOR UPDATE
                 """, (rs, rowNum) -> new CaseSendContext(
                 rs.getObject("owner_user_id", UUID.class),
                 rs.getString("status"),
-                rs.getString("external_thread_key")), caseId)
+                rs.getString("external_thread_key"),
+                rs.getString("provider")), caseId)
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> ApiProblemException.notFound("Case was not found."));
@@ -116,6 +132,12 @@ class SupportSendMessageService {
         }
         if (!userId.equals(context.ownerUserId())) {
             throw ApiProblemException.accessDenied();
+        }
+
+        if (replyBroadcast && (!"SLACK".equals(context.provider())
+                || context.externalThreadKey() == null || context.externalThreadKey().isBlank())) {
+            throw ApiProblemException.validationFailed(
+                    "Channel broadcast requires a Slack Case with an existing thread.");
         }
 
         lockAndValidateAttachments(caseId, attachmentIds);
@@ -136,8 +158,9 @@ class SupportSendMessageService {
                     provider_created_at,
                     edited_at,
                     deleted_at,
-                    correlation_id
-                ) VALUES (?, NULL, ?, 'SUPPORT', ?, NULL, NULL, ?, ?, FALSE, 'QUEUED', NULL, NULL, NULL, ?)
+                    correlation_id,
+                    reply_broadcast
+                ) VALUES (?, NULL, ?, 'SUPPORT', ?, NULL, NULL, ?, ?, FALSE, 'QUEUED', NULL, NULL, NULL, ?, ?)
                 RETURNING id
                 """, UUID.class,
                 caseId,
@@ -145,7 +168,8 @@ class SupportSendMessageService {
                 userId,
                 body,
                 bodyFormat.name(),
-                correlationId);
+                correlationId,
+                replyBroadcast);
 
         if (messageId == null) {
             throw new IllegalStateException("Support Message insert returned no id.");
@@ -157,7 +181,7 @@ class SupportSendMessageService {
                 OUTBOX_TYPE,
                 AGGREGATE_TYPE,
                 messageId,
-                deliveryPayload(messageId, caseId, context.externalThreadKey()),
+                deliveryPayload(messageId, caseId, context.externalThreadKey(), replyBroadcast),
                 correlationId);
 
         ObjectNode response = json.createObjectNode();
@@ -225,13 +249,14 @@ class SupportSendMessageService {
         }
     }
 
-    private String deliveryPayload(UUID messageId, UUID caseId, String externalThreadKey) {
+    private String deliveryPayload(UUID messageId, UUID caseId, String externalThreadKey, boolean replyBroadcast) {
         ObjectNode payload = json.createObjectNode();
         payload.put("messageId", messageId.toString());
         payload.put("caseId", caseId.toString());
         if (externalThreadKey != null) {
             payload.put("externalThreadKey", externalThreadKey);
         }
+        if (replyBroadcast) payload.put("replyBroadcast", true);
         return payload.toString();
     }
 
@@ -268,7 +293,7 @@ class SupportSendMessageService {
         return normalized;
     }
 
-    private record CaseSendContext(UUID ownerUserId, String status, String externalThreadKey) {
+    private record CaseSendContext(UUID ownerUserId, String status, String externalThreadKey, String provider) {
     }
 
     private record AttachmentCandidate(

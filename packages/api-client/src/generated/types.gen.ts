@@ -88,6 +88,7 @@ export type CaseDetail = {
   "updatedAt": string
   "lastActivityAt": string
   "version": number
+  "canReplyBroadcast"?: boolean
 }
 
 export type CaseIntegration = {
@@ -300,6 +301,7 @@ export type SendMessageRequest = {
   "body": string
   "bodyFormat"?: MessageBodyFormat
   "attachmentIds"?: Array<string>
+  "replyBroadcast"?: boolean
 }
 
 export type SendMessageResponse = {

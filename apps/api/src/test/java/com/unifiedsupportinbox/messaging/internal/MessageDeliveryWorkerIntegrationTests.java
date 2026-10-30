@@ -107,6 +107,28 @@ class MessageDeliveryWorkerIntegrationTests {
     }
 
     @Test
+    void broadcastFlagAndIdempotencyKeySurviveDurableTransientRetry() {
+        Fixture fixture = createFixture("ENABLED");
+        IdempotencyResult queued = send.send(fixture.caseId(), fixture.ownerId(),
+                "broadcast-retry", "Thread reply", null, java.util.List.of(),
+                true, "corr-broadcast-retry");
+        UUID messageId = UUID.fromString(queued.body().get("messageId").asText());
+        provider.steps(
+                DeliveryResult.transientFailure("RATE_LIMITED", Duration.ofMillis(100)),
+                DeliveryResult.sent("slack-ts-broadcast"));
+
+        assertThat(worker.process(messageId)).isEqualTo(MessageDeliveryWorker.AttemptResult.RETRY_SCHEDULED);
+        makeRetryDue(messageId);
+        assertThat(deliveries.redispatchDue()).isEqualTo(1);
+        assertThat(worker.process(messageId)).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+        assertThat(provider.broadcastFlags()).containsExactly(true, true);
+        assertThat(provider.idempotencyKey()).isEqualTo(messageId.toString());
+        assertThat(provider.calls()).isEqualTo(2);
+        assertThat(jdbc.queryForObject(
+                "SELECT reply_broadcast FROM messages WHERE id = ?", Boolean.class, messageId)).isTrue();
+    }
+
+    @Test
     void permanentFailureStopsAutomaticDelivery() {
         Fixture fixture = createFixture("ENABLED");
         UUID messageId = createMessage(fixture, "permanent");
@@ -315,6 +337,7 @@ class MessageDeliveryWorkerIntegrationTests {
         private final AtomicInteger calls = new AtomicInteger();
         private final AtomicBoolean transactionSeen = new AtomicBoolean();
         private volatile String idempotencyKey;
+        private final java.util.List<Boolean> broadcastFlags = new java.util.ArrayList<>();
 
         @Override
         public boolean supports(IntegrationProvider provider) {
@@ -328,6 +351,7 @@ class MessageDeliveryWorkerIntegrationTests {
                     false,
                     TransactionSynchronizationManager.isActualTransactionActive());
             idempotencyKey = command.idempotencyKey();
+            broadcastFlags.add(command.replyBroadcast());
             DeliveryResult next = steps.pollFirst();
             if (next == null) throw new IllegalStateException("Fake provider has no configured result.");
             return next;
@@ -343,10 +367,15 @@ class MessageDeliveryWorkerIntegrationTests {
             calls.set(0);
             transactionSeen.set(false);
             idempotencyKey = null;
+            broadcastFlags.clear();
         }
 
         int calls() {
             return calls.get();
+        }
+
+        java.util.List<Boolean> broadcastFlags() {
+            return java.util.List.copyOf(broadcastFlags);
         }
 
         boolean sawDatabaseTransaction() {
