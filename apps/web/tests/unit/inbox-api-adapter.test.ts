@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { ApiTransport, ApiTransportRequest, CaseMessage } from "@usi/api-client/generated"
 import { ApiHttpError } from "@/lib/services/api/http-transport"
 import { InboxConflictError } from "@/lib/services/inbox"
-import { createApiInboxRepository, InboxActionUnavailableError, mapCaseMessage } from "@/lib/services/api/inbox-adapter"
+import { createApiInboxRepository, InboxActionUnavailableError, mapCaseDetail, mapCaseMessage } from "@/lib/services/api/inbox-adapter"
 
 const caseId = "01a10d64-2d99-7627-813d-2bad1ab9ab55"
 const messageId = "01a10d64-2da1-7555-a8cf-a27e56abbc35"
@@ -66,6 +66,7 @@ describe("real inbox API adapter", () => {
     expect(page.items).toMatchObject([{ id: caseId, reference: "CASE-00000002", platform: "slack", sourceChannel: "#new-channel", unreadForCurrentUser: true }])
     expect(page.nextCursor).toBe("cursor-2")
     expect((await repository.getCase(caseId)).availableActions).toContain("CLAIM")
+    expect((await repository.getCase(caseId)).canReplyBroadcast).toBe(false)
     expect((await repository.getMessages(caseId)).items).toMatchObject([{ id: messageId, kind: "customer", body: message.body }])
     expect(requests.map((item) => item.method)).toEqual(["GET", "GET", "GET"])
   })
@@ -79,6 +80,11 @@ describe("real inbox API adapter", () => {
     expect(claim?.headers?.["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/)
     expect(send?.headers?.["Idempotency-Key"]).toBe("fixed-retry-key")
     expect(send?.body).toEqual({ body: "USI test reply", bodyFormat: "PLAIN_TEXT" })
+  })
+
+  it("maps server-authoritative Slack broadcast capability into the case view model", () => {
+    expect(mapCaseDetail({ ...detail, canReplyBroadcast: true }).canReplyBroadcast).toBe(true)
+    expect(mapCaseDetail({ ...detail, canReplyBroadcast: false }).canReplyBroadcast).toBe(false)
   })
 
   it("forwards opt-in Slack reply broadcast without changing default sends or idempotency keys", async () => {

@@ -63,6 +63,7 @@ export interface InboxCase {
   owner?: Pick<User, "id" | "fullName">
   lastMessageId?: string
   availableActions?: string[]
+  canReplyBroadcast?: boolean
   unreadForCurrentUser: boolean
   snoozedForCurrentUserUntil?: string
   currentUserRestrictedByIgnore: boolean

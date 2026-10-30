@@ -32,7 +32,7 @@ class CaseDetailService {
         return jdbc.query("""
                 SELECT c.id, c.reference, c.status, c.owner_user_id, owner.display_name AS owner_display_name,
                        c.claimed_at, c.waiting_until, c.resolved_at, c.ignored_at, c.resolution_category,
-                       c.related_case_id, related.reference AS related_case_reference,
+                       c.related_case_id, c.external_thread_key, c.provider AS case_provider, related.reference AS related_case_reference,
                        c.created_at, c.updated_at, c.last_activity_at, c.version,
                        customer.id AS customer_id, customer.name AS customer_name, customer.external_ref AS customer_external_ref,
                        channel.id AS channel_id, channel.name AS channel_name, channel.external_channel_id, channel.grouping_strategy,
@@ -63,6 +63,12 @@ class CaseDetailService {
             CaseTransitionPolicy.State state = new CaseTransitionPolicy.State(
                     status, rs.getObject("owner_user_id", UUID.class), instant(rs, "waiting_until"));
             Set<CaseTransitionPolicy.Action> actions = policy.availableActions(state, actor.policyActor());
+            // Do not infer Slack thread eligibility in the browser.
+            String threadKey = rs.getString("external_thread_key");
+            boolean canReplyBroadcast = actions.contains(CaseTransitionPolicy.Action.REPLY)
+                    && "SLACK".equals(rs.getString("case_provider"))
+                    && "SLACK".equals(rs.getString("provider"))
+                    && threadKey != null && !threadKey.isBlank();
             return new CaseDetail(
                     rs.getObject("id", UUID.class), rs.getString("reference"), status,
                     new Customer(rs.getObject("customer_id", UUID.class), rs.getString("customer_name"), rs.getString("customer_external_ref")),
@@ -74,7 +80,7 @@ class CaseDetailService {
                     new RelatedCase(rs.getObject("related_case_id", UUID.class), rs.getString("related_case_reference")),
                     new PersonalState(rs.getObject("last_read_message_id", UUID.class), instant(rs, "last_read_at"), instant(rs, "snoozed_until")),
                     sla(rs), rs.getInt("ignore_score"), actions.stream().map(Enum::name).sorted().toList(),
-                    instant(rs, "claimed_at"), instant(rs, "waiting_until"), instant(rs, "resolved_at"), instant(rs, "ignored_at"),
+                    canReplyBroadcast, instant(rs, "claimed_at"), instant(rs, "waiting_until"), instant(rs, "resolved_at"), instant(rs, "ignored_at"),
                     enumValue(rs, "resolution_category"), instant(rs, "created_at"), instant(rs, "updated_at"),
                     instant(rs, "last_activity_at"), rs.getLong("version"));
         }, userId, userId, caseId).stream().findFirst().orElseThrow(() -> ApiProblemException.notFound("Case was not found."));
@@ -124,7 +130,7 @@ class CaseDetailService {
 
     record CaseDetail(UUID id, String reference, CaseStatus status, Customer customer, Owner owner, Channel channel,
             Integration integration, RelatedCase relatedCase, PersonalState personalState, Sla sla, int ignoreScore,
-            List<String> availableActions, Instant claimedAt, Instant waitingUntil, Instant resolvedAt, Instant ignoredAt,
+            List<String> availableActions, boolean canReplyBroadcast, Instant claimedAt, Instant waitingUntil, Instant resolvedAt, Instant ignoredAt,
             CaseResolutionCategory resolutionCategory, Instant createdAt, Instant updatedAt, Instant lastActivityAt, long version) {}
     record Customer(UUID id, String name, String externalRef) {}
     record Owner(UUID id, String displayName) {}

@@ -125,6 +125,7 @@ export function mapCaseDetail(detail: CaseDetail): InboxCase {
       ? { reference: detail.relatedCase.reference, subject: detail.relatedCase.reference }
       : undefined,
     resolutionCategory: detail.resolutionCategory ?? undefined,
+    canReplyBroadcast: detail.canReplyBroadcast === true,
   }
 }
 

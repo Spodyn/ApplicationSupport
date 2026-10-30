@@ -88,6 +88,7 @@ export type CaseDetail = {
   "updatedAt": string
   "lastActivityAt": string
   "version": number
+  "canReplyBroadcast"?: boolean
 }
 
 export type CaseIntegration = {

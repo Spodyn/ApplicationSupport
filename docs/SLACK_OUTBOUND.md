@@ -54,7 +54,10 @@ frontend/Playwright tests and live Slack sandbox acceptance are
 **not yet implemented**. The OpenAPI request schema, deterministic generated
 TypeScript transport type and inbox API adapter now carry optional
 `replyBroadcast` with a false-by-default wire contract; adapter tests cover
-both opt-in and legacy sends. Do not
+both opt-in and legacy sends. The Case detail projection additionally returns
+server-calculated `canReplyBroadcast` only for a permitted Slack reply with a
+persisted root thread; frontend mapping preserves this capability without
+exposing the raw Slack thread timestamp. Do not
 offer the option in production or mark USI-245 complete until the entire
 end-to-end path is green.
 
