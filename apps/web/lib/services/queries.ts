@@ -230,6 +230,10 @@ export function useAdministrationSettingsActions() {
   const invalidate = () =>
     queryClient.invalidateQueries({ queryKey: queryKeys.administrationSettings() })
 
+  const previewOutOfOffice = useMutation({
+    mutationFn: (customerName?: string) =>
+      serviceRegistry.administrationSettings.previewOutOfOffice(customerName),
+  })
   const saveSection = useMutation({
     mutationFn: (input: AdministrationSectionInput) =>
       serviceRegistry.administrationSettings.saveSection(
@@ -277,6 +281,7 @@ export function useAdministrationSettingsActions() {
 
   return {
     saveSection,
+    previewOutOfOffice,
     setIntegrationStatus,
     testIntegration,
     configureChannel,
