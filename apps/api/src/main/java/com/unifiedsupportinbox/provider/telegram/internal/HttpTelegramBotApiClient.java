@@ -57,7 +57,15 @@ class HttpTelegramBotApiClient implements TelegramBotApiClient {
                     .POST(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(payload)))
                     .build();
             HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
-            JsonNode body = json.readTree(response.body());
+            JsonNode body;
+            try {
+                body = json.readTree(response.body());
+            } catch (JacksonException exception) {
+                // A malformed provider body cannot erase a trustworthy HTTP error.
+                int status = response.statusCode();
+                return new SendResponse(status >= 200 && status < 300 ? 502 : status,
+                        false, null, null, headerRetryAfter(response));
+            }
             boolean ok = body != null && body.path("ok").asBoolean(false);
             JsonNode id = body == null ? null : body.path("result").path("message_id");
             String messageId = id != null && id.isIntegralNumber() ? id.asText() : null;
@@ -68,11 +76,8 @@ class HttpTelegramBotApiClient implements TelegramBotApiClient {
                     ? Duration.ofSeconds(retry.asLong()) : headerRetryAfter(response);
             return new SendResponse(response.statusCode(), ok, messageId, errorCode, retryAfter);
         } catch (JacksonException exception) {
-            // A malformed body does not erase a trustworthy HTTP error status.
-            // In particular, preserve 429 + Retry-After and permanent 4xx failures.
-            int status = response.statusCode();
-            return new SendResponse(status >= 200 && status < 300 ? 502 : status,
-                    false, null, null, headerRetryAfter(response));
+            // JSON serialization failed before the provider request could be sent.
+            return new SendResponse(502, false, null, null, null);
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return new SendResponse(503, false, null, null, null);
