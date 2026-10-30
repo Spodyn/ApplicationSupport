@@ -68,7 +68,11 @@ class HttpTelegramBotApiClient implements TelegramBotApiClient {
                     ? Duration.ofSeconds(retry.asLong()) : headerRetryAfter(response);
             return new SendResponse(response.statusCode(), ok, messageId, errorCode, retryAfter);
         } catch (JacksonException exception) {
-            return new SendResponse(502, false, null, null, null);
+            // A malformed body does not erase a trustworthy HTTP error status.
+            // In particular, preserve 429 + Retry-After and permanent 4xx failures.
+            int status = response.statusCode();
+            return new SendResponse(status >= 200 && status < 300 ? 502 : status,
+                    false, null, null, headerRetryAfter(response));
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             return new SendResponse(503, false, null, null, null);
