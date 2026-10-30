@@ -12,6 +12,19 @@ const EXPECTED_MAIN_RULESET_ID = 21055765;
 // Bind eligibility to the actual repository CI workflow, not an arbitrary PR workflow.
 const EXPECTED_CI_WORKFLOW_ID = 330478347;
 const EXPECTED_CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
+const PROTECTED_CONTROL_FILES = new Set([
+  "scripts/ci_merge.mjs",
+  "scripts/tests/ci_merge.test.mjs",
+  "scripts/tests/test_orchestrator_policy.py",
+  "docs/orchestrator-policy.yaml",
+  "docs/ORCHESTRATOR_CONTRACT.md",
+  "docs/PRODUCT_CONTRACT.md",
+  "docs/decision-registry.yaml"
+]);
+const isProtectedControlFile = path =>
+  path.startsWith(".github/workflows/") ||
+  path === "AGENTS.md" || path.endsWith("/AGENTS.md") ||
+  PROTECTED_CONTROL_FILES.has(path);
 
 /**
  * A PR label is only a routing hint, not evidence. The independent attestor
@@ -110,8 +123,8 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
   // A PR can edit its own pull_request workflow to make six no-op jobs pass.
   // Never let such a workflow attest to its own security; require separate review.
   if (!Array.isArray(changedFiles) || changedFiles.length >= 100 ||
-      changedFiles.some(path => typeof path !== "string" || path.startsWith(".github/workflows/"))) {
-    errors.push("PR workflow changes or incomplete file inventory require independent review");
+      changedFiles.some(path => typeof path !== "string" || isProtectedControlFile(path))) {
+    errors.push("PR trusted workflow/control changes or incomplete file inventory require independent review");
   }
   if (run?.head_sha !== pull?.head?.sha) errors.push("CI SHA != current PR HEAD");
   const belongs = (run?.pull_requests || []).some(x => x.number === pull?.number && x.head?.sha === pull.head.sha);
