@@ -314,18 +314,13 @@ async function listChannels(): Promise<ManagedChannel[]> {
 }
 
 async function getBusinessHours(): Promise<ApiBusinessHoursSchedule> {
-  return browserApiTransport.request<ApiBusinessHoursSchedule>({
-    method: "GET",
-    path: "/api/v1/admin/business-hours",
-  })
+  return integrationApi.getBusinessHours()
 }
 
 async function saveBusinessHours(
   schedule: WorkScheduleSettings,
 ): Promise<ApiBusinessHoursSchedule> {
-  return browserApiTransport.request<ApiBusinessHoursSchedule>({
-    method: "PUT",
-    path: "/api/v1/admin/business-hours",
+  return integrationApi.replaceBusinessHours({
     body: {
       timezone: schedule.timezone,
       intervals: mapWorkScheduleToApiIntervals(schedule),
@@ -334,10 +329,7 @@ async function saveBusinessHours(
 }
 
 async function getOutOfOffice(): Promise<ApiOutOfOfficePolicy> {
-  const current = await browserApiTransport.request<ApiOutOfOfficePolicy>({
-    method: "GET",
-    path: "/api/v1/admin/out-of-office",
-  })
+  const current = await integrationApi.getOutOfOffice()
   // A refresh must update the optimistic-lock version, including after a 409.
   outOfOfficeVersion = current.version
   return current
@@ -349,9 +341,7 @@ async function saveOutOfOffice(
   if (outOfOfficeVersion === undefined) {
     outOfOfficeVersion = (await getOutOfOffice()).version
   }
-  const saved = await browserApiTransport.request<ApiOutOfOfficePolicy>({
-    method: "PUT",
-    path: "/api/v1/admin/out-of-office",
+  const saved = await integrationApi.replaceOutOfOffice({
     body: { ...policy, version: outOfOfficeVersion },
   })
   outOfOfficeVersion = saved.version
@@ -549,9 +539,7 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
       const schedule = value as WorkScheduleSettings
       await saveBusinessHours(schedule)
       try {
-        await browserApiTransport.request<ApiBusinessHoursSchedule>({
-          method: "PUT",
-          path: "/api/v1/admin/business-hours/exceptions",
+        await integrationApi.replaceBusinessHoursExceptions({
           body: mapScheduleExceptionsToApi(schedule.exceptions),
         })
       } catch (error) {
@@ -583,11 +571,7 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
   },
 
   async previewOutOfOffice(customerName) {
-    return browserApiTransport.request<ApiOutOfOfficePreview>({
-      method: "GET",
-      path: "/api/v1/admin/out-of-office/preview",
-      query: { customerName },
-    })
+    return integrationApi.previewOutOfOffice({ customerName })
   },
 
   async setIntegrationStatus(id, status) {
