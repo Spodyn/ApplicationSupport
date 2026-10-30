@@ -439,8 +439,11 @@ function ConversationPanel({
   const attachmentsReady = pendingAttachments.every((attachment) => attachment.scanStatus === "clean")
 
   useEffect(() => {
-    if (!canReplyBroadcast) setReplyBroadcast(false)
-  }, [canReplyBroadcast])
+    if (!canReplyBroadcast && replyBroadcast) {
+      setReplyBroadcast(false)
+      idempotencyKey.current = null
+    }
+  }, [canReplyBroadcast, replyBroadcast])
 
   const uploadFiles = async (files: FileList | null) => {
     if (!canReply || !files?.length) return
