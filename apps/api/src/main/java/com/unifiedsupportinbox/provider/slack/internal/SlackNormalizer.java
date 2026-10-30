@@ -144,7 +144,9 @@ class SlackNormalizer {
             return true;
         }
         String subtype = optionalText(message, "subtype");
-        if ("bot_message".equals(subtype)) return true;
+        // Slack may wrap a channel broadcast echo inside message_changed/message_deleted.
+        // Filtering the nested subtype prevents an outbound reply from being ingested as an edit or delete.
+        if ("bot_message".equals(subtype) || "thread_broadcast".equals(subtype)) return true;
         if (author == null) return false;
 
         JsonNode authorizations = inbound.callback().get("authorizations");
