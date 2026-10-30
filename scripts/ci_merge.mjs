@@ -175,6 +175,10 @@ const asJson = async (url, auth, opts = {}) => {
   return await response.json();
 };
 
+export const changedPathsFromFiles = files => files.flatMap(file =>
+  [file.filename, file.previous_filename].filter(Boolean)
+);
+
 const pickCI = (runs, pr) => runs.find(run =>
   run.event === "pull_request" && run.head_sha === pr.head.sha &&
   run.workflow_id === EXPECTED_CI_WORKFLOW_ID && run.path === EXPECTED_CI_WORKFLOW_PATH && run.name === "CI" &&
@@ -215,7 +219,7 @@ export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }
     pull, run, jobs, reviews, threads: threadConnection.nodes,
     ruleset, effectiveRulesets, expectedBaseSha: currentMainSha, comments, trustedAttestorId,
     // Renames can hide a protected workflow in previous_filename.
-    changedFiles: files.flatMap(file => [file.filename, file.previous_filename].filter(Boolean))
+    changedFiles: changedPathsFromFiles(files)
   });
   return {errors, pull, run};
 }
