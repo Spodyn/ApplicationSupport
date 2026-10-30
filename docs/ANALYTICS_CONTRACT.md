@@ -66,6 +66,30 @@ For every duration distribution, return `count`, `average`, `p50`, `p90` and
 - Customer/support conversation content, raw provider payloads, credentials and
   attachment URLs are not analytics dimensions.
 
+## USI-166 incremental per-user projection (implementation scope)
+
+The `GET /api/v1/statistics/users/{userId}` report projects durable
+`analytics_daily_case_metrics.user_id` attribution. An authenticated
+`USER` or `ADMIN` can read **self**; looking up another actor requires
+both `ADMIN` and `view_global_statistics`. The same role-plus-permission
+rule applies to the existing team/global statistics endpoints.
+
+The first increment returns claim, sent-first-response and resolution event
+counts with weighted duration averages, using the historical event actor
+dimension rather than the current Case owner. A deactivated actor remains in
+authorized historical reports. Querying a date/provider/customer range
+without matching events returns zero counts and `null` averages, never a
+fabricated duration. The reporting timezone follows the deployed active
+business-hours configuration.
+
+**Still outstanding for USI-166 DoD:** the complete business-time duration
+distributions and historical per-user SLA outcome/force-resolve dimensions
+defined above. The current aggregate only contains elapsed-second sums, not
+the underlying business-time duration distribution or immutable actor-linked
+SLA outcome events. No current-owner fallback or made-up SLA attribution may
+be presented as a completed KPI. The PR remains draft until the full contract
+and all necessary test evidence are implemented.
+
 ## Contract examples
 
 | Scenario | Expected result |
