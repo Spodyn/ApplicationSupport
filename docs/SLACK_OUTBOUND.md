@@ -49,8 +49,8 @@ hydrates it for every delivery attempt (including durable retries). Existing
 false/default request fingerprints are unchanged. The reserved V41 migration is held
 in this draft until competing V35 migrations from PRs #126 and #133 have been
 sequenced without Flyway out-of-order upgrades. Tests cover invalid broadcast,
-idempotent replay and transient retry preservation. The composer switch,
-composer UI, frontend/Playwright tests and live Slack sandbox acceptance are
+idempotent replay and transient retry preservation. The composer UI,
+frontend/Playwright tests and live Slack sandbox acceptance are
 **not yet implemented**. The OpenAPI request schema, deterministic generated
 TypeScript transport type and inbox API adapter now carry optional
 `replyBroadcast` with a false-by-default wire contract; adapter tests cover
