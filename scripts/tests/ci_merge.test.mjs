@@ -102,6 +102,12 @@ test("trusted merge guard, policy, contract and nested agent instructions requir
     "scripts/ci_merge.mjs",
     "scripts/tests/ci_merge.test.mjs",
     "scripts/tests/test_orchestrator_policy.py",
+    "scripts/delete_merged_branch.mjs",
+    "scripts/prune_merged_branches.mjs",
+    "scripts/tests/delete_merged_branch.test.mjs",
+    "scripts/tests/prune_merged_branches.test.mjs",
+    "scripts/secret_scan.py",
+    "scripts/validate_environment.py",
     "docs/orchestrator-policy.yaml",
     "docs/ORCHESTRATOR_CONTRACT.md",
     "docs/PRODUCT_CONTRACT.md",
@@ -132,6 +138,23 @@ test("trusted merge guard, policy, contract and nested agent instructions requir
   const normal = data();
   normal.changedFiles = ["apps/web/components/cases/cases-page.tsx"];
   assert.deepEqual(checkEligibility(normal), []);
+});
+
+test("renamed trusted cleanup or secret-scanner scripts still require independent review", () => {
+  for (const oldPath of [
+    "scripts/delete_merged_branch.mjs",
+    "scripts/prune_merged_branches.mjs",
+    "scripts/secret_scan.py",
+    "scripts/validate_environment.py"
+  ]) {
+    const d = data();
+    d.changedFiles = changedPathsFromFiles([{
+      filename: "docs/retired-" + oldPath.split("/").at(-1),
+      previous_filename: oldPath,
+      status: "renamed"
+    }]);
+    assert.match(checkEligibility(d).join(" "), /independent review/, oldPath);
+  }
 });
 
 test("renaming a workflow out of the protected directory cannot evade review", () => {
