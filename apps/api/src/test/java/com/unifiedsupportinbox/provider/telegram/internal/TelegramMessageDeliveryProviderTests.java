@@ -111,6 +111,19 @@ class TelegramMessageDeliveryProviderTests {
     }
 
     @Test
+    void tokenBearingTransportExceptionIsNotPropagatedToWorkerLogs() {
+        byte[] token = token();
+        when(secrets.resolve("telegram/development-bot", TelegramMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
+                .thenReturn(Optional.of(token));
+        when(api.sendMessage(any(), anyLong(), any(), any()))
+                .thenThrow(new IllegalStateException("https://api.telegram.org/bot123456789:secret/sendMessage"));
+        MessageDeliveryProvider.DeliveryResult result = provider.deliver(command("42"));
+        assertThat(result.outcome()).isEqualTo(MessageDeliveryProvider.Outcome.TRANSIENT_FAILURE);
+        assertThat(result.errorCode()).isEqualTo("TELEGRAM_REQUEST_FAILED");
+        assertThat(token).containsOnly((byte) 0);
+    }
+
+    @Test
     void missingBotCredentialIsPermanentWithoutProviderCall() {
         when(secrets.resolve("telegram/development-bot", TelegramMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .thenReturn(Optional.empty());
