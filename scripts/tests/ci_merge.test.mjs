@@ -105,7 +105,16 @@ test("trusted merge guard, policy, contract and nested agent instructions requir
     "docs/orchestrator-policy.yaml",
     "docs/ORCHESTRATOR_CONTRACT.md",
     "docs/PRODUCT_CONTRACT.md",
+    "docs/PRODUCT_SPEC.md",
+    "docs/WORKFLOW_MATRIX.md",
+    "docs/ARCHITECTURE.md",
+    "docs/INTEGRATIONS.md",
+    "docs/SECURITY.md",
+    "docs/OPERATIONS.md",
+    "docs/DECISION_REGISTRY.md",
     "docs/decision-registry.yaml",
+    ".github/CODEOWNERS",
+    ".github/actions/ci-helper/action.yml",
     "AGENTS.md",
     "apps/web/AGENTS.md"
   ]) {
