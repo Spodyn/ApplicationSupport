@@ -319,3 +319,23 @@ export type UserPermissions = {
 }
 
 export type UserRole = "USER" | "ADMIN"
+
+export type UserStatisticsMetrics = {
+  "userId": string
+  "displayName": string
+  "active": boolean
+  "claimed": number
+  "firstResponses": number
+  "averageFirstResponseSeconds": number | null
+  "resolved": number
+  "averageResolutionSeconds": number | null
+}
+
+export type UserStatisticsReport = {
+  "from": string
+  "to": string
+  "timezone": string
+  "provider": string | null
+  "customerId": string | null
+  "metrics": UserStatisticsMetrics
+}
