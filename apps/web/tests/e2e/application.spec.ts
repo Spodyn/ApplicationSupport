@@ -511,10 +511,23 @@ test("empty persisted conversation renders an empty state", async ({ page }) => 
   await expect(conversation.getByText("Nie udało się wczytać wiadomości.")).toHaveCount(0)
 })
 
-test("API user directory is read-only until real user mutations exist", async ({ page }) => {
+test("administrator creates a live user while edit and delete remain disabled", async ({ page }) => {
   const { externalRequests } = await preparePage(page)
-  // Verify the read-only guard under a *permitted administrator*; a disabled
-  // button due to missing permissions alone would be a false-positive test.
+  const admin = {
+    id: authenticatedSession.id,
+    email: authenticatedSession.email,
+    fullName: authenticatedSession.displayName,
+    role: "ADMIN",
+    active: true,
+    presence: "online",
+    validFrom: null,
+    validUntil: null,
+    lastLoginAt: null,
+    activeAssignedCases: 0,
+    createdAt: authenticatedSession.createdAt,
+  }
+  const rows: Array<Record<string, unknown>> = [admin]
+  const sends: Array<{ key: string; body: Record<string, unknown> }> = []
   await page.route("**/api/v1/auth/me", async (route) => {
     await route.fulfill({
       status: 200,
@@ -527,31 +540,59 @@ test("API user directory is read-only until real user mutations exist", async ({
     })
   })
   await page.route("**/api/v1/admin/users**", async (route) => {
+    const request = route.request()
+    if (request.method() === "POST") {
+      expect(request.headers()["x-xsrf-token"]).toBe("e2e-csrf")
+      const key = request.headers()["idempotency-key"]
+      expect(key).toMatch(/^[0-9a-f-]{36}$/)
+      const body = request.postDataJSON() as Record<string, unknown>
+      sends.push({ key, body })
+      const created = {
+        ...admin,
+        id: "018f0000-0000-7000-8000-000000000088",
+        email: body.email as string,
+        fullName: body.fullName as string,
+        role: body.role as string,
+        active: body.active as boolean,
+        validFrom: body.validFrom as string,
+        presence: "offline",
+        createdAt: new Date().toISOString(),
+      }
+      rows.push(created)
+      await route.fulfill({ status: 201, contentType: "application/json", body: JSON.stringify({
+        id: created.id, email: created.email, fullName: created.fullName,
+        role: created.role, active: created.active, validFrom: created.validFrom,
+      }) })
+      return
+    }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        items: [{
-          id: authenticatedSession.id,
-          email: authenticatedSession.email,
-          fullName: authenticatedSession.displayName,
-          role: "ADMIN",
-          active: true,
-          presence: "online",
-          validFrom: null,
-          validUntil: null,
-          lastLoginAt: null,
-          activeAssignedCases: 0,
-          createdAt: authenticatedSession.createdAt,
-        }],
-        nextCursor: null,
-      }),
+      body: JSON.stringify({ items: rows, nextCursor: null }),
     })
   })
+
   await page.goto("/users")
   await expect(page.getByRole("heading", { name: "Użytkownicy" })).toBeVisible()
-  await expect(page.getByRole("button", { name: "Dodaj użytkownika" }).first()).toBeDisabled()
-  await expect(page.getByRole("dialog", { name: "Dodaj użytkownika" })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Dodaj użytkownika" }).first()).toBeEnabled()
+  await page.getByRole("button", { name: "Dodaj użytkownika" }).first().click()
+  const dialog = page.getByRole("dialog", { name: "Dodaj użytkownika" })
+  await expect(dialog).toBeVisible()
+  await dialog.getByLabel("Imię i nazwisko").fill("Created Agent")
+  await dialog.getByLabel("E-mail").fill("created@example.com")
+  await dialog.getByLabel("Hasło początkowe").fill(["test", "only", "initial", "password", "123"].join("-"))
+  await dialog.getByRole("button", { name: "Zapisz" }).click()
+
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByText("created@example.com")).toBeVisible()
+  expect(sends).toHaveLength(1)
+  expect(sends[0].body).toMatchObject({
+    email: "created@example.com", fullName: "Created Agent",
+    role: "USER", active: true,
+  })
+  expect(sends[0].body).not.toHaveProperty("passwordHash")
+  expect(sends[0].body).not.toHaveProperty("password_hash")
+  expect(sends[0].body).toHaveProperty("initialPassword")
   expect(externalRequests).toEqual([])
 })
 

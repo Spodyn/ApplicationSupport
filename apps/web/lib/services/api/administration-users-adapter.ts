@@ -3,6 +3,7 @@ import type { AdminUserItem } from "@usi/api-client/generated"
 import type {
   AdministrationPermission,
   AdministrationUser,
+  AdministrationUserInput,
 } from "@/lib/domain/administration"
 import { administrationPermissions } from "@/lib/domain/administration"
 import type {
@@ -49,6 +50,51 @@ async function listUsers(query: AdministrationUserQuery = {}): Promise<Administr
   return items
 }
 
+function toInstant(day: string | undefined): string | undefined {
+  if (!day) return undefined
+  return new Date(`${day}T00:00:00.000Z`).toISOString()
+}
+
+async function createUser(
+  input: AdministrationUserInput,
+  idempotencyKey?: string,
+): Promise<AdministrationUser> {
+  if (!input.initialPassword) {
+    throw new Error("Podaj hasło początkowe nowego użytkownika.")
+  }
+  if (!idempotencyKey) {
+    throw new Error("Brakuje identyfikatora bezpiecznego ponowienia operacji.")
+  }
+
+  const { initialPassword } = input
+  // The generated client owns request/response typing; UI sees only AdministrationUser.
+  const created = await client.createAdminUser({
+    "Idempotency-Key": idempotencyKey,
+    body: {
+      email: input.email,
+      fullName: input.fullName,
+      role: input.role,
+      active: input.active,
+      validFrom: toInstant(input.validFrom),
+      validUntil: toInstant(input.validUntil),
+      permissions: input.permissions,
+      initialPassword,
+    },
+  })
+  return {
+    id: created.id,
+    email: created.email,
+    fullName: created.fullName,
+    role: created.role,
+    active: created.active,
+    validFrom: created.validFrom?.slice(0, 10) ?? "",
+    validUntil: created.validUntil?.slice(0, 10),
+    presence: "offline",
+    activeAssignedCases: 0,
+    permissions: created.role === "ADMIN" ? [...administrationPermissions] : [],
+  }
+}
+
 function mutationsNotAvailable(): never {
   throw new Error(
     "Zapisywanie zmian użytkowników wymaga wdrożenia osobnych operacji administracyjnych.",
@@ -56,11 +102,12 @@ function mutationsNotAvailable(): never {
 }
 
 /**
- * The directory is live; mutations are intentionally disabled until USI-72–75.
- * Never route real user IDs into the mock user mutation repository.
+ * Directory and initial-password creation use the real API. Edit/deactivate/delete
+ * remain disabled until USI-73–75; never mutate real users through mocks.
  */
 export const apiAdministrationUserRepository: AdministrationUserRepository = {
   supportsMutations: false,
+  supportsCreation: true,
 
   list: listUsers,
 
@@ -76,8 +123,9 @@ export const apiAdministrationUserRepository: AdministrationUserRepository = {
     return { ...mapUser(current), permissions }
   },
 
-  async save() {
-    return mutationsNotAvailable()
+  async save(input, id, key) {
+    if (id) return mutationsNotAvailable()
+    return createUser(input, key)
   },
 
   async deactivate() {

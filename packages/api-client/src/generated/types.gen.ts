@@ -14,6 +14,29 @@ export type AdminChannelView = {
   "lastMessageAt": string | null
 }
 
+export type AdminUserCreated = {
+  "id": string
+  "email": string
+  "fullName": string
+  "role": UserRole
+  "active": boolean
+  "credentialState": string
+  "version": number
+  "validFrom"?: string
+  "validUntil"?: string
+}
+
+export type AdminUserCreateRequest = {
+  "email": string
+  "fullName": string
+  "role": UserRole
+  "active": boolean
+  "validFrom"?: string | null
+  "validUntil"?: string | null
+  "permissions"?: Array<"manage_users" | "manage_integrations" | "manage_sla" | "manage_schedule" | "manage_notifications" | "view_global_statistics" | "reassign_cases" | "force_resolve" | "view_audit">
+  "initialPassword": string
+}
+
 export type AdminUserItem = {
   "id": string
   "email": string

@@ -26,11 +26,12 @@ export interface AdministrationUserQuery {
 }
 
 export interface AdministrationUserRepository {
-  /** False until the real create/edit/deactivate/delete commands are implemented. */
+  /** Create can be supported independently of edit/deactivate/delete. */
+  supportsCreation?: boolean
   supportsMutations?: boolean
   list(query?: AdministrationUserQuery): Promise<AdministrationUser[]>
   getCurrent(): Promise<AdministrationUser | undefined>
-  save(input: AdministrationUserInput, id?: string): Promise<AdministrationUser>
+  save(input: AdministrationUserInput, id?: string, idempotencyKey?: string): Promise<AdministrationUser>
   deactivate(id: string): Promise<AdministrationUser>
   delete(id: string): Promise<void>
 }
@@ -148,6 +149,9 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
     if (input.role === "USER" && input.permissions.length > 0) {
       throw new Error("Rola USER nie może otrzymywać uprawnień administracyjnych.")
     }
+    // Passwords are never part of the mock user profile state either.
+    const safeInput = { ...input }
+    delete safeInput.initialPassword
     const duplicate = usersState.find(
       (user) => normalize(user.email) === normalize(input.email) && user.id !== id,
     )
@@ -156,12 +160,12 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
     if (id) {
       const index = usersState.findIndex((user) => user.id === id)
       if (index < 0) throw new Error("Nie znaleziono użytkownika.")
-      usersState[index] = { ...usersState[index], ...structuredClone(input) }
+      usersState[index] = { ...usersState[index], ...structuredClone(safeInput) }
       return delay(usersState[index])
     }
 
     const created: AdministrationUser = {
-      ...structuredClone(input),
+      ...structuredClone(safeInput),
       id: `adm-u-${Date.now()}`,
       presence: "offline",
       activeAssignedCases: 0,
