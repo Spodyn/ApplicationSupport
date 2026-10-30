@@ -287,6 +287,17 @@ test("new PR discussion invalidates trusted evidence until a fresh attestation",
   });
   assert.match(checkEligibility(sameSecond).join(" "), /discussion changed after independent attestation/);
 
+  const editedOldDiscussion = data();
+  editedOldDiscussion.comments[0].id = 100;
+  editedOldDiscussion.comments.push({
+    id: 99, user: {id: 99, type: "User"},
+    created_at: "2026-10-29T20:58:00.000Z",
+    updated_at: "2026-10-29T20:59:30.000Z",
+    body: "Edited after the proof to disclose a security concern"
+  });
+  assert.match(checkEligibility(editedOldDiscussion).join(" "),
+    /discussion changed after independent attestation/);
+
   const renewed = data();
   renewed.comments[0].id = 100;
   renewed.comments.push({
