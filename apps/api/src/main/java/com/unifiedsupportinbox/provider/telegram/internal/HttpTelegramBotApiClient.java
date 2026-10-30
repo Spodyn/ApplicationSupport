@@ -50,7 +50,7 @@ class HttpTelegramBotApiClient implements TelegramBotApiClient {
         payload.put("text", text);
         if (messageThreadId != null) payload.put("message_thread_id", messageThreadId);
         try {
-            URI endpoint = apiRoot.resolve("bot" + token + "/sendMessage");
+            URI endpoint = apiRoot.resolve("./bot" + token + "/sendMessage");
             HttpRequest request = HttpRequest.newBuilder(endpoint)
                     .timeout(REQUEST_TIMEOUT)
                     .header("Content-Type", "application/json; charset=utf-8")
