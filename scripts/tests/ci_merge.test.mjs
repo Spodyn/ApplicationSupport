@@ -489,6 +489,13 @@ test("new review submissions and inline comments invalidate prior trusted proof"
   submitted.reviews = [{state: "COMMENTED", submitted_at: "2026-10-29T20:59:02.000Z"}];
   assert.match(checkEligibility(submitted).join(" "), /review discussion changed/);
 
+  const editedReview = data();
+  editedReview.reviews = [{
+    state: "COMMENTED", submitted_at: "2026-10-29T20:58:00.000Z",
+    updated_at: "2026-10-29T20:59:06.000Z"
+  }];
+  assert.match(checkEligibility(editedReview).join(" "), /review discussion changed/);
+
   const inline = data();
   inline.reviewComments = [{
     created_at: "2026-10-29T20:59:03.000Z",
