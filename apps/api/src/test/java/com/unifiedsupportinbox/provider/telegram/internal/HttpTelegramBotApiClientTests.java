@@ -75,6 +75,26 @@ class HttpTelegramBotApiClientTests {
         assertThat(response.httpStatus()).isEqualTo(502);
     }
 
+    @Test
+    void malformedRateLimitBodyStillPreservesHttp429AndRetryAfterHeader() throws Exception {
+        start(exchange -> {
+            exchange.getResponseHeaders().add("Retry-After", "17");
+            respond(exchange, 429, "not-json");
+        });
+        TelegramBotApiClient.SendResponse response = client().sendMessage(token(), 12345L, null, "Reply");
+        assertThat(response.ok()).isFalse();
+        assertThat(response.httpStatus()).isEqualTo(429);
+        assertThat(response.retryAfter()).isEqualTo(Duration.ofSeconds(17));
+    }
+
+    @Test
+    void malformedForbiddenBodyRemainsPermanentHttp403() throws Exception {
+        start(exchange -> respond(exchange, 403, "not-json"));
+        TelegramBotApiClient.SendResponse response = client().sendMessage(token(), 12345L, null, "Reply");
+        assertThat(response.ok()).isFalse();
+        assertThat(response.httpStatus()).isEqualTo(403);
+    }
+
     private HttpTelegramBotApiClient client() {
         return new HttpTelegramBotApiClient(HttpClient.newHttpClient(), json,
                 URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/"));
