@@ -307,6 +307,22 @@ export type SendMessageResponse = {
   "deliveryStatus": MessageDeliveryStatus
 }
 
+export type SlaOutcomeBreakdown = {
+  "type": "FIRST_RESPONSE" | "UNCLAIMED"
+  "completed": number
+  "achieved": number
+  "warnings": number
+  "breaches": number
+  "attainmentPercent": number | null
+  "durationSeconds": SlaOutcomeDistribution
+}
+
+export type SlaOutcomeDistribution = {
+  "average": number | null
+  "p50": number | null
+  "p95": number | null
+}
+
 export type UpdateCustomerRequest = {
   "name": string
   "externalRef"?: string | null
@@ -319,3 +335,24 @@ export type UserPermissions = {
 }
 
 export type UserRole = "USER" | "ADMIN"
+
+export type UserStatisticsMetrics = {
+  "userId": string
+  "displayName": string
+  "active": boolean
+  "claimed": number
+  "firstResponses": number
+  "averageFirstResponseSeconds": number | null
+  "resolved": number
+  "averageResolutionSeconds": number | null
+}
+
+export type UserStatisticsReport = {
+  "from": string
+  "to": string
+  "timezone": string
+  "provider": string | null
+  "customerId": string | null
+  "metrics": UserStatisticsMetrics
+  "slaOutcomes": Array<SlaOutcomeBreakdown>
+}

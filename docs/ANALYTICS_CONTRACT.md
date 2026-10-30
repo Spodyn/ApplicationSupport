@@ -66,6 +66,37 @@ For every duration distribution, return `count`, `average`, `p50`, `p90` and
 - Customer/support conversation content, raw provider payloads, credentials and
   attachment URLs are not analytics dimensions.
 
+## USI-166 incremental per-user projection (implementation scope)
+
+The `GET /api/v1/statistics/users/{userId}` report projects durable
+`analytics_daily_case_metrics.user_id` attribution. An authenticated
+`USER` or `ADMIN` can read **self**; looking up another actor requires
+both `ADMIN` and `view_global_statistics`. The same role-plus-permission
+rule applies to the existing team/global statistics endpoints.
+
+The first increment returns claim, sent-first-response and resolution event
+counts with weighted duration averages, using the historical event actor
+dimension rather than the current Case owner. A deactivated actor remains in
+authorized historical reports. Querying a date/provider/customer range
+without matching events returns zero counts and `null` averages, never a
+fabricated duration. The reporting timezone follows the deployed active
+business-hours configuration.
+
+Completed first-response and unclaimed SLA **outcomes** also use historical
+attribution: the first actually SENT human-support Message author and the
+first successful Claim audit actor, rather than mutable `cases.owner_user_id`.
+This attribution is tested after a simulated ownership transfer. An unclaimed
+outcome is not an agent's claim when no corresponding Claim audit exists.
+
+**Still outstanding for USI-166 DoD:** the complete business-time duration
+distributions (count, p90, p95) and durable actor-qualified live SLA warning /
+breach event counts and force-resolved dimensions defined above. The current
+daily aggregate contains elapsed-second sums rather than business-time
+duration distributions; current E13 scheduling prerequisites may still be
+unavailable. Do not invent unavailable events or count current ownership as
+historic SLA credit. The PR remains draft until the remaining contract and
+necessary acceptance evidence are implemented.
+
 ## Contract examples
 
 | Scenario | Expected result |
