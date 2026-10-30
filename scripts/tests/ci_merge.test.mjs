@@ -266,6 +266,39 @@ test("latest trusted revocation wins; edits and ambiguous events fail closed", (
   assert.match(checkEligibility(ambiguous).join(" "), /Ambiguous/);
 });
 
+test("new PR discussion invalidates trusted evidence until a fresh attestation", () => {
+  const later = data();
+  later.comments[0].id = 100;
+  later.comments.push({
+    id: 101, user: {id: 99, type: "User"},
+    created_at: "2026-10-29T20:59:30.000Z",
+    updated_at: "2026-10-29T20:59:30.000Z",
+    body: "New security finding: investigate before merge"
+  });
+  assert.match(checkEligibility(later).join(" "), /discussion changed after independent attestation/);
+
+  const sameSecond = data();
+  sameSecond.comments[0].id = 100;
+  sameSecond.comments.push({
+    id: 101, user: {id: 99, type: "User"},
+    created_at: sameSecond.comments[0].created_at,
+    updated_at: sameSecond.comments[0].created_at,
+    body: "Potential blocker posted in the same second"
+  });
+  assert.match(checkEligibility(sameSecond).join(" "), /discussion changed after independent attestation/);
+
+  const renewed = data();
+  renewed.comments[0].id = 100;
+  renewed.comments.push({
+    id: 101, user: {id: 99, type: "User"},
+    created_at: "2026-10-29T20:59:30.000Z",
+    updated_at: "2026-10-29T20:59:30.000Z",
+    body: "Security finding independently reviewed and resolved"
+  });
+  renewed.comments.push({...comment(attestation(), "2026-10-29T20:59:41.000Z"), id: 102});
+  assert.deepEqual(checkEligibility(renewed), []);
+});
+
 test("rejects incomplete evidence and partial comment pagination", () => {
   const d = data();
   editProof(d, proof => {delete proof.evidence.worker_lease;});
