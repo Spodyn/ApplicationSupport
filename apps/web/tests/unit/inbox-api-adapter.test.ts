@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import type { ApiTransport, ApiTransportRequest, CaseMessage } from "@usi/api-client/generated"
+import type { ApiTransport, ApiTransportRequest, CaseDetail, CaseMessage } from "@usi/api-client/generated"
 import { ApiHttpError } from "@/lib/services/api/http-transport"
 import { InboxConflictError } from "@/lib/services/inbox"
 import { createApiInboxRepository, InboxActionUnavailableError, mapCaseDetail, mapCaseMessage } from "@/lib/services/api/inbox-adapter"
@@ -16,7 +16,7 @@ const listItem = {
   ignoreScore: 0, waitingUntil: null, createdAt: "2026-10-05T10:00:00Z",
   updatedAt: "2026-10-05T10:00:00Z", lastActivityAt: "2026-10-05T10:00:00Z",
 }
-const detail = {
+const detail: CaseDetail = {
   id: caseId, reference: listItem.reference, status: "NEW",
   customer: { id: "customer", name: listItem.customerName, externalRef: "slack-test" },
   owner: { id: null, displayName: null },
