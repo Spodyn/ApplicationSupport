@@ -66,6 +66,12 @@ class HttpTelegramBotApiClient implements TelegramBotApiClient {
                 return new SendResponse(status >= 200 && status < 300 ? 502 : status,
                         false, null, null, headerRetryAfter(response));
             }
+            // A successful HTTP response without a valid Bot API envelope is not
+            // a definitive provider rejection; do not mark the durable send failed forever.
+            if (response.statusCode() >= 200 && response.statusCode() < 300 &&
+                    (body == null || !body.isObject() || !body.path("ok").isBoolean())) {
+                return new SendResponse(502, false, null, null, null);
+            }
             boolean ok = body != null && body.path("ok").asBoolean(false);
             JsonNode id = body == null ? null : body.path("result").path("message_id");
             String messageId = id != null && id.isIntegralNumber() ? id.asText() : null;
