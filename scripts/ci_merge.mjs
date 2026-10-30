@@ -16,6 +16,13 @@ const PROTECTED_CONTROL_FILES = new Set([
   "scripts/ci_merge.mjs",
   "scripts/tests/ci_merge.test.mjs",
   "scripts/tests/test_orchestrator_policy.py",
+  // These trusted-main scripts run with write permissions or enforce CI safety.
+  "scripts/delete_merged_branch.mjs",
+  "scripts/prune_merged_branches.mjs",
+  "scripts/tests/delete_merged_branch.test.mjs",
+  "scripts/tests/prune_merged_branches.test.mjs",
+  "scripts/secret_scan.py",
+  "scripts/validate_environment.py",
   "docs/orchestrator-policy.yaml",
   "docs/ORCHESTRATOR_CONTRACT.md",
   "docs/PRODUCT_CONTRACT.md",
