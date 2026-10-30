@@ -151,14 +151,14 @@ class AdminUserCreateIntegrationTests {
         // not leave a created account or a consumed idempotency key behind.
         jdbc.execute("""
                 CREATE FUNCTION reject_test_user_created_audit()
-                RETURNS trigger LANGUAGE plpgsql AS $
+                RETURNS trigger LANGUAGE plpgsql AS $test$
                 BEGIN
                     IF NEW.action = 'USER_CREATED' THEN
                         RAISE EXCEPTION 'test-only USER_CREATED audit failure';
                     END IF;
                     RETURN NEW;
                 END;
-                $
+                $test$
                 """);
         jdbc.execute("""
                 CREATE TRIGGER reject_test_user_created_audit_insert
