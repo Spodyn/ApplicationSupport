@@ -158,6 +158,23 @@ class AdminUserCreateIntegrationTests {
     }
 
     @Test
+    void acceptsEqualValidityBoundariesAsAllowedByTheFrozenContract() throws Exception {
+        user("admin@example.com", UserRole.ADMIN);
+        CookieManager cookies = login("admin@example.com");
+        String boundary = "2099-01-01T00:00:00Z";
+        String payload = """
+                {"email":"equal-dates@example.com","fullName":"Equal Dates","role":"USER",
+                 "active":true,"permissions":[],"initialPassword":"%s",
+                 "validFrom":"%s","validUntil":"%s"}
+                """.formatted(PASSWORD, boundary, boundary);
+        HttpResponse<String> created = post(client(cookies), cookies, payload, "equal-dates-key");
+        assertThat(created.statusCode()).isEqualTo(201);
+        UserAccount account = users.findByEmailIgnoreCase("equal-dates@example.com").orElseThrow();
+        assertThat(account.validFrom()).isEqualTo(java.time.Instant.parse(boundary));
+        assertThat(account.validUntil()).isEqualTo(java.time.Instant.parse(boundary));
+    }
+
+    @Test
     void auditFailureRollsBackUserGrantsAndIdempotencyReservation() throws Exception {
         user("admin@example.com", UserRole.ADMIN);
         CookieManager cookies = login("admin@example.com");
