@@ -257,6 +257,38 @@ class SlackNormalizerTests {
     }
 
     @Test
+    void filtersEditedAndDeletedThreadBroadcastEchoes() throws Exception {
+        SlackInboundEvent editedBroadcast = inbound("""
+                {
+                  "type":"event_callback",
+                  "event_id":"Ev-broadcast-edit",
+                  "event":{
+                    "type":"message","subtype":"message_changed","channel":"C-support","channel_type":"channel",
+                    "message":{"type":"message","subtype":"thread_broadcast","user":"U-customer",
+                      "text":"edited broadcast","ts":"1720000003.000001","thread_ts":"1720000000.123456"}
+                  }
+                }
+                """);
+        SlackInboundEvent deletedBroadcast = inbound("""
+                {
+                  "type":"event_callback",
+                  "event_id":"Ev-broadcast-delete",
+                  "event":{
+                    "type":"message","subtype":"message_deleted","channel":"C-support","channel_type":"channel",
+                    "deleted_ts":"1720000003.000001",
+                    "previous_message":{"type":"message","subtype":"thread_broadcast","user":"U-customer",
+                      "text":"broadcast","ts":"1720000003.000001","thread_ts":"1720000000.123456"}
+                  }
+                }
+                """);
+
+        assertThat(((SlackNormalizer.Filtered) normalizer.normalize(editedBroadcast, channelId)).reason())
+                .isEqualTo(SlackNormalizer.FilterReason.BOT_OR_APP_MESSAGE);
+        assertThat(((SlackNormalizer.Filtered) normalizer.normalize(deletedBroadcast, channelId)).reason())
+                .isEqualTo(SlackNormalizer.FilterReason.BOT_OR_APP_MESSAGE);
+    }
+
+    @Test
     void malformedSupportedMessageIsRejectedInsteadOfSilentlyDropped() throws Exception {
         SlackInboundEvent inbound = inbound("""
                 {
