@@ -49,9 +49,14 @@ hydrates it for every delivery attempt (including durable retries). Existing
 false/default request fingerprints are unchanged. The reserved V41 migration is held
 in this draft until competing V35 migrations from PRs #126 and #133 have been
 sequenced without Flyway out-of-order upgrades. Tests cover invalid broadcast,
-idempotent replay and transient retry preservation. The composer UI,
-frontend/Playwright tests and live Slack sandbox acceptance are
-**not yet implemented**. The OpenAPI request schema, deterministic generated
+idempotent replay and transient retry preservation. The existing composer now
+offers a server-gated, unchecked-by-default **Send also to channel** option
+only for eligible Slack thread replies. A successful send resets the option;
+a failed send retains the selected intent and stable idempotency key for retry.
+Changing the option or losing server eligibility invalidates that key.
+Playwright coverage exercises ordinary/broadcast sends and failed-send retry;
+exact-HEAD CI and live Slack sandbox acceptance remain required.
+The OpenAPI request schema, deterministic generated
 TypeScript transport type and inbox API adapter now carry optional
 `replyBroadcast` with a false-by-default wire contract; adapter tests cover
 both opt-in and legacy sends. The Case detail projection additionally returns
