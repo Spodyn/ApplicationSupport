@@ -88,6 +88,15 @@ first successful Claim audit actor, rather than mutable `cases.owner_user_id`.
 This attribution is tested after a simulated ownership transfer. An unclaimed
 outcome is not an agent's claim when no corresponding Claim audit exists.
 
+**Force-resolve attribution correction (2026-11-01):** rebuilding the daily
+projection now records `CASE_FORCE_RESOLVE` under the operational
+`user_id = NULL` bucket rather than crediting the administrative actor
+(or mutable current owner) with an agent-performance resolution. Ordinary
+`CASE_RESOLVE` remains credited to its historical audit actor. A
+PostgreSQL integration regression verifies separate per-user and operational
+totals. This exclusion does **not** provide the missing explicit
+`forced` dimension required for complete reporting.
+
 **Still outstanding for USI-166 DoD:** the complete business-time duration
 distributions (count, p90, p95) and durable actor-qualified live SLA warning /
 breach event counts and force-resolved dimensions defined above. The current
