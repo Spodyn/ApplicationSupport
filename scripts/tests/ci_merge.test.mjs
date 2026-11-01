@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {checkEligibility, changedPathsFromFiles, REQUIRED_JOBS, READY_LABEL, ATTESTATION_MARKER} from "../ci_merge.mjs";
+import {checkEligibility, changedPathsFromFiles, pickCI, REQUIRED_JOBS, READY_LABEL, ATTESTATION_MARKER} from "../ci_merge.mjs";
 
 const sha = "a".repeat(40), base = "b".repeat(40);
 
@@ -60,6 +60,41 @@ const data = () => ({
 test("eligible only with complete six-job exact SHA and readiness attestation", () => {
   assert.deepEqual(checkEligibility(data()), []);
 });
+
+test("CI ordering cannot let an older green run mask the newest failed or pending run", () => {
+  const d = data();
+  const earlier = {...d.run, id: 4100, created_at: "2026-10-29T20:55:00Z"};
+  const failed = {
+    ...d.run, id: 4101, created_at: "2026-10-29T20:56:00Z",
+    status: "completed", conclusion: "failure"
+  };
+  const pending = {
+    ...d.run, id: 4102, created_at: "2026-10-29T20:57:00Z",
+    status: "in_progress", conclusion: null
+  };
+
+  // Deliberately reverse real chronological order: the API's order is not a gate.
+  assert.equal(pickCI([earlier, failed], d.pull)?.id, failed.id);
+  assert.match(checkEligibility({...d, run: pickCI([earlier, failed], d.pull)}).join(" "),
+    /Exact successful pull_request CI run missing/);
+  assert.equal(pickCI([failed, earlier, pending], d.pull)?.id, pending.id);
+  assert.match(checkEligibility({...d, run: pickCI([earlier, pending], d.pull)}).join(" "),
+    /Exact successful pull_request CI run missing/);
+
+  // Invalid chronology and a full unpaginated API page are not safe to guess.
+  assert.equal(pickCI([{...earlier, created_at: "not-an-instant"}, failed], d.pull), null);
+  assert.equal(pickCI(Array.from({length: 100}, (_, index) => ({
+    ...earlier, id: index + 1
+  })), d.pull), null);
+  assert.equal(pickCI([{...earlier, id: null}], d.pull), null);
+
+  // Unrelated workflows may not shadow legitimate CI for this PR.
+  assert.equal(pickCI([
+    {...failed, workflow_id: 99999999, id: 4200},
+    earlier
+  ], d.pull)?.id, earlier.id);
+});
+
 test("fails closed for a draft, mismatch, and missing eligibility label", () => {
   const d = data();
   d.pull.draft = true;
