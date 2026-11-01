@@ -81,6 +81,17 @@ test("CI ordering cannot let an older green run mask the newest failed or pendin
   assert.match(checkEligibility({...d, run: pickCI([earlier, pending], d.pull)}).join(" "),
     /Exact successful pull_request CI run missing/);
 
+  // A newer trusted run lacking PR metadata must block the PR. Filtering it
+  // out first would wrongly fall back to the older green result.
+  const missingAssociation = {
+    ...d.run, id: 4103, created_at: "2026-10-29T20:58:00Z",
+    pull_requests: []
+  };
+  assert.equal(pickCI([earlier, missingAssociation], d.pull)?.id, missingAssociation.id);
+  assert.match(checkEligibility({
+    ...d, run: pickCI([earlier, missingAssociation], d.pull)
+  }).join(" "), /not proven to belong to this PR/);
+
   // Invalid chronology and a full unpaginated API page are not safe to guess.
   assert.equal(pickCI([{...earlier, created_at: "not-an-instant"}, failed], d.pull), null);
   assert.equal(pickCI(Array.from({length: 100}, (_, index) => ({
