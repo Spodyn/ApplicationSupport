@@ -289,9 +289,12 @@ export const pickCI = (runs, pr) => {
   if (!Array.isArray(runs) || runs.length >= 100) return null;
   const matches = runs.filter(run =>
     run.event === "pull_request" && run.head_sha === pr?.head?.sha &&
-    run.workflow_id === EXPECTED_CI_WORKFLOW_ID && run.path === EXPECTED_CI_WORKFLOW_PATH && run.name === "CI" &&
-    (run.pull_requests || []).some(p => p.number === pr?.number && p.head?.sha === pr?.head?.sha)
+    run.workflow_id === EXPECTED_CI_WORKFLOW_ID && run.path === EXPECTED_CI_WORKFLOW_PATH && run.name === "CI"
   );
+  // Intentionally do not prefilter by reported PR associations: if GitHub's
+  // newest run lacks or changes that metadata, eligibility must reject it
+  // rather than fall back to an older green run. checkEligibility verifies
+  // exact PR association and base SHA on the selected newest run.
   if (!matches.length || matches.some(run =>
     !Number.isFinite(Date.parse(run.created_at)) ||
     !Number.isSafeInteger(Number(run.id)) || Number(run.id) <= 0)) return null;
