@@ -115,11 +115,23 @@ class AdminUserListIntegrationTests {
                 """, agent.toString());
         assertThat(presence(admin, "agent@example.com")).isEqualTo("offline");
 
+        // A heartbeat inside the five-minute window does not make an expired
+        // server-side session online. Expiry and recency are separate gates.
         jdbc.update("""
                 UPDATE spring_session
-                SET last_access_time = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::bigint
+                SET last_access_time = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::bigint,
+                    expiry_time = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::bigint - 1000
                 WHERE principal_name = ?
                 """, agent.toString());
+        assertThat(presence(admin, "agent@example.com")).isEqualTo("offline");
+
+        jdbc.update("""
+                UPDATE spring_session
+                SET expiry_time = (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)::bigint + 3600000
+                WHERE principal_name = ?
+                """, agent.toString());
+        assertThat(presence(admin, "agent@example.com")).isEqualTo("online");
+
         jdbc.update("UPDATE users SET active = false WHERE id = ?", agent);
         assertThat(presence(admin, "agent@example.com")).isEqualTo("offline");
 
