@@ -108,7 +108,13 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers("/api/v1/admin/sla-policy/**").hasAuthority("manage_sla")
                         .requestMatchers("/api/v1/admin/notifications/**").hasAuthority("manage_notifications")
                         .requestMatchers("/api/v1/admin/audit/**").hasAuthority("view_audit")
-                        .requestMatchers("/api/v1/statistics/**").hasAuthority("view_global_statistics")
+                        // Per-user read is allowed for self; the controller enforces
+                        // ADMIN + global statistics permission for other-user queries.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/statistics/users/*").authenticated()
+                        .requestMatchers("/api/v1/statistics/**")
+                                .access(AuthorizationManagers.allOf(
+                                        AuthorityAuthorizationManager.hasRole("ADMIN"),
+                                        AuthorityAuthorizationManager.hasAuthority("view_global_statistics")))
                         .anyRequest().denyAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")

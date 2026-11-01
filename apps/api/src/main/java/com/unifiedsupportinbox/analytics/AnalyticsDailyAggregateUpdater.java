@@ -74,7 +74,12 @@ public class AnalyticsDailyAggregateUpdater {
                                 AND earlier.delivery_status IN ('SENT', 'DELIVERED')
                                 AND (earlier.created_at, earlier.id) < (m.created_at, m.id))
                         UNION ALL
-                        SELECT c.customer_id, c.provider, a.actor_user_id,
+                        -- Force-resolve counts towards global operational totals,
+                        -- never towards an agent's personal resolution performance.
+                        -- The audit row still retains the separate ADMIN actor.
+                        SELECT c.customer_id, c.provider,
+                               CASE WHEN a.action = 'CASE_FORCE_RESOLVE'
+                                    THEN NULL::uuid ELSE a.actor_user_id END,
                                0, 0, 0, 0, 1, 0,
                                greatest(0, extract(epoch FROM a.occurred_at - c.created_at)::bigint)
                         FROM audit_events a JOIN cases c ON c.id = a.case_id
