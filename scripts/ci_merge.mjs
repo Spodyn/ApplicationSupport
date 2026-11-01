@@ -278,11 +278,30 @@ export const changedPathsFromFiles = files => files.flatMap(file =>
   [file.filename, file.previous_filename].filter(Boolean)
 );
 
-const pickCI = (runs, pr) => runs.find(run =>
-  run.event === "pull_request" && run.head_sha === pr.head.sha &&
-  run.workflow_id === EXPECTED_CI_WORKFLOW_ID && run.path === EXPECTED_CI_WORKFLOW_PATH && run.name === "CI" &&
-  (run.pull_requests || []).some(p => p.number === pr.number && p.head?.sha === pr.head.sha)
-);
+/**
+ * Only the newest exact-revision CI attempt may authorize integration.
+ * GitHub's workflow-run listing order is not a security guarantee: an older
+ * successful run must not mask a newer failed/pending run for the same SHA.
+ * Missing/ambiguous run chronology and incomplete first-page history fail
+ * closed instead of selecting an arbitrary successful run.
+ */
+export const pickCI = (runs, pr) => {
+  if (!Array.isArray(runs) || runs.length >= 100) return null;
+  const matches = runs.filter(run =>
+    run.event === "pull_request" && run.head_sha === pr?.head?.sha &&
+    run.workflow_id === EXPECTED_CI_WORKFLOW_ID && run.path === EXPECTED_CI_WORKFLOW_PATH && run.name === "CI" &&
+    (run.pull_requests || []).some(p => p.number === pr?.number && p.head?.sha === pr?.head?.sha)
+  );
+  if (!matches.length || matches.some(run =>
+    !Number.isFinite(Date.parse(run.created_at)) ||
+    !Number.isSafeInteger(Number(run.id)) || Number(run.id) <= 0)) return null;
+  matches.sort((a, b) =>
+    Date.parse(b.created_at) - Date.parse(a.created_at) || Number(b.id) - Number(a.id));
+  if (matches.length > 1 &&
+      matches[0].created_at === matches[1].created_at &&
+      Number(matches[0].id) === Number(matches[1].id)) return null;
+  return matches[0];
+};
 
 export async function qualifyPR({ owner, repo, number, auth, trustedAttestorId }) {
   const api = "https://api.github.com/repos/" + owner + "/" + repo;
