@@ -4,6 +4,9 @@ import type {
   AdministrationSettings,
   AdministrationUser,
   AdministrationUserInput,
+  IntegrationConfigurationInput,
+  ManagedChannel,
+  ManagedCustomer,
   ManagedIntegration,
 } from "@/lib/domain/administration"
 import {
@@ -36,13 +39,16 @@ export interface AdministrationSettingsRepository {
     key: K,
     value: AdministrationSettings[K],
   ): Promise<AdministrationSettings[K]>
-  configureIntegration(id: string, workspace: string): Promise<ManagedIntegration>
+  configureIntegration(input: IntegrationConfigurationInput): Promise<ManagedIntegration>
   setIntegrationStatus(
     id: string,
     status: ManagedIntegration["status"],
   ): Promise<ManagedIntegration>
   testIntegration(id: string): Promise<ManagedIntegration>
-  setChannelIgnored(id: string, ignored: boolean): Promise<void>
+  discoverChannels(id: string): Promise<ManagedChannel[]>
+  configureChannel(id: string, customerId: string | undefined, ignored: boolean): Promise<void>
+  saveCustomer(input: Pick<ManagedCustomer, "name" | "externalRef">, id?: string): Promise<ManagedCustomer>
+  deactivateCustomer(id: string): Promise<ManagedCustomer>
   toggleNotification(id: string, enabled: boolean): Promise<void>
 }
 
@@ -209,14 +215,29 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     return delay(settingsState[key])
   },
 
-  async configureIntegration(id, workspace) {
+  async configureIntegration(input) {
     requireCurrentAdministrationPermission("manage_integrations")
-    const integration = settingsState.integrations.find((item) => item.id === id)
-    if (!integration) throw new Error("Nie znaleziono integracji.")
-    integration.workspace = workspace.trim()
-    integration.status = "configuring"
-    integration.health = "unknown"
-    return delay(integration)
+    const integration = input.id
+      ? settingsState.integrations.find((item) => item.id === input.id)
+      : undefined
+    const configured: ManagedIntegration = integration ?? {
+      id: `int-${Date.now()}`,
+      platform: input.platform,
+      displayName: input.displayName,
+      status: "configuring",
+      workspace: input.workspaceName,
+      workspaceId: input.workspaceId,
+      hasSecretReference: true,
+      health: "unknown",
+    }
+    configured.displayName = input.displayName
+    configured.workspace = input.workspaceName
+    configured.workspaceId = input.workspaceId
+    configured.hasSecretReference = true
+    configured.status = "configuring"
+    configured.health = "unknown"
+    if (!integration) settingsState.integrations.push(configured)
+    return delay(configured)
   },
 
   async setIntegrationStatus(id, status) {
@@ -242,12 +263,38 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     return delay(integration, 600)
   },
 
-  async setChannelIgnored(id, ignored) {
+  async discoverChannels() {
+    requireCurrentAdministrationPermission("manage_integrations")
+    return delay(settingsState.channels)
+  },
+
+  async configureChannel(id, customerId, ignored) {
     requireCurrentAdministrationPermission("manage_integrations")
     const channel = settingsState.channels.find((item) => item.id === id)
     if (!channel) throw new Error("Nie znaleziono kanału.")
+    const customer = settingsState.customers.find((item) => item.id === customerId)
+    channel.customerId = customer?.id
+    channel.customer = customer?.name ?? "Nie przypisano"
     channel.ignored = ignored
     return delay(undefined)
+  },
+
+  async saveCustomer(input, id) {
+    requireCurrentAdministrationPermission("manage_integrations")
+    const existing = id ? settingsState.customers.find((item) => item.id === id) : undefined
+    const customer = existing ?? { id: `customer-${Date.now()}`, name: "", active: true }
+    customer.name = input.name
+    customer.externalRef = input.externalRef
+    if (!existing) settingsState.customers.push(customer)
+    return delay(customer)
+  },
+
+  async deactivateCustomer(id) {
+    requireCurrentAdministrationPermission("manage_integrations")
+    const customer = settingsState.customers.find((item) => item.id === id)
+    if (!customer) throw new Error("Nie znaleziono klienta.")
+    customer.active = false
+    return delay(customer)
   },
 
   async toggleNotification(id, enabled) {

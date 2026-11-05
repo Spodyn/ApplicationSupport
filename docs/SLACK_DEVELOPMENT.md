@@ -145,6 +145,24 @@ same integration locator:
 <USI_INTEGRATION_SECRETS_DIRECTORY>/<secret_ref>/slack-bot-token
 ```
 
+The normal administrator onboarding path does not require database access or
+`local:slack:seed`:
+
+1. Sign in as an administrator with `manage_integrations`.
+2. Open **Ustawienia -> Integracje -> Dodaj Slack**.
+3. Enter the Slack `team_id`, workspace name, and the relative `secret_ref`
+   created above. The browser never receives either secret value.
+4. Save, run **Testuj**, then **Pobierz kanały**. Discovery uses
+   `auth.test` and cursor-paginated `conversations.list` and persists only
+   public/private/Slack Connect channels where the app is a member.
+5. Create a Customer under **Klienci**, map the discovered Channel under
+   **Kanały**, and enable the Integration after the connection test succeeds.
+
+The seed command remains an optional deterministic sandbox shortcut. OAuth app
+creation and installation still happen in Slack; the secure external-secret
+flow is the functional onboarding mode when OAuth client configuration is not
+available.
+
 The reference must be relative, may not contain traversal/backslash segments,
 and the resolved file must remain physically below the configured secret root.
 The resolver follows the same mounted-file model for `filesystem` and

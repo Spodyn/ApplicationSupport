@@ -7,6 +7,8 @@ import {
   Check,
   ChevronDown,
   Clock3,
+  Paperclip,
+  RotateCcw,
   Search,
   SlidersHorizontal,
   UserRound,
@@ -377,6 +379,7 @@ function ConversationPanel({
   className: string
 }) {
   const [draft, setDraft] = useState("")
+  const [files, setFiles] = useState<File[]>([])
   const [sendError, setSendError] = useState("")
   const idempotencyKey = useRef<string | null>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
@@ -387,8 +390,9 @@ function ConversationPanel({
     idempotencyKey.current ??= crypto.randomUUID()
     setSendError("")
     try {
-      await workflow.sendMessage.mutateAsync({ body: draft, idempotencyKey: idempotencyKey.current })
+      await workflow.sendMessage.mutateAsync({ body: draft, attachments: files, idempotencyKey: idempotencyKey.current })
       setDraft("")
+      setFiles([])
       idempotencyKey.current = null
     } catch (error) {
       setSendError(error instanceof Error ? error.message : "Nie udało się wysłać odpowiedzi.")
@@ -425,11 +429,11 @@ function ConversationPanel({
         {messagesLoading ? <p className="text-sm text-[#9aa5b6]">Wczytywanie wiadomości…</p> : messagesError ? <p role="alert" className="text-sm text-red-400">Nie udało się wczytać wiadomości.</p> : messages.length === 0 ? <p className="text-sm text-[#9aa5b6]">Brak wiadomości.</p> : (
           <div className="flex flex-col gap-6">
             {messages.map((message) => message.kind === "support" ? (
-              <div key={message.id} className="flex justify-end"><div className="max-w-[570px] rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-4 py-3 text-sm text-[#ded9eb]"><div className="mb-2 text-xs text-[#cfc4e8]">{message.sender ?? "Wsparcie"} · {timeLabel(message.createdAt)}{message.deliveryStatus ? ` · ${message.deliveryStatus}` : ""}</div><p className="whitespace-pre-wrap"><SafeExternalMessage content={message.body} /></p></div></div>
+              <div key={message.id} className="flex justify-end"><div className="max-w-[570px] rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-4 py-3 text-sm text-[#ded9eb]"><div className="mb-2 text-xs text-[#cfc4e8]">{message.sender ?? "Wsparcie"} · {timeLabel(message.createdAt)}{message.edited ? " · edytowano" : ""}{message.deliveryStatus ? ` · ${message.deliveryStatus}` : ""}</div><p className={cn("whitespace-pre-wrap", message.deleted && "italic text-[#aeb8c8]")}><SafeExternalMessage content={message.body} /></p><MessageAttachments attachments={message.attachments} />{message.deliveryStatus === "failed" && <button type="button" onClick={() => workflow.retryMessage.mutate(message.id)} disabled={workflow.retryMessage.isPending} className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-300/20 px-2.5 py-1.5 text-xs text-red-200 disabled:opacity-50"><RotateCcw className="size-3.5" /> Ponów wysyłkę</button>}</div></div>
             ) : message.kind === "system" ? (
               <div key={message.id} className="text-center text-xs text-[#9ba6b6]">{timeLabel(message.createdAt)} · <SafeExternalMessage content={message.body} /></div>
             ) : (
-              <div key={message.id} className="flex items-start gap-4"><Avatar initials={initials(message.sender ?? item.company)} /><div className="max-w-[570px]"><div className="text-xs text-[#aeb8c8]">{message.sender ?? item.company} · {timeLabel(message.createdAt)}</div><p className="mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]"><SafeExternalMessage content={message.body} /></p></div></div>
+              <div key={message.id} className="flex items-start gap-4"><Avatar initials={initials(message.sender ?? item.company)} /><div className="max-w-[570px]"><div className="text-xs text-[#aeb8c8]">{message.sender ?? item.company} · {timeLabel(message.createdAt)}{message.edited ? " · edytowano" : ""}</div><p className={cn("mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]", message.deleted && "italic text-[#aeb8c8]")}><SafeExternalMessage content={message.body} /></p><MessageAttachments attachments={message.attachments} /></div></div>
             ))}
           </div>
         )}
@@ -438,12 +442,18 @@ function ConversationPanel({
       <div className="shrink-0 pb-[22px] pl-[18px] pr-[22px]">
         <div className="rounded-[11px] border border-white/[0.085] bg-[linear-gradient(110deg,#0d1725,#0b1522)]">
           <textarea value={draft} onChange={(event) => { setDraft(event.target.value); idempotencyKey.current = null }} disabled={!canReply} placeholder={canReply ? "Napisz odpowiedź..." : "Przejmij case, aby odpowiedzieć"} aria-label="Treść odpowiedzi" className="block h-[80px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa] disabled:cursor-not-allowed" />
-          <div className="flex h-[51px] items-center justify-end px-[19px]"><button type="button" onClick={send} disabled={!canReply || !draft.trim() || workflow.sendMessage.isPending} className="h-[45px] w-[117px] rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{workflow.sendMessage.isPending ? "Wysyłanie…" : "Wyślij"}</button></div>
+          {files.length > 0 && <div className="flex flex-wrap gap-2 px-[19px] pb-2">{files.map((file, index) => <button key={`${file.name}-${file.size}-${index}`} type="button" onClick={() => { setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index)); idempotencyKey.current = null }} className="rounded-md bg-white/[0.06] px-2 py-1 text-xs text-[#cbd3df]" title="Usuń plik">{file.name}</button>)}</div>}
+          <div className="flex h-[51px] items-center justify-between px-[19px]"><label className={cn("inline-flex cursor-pointer items-center gap-2 text-xs text-[#aeb8c8]", !canReply && "pointer-events-none opacity-50")}><Paperclip className="size-4" /> Dodaj pliki<input type="file" multiple disabled={!canReply} className="hidden" onChange={(event) => { const selected = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...selected].slice(0, 10)); idempotencyKey.current = null; event.target.value = "" }} /></label><button type="button" onClick={send} disabled={!canReply || !draft.trim() || workflow.sendMessage.isPending} className="h-[45px] w-[117px] rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{workflow.sendMessage.isPending ? "Wysyłanie…" : "Wyślij"}</button></div>
         </div>
         {sendError && <p role="alert" className="mt-2 text-sm text-red-400">{sendError}</p>}
       </div>
     </section>
   )
+}
+
+function MessageAttachments({ attachments }: { attachments?: InboxMessage["attachments"] }) {
+  if (!attachments?.length) return null
+  return <div className="mt-3 flex flex-wrap gap-2">{attachments.map((attachment) => attachment.downloadUrl ? <a key={attachment.id} href={attachment.downloadUrl} download className="inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-black/10 px-2.5 py-1.5 text-xs text-violet-200 hover:bg-white/5"><Paperclip className="size-3.5" /> {attachment.fileName} · {attachment.size}</a> : <span key={attachment.id} className="inline-flex items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-[#cbd3df]"><Paperclip className="size-3.5" /> {attachment.fileName} · {attachment.size}</span>)}</div>
 }
 
 function Avatar({ initials, size = "default", online = false }: { initials: string; size?: "default" | "sm" | "xs"; online?: boolean }) {

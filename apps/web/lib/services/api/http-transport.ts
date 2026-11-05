@@ -38,6 +38,10 @@ function readCookie(name: string): string | undefined {
   return undefined
 }
 
+export function getBrowserCsrfToken(): string | undefined {
+  return readCookie("XSRF-TOKEN")
+}
+
 function requestPath(request: ApiTransportRequest): string {
   if (!request.query) return request.path
 
@@ -75,7 +79,7 @@ export const browserApiTransport: ApiTransport = {
     if (request.body !== undefined) headers.set("Content-Type", "application/json")
 
     if (!["GET"].includes(request.method)) {
-      const csrfToken = readCookie("XSRF-TOKEN")
+      const csrfToken = getBrowserCsrfToken()
       if (csrfToken) headers.set("X-XSRF-TOKEN", csrfToken)
     }
 

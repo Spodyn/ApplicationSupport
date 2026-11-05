@@ -13,6 +13,7 @@ import type {
   AdministrationSettings,
   AdministrationUserInput,
   ManagedIntegration,
+  IntegrationConfigurationInput,
 } from "@/lib/domain/administration"
 import type { AdministrationUserQuery } from "./administration"
 import type { AnalyticsFilters } from "@/lib/domain/analytics"
@@ -134,8 +135,12 @@ export function useInboxWorkflow(caseId?: string) {
       serviceRegistry.inbox.sendMessage(requireCaseId(), input),
     onSuccess: invalidateConversation,
   })
+  const retryMessage = useMutation({
+    mutationFn: (messageId: string) => serviceRegistry.inbox.retryMessage(messageId),
+    onSuccess: invalidateConversation,
+  })
 
-  return { claim, ignore, askCustomer, resolve, snooze, sendMessage }
+  return { claim, ignore, askCustomer, resolve, snooze, sendMessage, retryMessage }
 }
 
 export function useMarkAllResolvedRead() {
@@ -208,8 +213,8 @@ export function useAdministrationSettingsActions() {
     onSuccess: invalidate,
   })
   const configureIntegration = useMutation({
-    mutationFn: ({ id, workspace }: { id: string; workspace: string }) =>
-      serviceRegistry.administrationSettings.configureIntegration(id, workspace),
+    mutationFn: (input: IntegrationConfigurationInput) =>
+      serviceRegistry.administrationSettings.configureIntegration(input),
     onSuccess: invalidate,
   })
   const setIntegrationStatus = useMutation({
@@ -219,11 +224,24 @@ export function useAdministrationSettingsActions() {
   })
   const testIntegration = useMutation({
     mutationFn: (id: string) => serviceRegistry.administrationSettings.testIntegration(id),
+    onSettled: invalidate,
+  })
+  const discoverChannels = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationSettings.discoverChannels(id),
     onSuccess: invalidate,
   })
-  const setChannelIgnored = useMutation({
-    mutationFn: ({ id, ignored }: { id: string; ignored: boolean }) =>
-      serviceRegistry.administrationSettings.setChannelIgnored(id, ignored),
+  const configureChannel = useMutation({
+    mutationFn: ({ id, customerId, ignored }: { id: string; customerId?: string; ignored: boolean }) =>
+      serviceRegistry.administrationSettings.configureChannel(id, customerId, ignored),
+    onSuccess: invalidate,
+  })
+  const saveCustomer = useMutation({
+    mutationFn: ({ id, name, externalRef }: { id?: string; name: string; externalRef?: string }) =>
+      serviceRegistry.administrationSettings.saveCustomer({ name, externalRef }, id),
+    onSuccess: invalidate,
+  })
+  const deactivateCustomer = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationSettings.deactivateCustomer(id),
     onSuccess: invalidate,
   })
   const toggleNotification = useMutation({
@@ -237,7 +255,10 @@ export function useAdministrationSettingsActions() {
     configureIntegration,
     setIntegrationStatus,
     testIntegration,
-    setChannelIgnored,
+    discoverChannels,
+    configureChannel,
+    saveCustomer,
+    deactivateCustomer,
     toggleNotification,
   }
 }

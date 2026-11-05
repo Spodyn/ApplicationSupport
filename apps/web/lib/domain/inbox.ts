@@ -99,6 +99,7 @@ export interface InboxAttachment {
   fileName: string
   size: string
   type: "image" | "document" | "archive"
+  downloadUrl?: string
 }
 
 export interface InboxMessage {
@@ -108,6 +109,7 @@ export interface InboxMessage {
   body: string
   createdAt: string
   edited?: boolean
+  deleted?: boolean
   attachments?: InboxAttachment[]
   codeBlock?: {
     language: string

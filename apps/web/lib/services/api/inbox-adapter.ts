@@ -12,7 +12,7 @@ import {
   type InboxRepository,
 } from "@/lib/services/inbox"
 import { mapApiChannel } from "./channel-adapter"
-import { ApiHttpError, browserApiTransport } from "./http-transport"
+import { ApiHttpError, browserApiTransport, getBrowserCsrfToken } from "./http-transport"
 
 export class InboxActionUnavailableError extends Error {
   constructor() {
@@ -127,22 +127,67 @@ export function mapCaseDetail(detail: CaseDetail): InboxCase {
   }
 }
 
-export function mapCaseMessage(message: CaseMessage): InboxMessage {
+export function mapCaseMessage(message: CaseMessage, caseId?: string): InboxMessage {
   return {
     id: message.id,
     kind: message.kind.toLowerCase() as InboxMessage["kind"],
     sender: message.authorName ?? undefined,
-    body: message.body,
+    body: message.deletedAt ? "Wiadomość została usunięta w Slack." : message.body,
     createdAt: message.providerCreatedAt ?? message.createdAt,
     edited: Boolean(message.editedAt),
+    deleted: Boolean(message.deletedAt),
     deliveryStatus: message.deliveryStatus?.toLowerCase() as InboxMessage["deliveryStatus"],
     attachments: message.attachments.map((item) => ({
       id: item.id,
       fileName: item.fileName,
       size: `${item.sizeBytes} B`,
       type: item.contentType?.startsWith("image/") ? "image" : "document",
+      downloadUrl: caseId
+        ? `/api/v1/cases/${encodeURIComponent(caseId)}/attachments/${encodeURIComponent(item.id)}`
+        : undefined,
     })),
   }
+}
+
+type UploadedAttachment = {
+  attachmentId: string
+  filename: string
+  sizeBytes: number
+  scanStatus: "PENDING" | "CLEAN" | "INFECTED" | "ERROR"
+}
+
+async function uploadAttachment(caseId: string, file: File): Promise<UploadedAttachment> {
+  const form = new FormData()
+  form.append("file", file, file.name)
+  const headers = new Headers({ Accept: "application/json" })
+  const csrfToken = getBrowserCsrfToken()
+  if (csrfToken) headers.set("X-XSRF-TOKEN", csrfToken)
+  const response = await fetch(`/api/v1/cases/${encodeURIComponent(caseId)}/attachments`, {
+    method: "POST",
+    headers,
+    body: form,
+    credentials: "same-origin",
+    cache: "no-store",
+  })
+  if (!response.ok) {
+    const problem = await response.json().catch(() => undefined) as { detail?: string } | undefined
+    throw new Error(problem?.detail ?? `Nie udało się przesłać pliku ${file.name}.`)
+  }
+  const uploaded = await response.json() as UploadedAttachment
+  if (uploaded.scanStatus !== "CLEAN") {
+    throw new Error(`Plik ${file.name} nie przeszedł kontroli bezpieczeństwa (${uploaded.scanStatus}).`)
+  }
+  return uploaded
+}
+
+async function removePendingAttachment(caseId: string, attachmentId: string): Promise<void> {
+  const headers = new Headers()
+  const csrfToken = getBrowserCsrfToken()
+  if (csrfToken) headers.set("X-XSRF-TOKEN", csrfToken)
+  await fetch(
+    `/api/v1/cases/${encodeURIComponent(caseId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    { method: "DELETE", headers, credentials: "same-origin", cache: "no-store" },
+  ).catch(() => undefined)
 }
 
 export function createApiInboxRepository(transport: ApiTransport): InboxRepository {
@@ -157,7 +202,7 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     },
     async getMessages(caseId, before) {
       const page = await client.getCaseMessages({ caseId, before, limit: 50 })
-      return { items: page.items.map(mapCaseMessage), nextCursor: page.nextCursor ?? undefined }
+      return { items: page.items.map((message) => mapCaseMessage(message, caseId)), nextCursor: page.nextCursor ?? undefined }
     },
     async markRead(caseId, messageId) {
       await client.markCaseRead({ caseId, body: { messageId } })
@@ -178,18 +223,39 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     resolve: unavailable,
     snooze: unavailable,
     async sendMessage(caseId, input) {
-      if (input.attachments?.length || input.simulateFailure) throw new InboxActionUnavailableError()
+      if (input.simulateFailure) throw new InboxActionUnavailableError()
       const body = input.body.trim()
       if (!body) throw new Error("Wiadomość nie może być pusta.")
-      const accepted = await client.sendCaseMessage({
-        caseId,
-        "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
-        body: { body, bodyFormat: "PLAIN_TEXT" },
+      const attachments = input.attachments ?? []
+      if (attachments.some((attachment) => !(attachment instanceof File))) {
+        throw new InboxActionUnavailableError()
+      }
+      const files = attachments as File[]
+      if (files.length > 10) throw new Error("Jedna wiadomość może zawierać maksymalnie 10 plików.")
+      if (files.some((file) => file.size > 25 * 1024 * 1024)) throw new Error("Pojedynczy plik nie może przekraczać 25 MiB.")
+      if (files.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) throw new Error("Łączny rozmiar plików nie może przekraczać 50 MiB.")
+      const uploaded: UploadedAttachment[] = []
+      try {
+        for (const file of files) uploaded.push(await uploadAttachment(caseId, file))
+        const accepted = await client.sendCaseMessage({
+          caseId,
+          "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
+          body: { body, bodyFormat: "PLAIN_TEXT", attachmentIds: uploaded.map((item) => item.attachmentId) },
+        })
+        const history = await client.getCaseMessages({ caseId, limit: 50 })
+        const persisted = history.items.find((message) => message.id === accepted.messageId)
+        if (!persisted) throw new Error("Wysłana wiadomość nie pojawiła się w historii case’u.")
+        return mapCaseMessage(persisted, caseId)
+      } catch (error) {
+        await Promise.all(uploaded.map((item) => removePendingAttachment(caseId, item.attachmentId)))
+        throw error
+      }
+    },
+    async retryMessage(messageId) {
+      await client.retryMessageDelivery({
+        messageId,
+        "Idempotency-Key": crypto.randomUUID(),
       })
-      const history = await client.getCaseMessages({ caseId, limit: 50 })
-      const persisted = history.items.find((message) => message.id === accepted.messageId)
-      if (!persisted) throw new Error("Wysłana wiadomość nie pojawiła się w historii case’u.")
-      return mapCaseMessage(persisted)
     },
   }
 }

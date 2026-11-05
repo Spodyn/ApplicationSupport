@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react"
 import {
   BellRing,
+  Building2,
   CalendarClock,
   CheckCircle2,
   Clock3,
@@ -68,6 +69,7 @@ import type {
   AdministrationSettings,
   GeneralSettings,
   ManagedChannel,
+  ManagedCustomer,
   ManagedIntegration,
   NotificationDestination,
   NotificationType,
@@ -91,6 +93,7 @@ const tabItems = [
   { value: "schedule", label: "Godziny pracy", icon: CalendarClock },
   { value: "out-of-office", label: "Poza biurem", icon: MoonStar },
   { value: "integrations", label: "Integracje", icon: PlugZap },
+  { value: "customers", label: "Klienci", icon: Building2 },
   { value: "channels", label: "Kanały", icon: Radio },
   { value: "notifications", label: "Powiadomienia", icon: BellRing },
   { value: "permissions", label: "Uprawnienia", icon: ShieldCheck },
@@ -124,9 +127,9 @@ export function AdministrationSettingsPage() {
         <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4 p-4 md:p-6">
           <Alert className="bg-info/5 text-info">
             <Info />
-            <AlertTitle>Konfiguracja demonstracyjna</AlertTitle>
+            <AlertTitle>Konfiguracja chroniona</AlertTitle>
             <AlertDescription>
-              Wszystkie zmiany są obsługiwane przez lokalne, typowane serwisy mock i nie łączą się z zewnętrznymi dostawcami.
+              Dane integracji, klientów i kanałów są zapisywane w backendzie. Sekrety Slack pozostają wyłącznie w zewnętrznym katalogu sekretów.
             </AlertDescription>
           </Alert>
 
@@ -161,7 +164,8 @@ export function AdministrationSettingsPage() {
               <TabsContent value="schedule"><SchedulePanel data={settingsQuery.data.schedule} actions={actions} /></TabsContent>
               <TabsContent value="out-of-office"><OutOfOfficePanel data={settingsQuery.data.outOfOffice} actions={actions} /></TabsContent>
               <TabsContent value="integrations"><IntegrationsPanel data={settingsQuery.data.integrations} actions={actions} /></TabsContent>
-              <TabsContent value="channels"><ChannelsPanel data={settingsQuery.data.channels} actions={actions} /></TabsContent>
+              <TabsContent value="customers"><CustomersPanel data={settingsQuery.data.customers} actions={actions} /></TabsContent>
+              <TabsContent value="channels"><ChannelsPanel data={settingsQuery.data.channels} customers={settingsQuery.data.customers} actions={actions} /></TabsContent>
               <TabsContent value="notifications"><NotificationsPanel data={settingsQuery.data.notifications} integrations={settingsQuery.data.integrations} actions={actions} /></TabsContent>
               <TabsContent value="permissions"><PermissionsPanel data={settingsQuery.data.rolePermissions} actions={actions} /></TabsContent>
             </Tabs>
@@ -346,11 +350,21 @@ const integrationHealthLabels: Record<ManagedIntegration["health"], string> = {
 
 function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; actions: SettingsActions }) {
   const [configured, setConfigured] = useState<ManagedIntegration | null>(null)
-  const [workspace, setWorkspace] = useState("")
+  const [displayName, setDisplayName] = useState("Slack")
+  const [workspaceName, setWorkspaceName] = useState("")
+  const [workspaceId, setWorkspaceId] = useState("")
+  const [secretRef, setSecretRef] = useState("")
   const [disabledIntegration, setDisabledIntegration] = useState<ManagedIntegration | null>(null)
 
-  const openConfiguration = (integration: ManagedIntegration) => {
-    setWorkspace(integration.workspace)
+  const openConfiguration = (integration?: ManagedIntegration) => {
+    setDisplayName(integration?.displayName ?? "Slack")
+    setWorkspaceName(integration?.workspace ?? "")
+    setWorkspaceId(integration?.workspaceId ?? "")
+    setSecretRef("")
+    if (!integration) {
+      setConfigured({ id: "", platform: "slack", displayName: "Slack", status: "configuring", workspace: "", workspaceId: "", hasSecretReference: false, health: "unknown" })
+      return
+    }
     setConfigured(integration)
   }
 
@@ -372,6 +386,15 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
     }
   }
 
+  const discover = async (integration: ManagedIntegration) => {
+    try {
+      const channels = await actions.discoverChannels.mutateAsync(integration.id)
+      notify.success("Odświeżono kanały Slack", `Znaleziono ${channels.length} kanałów dostępnych dla aplikacji.`)
+    } catch (error) {
+      notify.error("Nie udało się pobrać kanałów Slack", getErrorMessage(error))
+    }
+  }
+
   return (
     <div className="grid gap-4">
       <Alert className="border-warning/30 bg-warning/10 text-warning-foreground">
@@ -381,6 +404,10 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
           Początkowo obsługiwane są standardowe kanały i czaty grupowe z RSC. Kanały prywatne i udostępnione wymagają osobnej walidacji.
         </AlertDescription>
       </Alert>
+
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => openConfiguration()}><Plus /> Dodaj Slack</Button>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         {data.map((integration) => (
@@ -427,8 +454,9 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
               </dl>
               <div className="flex flex-wrap gap-2 border-t pt-3">
                 <Button variant="outline" size="sm" onClick={() => openConfiguration(integration)}><Settings2 /> Konfiguruj</Button>
-                <Button variant="outline" size="sm" disabled={integration.status !== "enabled" || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> Testuj</Button>
-                {integration.status === "configuring" && <Button size="sm" onClick={() => void completeConfiguration(integration)}><RefreshCw /> Dokończ konfigurację</Button>}
+                <Button variant="outline" size="sm" disabled={integration.status === "disabled" || !integration.hasSecretReference || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> Testuj</Button>
+                {integration.platform === "slack" && <Button variant="outline" size="sm" disabled={integration.status === "disabled" || integration.health !== "healthy" || actions.discoverChannels.isPending} onClick={() => void discover(integration)}><RefreshCw /> Pobierz kanały</Button>}
+                {integration.status === "configuring" && integration.health === "healthy" && <Button size="sm" onClick={() => void completeConfiguration(integration)}><CheckCircle2 /> Włącz</Button>}
                 {integration.status !== "disabled" && <Button variant="destructive" size="sm" onClick={() => setDisabledIntegration(integration)}><Unplug /> Wyłącz</Button>}
               </div>
             </CardContent>
@@ -438,16 +466,21 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
 
       <Dialog open={Boolean(configured)} onOpenChange={(open) => !open && setConfigured(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Konfiguruj {configured ? channelLabels[configured.platform] : "integrację"}</DialogTitle><DialogDescription>W środowisku demonstracyjnym zapisujemy wyłącznie identyfikator obszaru roboczego, dzierżawy lub bota.</DialogDescription></DialogHeader>
-          <Field label="Obszar roboczy / dzierżawa / bot"><Input value={workspace} onChange={(event) => setWorkspace(event.target.value)} placeholder="np. firma.slack.com" /></Field>
-          <Alert><Info /><AlertDescription>Prawdziwy proces OAuth zostanie obsłużony przez docelowy backend.</AlertDescription></Alert>
+          <DialogHeader><DialogTitle>{configured?.id ? "Konfiguruj Slack" : "Dodaj Slack"}</DialogTitle><DialogDescription>Bezpieczny tryb konfiguracji przez zewnętrzną referencję sekretu. Wartości tokenu i signing secretu nigdy nie trafiają do przeglądarki ani bazy danych.</DialogDescription></DialogHeader>
+          <div className="grid gap-4">
+            <Field label="Nazwa połączenia"><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Slack — Support" /></Field>
+            <Field label="Nazwa workspace"><Input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder="Firma Support" /></Field>
+            <Field label="Slack Workspace ID" hint="Identyfikator team_id zwracany przez Slack, np. T012ABCDEF."><Input value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} placeholder="T012ABCDEF" /></Field>
+            <Field label="Referencja sekretu" hint="Względny katalog pod USI_INTEGRATION_SECRETS_DIRECTORY."><Input value={secretRef} onChange={(event) => setSecretRef(event.target.value)} placeholder="slack/firma-support" /></Field>
+          </div>
+          <Alert><Info /><AlertDescription>W tym katalogu muszą istnieć pliki <code>slack-bot-token</code> i <code>slack-signing-secret</code>. Po zapisie uruchom test, pobierz kanały i włącz integrację.</AlertDescription></Alert>
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose>
-            <Button disabled={!workspace.trim() || actions.configureIntegration.isPending} onClick={async () => {
+            <Button disabled={!displayName.trim() || !workspaceName.trim() || !workspaceId.trim() || !secretRef.trim() || actions.configureIntegration.isPending} onClick={async () => {
               if (!configured) return
               try {
-                await actions.configureIntegration.mutateAsync({ id: configured.id, workspace })
-                notify.success("Zapisano konfigurację", channelLabels[configured.platform])
+                await actions.configureIntegration.mutateAsync({ id: configured.id || undefined, platform: "slack", displayName, workspaceId, workspaceName, secretRef })
+                notify.success("Zapisano konfigurację", "Slack")
                 setConfigured(null)
               } catch (error) { notify.error("Nie udało się zapisać konfiguracji", getErrorMessage(error)) }
             }}>{actions.configureIntegration.isPending ? "Zapisywanie…" : "Zapisz konfigurację"}</Button>
@@ -475,33 +508,62 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
   )
 }
 
-function ChannelsPanel({ data, actions }: { data: ManagedChannel[]; actions: SettingsActions }) {
-  const setIgnored = async (channel: ManagedChannel, ignored: boolean) => {
+function CustomersPanel({ data, actions }: { data: ManagedCustomer[]; actions: SettingsActions }) {
+  const [edited, setEdited] = useState<ManagedCustomer | null>(null)
+  const [name, setName] = useState("")
+  const [externalRef, setExternalRef] = useState("")
+  const [deactivated, setDeactivated] = useState<ManagedCustomer | null>(null)
+
+  const open = (customer?: ManagedCustomer) => {
+    setEdited(customer ?? { id: "", name: "", active: true })
+    setName(customer?.name ?? "")
+    setExternalRef(customer?.externalRef ?? "")
+  }
+
+  return (
+    <SettingsCard title="Klienci" description="Klienci przypisywani do monitorowanych kanałów i spraw." actions={<Button size="sm" onClick={() => open()}><Plus /> Dodaj klienta</Button>}>
+      <div className="overflow-hidden rounded-lg border">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/40"><TableHead>Nazwa</TableHead><TableHead>Identyfikator zewnętrzny</TableHead><TableHead>Status</TableHead><TableHead><span className="sr-only">Akcje</span></TableHead></TableRow></TableHeader>
+          <TableBody>{data.map((customer) => <TableRow key={customer.id}><TableCell className="font-medium">{customer.name}</TableCell><TableCell className="font-mono text-xs">{customer.externalRef ?? "—"}</TableCell><TableCell><EnabledState enabled={customer.active} /></TableCell><TableCell className="text-right"><Button variant="ghost" size="icon-sm" aria-label={`Edytuj ${customer.name}`} onClick={() => open(customer)}><Pencil /></Button>{customer.active && <Button variant="ghost" size="icon-sm" aria-label={`Dezaktywuj ${customer.name}`} onClick={() => setDeactivated(customer)}><Unplug /></Button>}</TableCell></TableRow>)}</TableBody>
+        </Table>
+      </div>
+      <Dialog open={Boolean(edited)} onOpenChange={(value) => !value && setEdited(null)}>
+        <DialogContent><DialogHeader><DialogTitle>{edited?.id ? "Edytuj klienta" : "Dodaj klienta"}</DialogTitle><DialogDescription>Nazwa jest widoczna w skrzynce. Identyfikator zewnętrzny jest opcjonalny.</DialogDescription></DialogHeader><Field label="Nazwa"><Input value={name} onChange={(event) => setName(event.target.value)} /></Field><Field label="Identyfikator zewnętrzny"><Input value={externalRef} onChange={(event) => setExternalRef(event.target.value)} /></Field><DialogFooter><DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose><Button disabled={!name.trim() || actions.saveCustomer.isPending} onClick={() => { if (!edited) return; void actions.saveCustomer.mutateAsync({ id: edited.id || undefined, name, externalRef: externalRef.trim() || undefined }).then(() => { notify.success("Zapisano klienta", name); setEdited(null) }).catch((error) => notify.error("Nie udało się zapisać klienta", getErrorMessage(error))) }}>Zapisz</Button></DialogFooter></DialogContent>
+      </Dialog>
+      <ConfirmDialog open={Boolean(deactivated)} onOpenChange={(value) => !value && setDeactivated(null)} title="Dezaktywować klienta?" description={deactivated ? `Klient „${deactivated.name}” nie będzie dostępny do nowych przypisań.` : undefined} confirmLabel="Dezaktywuj" destructive onConfirm={() => { if (!deactivated) return; void actions.deactivateCustomer.mutateAsync(deactivated.id).then(() => { notify.success("Klient został dezaktywowany", deactivated.name); setDeactivated(null) }).catch((error) => notify.error("Nie udało się dezaktywować klienta", getErrorMessage(error))) }} />
+    </SettingsCard>
+  )
+}
+
+function ChannelsPanel({ data, customers, actions }: { data: ManagedChannel[]; customers: ManagedCustomer[]; actions: SettingsActions }) {
+  const configure = async (channel: ManagedChannel, customerId: string | undefined, ignored: boolean) => {
     try {
-      await actions.setChannelIgnored.mutateAsync({ id: channel.id, ignored })
-      notify.success(ignored ? "Kanał będzie ignorowany" : "Kanał będzie kwalifikowany", channel.channelName)
+      await actions.configureChannel.mutateAsync({ id: channel.id, customerId, ignored })
+      notify.success("Zapisano kanał", channel.channelName)
     } catch (error) {
-      notify.error("Nie udało się zmienić reguły kanału", getErrorMessage(error))
+      notify.error("Nie udało się zapisać kanału", getErrorMessage(error))
     }
   }
 
   return (
-    <SettingsCard title="Ignorowane kanały" description="Wybierz kanały, których wiadomości nie mają być kwalifikowane jako sprawy do zrobienia.">
+    <SettingsCard title="Kanały Slack" description="Przypisz dostępne kanały do klientów i określ regułę monitorowania.">
       <Alert>
         <Info />
         <AlertTitle>Wiadomości bez case’a i SLA</AlertTitle>
-        <AlertDescription>Wiadomość z ignorowanego kanału pozostaje zwykłą wiadomością. Nie tworzy sprawy do zrobienia i nie uruchamia dla niej SLA.</AlertDescription>
+        <AlertDescription>Wiadomość z kanału ignorowanego lub bez klienta jest uwierzytelniana i deduplikowana technicznie, ale nie tworzy Case’a, wiadomości biznesowej ani SLA.</AlertDescription>
       </Alert>
       <div className="overflow-hidden rounded-lg border">
         <Table>
-          <TableHeader><TableRow className="bg-muted/40"><TableHead>Platforma</TableHead><TableHead>Kanał</TableHead><TableHead>Klient</TableHead><TableHead>Ignoruj</TableHead><TableHead>Ostatnia wiadomość</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow className="bg-muted/40"><TableHead>Platforma</TableHead><TableHead>Kanał</TableHead><TableHead>Klient</TableHead><TableHead>Stan</TableHead><TableHead>Grupowanie</TableHead><TableHead>Ostatnia wiadomość</TableHead></TableRow></TableHeader>
           <TableBody>
             {data.map((channel) => (
               <TableRow key={channel.id}>
                 <TableCell><div className="flex items-center gap-2"><PlatformIcon channel={channel.platform} /> <span className="text-xs">{channelLabels[channel.platform]}</span></div></TableCell>
                 <TableCell className="font-medium">{channel.channelName}</TableCell>
-                <TableCell>{channel.customer}</TableCell>
-                <TableCell><div className="flex items-center gap-2"><Switch checked={channel.ignored} onCheckedChange={(checked) => void setIgnored(channel, checked)} aria-label={`${channel.channelName}: ${channel.ignored ? "ignorowany" : "kwalifikowany"}`} /><span className={`text-xs ${channel.ignored ? "text-warning-foreground" : "text-muted-foreground"}`}>{channel.ignored ? "Ignorowany" : "Kwalifikowany"}</span></div></TableCell>
+                <TableCell><Select value={channel.customerId ?? "__unmapped__"} onValueChange={(value) => void configure(channel, value === "__unmapped__" ? undefined : String(value), channel.ignored)}><SelectTrigger className="w-52"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__unmapped__">Nie przypisano</SelectItem>{customers.filter((customer) => customer.active).map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>)}</SelectContent></Select></TableCell>
+                <TableCell><div className="flex items-center gap-2"><Switch checked={channel.ignored} onCheckedChange={(checked) => void configure(channel, channel.customerId, checked)} aria-label={`${channel.channelName}: ${channel.ignored ? "ignorowany" : "monitorowany"}`} /><span className={`text-xs ${channel.ignored || !channel.customerId ? "text-warning-foreground" : "text-success"}`}>{!channel.active ? "Nieaktywny" : channel.ignored ? "Ignorowany" : !channel.customerId ? "Nieprzypisany" : "Monitorowany"}</span></div></TableCell>
+                <TableCell className="font-mono text-xs">{channel.groupingStrategy === "SLACK_ROOT_THREAD" ? "Root + wątek" : channel.groupingStrategy}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{channel.lastMessageAt ? formatDateTime(channel.lastMessageAt) : "Brak"}</TableCell>
               </TableRow>
             ))}

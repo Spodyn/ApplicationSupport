@@ -20,7 +20,7 @@ export interface InboxResolveInput {
 
 export interface InboxSendInput {
   body: string
-  attachments?: { fileName: string; size: string }[]
+  attachments?: Array<File | { fileName: string; size: string }>
   simulateFailure?: boolean
   idempotencyKey?: string
 }
@@ -42,6 +42,7 @@ export interface InboxRepository {
   resolve(caseId: string, input: InboxResolveInput): Promise<void>
   snooze(caseId: string, until: string): Promise<void>
   sendMessage(caseId: string, input: InboxSendInput): Promise<InboxMessage>
+  retryMessage(messageId: string): Promise<void>
 }
 
 export class InboxConflictError extends Error {
@@ -111,8 +112,8 @@ const appendSupportMessage = (
     createdAt,
     attachments: input.attachments?.map((attachment, index) => ({
       id: createId(`${caseId}-attachment-${index}`),
-      fileName: attachment.fileName,
-      size: attachment.size,
+      fileName: attachment instanceof File ? attachment.name : attachment.fileName,
+      size: attachment instanceof File ? `${attachment.size} B` : attachment.size,
       type: "document",
     })),
     deliveryStatus: "sent",
@@ -315,5 +316,13 @@ export const mockInboxRepository: InboxRepository = {
       body: input.body,
       attachments: input.attachments,
     })
+  },
+
+  async retryMessage(messageId) {
+    for (const messages of Object.values(mockInboxMessages)) {
+      const message = messages.find((item) => item.id === messageId)
+      if (message?.deliveryStatus === "failed") message.deliveryStatus = "queued"
+    }
+    await wait(undefined, 120)
   },
 }

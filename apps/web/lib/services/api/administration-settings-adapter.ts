@@ -2,6 +2,8 @@ import type {
   AdministrationSettings,
   ChannelGroupingStrategy,
   ManagedChannel,
+  ManagedCustomer,
+  ManagedIntegration,
   NotificationDestination,
   NotificationType,
   ScheduleException,
@@ -14,6 +16,32 @@ import { mapApiChannel } from "./channel-adapter"
 import { browserApiTransport } from "./http-transport"
 
 type ApiProvider = "SLACK" | "TEAMS" | "TELEGRAM"
+
+type ApiIntegration = {
+  id: string
+  provider: ApiProvider
+  displayName: string
+  status: "CONFIGURING" | "ENABLED" | "DISABLED"
+  health: "UNKNOWN" | "HEALTHY" | "DEGRADED" | "UNAVAILABLE"
+  workspaceExternalId?: string | null
+  workspaceName?: string | null
+  secretConfigured: boolean
+  lastEventAt?: string | null
+  lastErrorCode?: string | null
+}
+
+type ApiIntegrationTest = {
+  integration: ApiIntegration
+  outcome: "SUCCESS" | "TIMEOUT" | "UNAUTHORIZED" | "UNAVAILABLE"
+  errorCode?: string | null
+}
+
+type ApiCustomer = {
+  id: string
+  name: string
+  externalRef?: string | null
+  active: boolean
+}
 
 type ApiChannelRecord = {
   id: string
@@ -121,11 +149,36 @@ function mapChannel(channel: ApiChannelRecord): ManagedChannel {
     platform: mapApiChannel(channel.provider),
     externalChannelId: channel.externalChannelId,
     channelName: `${channel.name} · ${activity}`,
+    customerId: channel.customerId ?? undefined,
     customer: channel.customerName ?? "Nie przypisano",
     ignored: channel.ignored,
     groupingStrategy: channel.groupingStrategy,
     active: channel.active,
     lastMessageAt: channel.lastMessageAt ?? undefined,
+  }
+}
+
+function mapIntegration(integration: ApiIntegration): ManagedIntegration {
+  return {
+    id: integration.id,
+    platform: mapApiChannel(integration.provider),
+    displayName: integration.displayName,
+    status: integration.status.toLowerCase() as ManagedIntegration["status"],
+    workspace: integration.workspaceName ?? integration.workspaceExternalId ?? "",
+    workspaceId: integration.workspaceExternalId ?? "",
+    hasSecretReference: integration["secretConfigured"],
+    lastEventAt: integration.lastEventAt ?? undefined,
+    lastErrorCode: integration.lastErrorCode ?? undefined,
+    health: integration.health.toLowerCase() as ManagedIntegration["health"],
+  }
+}
+
+function mapCustomer(customer: ApiCustomer): ManagedCustomer {
+  return {
+    id: customer.id,
+    name: customer.name,
+    externalRef: customer.externalRef ?? undefined,
+    active: customer.active,
   }
 }
 
@@ -222,6 +275,22 @@ async function listChannels(): Promise<ManagedChannel[]> {
     path: "/api/v1/admin/channels",
   })
   return channels.map(mapChannel)
+}
+
+async function listIntegrations(): Promise<ManagedIntegration[]> {
+  const integrations = await browserApiTransport.request<ApiIntegration[]>({
+    method: "GET",
+    path: "/api/v1/admin/integrations",
+  })
+  return integrations.map(mapIntegration)
+}
+
+async function listCustomers(): Promise<ManagedCustomer[]> {
+  const customers = await browserApiTransport.request<ApiCustomer[]>({
+    method: "GET",
+    path: "/api/v1/admin/customers",
+  })
+  return customers.map(mapCustomer)
 }
 
 async function getBusinessHours(): Promise<ApiBusinessHoursSchedule> {
@@ -418,8 +487,10 @@ async function saveNotifications(
 
 export const apiAdministrationSettingsRepository: AdministrationSettingsRepository = {
   async get() {
-    const [settings, channels, businessHours, notifications, outOfOffice, sla] = await Promise.all([
+    const [settings, integrations, customers, channels, businessHours, notifications, outOfOffice, sla] = await Promise.all([
       mockAdministrationSettingsRepository.get(),
+      listIntegrations(),
+      listCustomers(),
       listChannels(),
       getBusinessHours(),
       listNotifications(),
@@ -428,6 +499,8 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     ])
     return {
       ...settings,
+      integrations,
+      customers,
       schedule: mapApiBusinessHours(businessHours, settings.schedule.exceptions),
       channels,
       notifications,
@@ -481,24 +554,77 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     return mockAdministrationSettingsRepository.saveSection(key, value)
   },
 
-  configureIntegration(id, workspace) {
-    return mockAdministrationSettingsRepository.configureIntegration(id, workspace)
+  async configureIntegration(input) {
+    const body = {
+      provider: apiProvider(input.platform),
+      displayName: input.displayName,
+      workspaceExternalId: input.workspaceId,
+      workspaceName: input.workspaceName,
+      secretRef: input.secretRef,
+    }
+    const integration = await browserApiTransport.request<ApiIntegration>({
+      method: input.id ? "PUT" : "POST",
+      path: input.id
+        ? `/api/v1/admin/integrations/${encodeURIComponent(input.id)}`
+        : "/api/v1/admin/integrations",
+      body,
+    })
+    return mapIntegration(integration)
   },
 
-  setIntegrationStatus(id, status) {
-    return mockAdministrationSettingsRepository.setIntegrationStatus(id, status)
+  async setIntegrationStatus(id, status) {
+    const integration = await browserApiTransport.request<ApiIntegration>({
+      method: "PATCH",
+      path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/status`,
+      body: { status: status.toUpperCase() },
+    })
+    return mapIntegration(integration)
   },
 
-  testIntegration(id) {
-    return mockAdministrationSettingsRepository.testIntegration(id)
+  async testIntegration(id) {
+    const result = await browserApiTransport.request<ApiIntegrationTest>({
+      method: "POST",
+      path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/test`,
+    })
+    if (result.outcome !== "SUCCESS") {
+      throw new Error(result.errorCode ?? "Test połączenia nie powiódł się.")
+    }
+    return mapIntegration(result.integration)
   },
 
-  async setChannelIgnored(id, ignored) {
+  async discoverChannels(id) {
+    const channels = await browserApiTransport.request<ApiChannelRecord[]>({
+      method: "POST",
+      path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/slack/discover-channels`,
+    })
+    return channels.map(mapChannel)
+  },
+
+  async configureChannel(id, customerId, ignored) {
     await browserApiTransport.request<ApiChannelRecord>({
       method: "PATCH",
       path: `/api/v1/admin/channels/${encodeURIComponent(id)}`,
-      body: { ignored },
+      body: { ignored, customerId: customerId ?? null },
     })
+  },
+
+  async saveCustomer(input, id) {
+    const customer = await browserApiTransport.request<ApiCustomer>({
+      method: id ? "PUT" : "POST",
+      path: id
+        ? `/api/v1/admin/customers/${encodeURIComponent(id)}`
+        : "/api/v1/admin/customers",
+      body: { name: input.name, externalRef: input.externalRef ?? null },
+    })
+    return mapCustomer(customer)
+  },
+
+  async deactivateCustomer(id) {
+    const customer = await browserApiTransport.request<ApiCustomer>({
+      method: "POST",
+      path: `/api/v1/admin/customers/${encodeURIComponent(id)}/deactivate`,
+    })
+    return mapCustomer(customer)
   },
 
   async toggleNotification(id, enabled) {

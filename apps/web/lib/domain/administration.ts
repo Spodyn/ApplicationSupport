@@ -91,8 +91,11 @@ export type IntegrationHealth = "unknown" | "healthy" | "degraded" | "unavailabl
 export interface ManagedIntegration {
   id: string
   platform: Channel
+  displayName: string
   status: IntegrationStatus
   workspace: string
+  workspaceId: string
+  hasSecretReference: boolean
   lastEventAt?: string
   lastErrorCode?: string
   health: IntegrationHealth
@@ -109,11 +112,28 @@ export interface ManagedChannel {
   platform: Channel
   externalChannelId: string
   channelName: string
+  customerId?: string
   customer: string
   ignored: boolean
   groupingStrategy: ChannelGroupingStrategy
   active: boolean
   lastMessageAt?: string
+}
+
+export interface ManagedCustomer {
+  id: string
+  name: string
+  externalRef?: string
+  active: boolean
+}
+
+export interface IntegrationConfigurationInput {
+  id?: string
+  platform: Channel
+  displayName: string
+  workspaceId: string
+  workspaceName: string
+  secretRef: string
 }
 
 export type NotificationType =
@@ -144,6 +164,7 @@ export interface AdministrationSettings {
   schedule: WorkScheduleSettings
   outOfOffice: OutOfOfficeSettings
   integrations: ManagedIntegration[]
+  customers: ManagedCustomer[]
   channels: ManagedChannel[]
   notifications: NotificationDestination[]
   rolePermissions: RolePermissions[]
