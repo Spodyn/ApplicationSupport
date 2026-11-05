@@ -33,9 +33,9 @@ class ChannelAdminController {
             @PathVariable UUID channelId,
             @Valid @RequestBody ChannelOperationalStateRequest input,
             Authentication actor) {
-        return channels.setIgnored(actor, channelId, Boolean.TRUE.equals(input.ignored()));
+        return channels.configure(actor, channelId, input.customerId(), Boolean.TRUE.equals(input.ignored()));
     }
 
-    record ChannelOperationalStateRequest(@NotNull Boolean ignored) {
+    record ChannelOperationalStateRequest(@NotNull Boolean ignored, UUID customerId) {
     }
 }

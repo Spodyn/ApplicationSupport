@@ -4,6 +4,7 @@ import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.audit.AuditActors;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.customer.CustomerView;
+import com.unifiedsupportinbox.customer.CustomerDirectory;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -12,7 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-class CustomerService {
+class CustomerService implements CustomerDirectory {
 
     private static final String ADMIN_AUTHORITY = "ROLE_ADMIN";
     private final CustomerRepository customers;
@@ -73,6 +74,12 @@ class CustomerService {
         CustomerEntity deactivated = customers.saveAndFlush(customer);
         appendAudit(actor, deactivated, "CUSTOMER_DEACTIVATED");
         return view(deactivated);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean isActive(UUID customerId) {
+        return customerId != null && customers.findById(customerId).map(CustomerEntity::active).orElse(false);
     }
 
     private CustomerEntity required(UUID customerId) {

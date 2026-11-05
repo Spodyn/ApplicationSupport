@@ -85,7 +85,7 @@ class IntegrationHealthCoordinator implements IntegrationHealthReporter {
         integrations.updateHealth(integrationId, IntegrationHealth.HEALTHY, current.lastEventAt(), null);
     }
 
-    @Scheduled(fixedDelayString = "${usi.providers.slack.health-check-ms:60000}")
+    @Scheduled(fixedDelayString = "${usi.providers.slack.health-check-ms:900000}")
     @Transactional
     public void detectEventSilence() {
         Instant cutoff = Instant.now().minus(eventSilenceThreshold);

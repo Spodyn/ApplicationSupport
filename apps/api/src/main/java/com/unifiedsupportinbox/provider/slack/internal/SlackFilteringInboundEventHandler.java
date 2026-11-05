@@ -66,6 +66,10 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
             outcomes.markIgnoredByChannel(inbound.inboundEventId());
             return;
         }
+        if (!channel.customerMapped()) {
+            outcomes.mark(inbound.inboundEventId(), UNMAPPED_CHANNEL);
+            return;
+        }
         if (!channel.active()) {
             outcomes.mark(inbound.inboundEventId(), INACTIVE_CHANNEL);
             return;

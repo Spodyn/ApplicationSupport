@@ -19,6 +19,7 @@ class ChannelIngestionPolicyAdapter implements ChannelIngestionPolicy {
     @Transactional(readOnly = true)
     public Optional<Decision> resolve(UUID integrationId, String externalChannelId) {
         return channels.findByIntegrationAndExternalChannel(integrationId, externalChannelId)
-                .map(channel -> new Decision(channel.id(), channel.ignored(), channel.active()));
+                .map(channel -> new Decision(
+                        channel.id(), channel.ignored(), channel.active(), channel.customerId() != null));
     }
 }
