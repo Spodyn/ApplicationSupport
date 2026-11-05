@@ -98,6 +98,7 @@ class SupportSendMessageService {
             MessageBodyFormat bodyFormat,
             List<UUID> attachmentIds,
             String correlationId) {
+        requireEligibleUser(userId);
         CaseSendContext context = jdbc.query("""
                 SELECT owner_user_id, status, external_thread_key
                 FROM cases
@@ -164,6 +165,17 @@ class SupportSendMessageService {
         response.put("messageId", messageId.toString());
         response.put("deliveryStatus", "QUEUED");
         return new IdempotencyResponse(202, response);
+    }
+
+    private void requireEligibleUser(UUID userId) {
+        Integer count = jdbc.queryForObject("""
+                SELECT count(*) FROM users
+                WHERE id = ? AND active = TRUE
+                  AND role IN ('USER', 'ADMIN')
+                  AND (valid_from IS NULL OR valid_from <= CURRENT_TIMESTAMP)
+                  AND (valid_until IS NULL OR valid_until > CURRENT_TIMESTAMP)
+                """, Integer.class, userId);
+        if (count == null || count != 1) throw ApiProblemException.accessDenied();
     }
 
     private void lockAndValidateAttachments(UUID caseId, List<UUID> attachmentIds) {

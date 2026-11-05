@@ -82,7 +82,11 @@ class CaseDetailService {
 
     private Actor actor(UUID caseId, UUID userId) {
         return jdbc.query("""
-                SELECT u.active, u.role,
+                SELECT u.active
+                           AND u.role IN ('USER', 'ADMIN')
+                           AND (u.valid_from IS NULL OR u.valid_from <= CURRENT_TIMESTAMP)
+                           AND (u.valid_until IS NULL OR u.valid_until > CURRENT_TIMESTAMP) AS eligible,
+                       u.role,
                        EXISTS (SELECT 1 FROM case_ignore_votes v WHERE v.case_id = ? AND v.user_id = ?) AS voted
                 FROM users u WHERE u.id = ?
                 """, (rs, rowNum) -> {
@@ -92,7 +96,7 @@ class CaseDetailService {
                     UNION
                     SELECT permission_code AS code FROM user_permissions WHERE user_id = ?
                     """, (permissionsRs, ignored) -> permissionsRs.getString("code"), role.name(), userId);
-            return new Actor(rs.getBoolean("active"), role, Set.copyOf(permissions), rs.getBoolean("voted"), userId);
+            return new Actor(rs.getBoolean("eligible"), role, Set.copyOf(permissions), rs.getBoolean("voted"), userId);
         }, caseId, userId, userId).stream().findFirst().orElseThrow(ApiProblemException::authenticationRequired);
     }
 

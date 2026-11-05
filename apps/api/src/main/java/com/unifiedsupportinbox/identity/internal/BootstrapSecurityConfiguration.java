@@ -89,10 +89,34 @@ class BootstrapSecurityConfiguration {
                                 "/api/v1/auth/me").authenticated()
                         .requestMatchers("/ws", "/ws/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/cases").authenticated()
-                        .requestMatchers(HttpMethod.GET, "/api/v1/cases/*/messages").authenticated()
+                        .requestMatchers(HttpMethod.GET,
+                                "/api/v1/cases/*/messages",
+                                "/api/v1/cases/*/attachments/*").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/cases/*", "/api/v1/cases/*/activity").authenticated()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/cases/*/claim", "/api/v1/cases/*/messages").authenticated()
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/cases/*/claim",
+                                "/api/v1/cases/*/messages",
+                                "/api/v1/cases/*/ask-customer",
+                                "/api/v1/cases/*/resolve",
+                                "/api/v1/cases/*/ignore",
+                                "/api/v1/cases/*/snooze",
+                                "/api/v1/cases/*/attachments",
+                                "/api/v1/messages/*/retry",
+                                "/api/v1/cases/read/mark-resolved").authenticated()
+                        .requestMatchers(HttpMethod.DELETE,
+                                "/api/v1/cases/*/snooze",
+                                "/api/v1/cases/*/attachments/*").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/v1/cases/*/read-position").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/admin/cases/*/assignees")
+                                .hasAuthority("reassign_cases")
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/admin/cases/*/assign",
+                                "/api/v1/admin/cases/*/reassign",
+                                "/api/v1/admin/cases/*/unassign").hasAuthority("reassign_cases")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/cases/*/force-resolve")
+                                .hasAuthority("force_resolve")
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/admin/users/*/ignore-weight")
+                                .hasAuthority(PermissionCatalog.MANAGE_USERS)
                         .requestMatchers(HttpMethod.PUT, "/api/v1/users/*/permissions")
                                 .hasAuthority(PermissionCatalog.MANAGE_USERS)
                         .requestMatchers("/api/v1/admin/customers/**").hasRole("ADMIN")

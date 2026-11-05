@@ -25,6 +25,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
     private final CaseCreationService cases;
     private final CustomerMessageUnreadService unread;
     private final OutOfOfficeResponder outOfOffice;
+    private final CustomerReplyWaitingService waitingReplies;
     private final JdbcTemplate jdbc;
     private final MessageCreatedOutboxPublisher messageCreated;
 
@@ -32,11 +33,13 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
             CaseCreationService cases,
             CustomerMessageUnreadService unread,
             OutOfOfficeResponder outOfOffice,
+            CustomerReplyWaitingService waitingReplies,
             JdbcTemplate jdbc,
             MessageCreatedOutboxPublisher messageCreated) {
         this.cases = cases;
         this.unread = unread;
         this.outOfOffice = outOfOffice;
+        this.waitingReplies = waitingReplies;
         this.jdbc = jdbc;
         this.messageCreated = messageCreated;
     }
@@ -102,6 +105,11 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         }
 
         UUID messageId = insertedMessageIds.getFirst();
+        waitingReplies.customerReplied(
+                caseResult.caseId(),
+                messageId,
+                command.providerOccurredAt(),
+                command.correlationId());
         messageCreated.publish(messageId, caseResult.caseId(), command.correlationId());
         unread.customerMessageCreated(caseResult.caseId(), messageId, command.correlationId());
         outOfOffice.customerMessageReceived(caseResult.caseId(), null, command.correlationId());

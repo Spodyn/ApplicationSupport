@@ -25,11 +25,59 @@ export type ApiProblem = {
 
 export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTICATION_REQUIRED" | "ACCESS_DENIED" | "RESOURCE_NOT_FOUND" | "CONFLICT" | "CASE_ALREADY_CLAIMED" | "RATE_LIMITED" | "PROVIDER_FAILURE" | "APPLICATION_FAILURE" | "INTERNAL_ERROR"
 
+export type AskCustomerRequest = {
+  "message": string
+  "waitingMinutes"?: number
+  "bodyFormat"?: MessageBodyFormat
+}
+
+export type BatchReadResponse = {
+  "updatedCount": number
+}
+
+export type CancelSnoozeResponse = {
+  "caseId": string
+  "cancelled": boolean
+}
+
+export type CaseActivityItem = {
+  "id": string
+  "actorLabel": string
+  "action": string
+  "actionDescription": string
+  "occurredAt": string
+}
+
+export type CaseActivityPage = {
+  "items": Array<CaseActivityItem>
+  "nextCursor": string | null
+}
+
+export type CaseAssignee = {
+  "id": string
+  "displayName": string
+  "eligible": boolean
+  "ignoreWeight": number
+  "ignoreWeightValidUntil": string | null
+}
+
+export type CaseAssignmentRequest = {
+  "targetUserId": string
+}
+
 export type CaseChannel = {
   "id": string
   "name": string
   "externalChannelId": string
   "groupingStrategy": string
+}
+
+export type CaseCommandResponse = {
+  "caseId": string
+  "status": CaseStatus
+  "ownerUserId": string | null
+  "resolutionCategory": CaseResolutionCategory | null
+  "version": number
 }
 
 export type CaseCustomer = {
@@ -60,6 +108,18 @@ export type CaseDetail = {
   "updatedAt": string
   "lastActivityAt": string
   "version": number
+}
+
+export type CaseFilterOption = {
+  "id": string
+  "name": string
+}
+
+export type CaseFilterOptions = {
+  "customers": Array<CaseFilterOption>
+  "channels": Array<CaseFilterOption>
+  "owners": Array<CaseFilterOption>
+  "providers": Array<Channel>
 }
 
 export type CaseIntegration = {
@@ -136,6 +196,8 @@ export type CaseRelated = {
   "reference": string | null
 }
 
+export type CaseResolutionCategory = "SOLVED" | "NO_ACTION_REQUIRED" | "DUPLICATE" | "OTHER"
+
 export type CaseSla = {
   "policyId": string
   "firstResponseStartedAt": string | null
@@ -202,6 +264,28 @@ export type EffectivePermission = string
 export type FieldError = {
   "field": string
   "message": string
+}
+
+export type IgnoreCaseRequest = {
+  "reason"?: string | null
+}
+
+export type IgnoreCaseResponse = {
+  "caseId": string
+  "status": CaseStatus
+  "ignoreScore": number
+  "version": number
+}
+
+export type IgnoreVoteWeight = {
+  "userId": string
+  "weight": number
+  "validUntil": string | null
+}
+
+export type IgnoreVoteWeightRequest = {
+  "weight": number
+  "validUntil"?: string | null
 }
 
 export type Integration = {
@@ -277,6 +361,19 @@ export type ReadPositionResponse = {
   "readAt": string
 }
 
+export type ResolveCaseRequest = {
+  "resolutionCategory"?: CaseResolutionCategory | null
+}
+
+export type ResolveCaseResponse = {
+  "caseId": string
+  "status": "RESOLVED"
+  "ownerUserId": string
+  "resolutionCategory": CaseResolutionCategory | null
+  "version": number
+  "resolvedAt": string
+}
+
 export type SendMessageRequest = {
   "body": string
   "bodyFormat"?: MessageBodyFormat
@@ -286,6 +383,15 @@ export type SendMessageRequest = {
 export type SendMessageResponse = {
   "messageId": string
   "deliveryStatus": MessageDeliveryStatus
+}
+
+export type SnoozeRequest = {
+  "until": string
+}
+
+export type SnoozeResponse = {
+  "caseId": string
+  "snoozedUntil": string
 }
 
 export type UpdateCustomerRequest = {
