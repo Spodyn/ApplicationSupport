@@ -117,6 +117,9 @@ export function CasesPage({
   const markResolvedRead = useMarkAllResolvedRead()
 
   const records = useMemo(() => casesQuery.data?.pages.flatMap((page) => page.items) ?? [], [casesQuery.data])
+  if (selectedCaseId === undefined && records[0]?.id) {
+    setSelectedCaseId(records[0].id)
+  }
   const selectedId = selectedCaseId ?? records[0]?.id
   const detailQuery = useInboxCase(selectedId)
   const messagesQuery = useInboxMessages(selectedId)

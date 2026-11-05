@@ -421,7 +421,7 @@ export default function UsersRoute() {
           <DialogHeader>
             <DialogTitle>{credentialResult?.kind === "invitation" ? "Zaproszenie gotowe" : "Reset hasła gotowy"}</DialogTitle>
             <DialogDescription>
-              Token jest widoczny tylko teraz. Przekaż go użytkownikowi bezpiecznym kanałem; wygaśnie {credentialResult ? formatDateTime(credentialResult.expiresAt) : ""}.
+              Token jest widoczny tylko teraz. Przekaż go użytkownikowi bezpiecznym kanałem i poproś o ustawienie hasła na stronie /activate; wygaśnie {credentialResult ? formatDateTime(credentialResult.expiresAt) : ""}.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
@@ -492,7 +492,7 @@ function UserDialog({
           <DialogHeader>
             <DialogTitle>{user ? "Edytuj użytkownika" : "Dodaj użytkownika"}</DialogTitle>
             <DialogDescription>
-              Dane są zapisywane w lokalnym serwisie demonstracyjnym.
+              Konto i uprawnienia zostaną zapisane w backendzie aplikacji.
             </DialogDescription>
           </DialogHeader>
 

@@ -239,6 +239,11 @@ export type CreateCustomerRequest = {
   "externalRef"?: string | null
 }
 
+export type CredentialRequest = {
+  "token": string
+  "password": string
+}
+
 export type CurrentSession = {
   "id": string
   "email": string

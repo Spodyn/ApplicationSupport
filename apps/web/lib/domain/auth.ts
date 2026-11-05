@@ -8,3 +8,8 @@ export interface LoginCredentials {
   email: string
   password: string
 }
+
+export interface CredentialAction {
+  token: string
+  password: string
+}

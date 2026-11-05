@@ -1,4 +1,8 @@
-import type { AuthenticatedUser, LoginCredentials } from "@/lib/domain/auth"
+import type {
+  AuthenticatedUser,
+  CredentialAction,
+  LoginCredentials,
+} from "@/lib/domain/auth"
 
 export const currentUserQueryKey = ["current-user"] as const
 
@@ -13,4 +17,6 @@ export interface CurrentUserRepository {
   get(): Promise<AuthenticatedUser>
   login(credentials: LoginCredentials): Promise<AuthenticatedUser>
   logout(): Promise<void>
+  acceptInvitation(action: CredentialAction): Promise<void>
+  completePasswordReset(action: CredentialAction): Promise<void>
 }

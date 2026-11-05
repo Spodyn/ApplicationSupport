@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
@@ -205,7 +206,7 @@ class UserAdministrationService {
         Instant expiresAt = Instant.now().plus(ttl);
         jdbc.update("UPDATE account_action_tokens SET used_at = now() WHERE user_id = ? AND token_type = ? AND used_at IS NULL", user.id(), type);
         jdbc.update("INSERT INTO account_action_tokens (user_id, token_type, token_hash, expires_at, created_by) VALUES (?, ?, ?, ?, ?)",
-                user.id(), type, hash(raw), expiresAt, actor == null ? null : actor.userId());
+                user.id(), type, hash(raw), Timestamp.from(expiresAt), actor == null ? null : actor.userId());
         audit.append(actor == null ? AuditActorType.SYSTEM : actorType(actor), actor == null ? null : actor.userId(),
                 auditAction, "USER", user.id(), null, Map.of("expiresAt", expiresAt.toString()));
         return new CredentialToken(raw, expiresAt);
