@@ -152,12 +152,16 @@ class SlackFilteringInboundIntegrationTests {
 
     private UUID createChannel(UUID integrationId, String externalChannelId, boolean active, boolean ignored) {
         UUID channelId = UUID.randomUUID();
+        UUID customerId = jdbc.queryForObject(
+                "INSERT INTO customers (name) VALUES (?) RETURNING id",
+                UUID.class,
+                "Customer " + channelId);
         jdbc.update("""
                 INSERT INTO channels (
-                    id, integration_id, external_channel_id, name, ignored,
+                    id, integration_id, external_channel_id, name, customer_id, ignored,
                     grouping_strategy, active
-                ) VALUES (?, ?, ?, 'support', ?, 'SLACK_ROOT_THREAD', ?)
-                """, channelId, integrationId, externalChannelId, ignored, active);
+                ) VALUES (?, ?, ?, 'support', ?, ?, 'SLACK_ROOT_THREAD', ?)
+                """, channelId, integrationId, externalChannelId, customerId, ignored, active);
         return channelId;
     }
 

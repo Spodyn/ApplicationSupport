@@ -2,6 +2,7 @@ package com.unifiedsupportinbox.provider.slack.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.unifiedsupportinbox.InboundEventOutcomeStore;
 import com.unifiedsupportinbox.InboundEventStore.InboundEvent;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
 import java.util.Map;
@@ -136,7 +137,7 @@ class SlackRootCaseMappingIntegrationTests {
     }
 
     @Test
-    void customerUnmappedChannelRetriesWithoutCreatingBusinessRows() {
+    void customerUnmappedChannelIsRecordedWithoutCreatingBusinessRows() {
         UUID integrationId = createSlackIntegration();
         UUID channelId = createChannel(integrationId, "C-unmapped-customer", null, true, false);
         assertThat(channelId).isNotNull();
@@ -145,7 +146,10 @@ class SlackRootCaseMappingIntegrationTests {
                 "Ev-no-customer",
                 rootMessage("Ev-no-customer", "C-unmapped-customer", "U-customer", "map me first", "1720000200.1"));
 
-        assertThat(worker.process(event.id())).isEqualTo(SlackInboundWorker.AttemptResult.RETRY_SCHEDULED);
+        assertThat(worker.process(event.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        assertThat(jdbc.queryForObject(
+                "SELECT processing_outcome FROM inbound_events WHERE id = ?", String.class, event.id()))
+                .isEqualTo(InboundEventOutcomeStore.UNMAPPED_CHANNEL);
         assertThat(count("cases")).isZero();
         assertThat(count("messages")).isZero();
         assertThat(countOutbox("case.created")).isZero();

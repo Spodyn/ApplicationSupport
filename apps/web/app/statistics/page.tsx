@@ -120,6 +120,8 @@ const slaColors = {
 const metricDefinitions = {
   created: "Case’y utworzone w wybranym okresie i zgodne ze wszystkimi aktywnymi filtrami.",
   resolved: "Case’y rozwiązane w wybranym okresie, niezależnie od daty ich utworzenia.",
+  ignored: "Case’y zignorowane w wybranym okresie; nie są liczone jako rozwiązane.",
+  claimed: "Case’y przejęte przez użytkownika w wybranym okresie.",
   backlog: "Liczba nierozwiązanych case’ów aktywnych na koniec analizowanego okresu.",
   sla: "Odsetek case’ów, w których pierwsza odpowiedź wsparcia została wysłana przed terminem SLA.",
   breached: "Liczba case’ów utworzonych w okresie, dla których SLA pierwszej odpowiedzi zostało przekroczone.",
@@ -316,12 +318,15 @@ function AnalyticsDashboard({ data, preset }: { data: AnalyticsResult; preset: D
   }> = [
     { metricKey: "created", label: "Utworzone", value: formatNumber(data.kpis.created), icon: Inbox, tone: "primary", definition: metricDefinitions.created },
     { metricKey: "resolved", label: "Rozwiązane", value: formatNumber(data.kpis.resolved), icon: CheckCircle2, tone: "success", definition: metricDefinitions.resolved },
+    { metricKey: "ignored", label: "Zignorowane", value: formatNumber(data.kpis.ignored), icon: Activity, tone: "neutral", definition: metricDefinitions.ignored },
+    { metricKey: "claimed", label: "Przejęte", value: formatNumber(data.kpis.claimed), icon: Inbox, tone: "info", definition: metricDefinitions.claimed },
     { metricKey: "backlog", label: "Aktualny backlog", value: formatNumber(data.kpis.backlog), icon: Activity, tone: "info", definition: metricDefinitions.backlog, lowerIsBetter: true },
-    { metricKey: "slaFirstResponsePercentage", label: "SLA – pierwsza odpowiedź", value: formatPercent(data.kpis.slaFirstResponsePercentage), icon: Gauge, tone: "success", definition: metricDefinitions.sla, percentagePoints: true },
+    { metricKey: "slaFirstResponsePercentage", label: "SLA – pierwsza odpowiedź", value: formatMaybePercent(data.kpis.slaFirstResponsePercentage), icon: Gauge, tone: "success", definition: metricDefinitions.sla, percentagePoints: true },
     { metricKey: "breachedSla", label: "Przekroczone SLA", value: formatNumber(data.kpis.breachedSla), icon: AlertTriangle, tone: "danger", definition: metricDefinitions.breached, lowerIsBetter: true },
-    { metricKey: "averageClaimMinutes", label: "Śr. czas przejęcia", value: formatDuration(data.kpis.averageClaimMinutes), icon: Clock3, tone: "warning", definition: metricDefinitions.claim, lowerIsBetter: true },
-    { metricKey: "averageFirstResponseMinutes", label: "Śr. pierwsza odpowiedź", value: formatDuration(data.kpis.averageFirstResponseMinutes), icon: TimerReset, tone: "teams", definition: metricDefinitions.response, lowerIsBetter: true },
-    { metricKey: "averageResolutionMinutes", label: "Śr. czas rozwiązania", value: formatDuration(data.kpis.averageResolutionMinutes), icon: CheckCircle2, tone: "neutral", definition: metricDefinitions.resolution, lowerIsBetter: true },
+    { metricKey: "warningSla", label: "Ostrzeżenia SLA", value: formatNumber(data.kpis.warningSla), icon: AlertTriangle, tone: "warning", definition: metricDefinitions.breached, lowerIsBetter: true },
+    { metricKey: "averageClaimMinutes", label: "Śr. czas przejęcia", value: formatMaybeDuration(data.kpis.averageClaimMinutes), icon: Clock3, tone: "warning", definition: metricDefinitions.claim, lowerIsBetter: true },
+    { metricKey: "averageFirstResponseMinutes", label: "Śr. pierwsza odpowiedź", value: formatMaybeDuration(data.kpis.averageFirstResponseMinutes), icon: TimerReset, tone: "teams", definition: metricDefinitions.response, lowerIsBetter: true },
+    { metricKey: "averageResolutionMinutes", label: "Śr. czas rozwiązania", value: formatMaybeDuration(data.kpis.averageResolutionMinutes), icon: CheckCircle2, tone: "neutral", definition: metricDefinitions.resolution, lowerIsBetter: true },
   ]
 
   return (
@@ -401,7 +406,28 @@ function AnalyticsDashboard({ data, preset }: { data: AnalyticsResult; preset: D
       </section>
 
       <PerformanceTable data={data.userPerformance} />
+      {data.currentWork && <CurrentWorkTable data={data.currentWork} />}
     </div>
+  )
+}
+
+function CurrentWorkTable({ data }: { data: NonNullable<AnalyticsResult["currentWork"]> }) {
+  return (
+    <Card className="min-w-0">
+      <CardHeader><CardTitle>Aktualna praca</CardTitle><CardDescription>Widok administracyjny aktywnych spraw, właścicieli i bieżącego stanu SLA.</CardDescription></CardHeader>
+      <CardContent><div className="overflow-x-auto rounded-lg border"><Table>
+        <TableHeader><TableRow className="bg-muted/40"><TableHead>Case</TableHead><TableHead>Klient</TableHead><TableHead>Źródło</TableHead><TableHead>Status</TableHead><TableHead>Właściciel</TableHead><TableHead>SLA</TableHead><TableHead>Utworzono</TableHead></TableRow></TableHeader>
+        <TableBody>{data.map((item) => <TableRow key={item.id}>
+          <TableCell className="font-mono text-xs">{item.reference}</TableCell>
+          <TableCell className="font-medium">{item.customerName}</TableCell>
+          <TableCell>{channelLabels[item.platform]} · {item.sourceChannel}</TableCell>
+          <TableCell><Badge variant="secondary">{item.statusLabel}</Badge></TableCell>
+          <TableCell>{item.userName ?? "Nieprzypisany"}</TableCell>
+          <TableCell><Badge variant={item.slaState === "breached" ? "destructive" : "secondary"}>{item.slaState === "met" ? "W normie" : item.slaState === "warning" ? "Zagrożone" : "Przekroczone"}</Badge></TableCell>
+          <TableCell className="text-xs text-muted-foreground">{new Intl.DateTimeFormat("pl-PL", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.createdAt))}</TableCell>
+        </TableRow>)}</TableBody>
+      </Table></div></CardContent>
+    </Card>
   )
 }
 
@@ -425,8 +451,8 @@ function MetricCard({
   icon: typeof Inbox
   definition: string
   tone: MetricTone
-  current: number
-  previous?: number
+  current: number | null
+  previous?: number | null
   lowerIsBetter?: boolean
   percentagePoints?: boolean
   comparisonLabel: string
@@ -454,7 +480,8 @@ function MetricCard({
   )
 }
 
-function KpiDelta({ current, previous, lowerIsBetter, percentagePoints, label }: { current: number; previous: number; lowerIsBetter: boolean; percentagePoints: boolean; label: string }) {
+function KpiDelta({ current, previous, lowerIsBetter, percentagePoints, label }: { current: number | null; previous: number | null; lowerIsBetter: boolean; percentagePoints: boolean; label: string }) {
+  if (current === null || previous === null) return <p className="mt-2 text-[10px] text-muted-foreground">Brak danych do porównania</p>
   const rawDelta = current - previous
   const delta = percentagePoints ? rawDelta * 100 : previous ? rawDelta / previous * 100 : undefined
   if (delta === undefined) return <p className="mt-2 text-[10px] text-muted-foreground">Brak wartości w poprzednim okresie</p>
@@ -550,8 +577,8 @@ function ClientPerformanceTable({ data, onSelect }: { data: ClientPerformance[];
                   <TableCell className="text-center tabular-nums">{item.notApplicable}</TableCell>
                   <TableCell className="text-center tabular-nums">{item.spam}</TableCell>
                   <TableCell className="text-right"><SlaBadge value={item.slaPercentage} /></TableCell>
-                  <TableCell className="text-right tabular-nums">{formatDuration(item.averageResponseMinutes)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatDuration(item.averageResolutionMinutes)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatMaybeDuration(item.averageResponseMinutes)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatMaybeDuration(item.averageResolutionMinutes)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -642,10 +669,10 @@ function PerformanceTable({ data }: { data: UserPerformance[] }) {
                   <TableCell className="text-center tabular-nums">{item.currentlyAssigned}</TableCell>
                   <TableCell className="text-center tabular-nums">{item.notApplicable}</TableCell>
                   <TableCell className="text-center tabular-nums">{item.spam}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatDuration(item.averageClaimMinutes)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatDuration(item.medianResponseMinutes)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatDuration(item.p90ResponseMinutes)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatDuration(item.averageResolutionMinutes)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatMaybeDuration(item.averageClaimMinutes)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatMaybeDuration(item.medianResponseMinutes)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatMaybeDuration(item.p90ResponseMinutes)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatMaybeDuration(item.averageResolutionMinutes)}</TableCell>
                   <TableCell className="text-right"><SlaBadge value={item.slaPercentage} /></TableCell>
                 </TableRow>
               ))}
@@ -668,7 +695,8 @@ function SortableHead({ label, sortKey, sort, onSort, align = "left", definition
   )
 }
 
-function SlaBadge({ value }: { value: number }) {
+function SlaBadge({ value }: { value: number | null }) {
+  if (value === null) return <Badge variant="secondary">—</Badge>
   return <Badge variant="secondary" className={cn("tabular-nums", value >= 0.85 ? "bg-success/10 text-success" : value >= 0.7 ? "bg-warning/15 text-warning-foreground" : "bg-destructive/10 text-destructive")}>{value >= 0.85 ? <CheckCircle2 /> : <Gauge />}{formatPercent(value)}</Badge>
 }
 
@@ -688,6 +716,14 @@ function DashboardFilterSelect({ value, onChange, options, label, allLabel }: { 
 }
 
 const axisTick = { fill: "var(--muted-foreground)", fontSize: 11 }
+
+function formatMaybeDuration(value: number | null) {
+  return value === null ? "—" : formatDuration(value)
+}
+
+function formatMaybePercent(value: number | null) {
+  return value === null ? "—" : formatPercent(value)
+}
 
 function getPresetRange(preset: Exclude<DatePreset, "custom">) {
   const end = new Date(`${analyticsToday}T12:00:00.000Z`)

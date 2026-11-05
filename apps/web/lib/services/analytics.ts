@@ -12,9 +12,6 @@ import type {
   UserPerformance,
 } from "@/lib/domain/analytics"
 import type { Channel } from "@/lib/domain/shared"
-import { mockAnalyticsRecords } from "@/mocks/analytics"
-import { mockUsers } from "@/mocks/users"
-import { requireCurrentAdministrationPermission } from "./administration"
 
 export interface AnalyticsRepository {
   calculate(filters: AnalyticsFilters): Promise<AnalyticsResult>
@@ -26,21 +23,17 @@ const slaLabels: Record<AnalyticsSlaState, string> = {
   breached: "Przekroczone",
 }
 
-function delay<T>(value: T, ms = 360) {
-  return new Promise<T>((resolve) => setTimeout(() => resolve(structuredClone(value)), ms))
-}
-
 function minutesBetween(from: string, to?: string) {
   if (!to) return undefined
   return Math.max(0, (new Date(to).getTime() - new Date(from).getTime()) / 60_000)
 }
 
 function average(values: number[]) {
-  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0
+  return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null
 }
 
 function percentile(values: number[], position: number) {
-  if (!values.length) return 0
+  if (!values.length) return null
   const sorted = [...values].sort((a, b) => a - b)
   const index = Math.max(0, Math.ceil(sorted.length * position) - 1)
   return sorted[index]
@@ -59,11 +52,6 @@ function enumerateDates(from: string, to: string) {
     cursor.setUTCDate(cursor.getUTCDate() + 1)
   }
   return dates
-}
-
-function inDateRange(value: string | undefined, from: string, to: string) {
-  if (!value) return false
-  return value >= `${from}T00:00:00.000Z` && value <= `${to}T23:59:59.999Z`
 }
 
 function matchesDimensions(record: AnalyticsRecord, filters: AnalyticsFilters) {
@@ -92,6 +80,8 @@ function distribution<TState extends string>(
 function calculateKpis(
   createdRecords: AnalyticsRecord[],
   resolvedRecords: AnalyticsRecord[],
+  ignoredRecords: AnalyticsRecord[],
+  claimedRecords: AnalyticsRecord[],
   backlogRecords: AnalyticsRecord[],
 ): AnalyticsKpis {
   const claimTimes = createdRecords.flatMap((record) => {
@@ -106,16 +96,30 @@ function calculateKpis(
     const value = minutesBetween(record.createdAt, record.resolvedAt)
     return value === undefined ? [] : [value]
   })
-  const slaEligible = createdRecords.filter((record) => record.firstResponseAt || record.slaState === "breached")
+  const firstResponseMet = (record: AnalyticsRecord) => Boolean(
+    record.firstResponseAt
+      && record.slaDeadlineAt
+      && new Date(record.firstResponseAt).getTime() <= new Date(record.slaDeadlineAt).getTime(),
+  )
+  const firstResponseBreached = (record: AnalyticsRecord) => Boolean(
+    record.slaDeadlineAt
+      && (record.firstResponseAt
+        ? new Date(record.firstResponseAt).getTime() > new Date(record.slaDeadlineAt).getTime()
+        : Date.now() > new Date(record.slaDeadlineAt).getTime()),
+  )
+  const slaEligible = createdRecords.filter((record) => firstResponseMet(record) || firstResponseBreached(record))
 
   return {
     created: createdRecords.length,
     resolved: resolvedRecords.length,
+    ignored: ignoredRecords.length,
+    claimed: claimedRecords.length,
     backlog: backlogRecords.length,
     slaFirstResponsePercentage: slaEligible.length
-      ? slaEligible.filter((record) => record.slaState === "met").length / slaEligible.length
-      : 0,
-    breachedSla: createdRecords.filter((record) => record.slaState === "breached").length,
+      ? slaEligible.filter(firstResponseMet).length / slaEligible.length
+      : null,
+    breachedSla: createdRecords.filter(firstResponseBreached).length,
+    warningSla: createdRecords.filter((record) => record.slaState === "warning").length,
     averageClaimMinutes: average(claimTimes),
     averageFirstResponseMinutes: average(responseTimes),
     averageResolutionMinutes: average(resolutionTimes),
@@ -129,7 +133,7 @@ function calculateUserPerformance(
   backlogRecords: AnalyticsRecord[],
 ): UserPerformance[] {
   const grouped = new Map<string, AnalyticsRecord[]>()
-  for (const record of records) {
+  for (const record of records.filter((item) => !item.excludedFromUserPerformance)) {
     if (!record.userId || !record.userName) continue
     grouped.set(record.userId, [...(grouped.get(record.userId) ?? []), record])
   }
@@ -160,7 +164,7 @@ function calculateUserPerformance(
         medianResponseMinutes: percentile(responseTimes, 0.5),
         p90ResponseMinutes: percentile(responseTimes, 0.9),
         averageResolutionMinutes: average(resolutionTimes),
-        slaPercentage: items.length ? items.filter((item) => item.slaState === "met").length / items.length : 0,
+        slaPercentage: items.length ? items.filter((item) => item.slaState === "met").length / items.length : null,
       }
     })
     .sort((a, b) => b.resolved - a.resolved || a.userName.localeCompare(b.userName, "pl"))
@@ -206,7 +210,7 @@ function calculateClientPerformance(records: AnalyticsRecord[]): ClientPerforman
         resolved: items.filter((item) => item.resolutionReason === "resolved").length,
         notApplicable: items.filter((item) => item.resolutionReason === "not_applicable").length,
         spam: items.filter((item) => item.resolutionReason === "spam").length,
-        slaPercentage: items.length ? items.filter((item) => item.slaState === "met").length / items.length : 0,
+      slaPercentage: items.length ? items.filter((item) => item.slaState === "met").length / items.length : null,
         averageResponseMinutes: average(responseTimes),
         averageResolutionMinutes: average(resolutionTimes),
       }
@@ -224,8 +228,8 @@ function calculateHeatmap(records: AnalyticsRecord[]): HeatmapPoint[] {
       hour,
       value: records.filter((record) => {
         const date = new Date(record.createdAt)
-        const mondayIndex = (date.getUTCDay() + 6) % 7
-        return mondayIndex === dayIndex && Math.floor(date.getUTCHours() / 3) * 3 === hour
+        const mondayIndex = record.createdDayIndex ?? (date.getUTCDay() + 6) % 7
+        return mondayIndex === dayIndex && Math.floor((record.createdHour ?? date.getUTCHours()) / 3) * 3 === hour
       }).length,
     })),
   )
@@ -234,7 +238,7 @@ function calculateHeatmap(records: AnalyticsRecord[]): HeatmapPoint[] {
 function calculateResponseTimeSeries(records: AnalyticsRecord[], dates: string[]): ResponseTimePoint[] {
   return dates.map((date) => {
     const values = records
-      .filter((record) => toDateKey(record.createdAt) === date)
+      .filter((record) => (record.createdDate ?? toDateKey(record.createdAt)) === date)
       .flatMap((record) => {
         const value = minutesBetween(record.createdAt, record.firstResponseAt)
         return value === undefined ? [] : [value]
@@ -248,34 +252,45 @@ function calculateResponseTimeSeries(records: AnalyticsRecord[], dates: string[]
   })
 }
 
-function calculatePeriod(filters: AnalyticsFilters) {
-  const dimensionRecords = mockAnalyticsRecords.filter((record) => matchesDimensions(record, filters))
-  const createdRecords = dimensionRecords.filter((record) => inDateRange(record.createdAt, filters.dateFrom, filters.dateTo))
-  const resolvedRecords = dimensionRecords.filter((record) => inDateRange(record.resolvedAt, filters.dateFrom, filters.dateTo))
-  const periodEnd = `${filters.dateTo}T23:59:59.999Z`
+function calculatePeriod(records: AnalyticsRecord[], filters: AnalyticsFilters) {
+  const dimensionRecords = records.filter((record) => matchesDimensions(record, filters))
+  const createdDate = (record: AnalyticsRecord) => record.createdDate ?? toDateKey(record.createdAt)
+  const resolvedDate = (record: AnalyticsRecord) => record.resolvedAt
+    ? record.resolvedDate ?? toDateKey(record.resolvedAt)
+    : undefined
+  const createdRecords = dimensionRecords.filter((record) => createdDate(record) >= filters.dateFrom && createdDate(record) <= filters.dateTo)
+  const completedInRange = dimensionRecords.filter((record) => {
+    const date = resolvedDate(record)
+    return date !== undefined && date >= filters.dateFrom && date <= filters.dateTo
+  })
+  const resolvedRecords = completedInRange.filter((record) => record.status === "resolved")
+  const ignoredRecords = completedInRange.filter((record) => record.status === "ignored")
+  const claimedRecords = dimensionRecords.filter((record) => {
+    const date = record.claimedDate ?? (record.claimedAt ? toDateKey(record.claimedAt) : undefined)
+    return date !== undefined && date >= filters.dateFrom && date <= filters.dateTo
+  })
   const backlogRecords = dimensionRecords.filter(
-    (record) => record.createdAt <= periodEnd && (!record.resolvedAt || record.resolvedAt > periodEnd),
+    (record) => createdDate(record) <= filters.dateTo && (!record.resolvedAt || (resolvedDate(record) ?? "") > filters.dateTo),
   )
   const dates = enumerateDates(filters.dateFrom, filters.dateTo)
   const timeSeries = dates.map((date) => {
-    const dayEnd = `${date}T23:59:59.999Z`
     return {
       date,
-      created: dimensionRecords.filter((record) => toDateKey(record.createdAt) === date).length,
-      resolved: dimensionRecords.filter((record) => record.resolvedAt && toDateKey(record.resolvedAt) === date).length,
-      backlog: dimensionRecords.filter((record) => record.createdAt <= dayEnd && (!record.resolvedAt || record.resolvedAt > dayEnd)).length,
+      created: dimensionRecords.filter((record) => createdDate(record) === date).length,
+      resolved: dimensionRecords.filter((record) => record.status === "resolved" && resolvedDate(record) === date).length,
+      backlog: dimensionRecords.filter((record) => createdDate(record) <= date && (!record.resolvedAt || (resolvedDate(record) ?? "") > date)).length,
     }
   })
   const slaTimeSeries = dates.map((date) => ({
     date,
-    met: createdRecords.filter((record) => toDateKey(record.createdAt) === date && record.slaState === "met").length,
-    warning: createdRecords.filter((record) => toDateKey(record.createdAt) === date && record.slaState === "warning").length,
-    breached: createdRecords.filter((record) => toDateKey(record.createdAt) === date && record.slaState === "breached").length,
+    met: createdRecords.filter((record) => createdDate(record) === date && record.slaState === "met").length,
+    warning: createdRecords.filter((record) => createdDate(record) === date && record.slaState === "warning").length,
+    breached: createdRecords.filter((record) => createdDate(record) === date && record.slaState === "breached").length,
   }))
   return {
     createdRecords,
     backlogRecords,
-    kpis: calculateKpis(createdRecords, resolvedRecords, backlogRecords),
+    kpis: calculateKpis(createdRecords, resolvedRecords, ignoredRecords, claimedRecords, backlogRecords),
     timeSeries,
     slaTimeSeries,
     responseTimeSeries: calculateResponseTimeSeries(createdRecords, dates),
@@ -298,15 +313,19 @@ function previousPeriod(filters: AnalyticsFilters): AnalyticsFilters {
   }
 }
 
-export const mockAnalyticsRepository: AnalyticsRepository = {
-  async calculate(filters) {
-    requireCurrentAdministrationPermission("view_global_statistics")
-    const current = calculatePeriod(filters)
-    const allCustomers = [...new Map(mockAnalyticsRecords.map((record) => [record.customerId, { id: record.customerId, name: record.customerName }])).values()]
+export function buildAnalyticsResult(
+  records: AnalyticsRecord[],
+  users: { id: string; fullName: string }[],
+  filters: AnalyticsFilters,
+  generatedAt: string,
+  includeCurrentWork = false,
+): AnalyticsResult {
+    const current = calculatePeriod(records, filters)
+    const allCustomers = [...new Map(records.map((record) => [record.customerId, { id: record.customerId, name: record.customerName }])).values()]
       .sort((a, b) => a.name.localeCompare(b.name, "pl"))
-    const allChannels = [...new Map(mockAnalyticsRecords.map((record) => [record.sourceChannel, { value: record.sourceChannel, label: record.sourceChannel, platform: record.platform }])).values()]
+    const allChannels = [...new Map(records.map((record) => [record.sourceChannel, { value: record.sourceChannel, label: record.sourceChannel, platform: record.platform }])).values()]
       .sort((a, b) => a.label.localeCompare(b.label, "pl"))
-    const allStatuses = [...new Map(mockAnalyticsRecords.map((record) => [record.status, { value: record.status, label: record.statusLabel }])).values()]
+    const allStatuses = [...new Map(records.map((record) => [record.status, { value: record.status, label: record.statusLabel }])).values()]
       .sort((a, b) => a.label.localeCompare(b.label, "pl"))
     const statusStates = [...new Set(current.createdRecords.map((record) => record.status))]
     const statusLabels = new Map(current.createdRecords.map((record) => [record.status, record.statusLabel]))
@@ -328,10 +347,10 @@ export const mockAnalyticsRepository: AnalyticsRepository = {
     )
 
     const comparisonFilters = filters.comparePrevious ? previousPeriod(filters) : undefined
-    const comparisonPeriod = comparisonFilters ? calculatePeriod(comparisonFilters) : undefined
+    const comparisonPeriod = comparisonFilters ? calculatePeriod(records, comparisonFilters) : undefined
     const result: AnalyticsResult = {
       filters,
-      lastUpdatedAt: new Date().toISOString(),
+      lastUpdatedAt: generatedAt,
       comparison: comparisonFilters && comparisonPeriod
         ? {
             filters: comparisonFilters,
@@ -350,14 +369,25 @@ export const mockAnalyticsRepository: AnalyticsRepository = {
       heatmap: calculateHeatmap(current.createdRecords),
       responseTimeSeries: current.responseTimeSeries,
       userPerformance: calculateUserPerformance(current.createdRecords, current.backlogRecords),
+      currentWork: includeCurrentWork ? current.backlogRecords.map((record) => ({
+        id: record.id,
+        reference: record.reference ?? record.id,
+        customerName: record.customerName,
+        platform: record.platform,
+        sourceChannel: record.sourceChannel,
+        status: record.status,
+        statusLabel: record.statusLabel,
+        userName: record.userName,
+        createdAt: record.createdAt,
+        slaState: record.slaState,
+      })) : undefined,
       options: {
-        users: mockUsers.filter((user) => !user.fullName.startsWith("Klient")).map(({ id, fullName }) => ({ id, fullName })),
+        users,
         customers: allCustomers,
         channels: allChannels,
         statuses: allStatuses,
         slaStates: (["met", "warning", "breached"] as const).map((value) => ({ value, label: slaLabels[value] })),
       },
     }
-    return delay(result)
-  },
+    return result
 }

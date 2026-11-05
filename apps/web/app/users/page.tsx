@@ -1,9 +1,11 @@
 "use client"
 
-import { useMemo, useState, type FormEvent, type ReactNode } from "react"
+import { useCallback, useMemo, useState, type FormEvent, type ReactNode } from "react"
 import {
   MoreHorizontal,
   CheckCircle2,
+  KeyRound,
+  MailPlus,
   Pencil,
   Plus,
   RefreshCw,
@@ -80,7 +82,7 @@ const emptyForm: AdministrationUserInput = {
   email: "",
   role: "USER",
   active: true,
-  validFrom: "2026-08-03",
+  validFrom: new Date().toISOString().slice(0, 10),
   validUntil: undefined,
   permissions: [],
 }
@@ -93,6 +95,12 @@ export default function UsersRoute() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [deactivatedUser, setDeactivatedUser] = useState<AdministrationUser | null>(null)
   const [deletedUser, setDeletedUser] = useState<AdministrationUser | null>(null)
+  const [credentialResult, setCredentialResult] = useState<{
+    kind: "invitation" | "reset"
+    user: AdministrationUser
+    token: string
+    expiresAt: string
+  } | null>(null)
 
   const query = useMemo(
     () => ({
@@ -110,6 +118,20 @@ export default function UsersRoute() {
     currentAdministrationUserQuery.data,
     "manage_users",
   )
+
+  const issueCredential = useCallback(async (
+    user: AdministrationUser,
+    kind: "invitation" | "reset",
+  ) => {
+    try {
+      const result = kind === "invitation"
+        ? await actions.issueInvitation.mutateAsync(user.id)
+        : await actions.issuePasswordReset.mutateAsync(user.id)
+      setCredentialResult({ kind, user, ...result })
+    } catch (error) {
+      notify.error("Nie udało się wygenerować bezpiecznego linku", getErrorMessage(error))
+    }
+  }, [actions.issueInvitation, actions.issuePasswordReset])
 
   const openCreate = () => {
     setEditedUser(null)
@@ -203,6 +225,18 @@ export default function UsersRoute() {
               <DropdownMenuItem disabled={!canManageUsers} onClick={() => openEdit(user)}>
                 <Pencil /> Edytuj
               </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!canManageUsers}
+                onClick={() => void issueCredential(user, "invitation")}
+              >
+                <MailPlus /> Wygeneruj zaproszenie
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!canManageUsers}
+                onClick={() => void issueCredential(user, "reset")}
+              >
+                <KeyRound /> Resetuj hasło
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
@@ -223,7 +257,7 @@ export default function UsersRoute() {
         ),
       },
     ],
-    [canManageUsers, currentAdministrationUserQuery.data?.id],
+    [canManageUsers, currentAdministrationUserQuery.data?.id, issueCredential],
   )
 
   const activeCount = users.filter((user) => user.active).length
@@ -381,6 +415,24 @@ export default function UsersRoute() {
         destructive
         onConfirm={() => void deleteUser()}
       />
+
+      <Dialog open={Boolean(credentialResult)} onOpenChange={(open) => !open && setCredentialResult(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{credentialResult?.kind === "invitation" ? "Zaproszenie gotowe" : "Reset hasła gotowy"}</DialogTitle>
+            <DialogDescription>
+              Token jest widoczny tylko teraz. Przekaż go użytkownikowi bezpiecznym kanałem; wygaśnie {credentialResult ? formatDateTime(credentialResult.expiresAt) : ""}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="credential-token">Jednorazowy token dla {credentialResult?.user.fullName}</Label>
+            <Input id="credential-token" readOnly value={credentialResult?.token ?? ""} onFocus={(event) => event.currentTarget.select()} />
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => setCredentialResult(null)}>Gotowe</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

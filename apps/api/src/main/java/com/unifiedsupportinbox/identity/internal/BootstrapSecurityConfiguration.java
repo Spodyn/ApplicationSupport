@@ -82,6 +82,10 @@ class BootstrapSecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                        .requestMatchers(HttpMethod.POST,
+                                "/api/v1/auth/invitations/accept",
+                                "/api/v1/auth/password-reset/request",
+                                "/api/v1/auth/password-reset/complete").permitAll()
                         .requestMatchers(HttpMethod.POST, SLACK_EVENTS_PATH).permitAll()
                         .requestMatchers(HttpMethod.POST, TELEGRAM_CALLBACK_PATH).permitAll()
                         .requestMatchers(
@@ -117,6 +121,9 @@ class BootstrapSecurityConfiguration {
                                 .hasAuthority("force_resolve")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/admin/users/*/ignore-weight")
                                 .hasAuthority(PermissionCatalog.MANAGE_USERS)
+                        .requestMatchers("/api/v1/admin/users/**")
+                                .hasAuthority(PermissionCatalog.MANAGE_USERS)
+                        .requestMatchers("/api/v1/admin/settings/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/users/*/permissions")
                                 .hasAuthority(PermissionCatalog.MANAGE_USERS)
                         .requestMatchers("/api/v1/admin/customers/**").hasRole("ADMIN")
@@ -127,7 +134,9 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers("/api/v1/admin/sla-policy/**").hasAuthority("manage_sla")
                         .requestMatchers("/api/v1/admin/notifications/**").hasAuthority("manage_notifications")
                         .requestMatchers("/api/v1/admin/audit/**").hasAuthority("view_audit")
-                        .requestMatchers("/api/v1/statistics/**").hasAuthority("view_global_statistics")
+                        .requestMatchers("/api/v1/statistics/overview", "/api/v1/statistics/sla")
+                                .hasAuthority("view_global_statistics")
+                        .requestMatchers("/api/v1/statistics/records").authenticated()
                         .anyRequest().denyAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")

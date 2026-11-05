@@ -280,7 +280,7 @@ class BusinessHoursIntegrationTests {
     private static UUID createUser(String email) {
         return jdbc.queryForObject(
                 "INSERT INTO users (email, display_name, password_hash, role, active) "
-                        + "VALUES (?, ?, ?, 'USER', TRUE) RETURNING id",
+                        + "VALUES (?, ?, ?, 'ADMIN', TRUE) RETURNING id",
                 UUID.class,
                 email,
                 email,

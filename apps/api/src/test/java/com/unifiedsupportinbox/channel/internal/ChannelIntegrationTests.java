@@ -190,7 +190,7 @@ class ChannelIntegrationTests {
                 Instant.parse("2026-08-29T06:30:00Z"),
                 "{}"));
 
-        UUID delegatedId = createUser("delegated@example.com", "USER");
+        UUID delegatedId = createUser("delegated@example.com", "ADMIN");
         jdbc.update(
                 "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations')",
                 delegatedId);

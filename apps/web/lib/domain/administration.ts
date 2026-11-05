@@ -83,6 +83,7 @@ export interface OutOfOfficeSettings {
   enabled: boolean
   template: string
   sendOncePerClosure: boolean
+  previewMessage?: string
 }
 
 export type IntegrationStatus = "configuring" | "enabled" | "disabled"
@@ -153,6 +154,19 @@ export interface NotificationDestination {
   enabled: boolean
 }
 
+export interface NotificationDelivery {
+  id: string
+  eventType: string
+  targetRef: string
+  status: "PENDING" | "PROCESSING" | "RETRY_SCHEDULED" | "SENT" | "DLQ" | "CANCELLED"
+  attempts: number
+  replayCount: number
+  lastErrorCode?: string
+  terminalReason?: string
+  createdAt: string
+  sentAt?: string
+}
+
 export interface RolePermissions {
   role: AdministrationRole
   permissions: AdministrationPermission[]
@@ -167,6 +181,7 @@ export interface AdministrationSettings {
   customers: ManagedCustomer[]
   channels: ManagedChannel[]
   notifications: NotificationDestination[]
+  notificationDeliveries?: NotificationDelivery[]
   rolePermissions: RolePermissions[]
 }
 

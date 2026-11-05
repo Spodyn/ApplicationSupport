@@ -31,6 +31,13 @@ export interface AdministrationUserRepository {
   save(input: AdministrationUserInput, id?: string): Promise<AdministrationUser>
   deactivate(id: string): Promise<AdministrationUser>
   delete(id: string): Promise<void>
+  issueInvitation(id: string): Promise<CredentialActionToken>
+  issuePasswordReset(id: string): Promise<CredentialActionToken>
+}
+
+export interface CredentialActionToken {
+  token: string
+  expiresAt: string
 }
 
 export interface AdministrationSettingsRepository {
@@ -50,6 +57,7 @@ export interface AdministrationSettingsRepository {
   saveCustomer(input: Pick<ManagedCustomer, "name" | "externalRef">, id?: string): Promise<ManagedCustomer>
   deactivateCustomer(id: string): Promise<ManagedCustomer>
   toggleNotification(id: string, enabled: boolean): Promise<void>
+  replayNotificationDelivery(id: string): Promise<void>
 }
 
 let usersState = structuredClone(mockAdministrationUsers)
@@ -185,6 +193,14 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
     usersState = usersState.filter((item) => item.id !== id)
     return delay(undefined)
   },
+
+  async issueInvitation() {
+    throw new Error("Zaproszenia są dostępne wyłącznie przez API.")
+  },
+
+  async issuePasswordReset() {
+    throw new Error("Reset hasła jest dostępny wyłącznie przez API.")
+  },
 }
 
 export const mockAdministrationSettingsRepository: AdministrationSettingsRepository = {
@@ -303,5 +319,9 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     if (!destination) throw new Error("Nie znaleziono celu powiadomień.")
     destination.enabled = enabled
     return delay(undefined)
+  },
+
+  async replayNotificationDelivery() {
+    throw new Error("Ponowienie dostawy jest dostępne wyłącznie przez API.")
   },
 }

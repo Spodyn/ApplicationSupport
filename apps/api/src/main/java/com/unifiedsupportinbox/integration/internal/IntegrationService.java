@@ -25,6 +25,7 @@ class IntegrationService {
 
     private static final String MANAGE_INTEGRATIONS = "manage_integrations";
     private static final Pattern SAFE_SECRET_REFERENCE = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._/-]{0,511}");
+    private static final Pattern SAFE_PROVIDER_ERROR_CODE = Pattern.compile("[A-Z][A-Z0-9_.:]{0,127}");
 
     private final IntegrationRepository integrations;
     private final List<IntegrationConnectionTester> connectionTesters;
@@ -208,8 +209,8 @@ class IntegrationService {
             case UNAVAILABLE -> "PROVIDER_UNAVAILABLE";
         };
         if (value == null || value.isBlank()) return fallback;
-        String normalized = value.strip().replaceAll("[^A-Za-z0-9_.:-]+", "_");
-        return normalized.length() <= 128 ? normalized : normalized.substring(0, 128);
+        String normalized = value.strip();
+        return SAFE_PROVIDER_ERROR_CODE.matcher(normalized).matches() ? normalized : fallback;
     }
 
     private static boolean hasAuthority(Authentication actor, String expected) {

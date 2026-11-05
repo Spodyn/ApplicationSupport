@@ -20,11 +20,11 @@ import type { AdministrationUserQuery } from "./administration"
 import type { AnalyticsFilters } from "@/lib/domain/analytics"
 
 export type AdministrationSectionInput = {
-  [K in keyof AdministrationSettings]: {
+  [K in Exclude<keyof AdministrationSettings, "notificationDeliveries">]: {
     key: K
     value: AdministrationSettings[K]
   }
-}[keyof AdministrationSettings]
+}[Exclude<keyof AdministrationSettings, "notificationDeliveries">]
 
 /**
  * Klucze zapytań TanStack Query. Ustrukturyzowane tak, aby łatwo było je
@@ -239,7 +239,13 @@ export function useAdministrationUserActions() {
     mutationFn: (id: string) => serviceRegistry.administrationUsers.delete(id),
     onSuccess: invalidate,
   })
-  return { save, deactivate, delete: deleteUser }
+  const issueInvitation = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationUsers.issueInvitation(id),
+  })
+  const issuePasswordReset = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationUsers.issuePasswordReset(id),
+  })
+  return { save, deactivate, delete: deleteUser, issueInvitation, issuePasswordReset }
 }
 
 export function useAdministrationSettings() {
@@ -299,6 +305,10 @@ export function useAdministrationSettingsActions() {
       serviceRegistry.administrationSettings.toggleNotification(id, enabled),
     onSuccess: invalidate,
   })
+  const replayNotificationDelivery = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationSettings.replayNotificationDelivery(id),
+    onSuccess: invalidate,
+  })
 
   return {
     saveSection,
@@ -310,6 +320,7 @@ export function useAdministrationSettingsActions() {
     saveCustomer,
     deactivateCustomer,
     toggleNotification,
+    replayNotificationDelivery,
   }
 }
 

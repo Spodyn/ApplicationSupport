@@ -6,9 +6,9 @@ const authenticatedSession = {
   id: "018f0000-0000-7000-8000-000000000064",
   email: "anna.kowalska@firma.pl",
   displayName: "Anna Kowalska",
-  role: "USER",
+  role: "ADMIN",
   createdAt: "2024-01-12T08:00:00.000Z",
-  effectivePermissions: [],
+  effectivePermissions: ["manage_users"],
 }
 
 const caseId = "018f0000-0000-7000-8000-000000000201"
@@ -82,6 +82,32 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
         contentType: "application/json",
         body: JSON.stringify(authenticatedSession),
       })
+      return
+    }
+
+    if (requestUrl.pathname === "/api/v1/admin/users/current" && request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: authenticatedSession.id,
+          fullName: authenticatedSession.displayName,
+          email: authenticatedSession.email,
+          role: authenticatedSession.role,
+          active: true,
+          validFrom: authenticatedSession.createdAt,
+          validUntil: null,
+          lastLoginAt: authenticatedSession.createdAt,
+          presence: "online",
+          activeAssignedCases: 0,
+          permissions: authenticatedSession.effectivePermissions,
+        }),
+      })
+      return
+    }
+
+    if (requestUrl.pathname === "/api/v1/admin/users" && request.method() === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
       return
     }
 
@@ -211,8 +237,9 @@ test("empty persisted conversation renders an empty state", async ({ page }) => 
 test("formularz dodawania użytkownika otwiera się i resetuje po anulowaniu", async ({ page }) => {
   const { externalRequests } = await preparePage(page)
   await page.goto("/users")
+  const addUserButton = page.getByRole("banner").getByRole("button", { name: "Dodaj użytkownika" })
 
-  await page.getByRole("button", { name: "Dodaj użytkownika" }).click()
+  await addUserButton.click()
   const dialog = page.getByRole("dialog", { name: "Dodaj użytkownika" })
   await expect(dialog).toBeVisible()
 
@@ -220,7 +247,7 @@ test("formularz dodawania użytkownika otwiera się i resetuje po anulowaniu", a
   await dialog.getByLabel("E-mail").fill("test@example.invalid")
   await dialog.getByRole("button", { name: "Anuluj" }).click()
 
-  await page.getByRole("button", { name: "Dodaj użytkownika" }).click()
+  await addUserButton.click()
   const reopenedDialog = page.getByRole("dialog", { name: "Dodaj użytkownika" })
   await expect(reopenedDialog.getByLabel("Imię i nazwisko")).toHaveValue("")
   await expect(reopenedDialog.getByLabel("E-mail")).toHaveValue("")

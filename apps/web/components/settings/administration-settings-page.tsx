@@ -72,6 +72,7 @@ import type {
   ManagedCustomer,
   ManagedIntegration,
   NotificationDestination,
+  NotificationDelivery,
   NotificationType,
   OutOfOfficeSettings,
   RolePermissions,
@@ -166,7 +167,7 @@ export function AdministrationSettingsPage() {
               <TabsContent value="integrations"><IntegrationsPanel data={settingsQuery.data.integrations} actions={actions} /></TabsContent>
               <TabsContent value="customers"><CustomersPanel data={settingsQuery.data.customers} actions={actions} /></TabsContent>
               <TabsContent value="channels"><ChannelsPanel data={settingsQuery.data.channels} customers={settingsQuery.data.customers} actions={actions} /></TabsContent>
-              <TabsContent value="notifications"><NotificationsPanel data={settingsQuery.data.notifications} integrations={settingsQuery.data.integrations} actions={actions} /></TabsContent>
+              <TabsContent value="notifications"><NotificationsPanel data={settingsQuery.data.notifications} deliveries={settingsQuery.data.notificationDeliveries ?? []} integrations={settingsQuery.data.integrations} actions={actions} /></TabsContent>
               <TabsContent value="permissions"><PermissionsPanel data={settingsQuery.data.rolePermissions} actions={actions} /></TabsContent>
             </Tabs>
           )}
@@ -311,7 +312,7 @@ const placeholders = ["customer_name", "next_opening_date", "next_opening_time",
 
 function OutOfOfficePanel({ data, actions }: { data: OutOfOfficeSettings; actions: SettingsActions }) {
   const [form, setForm] = useState(data)
-  const preview = form.template
+  const preview = (form.template === data.template && data.previewMessage ? data.previewMessage : form.template)
     .replaceAll("{{customer_name}}", "Joanno")
     .replaceAll("{{next_opening_date}}", "4 sierpnia 2026")
     .replaceAll("{{next_opening_time}}", "08:00")
@@ -593,7 +594,7 @@ const blankNotification: NotificationDestination = {
   enabled: true,
 }
 
-function NotificationsPanel({ data, integrations, actions }: { data: NotificationDestination[]; integrations: ManagedIntegration[]; actions: SettingsActions }) {
+function NotificationsPanel({ data, deliveries, integrations, actions }: { data: NotificationDestination[]; deliveries: NotificationDelivery[]; integrations: ManagedIntegration[]; actions: SettingsActions }) {
   const [edited, setEdited] = useState<NotificationDestination | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [removed, setRemoved] = useState<NotificationDestination | null>(null)
@@ -615,6 +616,13 @@ function NotificationsPanel({ data, integrations, actions }: { data: Notificatio
       await actions.toggleNotification.mutateAsync({ id: item.id, enabled })
       notify.success(enabled ? "Powiadomienia włączone" : "Powiadomienia wyłączone", item.name)
     } catch (error) { notify.error("Nie udało się zmienić powiadomień", getErrorMessage(error)) }
+  }
+
+  const replay = async (delivery: NotificationDelivery) => {
+    try {
+      await actions.replayNotificationDelivery.mutateAsync(delivery.id)
+      notify.success("Dostawa została ponownie zakolejkowana")
+    } catch (error) { notify.error("Nie udało się ponowić dostawy", getErrorMessage(error)) }
   }
 
   return (
@@ -660,6 +668,24 @@ function NotificationsPanel({ data, integrations, actions }: { data: Notificatio
       </Dialog>
 
       <ConfirmDialog open={Boolean(removed)} onOpenChange={(open) => !open && setRemoved(null)} title="Usunąć cel powiadomień?" description={removed ? `Alerty nie będą już wysyłane do „${removed.name}”.` : undefined} confirmLabel="Usuń" destructive onConfirm={() => { if (removed) void saveDestinations(data.filter((item) => item.id !== removed.id), "Usunięto cel powiadomień") }} />
+
+      <div className="mt-6 grid gap-2">
+        <div><h3 className="text-sm font-semibold">Ostatnie dostawy</h3><p className="text-xs text-muted-foreground">Statusy, próby i bezpieczne kody błędów; treści wiadomości oraz sekrety nie są wyświetlane.</p></div>
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader><TableRow className="bg-muted/40"><TableHead>Zdarzenie</TableHead><TableHead>Cel</TableHead><TableHead>Status</TableHead><TableHead>Próby</TableHead><TableHead>Utworzono</TableHead><TableHead>Błąd</TableHead><TableHead><span className="sr-only">Akcja</span></TableHead></TableRow></TableHeader>
+            <TableBody>{deliveries.map((delivery) => <TableRow key={delivery.id}>
+              <TableCell className="font-mono text-xs">{delivery.eventType}</TableCell>
+              <TableCell>{delivery.targetRef}</TableCell>
+              <TableCell><Badge variant={delivery.status === "SENT" ? "secondary" : delivery.status === "DLQ" ? "destructive" : "outline"}>{delivery.status}</Badge></TableCell>
+              <TableCell className="tabular-nums">{delivery.attempts}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">{formatDateTime(delivery.createdAt)}</TableCell>
+              <TableCell className="font-mono text-xs">{delivery.lastErrorCode ?? delivery.terminalReason ?? "—"}</TableCell>
+              <TableCell><Button size="sm" variant="outline" disabled={delivery.status !== "DLQ" || actions.replayNotificationDelivery.isPending} onClick={() => void replay(delivery)}><RefreshCw /> Ponów</Button></TableCell>
+            </TableRow>)}</TableBody>
+          </Table>
+        </div>
+      </div>
     </SettingsCard>
   )
 }
