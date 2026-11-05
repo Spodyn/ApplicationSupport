@@ -4,8 +4,9 @@ import type {
   CaseDetail,
   CaseListItem,
   CaseMessage,
+  CaseResolutionCategory,
 } from "@usi/api-client/generated"
-import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
+import type { InboxActivity, InboxCase, InboxMessage } from "@/lib/domain/inbox"
 import type { SlaState } from "@/lib/domain/shared"
 import {
   InboxConflictError,
@@ -13,17 +14,6 @@ import {
 } from "@/lib/services/inbox"
 import { mapApiChannel } from "./channel-adapter"
 import { ApiHttpError, browserApiTransport, getBrowserCsrfToken } from "./http-transport"
-
-export class InboxActionUnavailableError extends Error {
-  constructor() {
-    super("Ta akcja nie jest jeszcze dostępna dla prawdziwych case’ów.")
-    this.name = "InboxActionUnavailableError"
-  }
-}
-
-const unavailable = async (): Promise<never> => {
-  throw new InboxActionUnavailableError()
-}
 
 function mapSlaState(value: string | null): SlaState | "unknown" {
   switch (value) {
@@ -121,7 +111,7 @@ export function mapCaseDetail(detail: CaseDetail): InboxCase {
       availableActions: detail.availableActions,
     }),
     relatedCase: detail.relatedCase.reference
-      ? { reference: detail.relatedCase.reference, subject: detail.relatedCase.reference }
+      ? { id: detail.relatedCase.id ?? undefined, reference: detail.relatedCase.reference, subject: detail.relatedCase.reference }
       : undefined,
     resolutionCategory: detail.resolutionCategory ?? undefined,
   }
@@ -193,9 +183,33 @@ async function removePendingAttachment(caseId: string, attachmentId: string): Pr
 export function createApiInboxRepository(transport: ApiTransport): InboxRepository {
   const client = createApiClient(transport)
   return {
-    async list(cursor) {
-      const page = await client.listCases({ cursor, limit: 50 })
+    async list(cursor, query = {}) {
+      const page = await client.listCases({
+        cursor,
+        limit: 50,
+        view: query.view?.toUpperCase() as "ACTIVE" | "SNOOZED" | undefined,
+        mine: query.mine,
+        unassigned: query.unassigned,
+        unread: query.unread,
+        slaAttention: query.slaAttention,
+        status: query.status?.toUpperCase() as CaseListItem["status"] | undefined,
+        statusScope: query.statusScope?.toUpperCase() as "ALL" | "ACTIVE" | "TERMINAL" | undefined,
+        customerId: query.customerId,
+        channelId: query.channelId,
+        provider: query.provider?.toUpperCase() as CaseListItem["provider"] | undefined,
+        ownerId: query.ownerId,
+        search: query.search,
+      })
       return { items: page.items.map(mapCaseListItem), nextCursor: page.nextCursor ?? undefined }
+    },
+    async getFilterOptions() {
+      const options = await client.getCaseFilterOptions()
+      return {
+        customers: options.customers,
+        channels: options.channels,
+        owners: options.owners,
+        providers: options.providers.map((provider) => provider.toLowerCase() as "slack" | "teams" | "telegram"),
+      }
     },
     async getCase(caseId) {
       return mapCaseDetail(await client.getCaseDetail({ caseId }))
@@ -204,10 +218,24 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
       const page = await client.getCaseMessages({ caseId, before, limit: 50 })
       return { items: page.items.map((message) => mapCaseMessage(message, caseId)), nextCursor: page.nextCursor ?? undefined }
     },
+    async getActivity(caseId, cursor) {
+      const page = await client.getCaseActivity({ caseId, cursor, limit: 50 })
+      return {
+        items: page.items.map((item): InboxActivity => ({
+          id: item.id,
+          label: item.actionDescription,
+          createdAt: item.occurredAt,
+          author: item.actorLabel,
+        })),
+        nextCursor: page.nextCursor ?? undefined,
+      }
+    },
     async markRead(caseId, messageId) {
       await client.markCaseRead({ caseId, body: { messageId } })
     },
-    markAllResolvedRead: unavailable,
+    async markAllResolvedRead() {
+      await client.markResolvedCasesRead({ "Idempotency-Key": crypto.randomUUID() })
+    },
     async claim(caseId) {
       try {
         await client.claimCase({ caseId, "Idempotency-Key": crypto.randomUUID() })
@@ -218,17 +246,68 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
         throw error
       }
     },
-    ignore: unavailable,
-    askCustomer: unavailable,
-    resolve: unavailable,
-    snooze: unavailable,
+    async ignore(caseId, input) {
+      await client.ignoreCase({
+        caseId,
+        "Idempotency-Key": crypto.randomUUID(),
+        body: { reason: input.reason ?? null },
+      })
+    },
+    async askCustomer(caseId, input) {
+      await client.askCustomer({
+        caseId,
+        "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
+        body: { message: input.message, waitingMinutes: input.waitingMinutes, bodyFormat: "PLAIN_TEXT" },
+      })
+    },
+    async resolve(caseId, input) {
+      await client.resolveCase({
+        caseId,
+        "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
+        body: { resolutionCategory: input.category as CaseResolutionCategory | undefined },
+      })
+    },
+    async snooze(caseId, until) {
+      await client.snoozeCase({
+        caseId,
+        "Idempotency-Key": crypto.randomUUID(),
+        body: { until },
+      })
+    },
+    async cancelSnooze(caseId) {
+      await client.cancelCaseSnooze({ caseId, "Idempotency-Key": crypto.randomUUID() })
+    },
+    async listAssignees(caseId) {
+      return (await client.listCaseAssignees({ caseId })).map((item) => ({
+        id: item.id,
+        displayName: item.displayName,
+        eligible: item.eligible,
+        ignoreWeight: item.ignoreWeight,
+        ignoreWeightValidUntil: item.ignoreWeightValidUntil ?? undefined,
+      }))
+    },
+    async assign(caseId, userId, reassign) {
+      const input = { caseId, "Idempotency-Key": crypto.randomUUID(), body: { targetUserId: userId } }
+      if (reassign) await client.reassignCase(input)
+      else await client.assignCase(input)
+    },
+    async unassign(caseId) {
+      await client.unassignCase({ caseId, "Idempotency-Key": crypto.randomUUID() })
+    },
+    async forceResolve(caseId, input) {
+      await client.forceResolveCase({
+        caseId,
+        "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
+        body: { resolutionCategory: input.category as CaseResolutionCategory | undefined },
+      })
+    },
     async sendMessage(caseId, input) {
-      if (input.simulateFailure) throw new InboxActionUnavailableError()
+      if (input.simulateFailure) throw new Error("Symulowanie błędu jest dostępne wyłącznie w trybie demonstracyjnym.")
       const body = input.body.trim()
       if (!body) throw new Error("Wiadomość nie może być pusta.")
       const attachments = input.attachments ?? []
       if (attachments.some((attachment) => !(attachment instanceof File))) {
-        throw new InboxActionUnavailableError()
+        throw new Error("Nieobsługiwany format załącznika.")
       }
       const files = attachments as File[]
       if (files.length > 10) throw new Error("Jedna wiadomość może zawierać maksymalnie 10 plików.")

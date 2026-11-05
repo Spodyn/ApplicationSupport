@@ -86,6 +86,7 @@ export interface InboxCase {
     tags: string[]
   }
   relatedCase?: {
+    id?: string
     reference: string
     subject: string
   }

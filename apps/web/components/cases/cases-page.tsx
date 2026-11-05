@@ -11,16 +11,18 @@ import {
   RotateCcw,
   Search,
   SlidersHorizontal,
+  ThumbsDown,
   UserRound,
 } from "lucide-react"
-import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
+import type { InboxCase, InboxMessage, InboxStatus } from "@/lib/domain/inbox"
 import { inboxStatusLabels } from "@/lib/domain/inbox"
-import { useCurrentUser, useInboxCase, useInboxCases, useInboxMessages, useInboxWorkflow, useMarkInboxCaseRead } from "@/lib/services/queries"
+import type { InboxListQuery } from "@/lib/services/inbox"
+import { useCurrentUser, useInboxActivity, useInboxAssignees, useInboxCase, useInboxCases, useInboxFilterOptions, useInboxMessages, useInboxWorkflow, useMarkAllResolvedRead, useMarkInboxCaseRead } from "@/lib/services/queries"
 import { cn } from "@/lib/utils"
 import { SafeExternalMessage } from "./safe-external-message"
 
 type QuickFilter = "all" | "sla" | "mine"
-type AdvancedFilter = "mine" | "unassigned" | "sla" | "unread"
+type AdvancedFilter = "mine" | "unassigned" | "sla" | "unread" | "snoozed" | "active" | "terminal"
 
 type CasePresentation = {
   id: string
@@ -80,21 +82,42 @@ export function CasesPage({
   onlyMine?: boolean
   initialCaseId?: string
 }) {
-  const casesQuery = useInboxCases()
-  const currentUserQuery = useCurrentUser()
-  const markRead = useMarkInboxCaseRead()
   const [selectedCaseId, setSelectedCaseId] = useState<string | undefined>(initialCaseId)
   const [mobileConversationOpen, setMobileConversationOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(onlyMine ? "mine" : "all")
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilter[]>([])
+  const [serverSearch, setServerSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState<InboxStatus | "">("")
+  const [customerFilter, setCustomerFilter] = useState("")
+  const [channelFilter, setChannelFilter] = useState("")
+  const [providerFilter, setProviderFilter] = useState<"slack" | "teams" | "telegram" | "">("")
+  const [ownerFilter, setOwnerFilter] = useState("")
   const filterMenuRef = useRef<HTMLDivElement>(null)
   const readAttempt = useRef<string | null>(null)
+  const listQuery = useMemo<InboxListQuery>(() => ({
+    view: advancedFilters.includes("snoozed") ? "snoozed" : "active",
+    mine: quickFilter === "mine" || advancedFilters.includes("mine"),
+    unassigned: advancedFilters.includes("unassigned"),
+    unread: advancedFilters.includes("unread"),
+    slaAttention: quickFilter === "sla" || advancedFilters.includes("sla"),
+    statusScope: advancedFilters.includes("terminal") ? "terminal" : advancedFilters.includes("active") ? "active" : "all",
+    status: statusFilter || undefined,
+    customerId: customerFilter || undefined,
+    channelId: channelFilter || undefined,
+    provider: providerFilter || undefined,
+    ownerId: ownerFilter || undefined,
+    search: serverSearch || undefined,
+  }), [advancedFilters, channelFilter, customerFilter, ownerFilter, providerFilter, quickFilter, serverSearch, statusFilter])
+  const casesQuery = useInboxCases(listQuery)
+  const filterOptions = useInboxFilterOptions()
+  const currentUserQuery = useCurrentUser()
+  const markRead = useMarkInboxCaseRead()
+  const markResolvedRead = useMarkAllResolvedRead()
 
   const records = useMemo(() => casesQuery.data?.pages.flatMap((page) => page.items) ?? [], [casesQuery.data])
   const selectedId = selectedCaseId ?? records[0]?.id
-  const selectedRecord = records.find((item) => item.id === selectedId)
   const detailQuery = useInboxCase(selectedId)
   const messagesQuery = useInboxMessages(selectedId)
   const workflow = useInboxWorkflow(selectedId)
@@ -104,19 +127,12 @@ export function CasesPage({
   const messages = useMemo(() => messagesQuery.data?.pages.flatMap((page) => page.items).reverse() ?? [], [messagesQuery.data])
   const latestMessageId = messagesQuery.data?.pages[0]?.items[0]?.id
 
-  const visibleCases = useMemo(() => {
-    const normalized = search.trim().toLocaleLowerCase("pl")
-    return presentations.filter((item) => {
-      if (normalized && !`${item.reference} ${item.company} ${item.subject} ${item.source}`.toLocaleLowerCase("pl").includes(normalized)) return false
-      if (quickFilter === "sla" && !item.breached) return false
-      if (quickFilter === "mine" && !item.mine) return false
-      if (advancedFilters.includes("mine") && !item.mine) return false
-      if (advancedFilters.includes("sla") && !item.breached) return false
-      if (advancedFilters.includes("unread") && !item.unread) return false
-      if (advancedFilters.includes("unassigned") && !item.unassigned) return false
-      return true
-    })
-  }, [advancedFilters, quickFilter, presentations, search])
+  const visibleCases = presentations
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setServerSearch(search.trim()), 250)
+    return () => window.clearTimeout(timer)
+  }, [search])
 
   useEffect(() => {
     const handlePointerDown = (event: PointerEvent) => {
@@ -127,14 +143,14 @@ export function CasesPage({
   }, [])
 
   useEffect(() => {
-    const key = selectedRecord && latestMessageId ? `${selectedRecord.id}:${latestMessageId}` : null
-    if (selectedRecord?.unreadForCurrentUser && latestMessageId && key !== readAttempt.current) {
+    const key = selectedId && latestMessageId ? `${selectedId}:${latestMessageId}` : null
+    if (selectedId && latestMessageId && key !== readAttempt.current) {
       readAttempt.current = key
-      markRead.mutate({ caseId: selectedRecord.id, messageId: latestMessageId }, {
+      markRead.mutate({ caseId: selectedId, messageId: latestMessageId }, {
         onError: () => { readAttempt.current = null },
       })
     }
-  }, [selectedRecord, latestMessageId, markRead])
+  }, [selectedId, latestMessageId, markRead])
 
   const selectCase = (item: CasePresentation) => {
     setSelectedCaseId(item.id)
@@ -142,9 +158,15 @@ export function CasesPage({
   }
 
   const toggleAdvancedFilter = (filter: AdvancedFilter) => {
-    setAdvancedFilters((current) =>
-      current.includes(filter) ? current.filter((item) => item !== filter) : [...current, filter],
-    )
+    setAdvancedFilters((current) => {
+      if (current.includes(filter)) return current.filter((item) => item !== filter)
+      const withoutOppositeScope = filter === "active"
+        ? current.filter((item) => item !== "terminal")
+        : filter === "terminal"
+          ? current.filter((item) => item !== "active")
+          : current
+      return [...withoutOppositeScope, filter]
+    })
   }
 
   return (
@@ -187,12 +209,15 @@ export function CasesPage({
                 <SlidersHorizontal className="size-[18px]" strokeWidth={1.6} />
               </button>
               {filterMenuOpen && (
-                <div className="absolute right-0 top-12 z-30 w-52 rounded-xl border border-white/10 bg-[#111b29] p-2 shadow-2xl">
+                <div className="absolute right-0 top-12 z-30 w-72 rounded-xl border border-white/10 bg-[#111b29] p-2 shadow-2xl">
                   {([
                     ["mine", "Moje"],
                     ["unassigned", "Nieprzypisane"],
                     ["sla", "SLA"],
                     ["unread", "Nieodczytane"],
+                    ["snoozed", "Odłożone"],
+                    ["active", "Aktywne"],
+                    ["terminal", "Zakończone"],
                   ] as const).map(([value, label]) => {
                     const active = advancedFilters.includes(value)
                     return (
@@ -207,6 +232,14 @@ export function CasesPage({
                       </button>
                     )
                   })}
+                  <div className="mt-2 grid gap-2 border-t border-white/10 pt-2">
+                    <FilterSelect label="Status" value={statusFilter} onChange={(value) => setStatusFilter(value as InboxStatus | "")} options={Object.entries(inboxStatusLabels).map(([value, label]) => ({ value, label }))} />
+                    <FilterSelect label="Klient" value={customerFilter} onChange={setCustomerFilter} options={(filterOptions.data?.customers ?? []).map((item) => ({ value: item.id, label: item.name }))} />
+                    <FilterSelect label="Kanał" value={channelFilter} onChange={setChannelFilter} options={(filterOptions.data?.channels ?? []).map((item) => ({ value: item.id, label: item.name }))} />
+                    <FilterSelect label="Dostawca" value={providerFilter} onChange={(value) => setProviderFilter(value as typeof providerFilter)} options={[{ value: "slack", label: "Slack" }, { value: "teams", label: "Teams" }, { value: "telegram", label: "Telegram" }]} />
+                    <FilterSelect label="Właściciel" value={ownerFilter} onChange={setOwnerFilter} options={(filterOptions.data?.owners ?? []).map((item) => ({ value: item.id, label: item.name }))} />
+                  </div>
+                  <button type="button" disabled={markResolvedRead.isPending} onClick={() => markResolvedRead.mutate()} className="mt-1 w-full border-t border-white/10 px-2.5 py-2 text-left text-[12px] text-violet-300 disabled:opacity-50">Oznacz rozwiązane jako przeczytane</button>
                 </div>
               )}
             </div>
@@ -381,9 +414,32 @@ function ConversationPanel({
   const [draft, setDraft] = useState("")
   const [files, setFiles] = useState<File[]>([])
   const [sendError, setSendError] = useState("")
+  const [actionDialog, setActionDialog] = useState<"ask" | "ignore" | "resolve" | "snooze" | "admin" | null>(null)
+  const [actionText, setActionText] = useState("")
+  const [resolutionCategory, setResolutionCategory] = useState("")
+  const [waitingMinutes, setWaitingMinutes] = useState(24 * 60)
+  const [snoozeUntil, setSnoozeUntil] = useState(() => localDateTime(new Date(Date.now() + 60 * 60_000)))
+  const [assigneeId, setAssigneeId] = useState("")
+  const [actionError, setActionError] = useState("")
   const idempotencyKey = useRef<string | null>(null)
+  const workflowActionKey = useRef<string | null>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
+  const canAsk = Boolean(record?.availableActions?.includes("ASK_CUSTOMER"))
+  const canIgnore = Boolean(record?.availableActions?.includes("IGNORE"))
+  const canResolve = Boolean(record?.availableActions?.includes("RESOLVE"))
+  const canSnooze = Boolean(record?.availableActions?.includes("SNOOZE"))
+  const canAdmin = Boolean(record?.availableActions?.some((action) => ["ASSIGN", "REASSIGN", "UNASSIGN", "FORCE_RESOLVE"].includes(action)))
+  const assignees = useInboxAssignees(record?.id, actionDialog === "admin")
+  const activity = useInboxActivity(record?.id)
+  const activityItems = activity.data?.pages.flatMap((page) => page.items) ?? []
+  const actionPending = workflow.askCustomer.isPending
+    || workflow.ignore.isPending
+    || workflow.resolve.isPending
+    || workflow.snooze.isPending
+    || workflow.assign.isPending
+    || workflow.unassign.isPending
+    || workflow.forceResolve.isPending
 
   const send = async () => {
     if (!canReply || !draft.trim() || workflow.sendMessage.isPending) return
@@ -399,6 +455,49 @@ function ConversationPanel({
     }
   }
 
+  const performAction = async () => {
+    if (actionPending) return
+    setActionError("")
+    try {
+      if (actionDialog === "ask") {
+        workflowActionKey.current ??= crypto.randomUUID()
+        await workflow.askCustomer.mutateAsync({ message: actionText, waitingMinutes, idempotencyKey: workflowActionKey.current })
+      } else if (actionDialog === "ignore") {
+        await workflow.ignore.mutateAsync({ reason: actionText.trim() || undefined })
+      } else if (actionDialog === "resolve") {
+        workflowActionKey.current ??= crypto.randomUUID()
+        await workflow.resolve.mutateAsync({ category: resolutionCategory || undefined, idempotencyKey: workflowActionKey.current })
+      } else if (actionDialog === "snooze") {
+        await workflow.snooze.mutateAsync(new Date(snoozeUntil).toISOString())
+      }
+      setActionDialog(null)
+      setActionText("")
+      workflowActionKey.current = null
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Nie udało się wykonać akcji.")
+    }
+  }
+
+  const performAdminAction = async (action: "assign" | "reassign" | "unassign" | "forceResolve") => {
+    if (actionPending) return
+    setActionError("")
+    try {
+      if (action === "assign" || action === "reassign") {
+        if (!assigneeId) throw new Error("Wybierz agenta.")
+        await workflow.assign.mutateAsync({ userId: assigneeId, reassign: action === "reassign" })
+      } else if (action === "unassign") {
+        await workflow.unassign.mutateAsync()
+      } else {
+        workflowActionKey.current ??= crypto.randomUUID()
+        await workflow.forceResolve.mutateAsync({ category: resolutionCategory || undefined, idempotencyKey: workflowActionKey.current })
+      }
+      setActionDialog(null)
+      workflowActionKey.current = null
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "Nie udało się wykonać akcji administratora.")
+    }
+  }
+
   return (
     <section className={cn(className, "min-h-0 min-w-0 flex-col bg-[#08111f]")} aria-label={`Rozmowa ${item.company}`}>
       <header className="h-[148px] shrink-0 border-b border-white/[0.08] bg-[#08111f] px-[23px] py-[19px]">
@@ -410,18 +509,28 @@ function ConversationPanel({
           </div>
           <div className="hidden shrink-0 items-center gap-3 xl:flex">
             <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:cursor-not-allowed disabled:opacity-50"><UserRound className="size-[17px]" />{workflow.claim.isPending ? "Przejmowanie…" : "Przejmij"}</button>
-            <button disabled title="Akcja niedostępna" className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75"><AlarmClock className="size-[17px]" /> Odłóż</button>
-            <button disabled title="Akcja niedostępna" className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#7f899a] opacity-75"><Check className="size-[17px]" /> Zamknij sprawę</button>
+            <button type="button" onClick={() => record?.snoozedForCurrentUserUntil ? workflow.cancelSnooze.mutate() : setActionDialog("snooze")} disabled={!record?.snoozedForCurrentUserUntil && !canSnooze} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:opacity-50"><AlarmClock className="size-[17px]" />{record?.snoozedForCurrentUserUntil ? "Anuluj odłożenie" : "Odłóż"}</button>
+            <button type="button" onClick={() => setActionDialog("ignore")} disabled={!canIgnore} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:opacity-50"><ThumbsDown className="size-[17px]" /> Ignoruj {record ? `${record.ignoreVotes.current}/2` : ""}</button>
+            <button type="button" onClick={() => setActionDialog("ask")} disabled={!canAsk} className="flex h-[42px] items-center rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:opacity-50">Dopytaj</button>
+            <button type="button" onClick={() => setActionDialog("resolve")} disabled={!canResolve} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:opacity-50"><Check className="size-[17px]" /> Rozwiąż</button>
+            {canAdmin && <button type="button" onClick={() => setActionDialog("admin")} className="flex h-[42px] items-center rounded-[9px] border border-violet-500/20 bg-violet-950/30 px-4 text-[12px] text-violet-200">Administruj</button>}
           </div>
         </div>
-        <div className="mt-[15px] flex items-center gap-3">
+        <div className="mt-[15px] flex items-center gap-3 overflow-x-auto">
           <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] text-[#edf0f4] disabled:cursor-not-allowed disabled:opacity-50 xl:hidden">Przejmij</button>
+          <button type="button" onClick={() => setActionDialog("ask")} disabled={!canAsk} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] disabled:opacity-50 xl:hidden">Dopytaj</button>
+          <button type="button" onClick={() => setActionDialog("ignore")} disabled={!canIgnore} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] disabled:opacity-50 xl:hidden">Ignoruj</button>
+          <button type="button" onClick={() => record?.snoozedForCurrentUserUntil ? workflow.cancelSnooze.mutate() : setActionDialog("snooze")} disabled={!record?.snoozedForCurrentUserUntil && !canSnooze} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] disabled:opacity-50 xl:hidden">Odłóż</button>
+          <button type="button" onClick={() => setActionDialog("resolve")} disabled={!canResolve} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] disabled:opacity-50 xl:hidden">Rozwiąż</button>
+          {canAdmin && <button type="button" onClick={() => setActionDialog("admin")} className="h-[45px] rounded-[9px] border border-violet-500/20 bg-violet-950/30 px-3 text-[12px] text-violet-200 xl:hidden">Admin</button>}
           <div className="flex h-[45px] items-center gap-2 rounded-[9px] border border-violet-500/[0.12] bg-violet-950/35 px-3.5 text-[12px] font-medium text-violet-300">{item.status}</div>
           <div className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3.5 text-[12px] text-[#edf0f4]"><Avatar initials={initials(record?.owner?.fullName ?? "?")} size="sm" />{record?.owner?.fullName ?? "Nieprzypisane"}</div>
           <div className="flex h-[45px] items-center gap-2.5 rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3.5 text-[12px] font-semibold text-[#aeb8c8]"><Clock3 className="size-[17px]" />{item.sla}</div>
+          {record?.relatedCase?.id && <a href={`/cases?caseId=${encodeURIComponent(record.relatedCase.id)}`} className="text-xs text-violet-300">Powiązany: {record.relatedCase.reference}</a>}
         </div>
         {detailError && <p role="alert" className="text-xs text-red-400">Nie udało się wczytać szczegółów case’u.</p>}
         {workflow.claim.isError && <p role="alert" className="text-xs text-red-400">{workflow.claim.error.message}</p>}
+        {(workflow.cancelSnooze.isError || workflow.retryMessage.isError) && <p role="alert" className="text-xs text-red-400">Nie udało się odświeżyć stanu sprawy.</p>}
       </header>
 
       <div className="cases-scrollbar min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_72%_34%,rgba(23,48,76,0.12),transparent_42%)] py-[22px] pl-[22px] pr-[12px]">
@@ -440,6 +549,7 @@ function ConversationPanel({
       </div>
 
       <div className="shrink-0 pb-[22px] pl-[18px] pr-[22px]">
+        {activityItems.length > 0 && <details className="mb-2 rounded-lg border border-white/[0.07] bg-[#0d1624] px-3 py-2 text-xs text-[#aeb8c8]"><summary className="cursor-pointer text-[#d8dce4]">Historia aktywności ({activityItems.length})</summary><div className="mt-2 max-h-28 space-y-1 overflow-y-auto">{activityItems.map((event) => <div key={event.id} className="flex justify-between gap-3"><span>{event.label} · {event.author ?? "System"}</span><time>{timeLabel(event.createdAt)}</time></div>)}</div>{activity.hasNextPage && <button type="button" onClick={() => activity.fetchNextPage()} className="mt-2 text-violet-300">Wczytaj starsze</button>}</details>}
         <div className="rounded-[11px] border border-white/[0.085] bg-[linear-gradient(110deg,#0d1725,#0b1522)]">
           <textarea value={draft} onChange={(event) => { setDraft(event.target.value); idempotencyKey.current = null }} disabled={!canReply} placeholder={canReply ? "Napisz odpowiedź..." : "Przejmij case, aby odpowiedzieć"} aria-label="Treść odpowiedzi" className="block h-[80px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa] disabled:cursor-not-allowed" />
           {files.length > 0 && <div className="flex flex-wrap gap-2 px-[19px] pb-2">{files.map((file, index) => <button key={`${file.name}-${file.size}-${index}`} type="button" onClick={() => { setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index)); idempotencyKey.current = null }} className="rounded-md bg-white/[0.06] px-2 py-1 text-xs text-[#cbd3df]" title="Usuń plik">{file.name}</button>)}</div>}
@@ -447,8 +557,26 @@ function ConversationPanel({
         </div>
         {sendError && <p role="alert" className="mt-2 text-sm text-red-400">{sendError}</p>}
       </div>
+      {actionDialog && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111b29] p-5 shadow-2xl"><h3 className="text-lg font-semibold text-white">{actionDialog === "ask" ? "Dopytaj klienta" : actionDialog === "ignore" ? "Głos ignorowania" : actionDialog === "resolve" ? "Rozwiąż sprawę" : actionDialog === "snooze" ? "Odłóż sprawę" : "Administracja sprawą"}</h3>
+        {actionDialog === "ask" && <><textarea autoFocus value={actionText} onChange={(event) => setActionText(event.target.value)} className="mt-4 h-28 w-full rounded-lg border border-white/10 bg-[#08111f] p-3 text-sm" placeholder="Pytanie do klienta" /><label className="mt-3 block text-xs text-[#aeb8c8]">Czas oczekiwania<select value={waitingMinutes} onChange={(event) => setWaitingMinutes(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-white/10 bg-[#08111f] p-2"><option value={60}>1 godzina</option><option value={24 * 60}>24 godziny</option><option value={3 * 24 * 60}>3 dni</option><option value={7 * 24 * 60}>7 dni</option></select></label></>}
+        {actionDialog === "ignore" && <textarea autoFocus value={actionText} onChange={(event) => setActionText(event.target.value)} className="mt-4 h-24 w-full rounded-lg border border-white/10 bg-[#08111f] p-3 text-sm" placeholder="Powód (opcjonalnie)" />}
+        {(actionDialog === "resolve" || actionDialog === "admin") && <label className="mt-4 block text-xs text-[#aeb8c8]">Kategoria rozwiązania<select value={resolutionCategory} onChange={(event) => setResolutionCategory(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[#08111f] p-2"><option value="">Bez kategorii</option><option value="SOLVED">Rozwiązane</option><option value="NO_ACTION_REQUIRED">Brak wymaganej akcji</option><option value="DUPLICATE">Duplikat</option><option value="OTHER">Inne</option></select></label>}
+        {actionDialog === "snooze" && <><div className="mt-4 flex gap-2">{[["1h", 60], ["Jutro", 24 * 60], ["Tydzień", 7 * 24 * 60]].map(([label, minutes]) => <button key={String(label)} type="button" onClick={() => setSnoozeUntil(localDateTime(new Date(Date.now() + Number(minutes) * 60_000)))} className="rounded-md border border-white/10 px-3 py-1.5 text-xs">{label}</button>)}</div><input type="datetime-local" value={snoozeUntil} onChange={(event) => setSnoozeUntil(event.target.value)} className="mt-3 w-full rounded-lg border border-white/10 bg-[#08111f] p-2 text-sm" /></>}
+        {actionDialog === "admin" && <label className="mt-4 block text-xs text-[#aeb8c8]">Agent<select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[#08111f] p-2"><option value="">Wybierz agenta</option>{assignees.data?.filter((agent) => agent.eligible).map((agent) => <option key={agent.id} value={agent.id}>{agent.displayName}{agent.ignoreWeight === 2 ? " · głos ignorowania ×2" : ""}</option>)}</select></label>}
+        {actionError && <p role="alert" className="mt-3 text-sm text-red-400">{actionError}</p>}
+        <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => { setActionDialog(null); setActionError(""); workflowActionKey.current = null }} disabled={actionPending} className="rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-50">Anuluj</button>{actionDialog === "admin" ? <>{record?.availableActions?.includes("ASSIGN") && <button type="button" onClick={() => void performAdminAction("assign")} disabled={actionPending || !assigneeId} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">Przypisz</button>}{record?.availableActions?.includes("REASSIGN") && <button type="button" onClick={() => void performAdminAction("reassign")} disabled={actionPending || !assigneeId} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">Przypisz ponownie</button>}{record?.availableActions?.includes("UNASSIGN") && <button type="button" onClick={() => void performAdminAction("unassign")} disabled={actionPending} className="rounded-lg border border-amber-400/30 px-4 py-2 text-sm text-amber-200 disabled:opacity-50">Cofnij przypisanie</button>}{record?.availableActions?.includes("FORCE_RESOLVE") && <button type="button" onClick={() => void performAdminAction("forceResolve")} disabled={actionPending} className="rounded-lg bg-red-700 px-4 py-2 text-sm disabled:opacity-50">Wymuś rozwiązanie</button>}</> : <button type="button" onClick={() => void performAction()} disabled={actionPending || (actionDialog === "ask" && !actionText.trim())} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{actionPending ? "Zapisywanie…" : "Zatwierdź"}</button>}</div>
+      </div></div>}
     </section>
   )
+}
+
+function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) {
+  return <label className="grid grid-cols-[88px_1fr] items-center gap-2 text-[11px] text-[#aeb8c8]"><span>{label}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 rounded-md border border-white/10 bg-[#08111f] px-2 py-1.5 text-xs text-[#e8eaf0]"><option value="">Wszystkie</option>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+}
+
+function localDateTime(value: Date): string {
+  const offset = value.getTimezoneOffset() * 60_000
+  return new Date(value.getTime() - offset).toISOString().slice(0, 16)
 }
 
 function MessageAttachments({ attachments }: { attachments?: InboxMessage["attachments"] }) {

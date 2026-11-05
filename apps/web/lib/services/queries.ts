@@ -6,6 +6,7 @@ import { serviceRegistry } from "./registry"
 import type {
   InboxAskInput,
   InboxIgnoreInput,
+  InboxListQuery,
   InboxResolveInput,
   InboxSendInput,
 } from "./inbox"
@@ -31,9 +32,14 @@ export type AdministrationSectionInput = {
  */
 export const queryKeys = {
   currentUser: () => ["current-user"] as const,
-  inboxCases: () => ["support-inbox", "cases"] as const,
+  inboxCases: (query?: InboxListQuery) => query
+    ? ["support-inbox", "cases", query] as const
+    : ["support-inbox", "cases"] as const,
   inboxCase: (caseId: string) => ["support-inbox", "case", caseId] as const,
   inboxMessages: (caseId: string) => ["support-inbox", "messages", caseId] as const,
+  inboxActivity: (caseId: string) => ["support-inbox", "activity", caseId] as const,
+  inboxAssignees: (caseId: string) => ["support-inbox", "assignees", caseId] as const,
+  inboxFilterOptions: () => ["support-inbox", "filter-options"] as const,
   administrationUsers: (query?: AdministrationUserQuery) =>
     ["administration", "users", query ?? {}] as const,
   currentAdministrationUser: () => ["administration", "current-user"] as const,
@@ -48,12 +54,38 @@ export function useCurrentUser() {
   })
 }
 
-export function useInboxCases() {
+export function useInboxCases(query?: InboxListQuery) {
   return useInfiniteQuery({
-    queryKey: queryKeys.inboxCases(),
-    queryFn: ({ pageParam }) => serviceRegistry.inbox.list(pageParam),
+    queryKey: queryKeys.inboxCases(query),
+    queryFn: ({ pageParam }) => serviceRegistry.inbox.list(pageParam, query),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor,
+  })
+}
+
+export function useInboxFilterOptions() {
+  return useQuery({
+    queryKey: queryKeys.inboxFilterOptions(),
+    queryFn: () => serviceRegistry.inbox.getFilterOptions(),
+    staleTime: 60_000,
+  })
+}
+
+export function useInboxActivity(caseId?: string) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.inboxActivity(caseId ?? ""),
+    queryFn: ({ pageParam }) => serviceRegistry.inbox.getActivity(caseId ?? "", pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor,
+    enabled: Boolean(caseId),
+  })
+}
+
+export function useInboxAssignees(caseId?: string, enabled = false) {
+  return useQuery({
+    queryKey: queryKeys.inboxAssignees(caseId ?? ""),
+    queryFn: () => serviceRegistry.inbox.listAssignees(caseId ?? ""),
+    enabled: Boolean(caseId) && enabled,
   })
 }
 
@@ -103,6 +135,7 @@ export function useInboxWorkflow(caseId?: string) {
       queryClient.invalidateQueries({
         queryKey: queryKeys.inboxMessages(caseId ?? ""),
       }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.inboxActivity(caseId ?? "") }),
     ])
   }
 
@@ -130,6 +163,23 @@ export function useInboxWorkflow(caseId?: string) {
       serviceRegistry.inbox.snooze(requireCaseId(), until),
     onSuccess: invalidateCases,
   })
+  const cancelSnooze = useMutation({
+    mutationFn: () => serviceRegistry.inbox.cancelSnooze(requireCaseId()),
+    onSuccess: invalidateConversation,
+  })
+  const assign = useMutation({
+    mutationFn: ({ userId, reassign }: { userId: string; reassign: boolean }) =>
+      serviceRegistry.inbox.assign(requireCaseId(), userId, reassign),
+    onSuccess: invalidateConversation,
+  })
+  const unassign = useMutation({
+    mutationFn: () => serviceRegistry.inbox.unassign(requireCaseId()),
+    onSuccess: invalidateConversation,
+  })
+  const forceResolve = useMutation({
+    mutationFn: (input: InboxResolveInput) => serviceRegistry.inbox.forceResolve(requireCaseId(), input),
+    onSuccess: invalidateConversation,
+  })
   const sendMessage = useMutation({
     mutationFn: (input: InboxSendInput) =>
       serviceRegistry.inbox.sendMessage(requireCaseId(), input),
@@ -140,7 +190,7 @@ export function useInboxWorkflow(caseId?: string) {
     onSuccess: invalidateConversation,
   })
 
-  return { claim, ignore, askCustomer, resolve, snooze, sendMessage, retryMessage }
+  return { claim, ignore, askCustomer, resolve, snooze, cancelSnooze, assign, unassign, forceResolve, sendMessage, retryMessage }
 }
 
 export function useMarkAllResolvedRead() {

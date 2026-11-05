@@ -1,4 +1,4 @@
-import type { InboxCase, InboxMessage } from "@/lib/domain/inbox"
+import type { InboxActivity, InboxCase, InboxMessage, InboxStatus } from "@/lib/domain/inbox"
 import type { User } from "@/lib/domain/shared"
 import { mockInboxCaseRecords, mockInboxMessages } from "@/mocks/inbox"
 import { mockCurrentUser } from "@/mocks/users"
@@ -12,10 +12,43 @@ export interface InboxIgnoreInput {
 
 export interface InboxAskInput {
   message: string
+  waitingMinutes?: number
+  idempotencyKey?: string
 }
 
 export interface InboxResolveInput {
   category?: string
+  idempotencyKey?: string
+}
+
+export interface InboxListQuery {
+  view?: "active" | "snoozed"
+  mine?: boolean
+  unassigned?: boolean
+  unread?: boolean
+  slaAttention?: boolean
+  status?: InboxStatus
+  statusScope?: "all" | "active" | "terminal"
+  customerId?: string
+  channelId?: string
+  provider?: "slack" | "teams" | "telegram"
+  ownerId?: string
+  search?: string
+}
+
+export interface InboxAssignee {
+  id: string
+  displayName: string
+  eligible: boolean
+  ignoreWeight: number
+  ignoreWeightValidUntil?: string
+}
+
+export interface InboxFilterOptions {
+  customers: Array<{ id: string; name: string }>
+  channels: Array<{ id: string; name: string }>
+  owners: Array<{ id: string; name: string }>
+  providers: Array<"slack" | "teams" | "telegram">
 }
 
 export interface InboxSendInput {
@@ -31,9 +64,11 @@ export interface InboxPage<T> {
 }
 
 export interface InboxRepository {
-  list(cursor?: string): Promise<InboxPage<InboxCase>>
+  list(cursor?: string, query?: InboxListQuery): Promise<InboxPage<InboxCase>>
+  getFilterOptions(): Promise<InboxFilterOptions>
   getCase(caseId: string): Promise<InboxCase>
   getMessages(caseId: string, before?: string): Promise<InboxPage<InboxMessage>>
+  getActivity(caseId: string, cursor?: string): Promise<InboxPage<InboxActivity>>
   markRead(caseId: string, messageId: string): Promise<void>
   markAllResolvedRead(): Promise<void>
   claim(caseId: string): Promise<void>
@@ -41,6 +76,11 @@ export interface InboxRepository {
   askCustomer(caseId: string, input: InboxAskInput): Promise<void>
   resolve(caseId: string, input: InboxResolveInput): Promise<void>
   snooze(caseId: string, until: string): Promise<void>
+  cancelSnooze(caseId: string): Promise<void>
+  listAssignees(caseId: string): Promise<InboxAssignee[]>
+  assign(caseId: string, userId: string, reassign: boolean): Promise<void>
+  unassign(caseId: string): Promise<void>
+  forceResolve(caseId: string, input: InboxResolveInput): Promise<void>
   sendMessage(caseId: string, input: InboxSendInput): Promise<InboxMessage>
   retryMessage(messageId: string): Promise<void>
 }
@@ -154,6 +194,11 @@ export const mockInboxRepository: InboxRepository = {
     return wait({ items: cases })
   },
 
+  async getFilterOptions() {
+    const customers = [...new Map(mockInboxCaseRecords.map((item) => [item.customer.id, { id: item.customer.id, name: item.customer.name }])).values()]
+    return wait({ customers, channels: [], owners: [{ id: mockCurrentUser.id, name: mockCurrentUser.fullName }], providers: ["slack", "teams", "telegram"] })
+  },
+
   async getCase(caseId) {
     const { unreadForUserIds, snoozedUntilByUser, restrictedUserIds, ...item } = getRecord(caseId)
     return wait({
@@ -166,6 +211,10 @@ export const mockInboxRepository: InboxRepository = {
 
   async getMessages(caseId) {
     return wait({ items: [...(mockInboxMessages[caseId] ?? [])] }, 120)
+  },
+
+  async getActivity(caseId) {
+    return wait({ items: [...getRecord(caseId).activity] })
   },
 
   async markRead(caseId) {
@@ -295,6 +344,36 @@ export const mockInboxRepository: InboxRepository = {
     }
     record.snoozedUntilByUser[mockCurrentUser.id] = until
     markCurrentUserRead(caseId)
+  },
+
+  async cancelSnooze(caseId) {
+    delete getRecord(caseId).snoozedUntilByUser[mockCurrentUser.id]
+    await wait(undefined, 80)
+  },
+
+  async listAssignees() {
+    return wait([{ id: mockCurrentUser.id, displayName: mockCurrentUser.fullName, eligible: true, ignoreWeight: 1 }])
+  },
+
+  async assign(caseId, userId) {
+    const record = getRecord(caseId)
+    record.owner = userId === mockCurrentUser.id ? mockCurrentUser : { id: userId, fullName: "Agent" }
+    record.status = "verification"
+    await wait(undefined, 80)
+  },
+
+  async unassign(caseId) {
+    const record = getRecord(caseId)
+    record.owner = undefined
+    record.status = "new"
+    await wait(undefined, 80)
+  },
+
+  async forceResolve(caseId, input) {
+    const record = getRecord(caseId)
+    record.status = "resolved"
+    record.resolutionCategory = input.category
+    await wait(undefined, 80)
   },
 
   async sendMessage(caseId, input) {
