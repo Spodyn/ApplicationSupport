@@ -184,3 +184,16 @@ previous mappings on provider failure. An unknown channel retries until discover
 check `SLACK_CHANNEL_DISCOVERY_PENDING` if membership/scopes remain unavailable.
 The server-side secret resolver remains authoritative; never put provider credentials
 in web configuration or chat.
+
+### Development migration reconciliation
+
+The unpublished user-administration migration is numbered `38.1` to preserve the
+already published `V38__admin_user_list_indexes.sql`. Fresh databases apply both
+normally. A development database that already applied the former local
+`V38__user_administration_and_general_settings.sql` must preserve its SQL checksum
+and data: back up its Flyway history, verify that exact successful local migration,
+then relabel only that history entry to version `38.1` and the corresponding new
+filename. Apply the published index migration once with Flyway out-of-order enabled
+for that startup, then restore the normal setting. Never relabel the published
+index migration or reset application data. Remove any obsolete copy of the old
+filename from generated build resources before validating the new migration set.

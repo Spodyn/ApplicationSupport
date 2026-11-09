@@ -1,4 +1,4 @@
-import type { InboxActivity, InboxCase, InboxMessage, InboxStatus } from "@/lib/domain/inbox"
+import type { InboxAttachment, InboxActivity, InboxCase, InboxMessage, InboxStatus } from "@/lib/domain/inbox"
 import type { User } from "@/lib/domain/shared"
 import { mockInboxCaseRecords, mockInboxMessages } from "@/mocks/inbox"
 import { mockCurrentUser } from "@/mocks/users"
@@ -51,9 +51,13 @@ export interface InboxFilterOptions {
   providers: Array<"slack" | "teams" | "telegram">
 }
 
+export interface InboxPendingAttachment extends InboxAttachment {
+  scanStatus: "pending" | "scanning" | "clean" | "infected" | "error"
+}
+
 export interface InboxSendInput {
   body: string
-  attachments?: Array<File | { fileName: string; size: string }>
+  attachments?: Array<File | InboxPendingAttachment | { fileName: string; size: string }>
   simulateFailure?: boolean
   idempotencyKey?: string
 }
@@ -82,7 +86,9 @@ export interface InboxRepository {
   unassign(caseId: string): Promise<void>
   forceResolve(caseId: string, input: InboxResolveInput): Promise<void>
   sendMessage(caseId: string, input: InboxSendInput): Promise<InboxMessage>
-  retryMessage(messageId: string): Promise<void>
+  uploadAttachment(caseId: string, file: File): Promise<InboxPendingAttachment>
+  removePendingAttachment(caseId: string, attachmentId: string): Promise<void>
+  retryMessage(messageId: string, idempotencyKey?: string): Promise<void>
 }
 
 export class InboxConflictError extends Error {
@@ -397,6 +403,10 @@ export const mockInboxRepository: InboxRepository = {
     })
   },
 
+  async uploadAttachment(_caseId, file) {
+    return wait({ id: createId("pending-attachment"), fileName: file.name, size: `${file.size} B`, type: file.type.startsWith("image/") ? "image" as const : "document" as const, scanStatus: "clean" as const }, 100)
+  },
+  async removePendingAttachment() { await wait(undefined, 50) },
   async retryMessage(messageId) {
     for (const messages of Object.values(mockInboxMessages)) {
       const message = messages.find((item) => item.id === messageId)

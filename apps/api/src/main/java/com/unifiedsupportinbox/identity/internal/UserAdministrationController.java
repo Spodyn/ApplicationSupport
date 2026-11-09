@@ -32,13 +32,6 @@ class UserAdministrationController {
 
     UserAdministrationController(UserAdministrationService service) { this.service = service; }
 
-    @GetMapping("/admin/users")
-    List<UserAdministrationService.UserView> list(@RequestParam(required = false) String search,
-            @RequestParam(required = false) UserRole role, @RequestParam(required = false) Boolean active,
-            Authentication authentication) {
-        return service.list(principal(authentication), search, role, active);
-    }
-
     @GetMapping("/admin/users/current")
     UserAdministrationService.UserView current(Authentication authentication) {
         return service.current(principal(authentication));

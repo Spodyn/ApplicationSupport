@@ -6,6 +6,7 @@ import { createApiInboxRepository, mapCaseMessage } from "@/lib/services/api/inb
 
 const caseId = "01a10d64-2d99-7627-813d-2bad1ab9ab55"
 const messageId = "01a10d64-2da1-7555-a8cf-a27e56abbc35"
+const attachmentId = "01a10d64-2da2-7555-a8cf-a27e56abbc36"
 const listItem = {
   id: caseId, reference: "CASE-00000002", status: "NEW", customerId: "customer",
   customerName: "Slack Test Customer", channelId: "channel", channelName: "new-channel",
@@ -39,7 +40,19 @@ function fixture() {
     if (input.path === "/api/v1/cases") return { items: [listItem], nextCursor: "cursor-2" }
     if (input.path === `/api/v1/cases/${caseId}`) return detail
     if (input.path === `/api/v1/cases/${caseId}/messages` && input.method === "GET") return { items: [message], nextCursor: null }
-    if (input.path === `/api/v1/cases/${caseId}/messages` && input.method === "POST") return { messageId }
+    if (input.path === `/api/v1/cases/${caseId}/attachments` && input.method === "POST") {
+      return {
+        attachmentId,
+        filename: "evidence.txt",
+        contentType: "text/plain",
+        sizeBytes: 4,
+        scanStatus: "CLEAN",
+        scanError: null,
+      }
+    }
+    if (input.path === `/api/v1/cases/${caseId}/attachments/${attachmentId}` && input.method === "DELETE") return undefined
+    if (input.path === `/api/v1/messages/${messageId}/retry` && input.method === "POST") return { messageId, deliveryStatus: "QUEUED" }
+    if (input.path === `/api/v1/cases/${caseId}/messages` && input.method === "POST") return { messageId, deliveryStatus: "QUEUED" }
     return {}
   })
   const repository = createApiInboxRepository({ request } as ApiTransport)
@@ -78,10 +91,27 @@ describe("real inbox API adapter", () => {
   })
 
   it("maps persisted support messages as agent messages and accepts an empty real history page", async () => {
-    expect(mapCaseMessage({
+    expect(mapCaseMessage(caseId, {
       ...message, kind: "SUPPORT", inbound: false, providerCreatedAt: null,
       deliveryStatus: "SENT", authorName: "Agent", body: "Support reply",
-    })).toMatchObject({ kind: "support", sender: "Agent", body: "Support reply", deliveryStatus: "sent" })
+      attachments: [{
+        id: attachmentId,
+        fileName: "evidence.txt",
+        sizeBytes: 4,
+        contentType: "text/plain",
+        detectedContentType: "text/plain",
+        scanStatus: "CLEAN",
+      }],
+    })).toMatchObject({
+      kind: "support",
+      sender: "Agent",
+      body: "Support reply",
+      deliveryStatus: "sent",
+      attachments: [{
+        id: attachmentId,
+        downloadUrl: `/api/v1/cases/${caseId}/attachments/${attachmentId}`,
+      }],
+    })
     const repository = createApiInboxRepository({
       request: vi.fn().mockResolvedValue({ items: [], nextCursor: null }),
     } as ApiTransport)

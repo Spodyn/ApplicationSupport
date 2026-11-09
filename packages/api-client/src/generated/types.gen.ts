@@ -14,6 +14,40 @@ export type AdminChannel = {
   "lastMessageAt": string | null
 }
 
+export type AdminChannelView = {
+  "id": string
+  "integrationId": string
+  "provider": Channel
+  "externalChannelId": string
+  "name": string
+  "customerId": string | null
+  "customerName": string | null
+  "ignored": boolean
+  "groupingStrategy": ChannelGroupingStrategy
+  "active": boolean
+  "lastMessageAt": string | null
+}
+
+export type AdminUserItem = {
+  "id": string
+  "email": string
+  "fullName": string
+  "role": UserRole
+  "active": boolean
+  "presence": "online" | "offline"
+  "validFrom": string | null
+  "validUntil": string | null
+  "lastLoginAt": string | null
+  "activeAssignedCases": number
+  "createdAt": string
+  "permissions"?: Array<string>
+}
+
+export type AdminUserPage = {
+  "items": Array<AdminUserItem>
+  "nextCursor": string | null
+}
+
 export type ApiProblem = {
   "code": ApiProblemCode
   "title": string
@@ -29,6 +63,15 @@ export type AskCustomerRequest = {
   "message": string
   "waitingMinutes"?: number
   "bodyFormat"?: MessageBodyFormat
+}
+
+export type AttachmentUploadResponse = {
+  "attachmentId": string
+  "filename": string
+  "contentType": string | null
+  "sizeBytes": number
+  "scanStatus": string
+  "scanError": string | null
 }
 
 export type BatchReadResponse = {
@@ -227,6 +270,11 @@ export type ChannelConfigurationRequest = {
 
 export type ChannelGroupingStrategy = "SLACK_ROOT_THREAD" | "TEAMS_ROOT_REPLIES" | "TELEGRAM_TOPIC" | "TELEGRAM_CHAT_ACTIVE_CASE"
 
+export type ChannelOperationalStateRequest = {
+  "ignored": boolean
+  "clearCustomer"?: boolean
+}
+
 export type ClaimCaseResponse = {
   "caseId": string
   "status": CaseStatus
@@ -324,12 +372,33 @@ export type IntegrationConnectionTest = {
   "errorCode": string | null
 }
 
+export type IntegrationConnectionTestView = {
+  "integration": IntegrationView
+  "outcome": IntegrationConnectionOutcome
+  "errorCode": string | null
+}
+
 export type IntegrationHealth = "UNKNOWN" | "HEALTHY" | "DEGRADED" | "UNAVAILABLE"
 
 export type IntegrationStatus = "CONFIGURING" | "ENABLED" | "DISABLED"
 
 export type IntegrationStatusRequest = {
-  "status": "ENABLED" | "DISABLED"
+  "status": IntegrationStatus
+}
+
+export type IntegrationView = {
+  "id": string
+  "provider": Channel
+  "displayName": string
+  "status": IntegrationStatus
+  "health": IntegrationHealth
+  "workspaceExternalId": string | null
+  "workspaceName": string | null
+  "secretConfigured": boolean
+  "lastEventAt": string | null
+  "lastErrorCode": string | null
+  "createdAt": string
+  "updatedAt": string
 }
 
 export type LoginRequest = {

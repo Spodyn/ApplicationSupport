@@ -8,6 +8,7 @@ import type {
   ManagedChannel,
   ManagedCustomer,
   ManagedIntegration,
+  ChannelGroupingStrategy,
 } from "@/lib/domain/administration"
 import {
   administrationPermissionLabels,
@@ -26,6 +27,8 @@ export interface AdministrationUserQuery {
 }
 
 export interface AdministrationUserRepository {
+  /** False until the real create/edit/deactivate/delete commands are implemented. */
+  supportsMutations?: boolean
   list(query?: AdministrationUserQuery): Promise<AdministrationUser[]>
   getCurrent(): Promise<AdministrationUser | undefined>
   save(input: AdministrationUserInput, id?: string): Promise<AdministrationUser>
@@ -53,7 +56,8 @@ export interface AdministrationSettingsRepository {
   ): Promise<ManagedIntegration>
   testIntegration(id: string): Promise<ManagedIntegration>
   discoverChannels(id: string): Promise<ManagedChannel[]>
-  configureChannel(id: string, customerId: string | undefined, ignored: boolean): Promise<void>
+  listCustomers(): Promise<import("@/lib/domain/administration").ManagedCustomerOption[]>
+  configureChannel(id: string, customerId: string | undefined, ignored: boolean, groupingStrategy?: import("@/lib/domain/administration").ChannelGroupingStrategy): Promise<void>
   saveCustomer(input: Pick<ManagedCustomer, "name" | "externalRef">, id?: string): Promise<ManagedCustomer>
   deactivateCustomer(id: string): Promise<ManagedCustomer>
   toggleNotification(id: string, enabled: boolean): Promise<void>
@@ -124,6 +128,7 @@ export function requireCurrentAdministrator() {
 }
 
 export const mockAdministrationUserRepository: AdministrationUserRepository = {
+  supportsMutations: true,
   async list(query = {}) {
     requireCurrentAdministrationPermission("manage_users")
     let result = [...usersState]
@@ -284,7 +289,12 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     return delay(settingsState.channels)
   },
 
-  async configureChannel(id, customerId, ignored) {
+  async listCustomers() {
+    requireCurrentAdministrationPermission("manage_integrations")
+    return delay(settingsState.customers.filter((customer) => customer.active).map(({ id, name }) => ({ id, name })))
+  },
+
+  async configureChannel(id, customerId, ignored, groupingStrategy) {
     requireCurrentAdministrationPermission("manage_integrations")
     const channel = settingsState.channels.find((item) => item.id === id)
     if (!channel) throw new Error("Nie znaleziono kanału.")
@@ -292,6 +302,7 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     channel.customerId = customer?.id
     channel.customer = customer?.name ?? "Nie przypisano"
     channel.ignored = ignored
+    if (groupingStrategy) channel.groupingStrategy = groupingStrategy
     return delay(undefined)
   },
 

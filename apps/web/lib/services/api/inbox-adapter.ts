@@ -10,10 +10,11 @@ import type { InboxActivity, InboxCase, InboxMessage } from "@/lib/domain/inbox"
 import type { SlaState } from "@/lib/domain/shared"
 import {
   InboxConflictError,
+  type InboxPendingAttachment,
   type InboxRepository,
 } from "@/lib/services/inbox"
 import { mapApiChannel } from "./channel-adapter"
-import { ApiHttpError, browserApiTransport, getBrowserCsrfToken } from "./http-transport"
+import { ApiHttpError, browserApiTransport } from "./http-transport"
 
 function mapSlaState(value: string | null): SlaState | "unknown" {
   switch (value) {
@@ -117,7 +118,11 @@ export function mapCaseDetail(detail: CaseDetail): InboxCase {
   }
 }
 
-export function mapCaseMessage(message: CaseMessage, caseId?: string): InboxMessage {
+export function mapCaseMessage(message: CaseMessage, caseId?: string): InboxMessage
+export function mapCaseMessage(caseId: string, message: CaseMessage): InboxMessage
+export function mapCaseMessage(first: CaseMessage | string, second?: string | CaseMessage): InboxMessage {
+  const message = typeof first === "string" ? second as CaseMessage : first
+  const caseId = typeof first === "string" ? first : typeof second === "string" ? second : undefined
   return {
     id: message.id,
     kind: message.kind.toLowerCase() as InboxMessage["kind"],
@@ -130,8 +135,8 @@ export function mapCaseMessage(message: CaseMessage, caseId?: string): InboxMess
     attachments: message.attachments.map((item) => ({
       id: item.id,
       fileName: item.fileName,
-      size: `${item.sizeBytes} B`,
-      type: item.contentType?.startsWith("image/") ? "image" : "document",
+      size: formatBytes(item.sizeBytes),
+      type: item.contentType?.startsWith("image/") ? "image" : /\.(zip|rar|7z|tar|gz)$/i.test(item.fileName) ? "archive" : "document",
       downloadUrl: caseId
         ? `/api/v1/cases/${encodeURIComponent(caseId)}/attachments/${encodeURIComponent(item.id)}`
         : undefined,
@@ -139,50 +144,15 @@ export function mapCaseMessage(message: CaseMessage, caseId?: string): InboxMess
   }
 }
 
-type UploadedAttachment = {
-  attachmentId: string
-  filename: string
-  sizeBytes: number
-  scanStatus: "PENDING" | "CLEAN" | "INFECTED" | "ERROR"
-}
-
-async function uploadAttachment(caseId: string, file: File): Promise<UploadedAttachment> {
-  const form = new FormData()
-  form.append("file", file, file.name)
-  const headers = new Headers({ Accept: "application/json" })
-  const csrfToken = getBrowserCsrfToken()
-  if (csrfToken) headers.set("X-XSRF-TOKEN", csrfToken)
-  const response = await fetch(`/api/v1/cases/${encodeURIComponent(caseId)}/attachments`, {
-    method: "POST",
-    headers,
-    body: form,
-    credentials: "same-origin",
-    cache: "no-store",
-  })
-  if (!response.ok) {
-    const problem = await response.json().catch(() => undefined) as { detail?: string } | undefined
-    throw new Error(problem?.detail ?? `Nie udało się przesłać pliku ${file.name}.`)
-  }
-  const uploaded = await response.json() as UploadedAttachment
-  if (uploaded.scanStatus !== "CLEAN") {
-    throw new Error(`Plik ${file.name} nie przeszedł kontroli bezpieczeństwa (${uploaded.scanStatus}).`)
-  }
-  return uploaded
-}
-
-async function removePendingAttachment(caseId: string, attachmentId: string): Promise<void> {
-  const headers = new Headers()
-  const csrfToken = getBrowserCsrfToken()
-  if (csrfToken) headers.set("X-XSRF-TOKEN", csrfToken)
-  await fetch(
-    `/api/v1/cases/${encodeURIComponent(caseId)}/attachments/${encodeURIComponent(attachmentId)}`,
-    { method: "DELETE", headers, credentials: "same-origin", cache: "no-store" },
-  ).catch(() => undefined)
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export function createApiInboxRepository(transport: ApiTransport): InboxRepository {
   const client = createApiClient(transport)
-  return {
+  const repository: InboxRepository = {
     async list(cursor, query = {}) {
       const page = await client.listCases({
         cursor,
@@ -306,37 +276,51 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
       const body = input.body.trim()
       if (!body) throw new Error("Wiadomość nie może być pusta.")
       const attachments = input.attachments ?? []
-      if (attachments.some((attachment) => !(attachment instanceof File))) {
-        throw new Error("Nieobsługiwany format załącznika.")
-      }
-      const files = attachments as File[]
-      if (files.length > 10) throw new Error("Jedna wiadomość może zawierać maksymalnie 10 plików.")
+      const files = attachments.filter((attachment): attachment is File => attachment instanceof File)
+      const pending = attachments.filter((attachment): attachment is InboxPendingAttachment => !(attachment instanceof File) && "id" in attachment && "scanStatus" in attachment)
+      if (files.length + pending.length !== attachments.length) throw new Error("Nieobsługiwany format załącznika.")
+      if (pending.some((attachment) => attachment.scanStatus !== "clean")) throw new Error("Wiadomość może zawierać tylko poprawnie zeskanowane załączniki.")
+      if (attachments.length > 10) throw new Error("Jedna wiadomość może zawierać maksymalnie 10 plików.")
       if (files.some((file) => file.size > 25 * 1024 * 1024)) throw new Error("Pojedynczy plik nie może przekraczać 25 MiB.")
       if (files.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) throw new Error("Łączny rozmiar plików nie może przekraczać 50 MiB.")
-      const uploaded: UploadedAttachment[] = []
+      const uploaded: InboxPendingAttachment[] = []
       try {
-        for (const file of files) uploaded.push(await uploadAttachment(caseId, file))
+        for (const file of files) {
+          const result = await repository.uploadAttachment(caseId, file)
+          uploaded.push(result)
+          if (result.scanStatus !== "clean") throw new Error(`Plik ${file.name} nie przeszedł kontroli bezpieczeństwa.`)
+        }
         const accepted = await client.sendCaseMessage({
           caseId,
           "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
-          body: { body, bodyFormat: "PLAIN_TEXT", attachmentIds: uploaded.map((item) => item.attachmentId) },
+          body: { body, bodyFormat: "PLAIN_TEXT", attachmentIds: [...pending, ...uploaded].map((item) => item.id) },
         })
         const history = await client.getCaseMessages({ caseId, limit: 50 })
         const persisted = history.items.find((message) => message.id === accepted.messageId)
         if (!persisted) throw new Error("Wysłana wiadomość nie pojawiła się w historii case’u.")
         return mapCaseMessage(persisted, caseId)
       } catch (error) {
-        await Promise.all(uploaded.map((item) => removePendingAttachment(caseId, item.attachmentId)))
+        await Promise.all(uploaded.map((item) => repository.removePendingAttachment(caseId, item.id)))
         throw error
       }
     },
-    async retryMessage(messageId) {
+    async uploadAttachment(caseId, file) {
+      const body = new FormData()
+      body.append("file", file)
+      const uploaded = await client.uploadCaseAttachment({ caseId, body })
+      return { id: uploaded.attachmentId, fileName: uploaded.filename, size: formatBytes(uploaded.sizeBytes), type: uploaded.contentType?.startsWith("image/") ? "image" : "document", scanStatus: uploaded.scanStatus.toLowerCase() as InboxPendingAttachment["scanStatus"] }
+    },
+    async removePendingAttachment(caseId, attachmentId) {
+      await client.removePendingCaseAttachment({ caseId, attachmentId })
+    },
+    async retryMessage(messageId, idempotencyKey) {
       await client.retryMessageDelivery({
         messageId,
-        "Idempotency-Key": crypto.randomUUID(),
+        "Idempotency-Key": idempotencyKey ?? crypto.randomUUID(),
       })
     },
   }
+  return repository
 }
 
 export const apiInboxRepository = createApiInboxRepository(browserApiTransport)

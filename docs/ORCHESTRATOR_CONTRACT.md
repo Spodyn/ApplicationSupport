@@ -1,6 +1,6 @@
 # Autonomous Orchestrator Contract
 
-**Status:** FROZEN operational contract for autonomous development of USI v1.  
+**Status:** Owner-approved operational revision under USI-247 (2026-10-29); activation of CI-gated automatic merging remains separately gated. Frozen product semantics are unchanged.  
 **Scope:** development/review/merge orchestration only; it does not grant production authority.
 
 ## 1. Source precedence
@@ -66,17 +66,17 @@ Where practical, the developer worker should not receive Jira mutation or GitHub
 
 Resolves ordinary implementation choices autonomously using the source hierarchy. It escalates only a real contract change or protected production/legal/commercial decision as defined by `AGENTS.md` and `decision-registry.yaml`.
 
-### Reviewer worker
+### Reviewer worker / automated quality gate
 
-Runs with fresh context and reviews the **exact current PR HEAD SHA**. It does not trust the developer's completion report as evidence.
+For standard development PRs, owner decision USI-247 (2026-10-29) replaces the target requirement to assign an independent human reviewer with **complete exact-HEAD automated quality gates**. No reviewer is assigned solely to unblock the queue; no fictional `APPROVE` event is created.
 
-Reviewer output is exactly one of:
+An independent reviewer may still be required by an *effective* GitHub ruleset, a protected security/production decision or an explicitly documented high-risk exception. If such a real approval is required and unavailable, keep the PR blocked and work on independent tickets. When a reviewer is actually used, its decision is bound to the exact reviewed HEAD and is one of `APPROVE`, `REQUEST_CHANGES` or `BLOCKED`. Neither a previous SHA approval nor a green status on another commit counts.
 
-- `APPROVE`
-- `REQUEST_CHANGES`
-- `BLOCKED`
+### Integrator / orchestrator worker
 
-The review covers ticket scope, frozen contract, diff, tests/CI, security, migration/API compatibility and unintended UI changes as applicable.
+This worker is separate from the developer worker. It checks the entire active PR queue (including existing `Do przeglądu` PRs), confirms current branch ownership/lease, verifies every applicable check for the exact current SHA and merges only when the effective merge gate in §6 permits it. It records the merge SHA and only then updates Jira.
+
+**Activation order:** (1) land the explicit authorized operational-policy change; (2) verify and where necessary update GitHub ruleset/branch protection and automation permissions; (3) validate an end-to-end non-production test PR of the same merge path; (4) enable unattended merging. Until all steps are proven, this document is the *target* process, not evidence that an unattended merge worker exists.
 
 ## 4. Jira lifecycle
 
@@ -86,12 +86,10 @@ Normal lifecycle:
 
 Rules:
 
-- orchestrator moves a ticket to `W toku` only when a worker actually starts it,
-- `Do przeglądu` only after a real pushed PR exists and required local validation has passed,
-- `Gotowe` only after the exact reviewed change is actually merged to `main`,
-- a decision freeze comment alone never makes an implementation ticket `Gotowe`.
-
-Remote state changes are idempotent and reconciled after restart.
+- Move a ticket to `W toku` only when a worker actually starts it.
+- Move to `Do przeglądu` only after a pushed PR exists and required available local validation has passed. A PR may remain there while awaiting mandatory external/acceptance verification.
+- Move to `Gotowe` only after the exact checked change is merged to `main` **and** all applicable Definition of Done/mandatory verification is complete.
+- Neither a decision-freeze comment nor green CI in isolation makes a ticket `Gotowe`. Never report `BLOCKED` or `NOT RUN` as `PASS`.
 
 ## 5. Branch and PR discipline
 
@@ -104,17 +102,20 @@ Remote state changes are idempotent and reconciled after restart.
 
 ## 6. Merge gate
 
-A PR may be squash-merged only when all are true:
+**Target owner-approved mode (USI-247, 2026-10-29):** the integrator may squash-merge a standard development PR without manual reviewer assignment **only after** the authorized policy revision is effective, actual automation is verified and enabled, and all these conditions hold simultaneously:
 
-1. current PR HEAD SHA equals the SHA reviewed by the reviewer,
-2. reviewer result is `APPROVE`,
-3. all required validation/CI/security gates for that SHA are green,
-4. PR is mergeable and has no unresolved review threads/blockers,
-5. all graph dependencies are still Jira `Gotowe`,
-6. no new higher-precedence Jira contract change invalidates the work,
-7. branch contains no production secret or prohibited production operation.
+1. The current PR HEAD SHA is precisely the SHA whose CI and security results were checked. Recheck after any push, change of base, or stale CI.
+2. The complete required workflow is green at that SHA, **including configuration, backend, integration, infrastructure, OpenAPI and validate jobs where configured**; check runs are neither pending, skipped without justification, cancelled nor failed. The GitHub `validate` required status alone is not evidence the other required gates passed.
+3. Required automated tests are meaningful (including appropriate negative/regression cases); no failing test was weakened or converted to skip to obtain green CI.
+4. PR is mergeable, without conflicts or unresolved review/security findings, and all currently effective GitHub rulesets/branch protections are satisfied.
+5. Required Jira dependencies are still `Gotowe`, and no new higher-precedence Jira/product contract invalidates the work.
+6. No prohibited production operation, credential leak or Critical/High actionable security finding remains.
+7. All **mandatory** verification and ticket DoD conditions are satisfied. Missing tenant/device/sandbox or real-provider acceptance evidence is `BLOCKED` / `NOT RUN`, not `PASS`; if it is mandatory for this PR's integration, keep this PR blocked while advancing independent tickets.
+8. A required human approval under any still-effective policy, security exception or GitHub rule must actually exist on the exact HEAD. Do not self-approve, fabricate approval, or bypass protection.
 
-After successful merge, the orchestrator verifies the merge result and only then moves Jira to `Gotowe`.
+No ordinary human review is mandated by the **target** policy once formally activated, but any review already issued with `REQUEST_CHANGES`, blocked thread or security concern must be resolved, not ignored. An existing `APPROVE` on a different SHA confers no authority.
+
+If conditions are unmet, save the exact reason and checkpoint and move to another independent task. After merge, verify the actual commit in `main` and only then reconcile Jira. Do not confuse a successful workflow run with an actual merge.
 
 ## 7. Conflict handling
 
@@ -132,27 +133,24 @@ Do not preserve an old approval after the reviewed SHA changes.
 
 Orchestrator state is durable (SQLite or equivalent) and includes at least:
 
-- ticket/work item state,
-- worker lease + heartbeat,
-- branch/worktree identity,
-- PR number/head SHA,
-- last reviewed SHA/result,
-- validation state,
-- remote mutation/idempotency markers.
+- ticket/work item state, worker lease and heartbeat,
+- branch/worktree identity, PR number/head SHA,
+- exact-SHA CI/security results and any actual reviewed SHA/result,
+- separately labelled `PASS`, `FAIL`, `NOT RUN` and `BLOCKED` checks,
+- mandatory external/manual acceptance evidence and revisit conditions,
+- remote mutation/idempotency markers and merge SHA.
 
-After crash/restart the orchestrator first reconciles GitHub/Jira/working-tree reality before creating any new branch, PR, comment or status transition. It must not duplicate business/workflow mutations merely because local state was lost.
-
-Expired worker leases may be recovered only after verifying no still-running worker owns the same worktree/ticket.
+After crash/restart reconcile GitHub/Jira/working-tree reality, checks and active leases before new mutations. Expired leases may be recovered only after verifying no running worker owns that worktree/ticket. A lease that cannot be verified is *not* evidence the worker stopped. Avoid duplicate PRs, tickets and comments.
 
 ## 9. Concurrency and scaling
 
-Scale gradually based on measured throughput/conflicts/CI wait/review rejection and machine resource usage:
+Scale gradually based on throughput, conflict rate, CI quality and failed merge attempts:
 
-1. one DEV + reviewer, no automatic merge during dry run,
-2. multiple DEV workers after lifecycle stability,
-3. automatic merge only after exact-SHA review and merge-gate behavior has proven reliable.
+1. One developer plus independent integrator with manual, exact-SHA gate audit; no unattended merges during dry run.
+2. Verify the ruleset and automation identity/permissions; exercise one non-production test PR through the entire intended merge and Jira reconciliation flow.
+3. Enable CI-gated automatic merges only after the test proves all guards; then add parallel developers with durable exclusive leases and heartbeat.
 
-More workers are not useful if they increase conflicts, flaky CI or review churn.
+Two schedules may run concurrently; never share a ticket/branch/worktree without safe atomic ownership. An unverifiable active lease blocks *that* item only, not unrelated independent work.
 
 ## 10. Production boundary
 
@@ -164,15 +162,20 @@ Codex/reviewer workers never receive production credentials.
 
 Compatible vendor SDK/API version, scopes and endpoint details may be verified from current official vendor documentation during implementation without Product Owner escalation, provided the frozen provider scope, workflow and security boundary are unchanged.
 
-## 12. Completion evidence
+## 12. Owner decision and deferred verification
+
+The owner explicitly prefers continued independent implementation where a dependency is unavailable and CI-gated automatic processing of existing and new PRs without assigning a manual reviewer (29 October 2026, USI-247). This is an operational change only: frozen product behavior, security, Jira dependencies, real test failures and production protections remain mandatory. The active branch ruleset and automation implementation, not the statement of intent, determine whether unattended merge is truly enabled.
+
+A blocked item records the missing verification, exact prerequisite to rerun it, and next independent ticket. Revisit deferred checks once the environment is available. Do not create false green acceptance or claim production readiness.
+
+## 13. Completion evidence
 
 For every completed ticket preserve:
 
 - Jira key,
 - feature branch and PR,
 - merged commit/SHA,
-- exact reviewed HEAD SHA,
-- reviewer result,
+- exact validated PR HEAD SHA and, if a real review was required, the reviewed SHA and result,
 - required test/CI results,
 - migration/API/event summary if applicable,
 - remaining non-blocking risks.

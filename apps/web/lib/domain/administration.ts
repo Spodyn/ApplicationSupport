@@ -97,6 +97,7 @@ export interface ManagedIntegration {
   workspace: string
   workspaceId: string
   hasSecretReference: boolean
+  canEnable?: boolean
   lastEventAt?: string
   lastErrorCode?: string
   health: IntegrationHealth
@@ -107,6 +108,11 @@ export type ChannelGroupingStrategy =
   | "TEAMS_ROOT_REPLIES"
   | "TELEGRAM_TOPIC"
   | "TELEGRAM_CHAT_ACTIVE_CASE"
+
+export interface ManagedCustomerOption {
+  id: string
+  name: string
+}
 
 export interface ManagedChannel {
   id: string

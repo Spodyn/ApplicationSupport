@@ -2,7 +2,7 @@ import { operationEntries, readContract, resolveSchema } from './model.mjs'
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 const SUPPORTED_PARAMETER_LOCATIONS = new Set(['path', 'query', 'header'])
-const SUPPORTED_MEDIA_TYPES = new Set(['application/json', 'application/problem+json'])
+const SUPPORTED_MEDIA_TYPES = new Set(['application/json', 'application/problem+json', 'multipart/form-data'])
 const SUPPORTED_SCHEMA_TYPES = new Set(['string', 'integer', 'number', 'boolean', 'array', 'object', 'null'])
 const UNSUPPORTED_HTTP_METHODS = new Set(['head', 'options', 'trace'])
 

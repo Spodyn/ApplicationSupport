@@ -1,5 +1,7 @@
+import { createApiClient } from "@usi/api-client/generated"
+import { administrationPermissions } from "@/lib/domain/administration"
 import type { AdministrationPermission, AdministrationUser, AdministrationUserInput } from "@/lib/domain/administration"
-import type { AdministrationUserQuery, AdministrationUserRepository, CredentialActionToken } from "@/lib/services/administration"
+import type { AdministrationUserRepository, CredentialActionToken } from "@/lib/services/administration"
 import { browserApiTransport } from "./http-transport"
 
 type ApiUser = {
@@ -13,13 +15,14 @@ type ApiUser = {
   lastLoginAt?: string | null
   presence: "online" | "away" | "offline"
   activeAssignedCases: number
-  permissions: AdministrationPermission[]
+  permissions?: AdministrationPermission[]
 }
 
 function mapUser(user: ApiUser): AdministrationUser {
   return {
     ...user,
-    validFrom: user.validFrom?.slice(0, 10) ?? new Date().toISOString().slice(0, 10),
+    permissions: user.permissions ?? [],
+    validFrom: user.validFrom?.slice(0, 10) ?? "",
     validUntil: user.validUntil?.slice(0, 10),
     lastLoginAt: user.lastLoginAt ?? undefined,
   }
@@ -33,22 +36,27 @@ function body(input: AdministrationUserInput) {
   }
 }
 
-function queryString(query: AdministrationUserQuery = {}) {
-  const params = new URLSearchParams()
-  if (query.search) params.set("search", query.search)
-  if (query.role) params.set("role", query.role)
-  if (query.active !== undefined) params.set("active", String(query.active))
-  const value = params.toString()
-  return value ? `?${value}` : ""
-}
-
 export const apiAdministrationUserRepository: AdministrationUserRepository = {
+  supportsMutations: true,
   async list(query) {
-    const users = await browserApiTransport.request<ApiUser[]>({ method: "GET", path: `/api/v1/admin/users${queryString(query)}` })
-    return users.map(mapUser)
+    const client = createApiClient(browserApiTransport)
+    const users: AdministrationUser[] = []
+    let cursor: string | undefined
+    do {
+      const page = await client.listAdminUsers({ ...query, cursor, limit: 100 })
+      users.push(...page.items.map((user) => mapUser({ ...user, permissions: user.permissions as AdministrationPermission[] | undefined })))
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+    return users
   },
   async getCurrent() {
-    return mapUser(await browserApiTransport.request<ApiUser>({ method: "GET", path: "/api/v1/admin/users/current" }))
+    const client = createApiClient(browserApiTransport)
+    const session = await client.getCurrentSession()
+    if (session.role !== "ADMIN") return undefined
+    const page = await client.listAdminUsers({ search: session.email, limit: 100 })
+    const current = page.items.find((user) => user.id === session.id)
+    if (!current) return undefined
+    return mapUser({ ...current, permissions: session.effectivePermissions.filter((value): value is AdministrationPermission => (administrationPermissions as readonly string[]).includes(value)) })
   },
   async save(input, id) {
     return mapUser(await browserApiTransport.request<ApiUser>({

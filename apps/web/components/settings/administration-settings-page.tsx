@@ -67,6 +67,7 @@ import {
 import type {
   AdministrationPermission,
   AdministrationSettings,
+  ChannelGroupingStrategy,
   GeneralSettings,
   ManagedChannel,
   ManagedCustomer,
@@ -458,6 +459,7 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                 <Button variant="outline" size="sm" disabled={integration.status === "disabled" || !integration.hasSecretReference || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> Testuj</Button>
                 {integration.platform === "slack" && <Button variant="outline" size="sm" disabled={integration.status === "disabled" || integration.health !== "healthy" || actions.discoverChannels.isPending} onClick={() => void discover(integration)}><RefreshCw /> Pobierz kanały</Button>}
                 {integration.status === "configuring" && integration.health === "healthy" && <Button size="sm" onClick={() => void completeConfiguration(integration)}><CheckCircle2 /> Włącz</Button>}
+                {integration.status === "disabled" && <Button size="sm" disabled={!integration.hasSecretReference || actions.setIntegrationStatus.isPending} onClick={() => void completeConfiguration(integration)}><CheckCircle2 /> Włącz</Button>}
                 {integration.status !== "disabled" && <Button variant="destructive" size="sm" onClick={() => setDisabledIntegration(integration)}><Unplug /> Wyłącz</Button>}
               </div>
             </CardContent>
@@ -540,7 +542,7 @@ function CustomersPanel({ data, actions }: { data: ManagedCustomer[]; actions: S
 function ChannelsPanel({ data, customers, actions }: { data: ManagedChannel[]; customers: ManagedCustomer[]; actions: SettingsActions }) {
   const configure = async (channel: ManagedChannel, customerId: string | undefined, ignored: boolean) => {
     try {
-      await actions.configureChannel.mutateAsync({ id: channel.id, customerId, ignored })
+      await actions.configureChannel.mutateAsync({ id: channel.id, customerId, ignored, groupingStrategy: channel.groupingStrategy })
       notify.success("Zapisano kanał", channel.channelName)
     } catch (error) {
       notify.error("Nie udało się zapisać kanału", getErrorMessage(error))
@@ -552,7 +554,7 @@ function ChannelsPanel({ data, customers, actions }: { data: ManagedChannel[]; c
       <Alert>
         <Info />
         <AlertTitle>Wiadomości bez case’a i SLA</AlertTitle>
-        <AlertDescription>Wiadomość z kanału ignorowanego lub bez klienta jest uwierzytelniana i deduplikowana technicznie, ale nie tworzy Case’a, wiadomości biznesowej ani SLA.</AlertDescription>
+        <AlertDescription>Kanały ignorowane nie tworzą nowych spraw. Wiadomości Slack bez przypisanego klienta trafiają do skrzynki jako „Nie przypisano”.</AlertDescription>
       </Alert>
       <div className="overflow-hidden rounded-lg border">
         <Table>
@@ -564,7 +566,7 @@ function ChannelsPanel({ data, customers, actions }: { data: ManagedChannel[]; c
                 <TableCell className="font-medium">{channel.channelName}</TableCell>
                 <TableCell><Select value={channel.customerId ?? "__unmapped__"} onValueChange={(value) => void configure(channel, value === "__unmapped__" ? undefined : String(value), channel.ignored)}><SelectTrigger className="w-52"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__unmapped__">Nie przypisano</SelectItem>{customers.filter((customer) => customer.active).map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>)}</SelectContent></Select></TableCell>
                 <TableCell><div className="flex items-center gap-2"><Switch checked={!channel.ignored} onCheckedChange={(checked) => void configure(channel, channel.customerId, !checked)} aria-label={`${channel.channelName}: monitoring`} /><span className={`text-xs ${channel.ignored || !channel.customerId ? "text-warning-foreground" : "text-success"}`}>{!channel.active ? "Nieaktywny" : channel.ignored ? "Ignorowany" : !channel.customerId ? "Nieprzypisany" : "Monitorowany"}</span></div></TableCell>
-                <TableCell className="font-mono text-xs">{channel.groupingStrategy === "SLACK_ROOT_THREAD" ? "Root + wątek" : channel.groupingStrategy}</TableCell>
+                <TableCell className="font-mono text-xs">{channel.platform === "telegram" ? <Select value={channel.groupingStrategy} onValueChange={(value) => { if (channel.customerId) void actions.configureChannel.mutateAsync({ id: channel.id, customerId: channel.customerId, ignored: channel.ignored, groupingStrategy: value as ChannelGroupingStrategy }).catch((error) => notify.error("Nie udało się zapisać grupowania", getErrorMessage(error))) }}><SelectTrigger aria-label={`${channel.channelName}: grupowanie`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="TELEGRAM_TOPIC">Temat forum</SelectItem><SelectItem value="TELEGRAM_CHAT_ACTIVE_CASE">Aktywny case na czat</SelectItem></SelectContent></Select> : channel.groupingStrategy === "SLACK_ROOT_THREAD" ? "Root + wątek" : channel.groupingStrategy}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{channel.lastMessageAt ? formatDateTime(channel.lastMessageAt) : "Brak"}</TableCell>
               </TableRow>
             ))}

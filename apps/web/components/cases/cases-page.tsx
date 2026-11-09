@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import type { InboxCase, InboxMessage, InboxStatus } from "@/lib/domain/inbox"
 import { inboxStatusLabels } from "@/lib/domain/inbox"
+import { deliveryStatusLabels } from "@/lib/domain/labels"
 import type { InboxListQuery } from "@/lib/services/inbox"
 import { useCurrentUser, useInboxActivity, useInboxAssignees, useInboxCase, useInboxCases, useInboxFilterOptions, useInboxMessages, useInboxWorkflow, useMarkAllResolvedRead, useMarkInboxCaseRead } from "@/lib/services/queries"
 import { cn } from "@/lib/utils"
@@ -127,7 +128,11 @@ export function CasesPage({
   const presentations = useMemo(() => records.map((record) => toPresentation(record, currentUserQuery.data?.id)), [records, currentUserQuery.data?.id])
   const selectedPresentation = presentations.find((item) => item.id === selectedId)
     ?? (detailQuery.data ? toPresentation(detailQuery.data, currentUserQuery.data?.id) : undefined)
-  const messages = useMemo(() => messagesQuery.data?.pages.flatMap((page) => page.items).reverse() ?? [], [messagesQuery.data])
+  const messages = useMemo(() => {
+    const seen = new Set<string>()
+    return (messagesQuery.data?.pages.flatMap((page) => page.items) ?? [])
+      .filter((message) => { if (seen.has(message.id)) return false; seen.add(message.id); return true }).reverse()
+  }, [messagesQuery.data])
   const latestMessageId = messagesQuery.data?.pages[0]?.items[0]?.id
 
   const visibleCases = presentations
@@ -541,7 +546,7 @@ function ConversationPanel({
         {messagesLoading ? <p className="text-sm text-[#9aa5b6]">Wczytywanie wiadomości…</p> : messagesError ? <p role="alert" className="text-sm text-red-400">Nie udało się wczytać wiadomości.</p> : messages.length === 0 ? <p className="text-sm text-[#9aa5b6]">Brak wiadomości.</p> : (
           <div className="flex flex-col gap-6">
             {messages.map((message) => message.kind === "support" ? (
-              <div key={message.id} className="flex justify-end"><div className="max-w-[570px] rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-4 py-3 text-sm text-[#ded9eb]"><div className="mb-2 text-xs text-[#cfc4e8]">{message.sender ?? "Wsparcie"} · {timeLabel(message.createdAt)}{message.edited ? " · edytowano" : ""}{message.deliveryStatus ? ` · ${message.deliveryStatus}` : ""}</div><p className={cn("whitespace-pre-wrap", message.deleted && "italic text-[#aeb8c8]")}><SafeExternalMessage content={message.body} /></p><MessageAttachments attachments={message.attachments} />{message.deliveryStatus === "failed" && <button type="button" onClick={() => workflow.retryMessage.mutate(message.id)} disabled={workflow.retryMessage.isPending} className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-300/20 px-2.5 py-1.5 text-xs text-red-200 disabled:opacity-50"><RotateCcw className="size-3.5" /> Ponów wysyłkę</button>}</div></div>
+              <div key={message.id} className="flex justify-end"><div className="max-w-[570px] rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-4 py-3 text-sm text-[#ded9eb]"><div className="mb-2 text-xs text-[#cfc4e8]">{message.sender ?? "Wsparcie"} · {timeLabel(message.createdAt)}{message.edited ? " · edytowano" : ""}{message.deliveryStatus ? ` · ${deliveryStatusLabels[message.deliveryStatus]}` : ""}</div><p className={cn("whitespace-pre-wrap", message.deleted && "italic text-[#aeb8c8]")}><SafeExternalMessage content={message.body} /></p><MessageAttachments attachments={message.attachments} />{message.deliveryStatus === "failed" && <button type="button" onClick={() => workflow.retryMessage.mutate(message.id)} disabled={workflow.retryMessage.isPending} className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-300/20 px-2.5 py-1.5 text-xs text-red-200 disabled:opacity-50"><RotateCcw className="size-3.5" /> Ponów wysyłkę</button>}</div></div>
             ) : message.kind === "system" ? (
               <div key={message.id} className="text-center text-xs text-[#9ba6b6]">{timeLabel(message.createdAt)} · <SafeExternalMessage content={message.body} /></div>
             ) : (

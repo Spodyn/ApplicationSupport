@@ -700,11 +700,20 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     return channels.map(mapChannel)
   },
 
-  async configureChannel(id, customerId, ignored) {
+  async listCustomers() {
+    return (await listCustomers()).filter((customer) => customer.active).map(({ id, name }) => ({ id, name }))
+  },
+
+  async configureChannel(id, customerId, ignored, groupingStrategy) {
+    const strategy = customerId && !groupingStrategy
+      ? (await browserApiTransport.request<ApiChannelRecord[]>({ method: "GET", path: "/api/v1/admin/channels" })).find((channel) => channel.id === id)?.groupingStrategy
+      : groupingStrategy
     await browserApiTransport.request<ApiChannelRecord>({
       method: "PATCH",
       path: `/api/v1/admin/channels/${encodeURIComponent(id)}`,
-      body: { ignored, customerId: customerId ?? null },
+      body: customerId
+        ? { ignored, customerId, groupingStrategy: strategy }
+        : { ignored, clearCustomer: true },
     })
   },
 

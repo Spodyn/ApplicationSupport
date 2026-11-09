@@ -245,7 +245,7 @@ export function useAdministrationUserActions() {
   const issuePasswordReset = useMutation({
     mutationFn: (id: string) => serviceRegistry.administrationUsers.issuePasswordReset(id),
   })
-  return { save, deactivate, delete: deleteUser, issueInvitation, issuePasswordReset }
+  return { save, deactivate, delete: deleteUser, issueInvitation, issuePasswordReset, supported: serviceRegistry.administrationUsers.supportsMutations !== false }
 }
 
 export function useAdministrationSettings() {
@@ -287,8 +287,8 @@ export function useAdministrationSettingsActions() {
     onSuccess: invalidate,
   })
   const configureChannel = useMutation({
-    mutationFn: ({ id, customerId, ignored }: { id: string; customerId?: string; ignored: boolean }) =>
-      serviceRegistry.administrationSettings.configureChannel(id, customerId, ignored),
+    mutationFn: ({ id, customerId, ignored, groupingStrategy }: { id: string; customerId?: string; ignored: boolean; groupingStrategy?: import("@/lib/domain/administration").ChannelGroupingStrategy }) =>
+      serviceRegistry.administrationSettings.configureChannel(id, customerId, ignored, groupingStrategy),
     onSuccess: invalidate,
   })
   const saveCustomer = useMutation({

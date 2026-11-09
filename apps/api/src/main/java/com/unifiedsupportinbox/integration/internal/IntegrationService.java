@@ -30,14 +30,17 @@ class IntegrationService {
     private final IntegrationRepository integrations;
     private final List<IntegrationConnectionTester> connectionTesters;
     private final AuditEventStore auditEvents;
+    private final IntegrationConnectionTestRunner connectionTestRunner;
 
     IntegrationService(
             IntegrationRepository integrations,
             List<IntegrationConnectionTester> connectionTesters,
-            AuditEventStore auditEvents) {
+            AuditEventStore auditEvents,
+            IntegrationConnectionTestRunner connectionTestRunner) {
         this.integrations = integrations;
         this.connectionTesters = List.copyOf(connectionTesters);
         this.auditEvents = auditEvents;
+        this.connectionTestRunner = connectionTestRunner;
     }
 
     @Transactional(readOnly = true)
@@ -110,13 +113,15 @@ class IntegrationService {
         }
         IntegrationRecord current = integrations.findById(integrationId)
                 .orElseThrow(() -> ApiProblemException.notFound("Integration was not found."));
-        if (status == IntegrationStatus.ENABLED
-                && (current.workspaceExternalId() == null
-                    || current.secretRef() == null
-                    || current.health() != IntegrationHealth.HEALTHY)) {
-            throw ApiProblemException.conflict("Test the configured credentials successfully before enabling the integration.");
+        if (status == IntegrationStatus.ENABLED && current.secretRef() == null) {
+            throw ApiProblemException.validationFailed("Integration credentials must be configured before enabling it.");
         }
-        IntegrationRecord updated = integrations.updateStatus(integrationId, status);
+        IntegrationRecord updated;
+        try {
+            updated = integrations.updateStatus(integrationId, status);
+        } catch (DataIntegrityViolationException conflict) {
+            throw ApiProblemException.conflict("Integration status conflicts with the active provider/workspace mapping.");
+        }
         appendAudit(actor, updated, status == IntegrationStatus.ENABLED
                 ? "INTEGRATION_ENABLED"
                 : "INTEGRATION_DISABLED", Map.of("status", status.name()));
@@ -132,7 +137,7 @@ class IntegrationService {
                 .filter(tester -> tester.supports(integration.provider()))
                 .toList();
         IntegrationConnectionTester.Result result = matching.size() == 1
-                ? runTest(matching.getFirst(), integration)
+                ? connectionTestRunner.run(matching.getFirst(), integration)
                 : IntegrationConnectionTester.Result.unavailable();
         IntegrationHealth health = switch (result.outcome()) {
             case SUCCESS -> IntegrationHealth.HEALTHY;
@@ -142,26 +147,13 @@ class IntegrationService {
         String errorCode = result.outcome() == IntegrationConnectionTester.Outcome.SUCCESS
                 ? null
                 : normalizeErrorCode(result.errorCode(), result.outcome());
-        IntegrationRecord updated = integrations.updateHealth(
-                integration.id(), health, integration.lastEventAt(), errorCode);
+        IntegrationRecord updated = integrations.updateHealthPreservingLastEvent(
+                integration.id(), health, errorCode);
         return new IntegrationConnectionTestView(updated.toView(), result.outcome(), errorCode);
     }
 
-    private static IntegrationConnectionTester.Result runTest(
-            IntegrationConnectionTester tester, IntegrationRecord integration) {
-        try {
-            IntegrationConnectionTester.Result result = tester.test(new IntegrationConnectionTester.Request(
-                    integration.id(), integration.provider(), integration.workspaceExternalId(), integration.secretRef() != null));
-            return result == null || result.outcome() == null
-                    ? IntegrationConnectionTester.Result.unavailable()
-                    : result;
-        } catch (RuntimeException ignored) {
-            return IntegrationConnectionTester.Result.unavailable();
-        }
-    }
-
     private static void requireManageIntegrations(Authentication actor) {
-        if (!hasAuthority(actor, MANAGE_INTEGRATIONS)) throw ApiProblemException.accessDenied();
+        if (!hasAuthority(actor, "ROLE_ADMIN") || !hasAuthority(actor, MANAGE_INTEGRATIONS)) throw ApiProblemException.accessDenied();
     }
 
     private static IntegrationConfigurationInput normalize(IntegrationConfigurationInput input) {

@@ -114,7 +114,7 @@ export default function UsersRoute() {
   const currentAdministrationUserQuery = useCurrentAdministrationUser()
   const actions = useAdministrationUserActions()
   const users = usersQuery.data ?? []
-  const canManageUsers = hasAdministrationPermission(
+  const canManageUsers = actions.supported && hasAdministrationPermission(
     currentAdministrationUserQuery.data,
     "manage_users",
   )
@@ -191,7 +191,7 @@ export default function UsersRoute() {
         className: "min-w-40 text-xs",
         cell: (user) => (
           <div>
-            <p>od {formatDate(user.validFrom)}</p>
+            <p>{user.validFrom ? `od ${formatDate(user.validFrom)}` : "bez daty początkowej"}</p>
             <p className="text-muted-foreground">
               {user.validUntil ? `do ${formatDate(user.validUntil)}` : "bezterminowo"}
             </p>

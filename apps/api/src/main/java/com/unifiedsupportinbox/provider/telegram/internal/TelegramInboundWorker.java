@@ -68,8 +68,17 @@ class TelegramInboundWorker {
             String text = message.has("text") && message.path("text").isTextual() ? message.path("text").asText() : "";
             String chatId = message.path("chat").path("id").asText();
             String messageId = message.path("message_id").asText();
-            String topic = message.path("message_thread_id").isIntegralNumber() ? message.path("message_thread_id").asText() : null;
-            return new TelegramMessage(chatId, messageId, topic == null ? messageId : topic, from.path("id").asText(), text, bot, Instant.ofEpochSecond(message.path("date").asLong()));
+            String topic = message.path("message_thread_id").isIntegralNumber()
+                    ? message.path("message_thread_id").asText()
+                    : null;
+            return new TelegramMessage(
+                    chatId,
+                    messageId,
+                    topic,
+                    from.path("id").asText(),
+                    text,
+                    bot,
+                    Instant.ofEpochSecond(message.path("date").asLong()));
         } catch (RuntimeException bad) { throw new IllegalArgumentException("Malformed Telegram update.", bad); }
     }
     private record TelegramMessage(String chatId, String messageId, String threadKey, String authorId, String text, boolean fromBot, Instant occurredAt) {}

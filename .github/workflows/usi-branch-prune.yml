@@ -1,0 +1,42 @@
+name: USI stale merged branch cleanup
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '13 3 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Preview deletions only'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: usi-historical-branch-pruning
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Prove branch pruning safety tests
+        run: node --test scripts/tests/delete_merged_branch.test.mjs scripts/tests/prune_merged_branches.test.mjs
+      - name: Prune only unchanged merged branches with no open PR consumers
+        env:
+          GH_TOKEN: ${{ github.token }}
+          USI_BRANCH_SWEEP_DRY_RUN: ${{ inputs.dry_run || vars.USI_BRANCH_SWEEP_DRY_RUN || 'false' }}
+        run: node scripts/prune_merged_branches.mjs
