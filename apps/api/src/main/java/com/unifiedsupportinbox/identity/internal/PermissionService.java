@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 @Service
 class PermissionService {
@@ -16,11 +17,13 @@ class PermissionService {
     private final UserAccountRepository users;
     private final PermissionStore permissions;
     private final AuditEventStore auditEvents;
+    private final JdbcTemplate jdbc;
 
-    PermissionService(UserAccountRepository users, PermissionStore permissions, AuditEventStore auditEvents) {
+    PermissionService(UserAccountRepository users, PermissionStore permissions, AuditEventStore auditEvents, JdbcTemplate jdbc) {
         this.users = users;
         this.permissions = permissions;
         this.auditEvents = auditEvents;
+        this.jdbc = jdbc;
     }
 
     @Transactional(readOnly = true)
@@ -37,7 +40,7 @@ class PermissionService {
 
     @Transactional(readOnly = true)
     void requirePermission(UsiSessionPrincipal actor, String permission) {
-        if (!hasPermission(actor, permission)) {
+        if (actor == null || actor.role() != UserRole.ADMIN || !hasPermission(actor, permission)) {
             throw ApiProblemException.accessDenied();
         }
     }
@@ -52,6 +55,10 @@ class PermissionService {
         UserAccount target = users.findById(userId)
                 .orElseThrow(() -> ApiProblemException.notFound("User was not found."));
 
+        if (target.role() != UserRole.ADMIN) {
+            throw ApiProblemException.validationFailed("Only administrators can receive administrative permissions.");
+        }
+
         List<String> normalized;
         try {
             normalized = PermissionCatalog.normalizeRequested(requestedPermissions);
@@ -60,7 +67,17 @@ class PermissionService {
         }
 
         List<String> previous = permissions.explicitPermissions(userId);
+        jdbc.queryForList("SELECT id FROM users WHERE role = 'ADMIN' FOR UPDATE", UUID.class);
         permissions.replaceExplicitPermissions(userId, normalized);
+        Integer managers = jdbc.queryForObject("""
+                SELECT count(*) FROM users u JOIN user_permissions p ON p.user_id = u.id
+                WHERE u.role = 'ADMIN' AND u.active = TRUE AND p.permission_code = 'manage_users'
+                  AND (u.valid_from IS NULL OR u.valid_from <= now())
+                  AND (u.valid_until IS NULL OR u.valid_until > now())
+                """, Integer.class);
+        if (managers == null || managers == 0) {
+            throw ApiProblemException.conflict("At least one active administrator with user-management permission is required.");
+        }
         auditEvents.append(
                 actor.role() == UserRole.ADMIN ? AuditActorType.ADMIN : AuditActorType.USER,
                 actor.userId(),
@@ -79,10 +96,9 @@ class PermissionService {
         if (!user.isSessionEligibleAt(Instant.now())) {
             return List.of();
         }
-        if (user.role() == UserRole.ADMIN) {
-            return PermissionCatalog.ALL;
-        }
-        return permissions.explicitPermissions(user.id());
+        return user.role() == UserRole.ADMIN
+                ? permissions.explicitPermissions(user.id())
+                : List.of();
     }
 
     record PermissionSnapshot(

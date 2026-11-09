@@ -233,6 +233,7 @@ Admin current work:
 - One active integration per `(provider, workspace_external_id)` in a deployment.
 - Configuration status is separate from health: `CONFIGURING|ENABLED|DISABLED` vs `UNKNOWN|HEALTHY|DEGRADED|UNAVAILABLE`.
 - `DISABLED` preserves historical data; inbound may be authenticated/deduped for technical accounting but creates no Case/Message/SLA; outbound is not delivered.
+- Slack intake override approved by the user on 2026-11-09: reconcile authorized bot channel membership automatically; active supported Slack channels without a Customer mapping create visible Cases with a null customer ("Nie przypisano"). Never guess a customer.
 - Channel discovery does not hard-delete missing channels; it marks them inactive, and rediscovery reactivates the same identity.
 - `channel.ignored=true` is scoped to that Channel record. Future inbound events for it are still authenticated and deduplicated, recorded with technical outcome `IGNORED_BY_CHANNEL`, but create **no Case, Message, SLA or read-state side effect**. Existing Cases/messages are never rewritten by toggling the flag. Because no Message is created, an ignored-channel inbound is not shown as ordinary conversation content in the inbox.
 - Manual test-connection timeout is 10 seconds and may update health/sanitized error, never silently enable/disable integration.

@@ -129,7 +129,7 @@ class AdminUserListService {
         return count != null && count == 1;
     }
 
-    private static AdminUserItem map(ResultSet rs) throws SQLException {
+    private AdminUserItem map(ResultSet rs) throws SQLException {
         return new AdminUserItem(
                 rs.getObject("id", UUID.class),
                 rs.getString("email"),
@@ -141,7 +141,8 @@ class AdminUserListService {
                 timestamp(rs, "valid_until"),
                 timestamp(rs, "last_login_at"),
                 rs.getLong("active_assigned_cases"),
-                timestamp(rs, "created_at"));
+                timestamp(rs, "created_at"),
+                permissions.effectivePermissions(rs.getObject("id", UUID.class)));
     }
 
     private static Instant timestamp(ResultSet rs, String column) throws SQLException {
@@ -173,6 +174,7 @@ class AdminUserListService {
             Instant validUntil,
             Instant lastLoginAt,
             long activeAssignedCases,
-            Instant createdAt) {
+            Instant createdAt,
+            List<String> permissions) {
     }
 }

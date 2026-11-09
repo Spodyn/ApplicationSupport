@@ -152,6 +152,12 @@ class UserAccount {
         this.passwordHash = normalizePasswordHash(passwordHash);
     }
 
+    void updateProfile(String email, String displayName, UserRole role) {
+        this.email = normalizeEmail(email);
+        this.displayName = normalizeDisplayName(displayName);
+        this.role = Objects.requireNonNull(role, "role");
+    }
+
     @PrePersist
     void beforeInsert() {
         normalizeAndValidate();

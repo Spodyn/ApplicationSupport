@@ -14,14 +14,17 @@ class BootstrapAdminService {
     private final UserAccountRepository users;
     private final BootstrapAdminStateRepository bootstrapState;
     private final PasswordEncoder encoder;
+    private final PermissionStore permissions;
 
     BootstrapAdminService(
             UserAccountRepository users,
             BootstrapAdminStateRepository bootstrapState,
-            PasswordEncoder encoder) {
+            PasswordEncoder encoder,
+            PermissionStore permissions) {
         this.users = users;
         this.bootstrapState = bootstrapState;
         this.encoder = encoder;
+        this.permissions = permissions;
     }
 
     @Transactional
@@ -52,6 +55,7 @@ class BootstrapAdminService {
                 true,
                 null,
                 null));
+        permissions.replaceExplicitPermissions(administrator.id(), PermissionCatalog.ALL);
         bootstrapState.markConsumed(administrator.id());
         return administrator.id();
     }

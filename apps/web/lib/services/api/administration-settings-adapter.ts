@@ -1,29 +1,45 @@
-import { createApiClient } from "@usi/api-client/generated"
-import type {
-  Channel as ApiProvider,
-  IntegrationStatus as ApiIntegrationStatus,
-  IntegrationView as ApiIntegrationRecord,
-} from "@usi/api-client/generated"
 import type {
   AdministrationSettings,
   ChannelGroupingStrategy,
   ManagedChannel,
+  ManagedCustomer,
   ManagedIntegration,
-  ManagedCustomerOption,
   NotificationDestination,
+  NotificationDelivery,
   NotificationType,
   ScheduleException,
   WorkScheduleSettings,
 } from "@/lib/domain/administration"
 import type { Channel } from "@/lib/domain/shared"
 import type { AdministrationSettingsRepository } from "@/lib/services/administration"
-import { mockAdministrationSettingsRepository } from "@/lib/services/administration"
 import { mapApiChannel } from "./channel-adapter"
 import { browserApiTransport } from "./http-transport"
 
-type ApiCustomerRecord = {
+type ApiProvider = "SLACK" | "TEAMS" | "TELEGRAM"
+
+type ApiIntegration = {
+  id: string
+  provider: ApiProvider
+  displayName: string
+  status: "CONFIGURING" | "ENABLED" | "DISABLED"
+  health: "UNKNOWN" | "HEALTHY" | "DEGRADED" | "UNAVAILABLE"
+  workspaceExternalId?: string | null
+  workspaceName?: string | null
+  secretConfigured: boolean
+  lastEventAt?: string | null
+  lastErrorCode?: string | null
+}
+
+type ApiIntegrationTest = {
+  integration: ApiIntegration
+  outcome: "SUCCESS" | "TIMEOUT" | "UNAUTHORIZED" | "UNAVAILABLE"
+  errorCode?: string | null
+}
+
+type ApiCustomer = {
   id: string
   name: string
+  externalRef?: string | null
   active: boolean
 }
 
@@ -52,6 +68,13 @@ export type ApiBusinessHoursSchedule = {
   timezone: string
   active: boolean
   intervals: ApiBusinessHoursInterval[]
+  exceptions?: {
+    date: string
+    type: "CLOSED" | "OPEN" | "OVERRIDE"
+    start?: string | null
+    end?: string | null
+    note?: string | null
+  }[]
   updatedBy: string
   updatedAt: string
 }
@@ -82,6 +105,12 @@ type ApiNotificationRule = {
   updatedAt: string
 }
 
+type ApiNotificationDelivery = NotificationDelivery & {
+  lastErrorCode?: string | null
+  terminalReason?: string | null
+  sentAt?: string | null
+}
+
 type ApiOutOfOfficePolicy = {
   enabled: boolean
   template: string
@@ -89,6 +118,12 @@ type ApiOutOfOfficePolicy = {
   version: number
   updatedAt: string
   updatedBy: string
+}
+
+type ApiOutOfOfficePreview = {
+  message: string
+  nextOpening?: string | null
+  timezone: string
 }
 
 type ApiSlaPolicy = {
@@ -102,6 +137,13 @@ type ApiSlaPolicy = {
   pauseWaiting: boolean
   version: number
   updatedAt: string
+}
+
+type ApiOrganizationSettings = {
+  general: AdministrationSettings["general"]
+  rolePermissions: AdministrationSettings["rolePermissions"]
+  warningBeforeDeadlineMinutes: number
+  businessHoursOnly: boolean
 }
 
 const scheduleDays = [
@@ -125,23 +167,6 @@ const supportedNotificationTypes = new Set<NotificationType>([
 const notificationDestinationVersions = new Map<string, number>()
 let outOfOfficeVersion: number | undefined
 let slaPolicyVersion: number | undefined
-const integrationApi = createApiClient(browserApiTransport)
-
-function mapIntegration(integration: ApiIntegrationRecord): ManagedIntegration {
-  return {
-    id: integration.id,
-    platform: mapApiChannel(integration.provider),
-    status: integration.status.toLowerCase() as ManagedIntegration["status"],
-    canEnable: integration.secretConfigured,
-    workspace:
-      integration.workspaceName ??
-      integration.workspaceExternalId ??
-      integration.displayName,
-    lastEventAt: integration.lastEventAt ?? undefined,
-    lastErrorCode: integration.lastErrorCode ?? undefined,
-    health: integration.health.toLowerCase() as ManagedIntegration["health"],
-  }
-}
 
 function mapChannel(channel: ApiChannelRecord): ManagedChannel {
   const activity = channel.active ? "Aktywny" : "Nieaktywny"
@@ -159,16 +184,34 @@ function mapChannel(channel: ApiChannelRecord): ManagedChannel {
   }
 }
 
+function mapIntegration(integration: ApiIntegration): ManagedIntegration {
+  return {
+    id: integration.id,
+    platform: mapApiChannel(integration.provider),
+    displayName: integration.displayName,
+    status: integration.status.toLowerCase() as ManagedIntegration["status"],
+    workspace: integration.workspaceName ?? integration.workspaceExternalId ?? "",
+    workspaceId: integration.workspaceExternalId ?? "",
+    hasSecretReference: integration["secretConfigured"],
+    lastEventAt: integration.lastEventAt ?? undefined,
+    lastErrorCode: integration.lastErrorCode ?? undefined,
+    health: integration.health.toLowerCase() as ManagedIntegration["health"],
+  }
+}
+
+function mapCustomer(customer: ApiCustomer): ManagedCustomer {
+  return {
+    id: customer.id,
+    name: customer.name,
+    externalRef: customer.externalRef ?? undefined,
+    active: customer.active,
+  }
+}
+
 function apiProvider(channel: Channel): ApiProvider {
   if (channel === "slack") return "SLACK"
   if (channel === "teams") return "TEAMS"
   return "TELEGRAM"
-}
-
-function apiIntegrationStatus(status: ManagedIntegration["status"]): ApiIntegrationStatus {
-  if (status === "configuring") return "CONFIGURING"
-  if (status === "enabled") return "ENABLED"
-  return "DISABLED"
 }
 
 function wallClock(value: string): string {
@@ -191,7 +234,14 @@ function coalesceAdjacentIntervals(intervals: ApiBusinessHoursInterval[]) {
 
 export function mapApiBusinessHours(
   schedule: ApiBusinessHoursSchedule,
-  exceptions: ScheduleException[] = [],
+  exceptions: ScheduleException[] = (schedule.exceptions ?? []).map((item) => ({
+    id: item.date,
+    date: item.date,
+    name: item.note ?? (item.type === "CLOSED" ? "Dzień wolny" : "Wyjątek godzin pracy"),
+    closed: item.type === "CLOSED",
+    start: item.start?.slice(0, 5) ?? undefined,
+    end: item.end?.slice(0, 5) ?? undefined,
+  })),
 ): WorkScheduleSettings {
   const days = scheduleDays.map(({ dayOfWeek, key, label }) => {
     const intervals = coalesceAdjacentIntervals(
@@ -252,27 +302,28 @@ export function mapWorkScheduleToApiIntervals(
   })
 }
 
-async function listIntegrations(): Promise<ManagedIntegration[]> {
-  const integrations = await integrationApi.listIntegrations()
-  return integrations.map(mapIntegration)
-}
-
-async function listCustomers(): Promise<ManagedCustomerOption[]> {
-  const customers = await browserApiTransport.request<ApiCustomerRecord[]>({
-    method: "GET",
-    path: "/api/v1/admin/customers",
-  })
-  return customers
-    .filter((customer) => customer.active)
-    .map((customer) => ({ id: customer.id, name: customer.name }))
-}
-
 async function listChannels(): Promise<ManagedChannel[]> {
   const channels = await browserApiTransport.request<ApiChannelRecord[]>({
     method: "GET",
     path: "/api/v1/admin/channels",
   })
   return channels.map(mapChannel)
+}
+
+async function listIntegrations(): Promise<ManagedIntegration[]> {
+  const integrations = await browserApiTransport.request<ApiIntegration[]>({
+    method: "GET",
+    path: "/api/v1/admin/integrations",
+  })
+  return integrations.map(mapIntegration)
+}
+
+async function listCustomers(): Promise<ManagedCustomer[]> {
+  const customers = await browserApiTransport.request<ApiCustomer[]>({
+    method: "GET",
+    path: "/api/v1/admin/customers",
+  })
+  return customers.map(mapCustomer)
 }
 
 async function getBusinessHours(): Promise<ApiBusinessHoursSchedule> {
@@ -295,10 +346,35 @@ async function saveBusinessHours(
   })
 }
 
+async function saveBusinessHoursExceptions(schedule: WorkScheduleSettings) {
+  return browserApiTransport.request<ApiBusinessHoursSchedule>({
+    method: "PUT",
+    path: "/api/v1/admin/business-hours/exceptions",
+    body: schedule.exceptions.map((item) => ({
+      date: item.date,
+      type: item.closed ? "CLOSED" : "OVERRIDE",
+      start: item.closed ? null : item.start,
+      end: item.closed ? null : item.end,
+      note: item.name,
+    })),
+  })
+}
+
+async function getOrganizationSettings() {
+  return browserApiTransport.request<ApiOrganizationSettings>({ method: "GET", path: "/api/v1/admin/settings" })
+}
+
 async function getOutOfOffice(): Promise<ApiOutOfOfficePolicy> {
   return browserApiTransport.request<ApiOutOfOfficePolicy>({
     method: "GET",
     path: "/api/v1/admin/out-of-office",
+  })
+}
+
+async function getOutOfOfficePreview(): Promise<ApiOutOfOfficePreview> {
+  return browserApiTransport.request<ApiOutOfOfficePreview>({
+    method: "GET",
+    path: "/api/v1/admin/out-of-office/preview?customerName=Joanna",
   })
 }
 
@@ -311,7 +387,12 @@ async function saveOutOfOffice(
   const saved = await browserApiTransport.request<ApiOutOfOfficePolicy>({
     method: "PUT",
     path: "/api/v1/admin/out-of-office",
-    body: { ...policy, version: outOfOfficeVersion },
+    body: {
+      enabled: policy.enabled,
+      template: policy.template,
+      sendOncePerClosure: policy.sendOncePerClosure,
+      version: outOfOfficeVersion,
+    },
   })
   outOfOfficeVersion = saved.version
   return saved
@@ -386,6 +467,18 @@ function mapNotifications(
 async function listNotifications(): Promise<NotificationDestination[]> {
   const configuration = await readNotificationConfiguration()
   return mapNotifications(configuration.destinations, configuration.rules)
+}
+
+async function listNotificationDeliveries(): Promise<NotificationDelivery[]> {
+  const deliveries = await browserApiTransport.request<ApiNotificationDelivery[]>({
+    method: "GET", path: "/api/v1/admin/notifications/deliveries",
+  })
+  return deliveries.map((item) => ({
+    ...item,
+    lastErrorCode: item.lastErrorCode ?? undefined,
+    terminalReason: item.terminalReason ?? undefined,
+    sentAt: item.sentAt ?? undefined,
+  }))
 }
 
 function destinationBody(item: NotificationDestination) {
@@ -469,32 +562,40 @@ async function saveNotifications(
 
 export const apiAdministrationSettingsRepository: AdministrationSettingsRepository = {
   async get() {
-    const [settings, integrations, channels, businessHours, notifications, outOfOffice, sla] = await Promise.all([
-      mockAdministrationSettingsRepository.get(),
+    const [organization, integrations, customers, channels, businessHours, notifications, notificationDeliveries, outOfOffice, outOfOfficePreview, sla] = await Promise.all([
+      getOrganizationSettings(),
       listIntegrations(),
+      listCustomers(),
       listChannels(),
       getBusinessHours(),
       listNotifications(),
+      listNotificationDeliveries(),
       getOutOfOffice(),
+      getOutOfOfficePreview(),
       getSlaPolicy(),
     ])
     return {
-      ...settings,
-      schedule: mapApiBusinessHours(businessHours, settings.schedule.exceptions),
+      general: organization.general,
+      rolePermissions: organization.rolePermissions,
       integrations,
+      customers,
+      schedule: mapApiBusinessHours(businessHours),
       channels,
       notifications,
+      notificationDeliveries,
       outOfOffice: {
         enabled: outOfOffice.enabled,
         template: outOfOffice.template,
         sendOncePerClosure: outOfOffice.sendOncePerClosure,
+        previewMessage: outOfOfficePreview.message,
       },
       sla: {
-        ...settings.sla,
         firstResponseMinutes: sla.firstResponseMinutes,
         unclaimedReminderMinutes: sla.unclaimedWarningMinutes,
         inProgressReminderMinutes: sla.inProgressWarningMinutes,
+        warningBeforeDeadlineMinutes: organization.warningBeforeDeadlineMinutes,
         repeatedBreachMinutes: sla.inProgressBreachMinutes,
+        businessHoursOnly: organization.businessHoursOnly,
         pauseWhileWaiting: sla.pauseWaiting,
       },
     }
@@ -506,10 +607,8 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
   ) {
     if (key === "schedule") {
       const schedule = value as WorkScheduleSettings
-      const saved = await saveBusinessHours(schedule)
-      const mapped = mapApiBusinessHours(saved, schedule.exceptions)
-      await mockAdministrationSettingsRepository.saveSection("schedule", mapped)
-      return mapped as AdministrationSettings[K]
+      await saveBusinessHours(schedule)
+      return mapApiBusinessHours(await saveBusinessHoursExceptions(schedule)) as AdministrationSettings[K]
     }
     if (key === "notifications") {
       return (await saveNotifications(value as NotificationDestination[])) as AdministrationSettings[K]
@@ -525,45 +624,116 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     if (key === "sla") {
       const saved = await saveSlaPolicy(value as AdministrationSettings["sla"])
       const existing = value as AdministrationSettings["sla"]
+      await browserApiTransport.request<ApiOrganizationSettings>({
+        method: "PUT", path: "/api/v1/admin/settings/sla-display", body: {
+          warningBeforeDeadlineMinutes: existing.warningBeforeDeadlineMinutes,
+          businessHoursOnly: existing.businessHoursOnly,
+        },
+      })
       return { ...existing, firstResponseMinutes: saved.firstResponseMinutes,
         unclaimedReminderMinutes: saved.unclaimedWarningMinutes,
         inProgressReminderMinutes: saved.inProgressWarningMinutes,
         repeatedBreachMinutes: saved.inProgressBreachMinutes,
         pauseWhileWaiting: saved.pauseWaiting } as AdministrationSettings[K]
     }
-    return mockAdministrationSettingsRepository.saveSection(key, value)
+    if (key === "general") {
+      const saved = await browserApiTransport.request<ApiOrganizationSettings>({
+        method: "PUT", path: "/api/v1/admin/settings/general", body: value,
+      })
+      return saved.general as AdministrationSettings[K]
+    }
+    if (key === "rolePermissions") {
+      const roles = value as AdministrationSettings["rolePermissions"]
+      const saved = await browserApiTransport.request<ApiOrganizationSettings>({
+        method: "PUT", path: "/api/v1/admin/settings/role-permissions", body: {
+          adminPermissions: roles.find((item) => item.role === "ADMIN")?.permissions ?? [],
+        },
+      })
+      return saved.rolePermissions as AdministrationSettings[K]
+    }
+    throw new Error(`Sekcja ${String(key)} nie obsługuje bezpośredniego zapisu.`)
+  },
+
+  async configureIntegration(input) {
+    const body = {
+      provider: apiProvider(input.platform),
+      displayName: input.displayName,
+      workspaceExternalId: input.workspaceId,
+      workspaceName: input.workspaceName,
+      secretRef: input.secretRef,
+    }
+    const integration = await browserApiTransport.request<ApiIntegration>({
+      method: input.id ? "PUT" : "POST",
+      path: input.id
+        ? `/api/v1/admin/integrations/${encodeURIComponent(input.id)}`
+        : "/api/v1/admin/integrations",
+      body,
+    })
+    return mapIntegration(integration)
   },
 
   async setIntegrationStatus(id, status) {
-    const integration = await integrationApi.setIntegrationStatus({
-      integrationId: id,
-      body: { status: apiIntegrationStatus(status) },
+    const integration = await browserApiTransport.request<ApiIntegration>({
+      method: "PATCH",
+      path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/status`,
+      body: { status: status.toUpperCase() },
     })
     return mapIntegration(integration)
   },
 
   async testIntegration(id) {
-    const result = await integrationApi.testIntegrationConnection({ integrationId: id })
+    const result = await browserApiTransport.request<ApiIntegrationTest>({
+      method: "POST",
+      path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/test`,
+    })
+    if (result.outcome !== "SUCCESS") {
+      throw new Error(result.errorCode ?? "Test połączenia nie powiódł się.")
+    }
     return mapIntegration(result.integration)
   },
 
-  listCustomers,
-
-  async configureChannel(id, customerId, groupingStrategy) {
-    const updated = await browserApiTransport.request<ApiChannelRecord>({
-      method: "PATCH",
-      path: `/api/v1/admin/channels/${encodeURIComponent(id)}`,
-      body: { customerId, groupingStrategy },
+  async discoverChannels(id) {
+    const channels = await browserApiTransport.request<ApiChannelRecord[]>({
+      method: "POST",
+      path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/slack/discover-channels`,
     })
-    return mapChannel(updated)
+    return channels.map(mapChannel)
   },
 
-  async setChannelIgnored(id, ignored) {
+  async listCustomers() {
+    return (await listCustomers()).filter((customer) => customer.active).map(({ id, name }) => ({ id, name }))
+  },
+
+  async configureChannel(id, customerId, ignored, groupingStrategy) {
+    const strategy = customerId && !groupingStrategy
+      ? (await browserApiTransport.request<ApiChannelRecord[]>({ method: "GET", path: "/api/v1/admin/channels" })).find((channel) => channel.id === id)?.groupingStrategy
+      : groupingStrategy
     await browserApiTransport.request<ApiChannelRecord>({
       method: "PATCH",
       path: `/api/v1/admin/channels/${encodeURIComponent(id)}`,
-      body: { ignored },
+      body: customerId
+        ? { ignored, customerId, groupingStrategy: strategy }
+        : { ignored, clearCustomer: true },
     })
+  },
+
+  async saveCustomer(input, id) {
+    const customer = await browserApiTransport.request<ApiCustomer>({
+      method: id ? "PUT" : "POST",
+      path: id
+        ? `/api/v1/admin/customers/${encodeURIComponent(id)}`
+        : "/api/v1/admin/customers",
+      body: { name: input.name, externalRef: input.externalRef ?? null },
+    })
+    return mapCustomer(customer)
+  },
+
+  async deactivateCustomer(id) {
+    const customer = await browserApiTransport.request<ApiCustomer>({
+      method: "POST",
+      path: `/api/v1/admin/customers/${encodeURIComponent(id)}/deactivate`,
+    })
+    return mapCustomer(customer)
   },
 
   async toggleNotification(id, enabled) {
@@ -579,5 +749,11 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
       body: { version, enabled },
     })
     notificationDestinationVersions.set(id, saved.version)
+  },
+
+  async replayNotificationDelivery(id) {
+    await browserApiTransport.request<void>({
+      method: "POST", path: `/api/v1/admin/notifications/deliveries/${encodeURIComponent(id)}/replay`,
+    })
   },
 }

@@ -106,17 +106,26 @@ In a monitored customer channel, a human message not originating from the USI ap
 
 ### 2.4 Unmapped channels
 
-For a valid callback from a channel without an active Customer mapping:
+User-approved local Slack intake override (2026-11-09): enabled integrations reconcile
+bot membership every 30 seconds. Discovery accepts only supported public/private/Slack
+Connect channels where `is_member=true`, preserves existing mappings and ignored flags,
+and marks missing channels inactive only after a complete successful paginated snapshot.
+Discovery failures preserve the previous snapshot. No history is imported.
 
-- verify/authenticate it;
-- persist/deduplicate it as `UNMAPPED_CHANNEL` technical state;
-- do not create Case, Message or SLA;
-- surface the configuration problem in Settings/admin tooling.
+Authenticated human messages in discovered, active, non-ignored Slack channels create
+Cases and Messages even when the channel has no Customer mapping. The Case customer
+is NULL and inbox/detail/analytics display **Nie przypisano**. No synthetic or real
+Customer is guessed. Existing Case read DTOs retain a non-null UUID field: reserved
+zero UUID `00000000-0000-0000-0000-000000000000` represents this unassigned
+projection, never a Customer record. Other providers retain their existing customer-mapping requirement.
+Messages arriving before discovery retry durably rather than being silently discarded.
 
 ### 2.5 Edits and deletes
 
 - Customer edit updates the existing Message and `edited_at`; it produces activity and unread.
-- Customer delete marks the existing Message deleted (`deleted_at`/safe marker), preserves identity/history and does not create/reopen a Case.
+- Customer delete clears stored body and marks the existing Message deleted (`deleted_at`/safe marker), preserves identity/history and does not create/reopen a Case.
+- Edits/deletes target the original provider Message across Case generations, with row locks and stale/duplicate suppression. Missing originals retry as `MESSAGE_MUTATION_TARGET_PENDING`; they never create a Case. Edits of read Messages reset eligible read projections; deleted Messages cannot be resurrected by a late edit.
+- A transactional `message.updated` outbox event triggers an authenticated per-Case realtime hint; clients refetch the persisted conversation, activity and list.
 
 ### 2.6 Request verification and ACK
 

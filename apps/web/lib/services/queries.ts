@@ -6,6 +6,7 @@ import { serviceRegistry } from "./registry"
 import type {
   InboxAskInput,
   InboxIgnoreInput,
+  InboxListQuery,
   InboxResolveInput,
   InboxSendInput,
 } from "./inbox"
@@ -13,16 +14,17 @@ import type {
   AdministrationSettings,
   AdministrationUserInput,
   ManagedIntegration,
+  IntegrationConfigurationInput,
 } from "@/lib/domain/administration"
 import type { AdministrationUserQuery } from "./administration"
 import type { AnalyticsFilters } from "@/lib/domain/analytics"
 
 export type AdministrationSectionInput = {
-  [K in keyof AdministrationSettings]: {
+  [K in Exclude<keyof AdministrationSettings, "notificationDeliveries">]: {
     key: K
     value: AdministrationSettings[K]
   }
-}[keyof AdministrationSettings]
+}[Exclude<keyof AdministrationSettings, "notificationDeliveries">]
 
 /**
  * Klucze zapytań TanStack Query. Ustrukturyzowane tak, aby łatwo było je
@@ -30,14 +32,18 @@ export type AdministrationSectionInput = {
  */
 export const queryKeys = {
   currentUser: () => ["current-user"] as const,
-  inboxCases: () => ["support-inbox", "cases"] as const,
+  inboxCases: (query?: InboxListQuery) => query
+    ? ["support-inbox", "cases", query] as const
+    : ["support-inbox", "cases"] as const,
   inboxCase: (caseId: string) => ["support-inbox", "case", caseId] as const,
   inboxMessages: (caseId: string) => ["support-inbox", "messages", caseId] as const,
+  inboxActivity: (caseId: string) => ["support-inbox", "activity", caseId] as const,
+  inboxAssignees: (caseId: string) => ["support-inbox", "assignees", caseId] as const,
+  inboxFilterOptions: () => ["support-inbox", "filter-options"] as const,
   administrationUsers: (query?: AdministrationUserQuery) =>
     ["administration", "users", query ?? {}] as const,
   currentAdministrationUser: () => ["administration", "current-user"] as const,
   administrationSettings: () => ["administration", "settings"] as const,
-  administrationCustomers: () => ["administration", "customers"] as const,
   analytics: (filters: AnalyticsFilters) => ["analytics", filters] as const,
 }
 
@@ -48,12 +54,38 @@ export function useCurrentUser() {
   })
 }
 
-export function useInboxCases() {
+export function useInboxCases(query?: InboxListQuery) {
   return useInfiniteQuery({
-    queryKey: queryKeys.inboxCases(),
-    queryFn: ({ pageParam }) => serviceRegistry.inbox.list(pageParam),
+    queryKey: queryKeys.inboxCases(query),
+    queryFn: ({ pageParam }) => serviceRegistry.inbox.list(pageParam, query),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor,
+  })
+}
+
+export function useInboxFilterOptions() {
+  return useQuery({
+    queryKey: queryKeys.inboxFilterOptions(),
+    queryFn: () => serviceRegistry.inbox.getFilterOptions(),
+    staleTime: 60_000,
+  })
+}
+
+export function useInboxActivity(caseId?: string) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.inboxActivity(caseId ?? ""),
+    queryFn: ({ pageParam }) => serviceRegistry.inbox.getActivity(caseId ?? "", pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor,
+    enabled: Boolean(caseId),
+  })
+}
+
+export function useInboxAssignees(caseId?: string, enabled = false) {
+  return useQuery({
+    queryKey: queryKeys.inboxAssignees(caseId ?? ""),
+    queryFn: () => serviceRegistry.inbox.listAssignees(caseId ?? ""),
+    enabled: Boolean(caseId) && enabled,
   })
 }
 
@@ -103,6 +135,7 @@ export function useInboxWorkflow(caseId?: string) {
       queryClient.invalidateQueries({
         queryKey: queryKeys.inboxMessages(caseId ?? ""),
       }),
+      queryClient.invalidateQueries({ queryKey: queryKeys.inboxActivity(caseId ?? "") }),
     ])
   }
 
@@ -130,17 +163,21 @@ export function useInboxWorkflow(caseId?: string) {
       serviceRegistry.inbox.snooze(requireCaseId(), until),
     onSuccess: invalidateCases,
   })
-  const uploadAttachment = useMutation({
-    mutationFn: (file: File) =>
-      serviceRegistry.inbox.uploadAttachment(requireCaseId(), file),
+  const cancelSnooze = useMutation({
+    mutationFn: () => serviceRegistry.inbox.cancelSnooze(requireCaseId()),
+    onSuccess: invalidateConversation,
   })
-  const removePendingAttachment = useMutation({
-    mutationFn: (attachmentId: string) =>
-      serviceRegistry.inbox.removePendingAttachment(requireCaseId(), attachmentId),
+  const assign = useMutation({
+    mutationFn: ({ userId, reassign }: { userId: string; reassign: boolean }) =>
+      serviceRegistry.inbox.assign(requireCaseId(), userId, reassign),
+    onSuccess: invalidateConversation,
   })
-  const retryMessage = useMutation({
-    mutationFn: ({ messageId, idempotencyKey }: { messageId: string; idempotencyKey?: string }) =>
-      serviceRegistry.inbox.retryMessage(messageId, idempotencyKey),
+  const unassign = useMutation({
+    mutationFn: () => serviceRegistry.inbox.unassign(requireCaseId()),
+    onSuccess: invalidateConversation,
+  })
+  const forceResolve = useMutation({
+    mutationFn: (input: InboxResolveInput) => serviceRegistry.inbox.forceResolve(requireCaseId(), input),
     onSuccess: invalidateConversation,
   })
   const sendMessage = useMutation({
@@ -148,18 +185,12 @@ export function useInboxWorkflow(caseId?: string) {
       serviceRegistry.inbox.sendMessage(requireCaseId(), input),
     onSuccess: invalidateConversation,
   })
+  const retryMessage = useMutation({
+    mutationFn: (messageId: string) => serviceRegistry.inbox.retryMessage(messageId),
+    onSuccess: invalidateConversation,
+  })
 
-  return {
-    claim,
-    ignore,
-    askCustomer,
-    resolve,
-    snooze,
-    uploadAttachment,
-    removePendingAttachment,
-    retryMessage,
-    sendMessage,
-  }
+  return { claim, ignore, askCustomer, resolve, snooze, cancelSnooze, assign, unassign, forceResolve, sendMessage, retryMessage }
 }
 
 export function useMarkAllResolvedRead() {
@@ -208,14 +239,13 @@ export function useAdministrationUserActions() {
     mutationFn: (id: string) => serviceRegistry.administrationUsers.delete(id),
     onSuccess: invalidate,
   })
-  return { save, deactivate, delete: deleteUser, supported: serviceRegistry.administrationUsers.supportsMutations !== false }
-}
-
-export function useAdministrationCustomers() {
-  return useQuery({
-    queryKey: queryKeys.administrationCustomers(),
-    queryFn: () => serviceRegistry.administrationSettings.listCustomers(),
+  const issueInvitation = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationUsers.issueInvitation(id),
   })
+  const issuePasswordReset = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationUsers.issuePasswordReset(id),
+  })
+  return { save, deactivate, delete: deleteUser, issueInvitation, issuePasswordReset, supported: serviceRegistry.administrationUsers.supportsMutations !== false }
 }
 
 export function useAdministrationSettings() {
@@ -238,6 +268,11 @@ export function useAdministrationSettingsActions() {
       ),
     onSuccess: invalidate,
   })
+  const configureIntegration = useMutation({
+    mutationFn: (input: IntegrationConfigurationInput) =>
+      serviceRegistry.administrationSettings.configureIntegration(input),
+    onSuccess: invalidate,
+  })
   const setIntegrationStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: ManagedIntegration["status"] }) =>
       serviceRegistry.administrationSettings.setIntegrationStatus(id, status),
@@ -245,28 +280,24 @@ export function useAdministrationSettingsActions() {
   })
   const testIntegration = useMutation({
     mutationFn: (id: string) => serviceRegistry.administrationSettings.testIntegration(id),
+    onSettled: invalidate,
+  })
+  const discoverChannels = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationSettings.discoverChannels(id),
     onSuccess: invalidate,
   })
   const configureChannel = useMutation({
-    mutationFn: ({
-      id,
-      customerId,
-      groupingStrategy,
-    }: {
-      id: string
-      customerId: string
-      groupingStrategy: import("@/lib/domain/administration").ChannelGroupingStrategy
-    }) =>
-      serviceRegistry.administrationSettings.configureChannel(
-        id,
-        customerId,
-        groupingStrategy,
-      ),
+    mutationFn: ({ id, customerId, ignored, groupingStrategy }: { id: string; customerId?: string; ignored: boolean; groupingStrategy?: import("@/lib/domain/administration").ChannelGroupingStrategy }) =>
+      serviceRegistry.administrationSettings.configureChannel(id, customerId, ignored, groupingStrategy),
     onSuccess: invalidate,
   })
-  const setChannelIgnored = useMutation({
-    mutationFn: ({ id, ignored }: { id: string; ignored: boolean }) =>
-      serviceRegistry.administrationSettings.setChannelIgnored(id, ignored),
+  const saveCustomer = useMutation({
+    mutationFn: ({ id, name, externalRef }: { id?: string; name: string; externalRef?: string }) =>
+      serviceRegistry.administrationSettings.saveCustomer({ name, externalRef }, id),
+    onSuccess: invalidate,
+  })
+  const deactivateCustomer = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationSettings.deactivateCustomer(id),
     onSuccess: invalidate,
   })
   const toggleNotification = useMutation({
@@ -274,14 +305,22 @@ export function useAdministrationSettingsActions() {
       serviceRegistry.administrationSettings.toggleNotification(id, enabled),
     onSuccess: invalidate,
   })
+  const replayNotificationDelivery = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationSettings.replayNotificationDelivery(id),
+    onSuccess: invalidate,
+  })
 
   return {
     saveSection,
+    configureIntegration,
     setIntegrationStatus,
     testIntegration,
+    discoverChannels,
     configureChannel,
-    setChannelIgnored,
+    saveCustomer,
+    deactivateCustomer,
     toggleNotification,
+    replayNotificationDelivery,
   }
 }
 

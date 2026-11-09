@@ -1,8 +1,8 @@
 import { apiCurrentUserRepository } from "./api/auth-adapter"
 import { apiAdministrationSettingsRepository } from "./api/administration-settings-adapter"
-import { apiInboxRepository } from "./api/inbox-adapter"
 import { apiAdministrationUserRepository } from "./api/administration-users-adapter"
-import { mockAnalyticsRepository } from "./analytics"
+import { apiInboxRepository } from "./api/inbox-adapter"
+import { apiAnalyticsRepository } from "./api/analytics-adapter"
 
 /**
  * Jedyny punkt wiążący interfejsy usług z implementacją danych.
@@ -14,5 +14,5 @@ export const serviceRegistry = {
   inbox: apiInboxRepository,
   administrationUsers: apiAdministrationUserRepository,
   administrationSettings: apiAdministrationSettingsRepository,
-  analytics: mockAnalyticsRepository,
+  analytics: apiAnalyticsRepository,
 }

@@ -43,7 +43,7 @@ export function LoginForm() {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form className="space-y-4" onSubmit={(event) => void submit(event)}>
+        <form method="post" className="space-y-4" onSubmit={(event) => void submit(event)}>
           <div className="space-y-2">
             <Label htmlFor="email">E-mail</Label>
             <Input

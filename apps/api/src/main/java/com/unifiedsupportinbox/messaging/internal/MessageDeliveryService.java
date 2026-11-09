@@ -10,6 +10,7 @@ import com.unifiedsupportinbox.messaging.MessageDeliveryStatus;
 import com.unifiedsupportinbox.messaging.internal.MessageDeliveryRepository.DeliveryAttemptRecord;
 import com.unifiedsupportinbox.messaging.internal.MessageDeliveryRepository.DeliveryMessageRecord;
 import com.unifiedsupportinbox.messaging.internal.MessageDeliveryRepository.DueDeliveryRecord;
+import com.unifiedsupportinbox.sla.CaseSlaResponseRecorder;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -35,6 +36,8 @@ class MessageDeliveryService {
     private final IdempotentCommandExecutor idempotency;
     private final ObjectMapper json;
     private final ApplicationEventPublisher events;
+    private final AskCustomerDeliveryFinalizer askFinalizer;
+    private final CaseSlaResponseRecorder slaResponses;
 
     MessageDeliveryService(
             MessageDeliveryRepository repository,
@@ -42,13 +45,17 @@ class MessageDeliveryService {
             OutboxEventStore outbox,
             IdempotentCommandExecutor idempotency,
             ObjectMapper json,
-            ApplicationEventPublisher events) {
+            ApplicationEventPublisher events,
+            AskCustomerDeliveryFinalizer askFinalizer,
+            CaseSlaResponseRecorder slaResponses) {
         this.repository = repository;
         this.properties = properties;
         this.outbox = outbox;
         this.idempotency = idempotency;
         this.json = json;
         this.events = events;
+        this.askFinalizer = askFinalizer;
+        this.slaResponses = slaResponses;
     }
 
     @Transactional
@@ -87,6 +94,12 @@ class MessageDeliveryService {
                 || !repository.markSuccess(current.messageId(), status, normalizedRef)) {
             throw new IllegalStateException("Message delivery claim was lost before success checkpoint: " + current.messageId());
         }
+        Instant sentAt = Instant.now();
+        // System deliveries (including OOO) are never the first human response.
+        if (current.authorUserId() != null) {
+            slaResponses.recordProviderAcceptedResponse(current.caseId(), sentAt);
+        }
+        askFinalizer.finalizeIfAsk(current, sentAt);
         publish(current, status, null, null, null);
     }
 

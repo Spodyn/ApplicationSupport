@@ -26,7 +26,13 @@ export interface AnalyticsFilters {
 
 export interface AnalyticsRecord {
   id: string
+  reference?: string
   createdAt: string
+  createdDate?: string
+  claimedDate?: string
+  resolvedDate?: string
+  createdDayIndex?: number
+  createdHour?: number
   claimedAt?: string
   firstResponseAt?: string
   resolvedAt?: string
@@ -43,18 +49,22 @@ export interface AnalyticsRecord {
   tags: string[]
   resolutionReason?: AnalyticsResolutionReason
   slaState: AnalyticsSlaState
-  slaDeadlineAt: string
+  slaDeadlineAt?: string
+  excludedFromUserPerformance?: boolean
 }
 
 export interface AnalyticsKpis {
   created: number
   resolved: number
+  ignored: number
+  claimed: number
   backlog: number
-  slaFirstResponsePercentage: number
+  slaFirstResponsePercentage: number | null
   breachedSla: number
-  averageClaimMinutes: number
-  averageFirstResponseMinutes: number
-  averageResolutionMinutes: number
+  warningSla: number
+  averageClaimMinutes: number | null
+  averageFirstResponseMinutes: number | null
+  averageResolutionMinutes: number | null
   notApplicable: number
   spam: number
 }
@@ -93,9 +103,9 @@ export interface ClientPerformance {
   resolved: number
   notApplicable: number
   spam: number
-  slaPercentage: number
-  averageResponseMinutes: number
-  averageResolutionMinutes: number
+  slaPercentage: number | null
+  averageResponseMinutes: number | null
+  averageResolutionMinutes: number | null
 }
 
 export interface HeatmapPoint {
@@ -107,9 +117,9 @@ export interface HeatmapPoint {
 
 export interface ResponseTimePoint {
   date: string
-  averageMinutes: number
-  medianMinutes: number
-  p90Minutes: number
+  averageMinutes: number | null
+  medianMinutes: number | null
+  p90Minutes: number | null
 }
 
 export interface UserPerformance {
@@ -120,11 +130,11 @@ export interface UserPerformance {
   currentlyAssigned: number
   notApplicable: number
   spam: number
-  averageClaimMinutes: number
-  medianResponseMinutes: number
-  p90ResponseMinutes: number
-  averageResolutionMinutes: number
-  slaPercentage: number
+  averageClaimMinutes: number | null
+  medianResponseMinutes: number | null
+  p90ResponseMinutes: number | null
+  averageResolutionMinutes: number | null
+  slaPercentage: number | null
 }
 
 export interface AnalyticsComparison {
@@ -148,6 +158,18 @@ export interface AnalyticsResult {
   heatmap: HeatmapPoint[]
   responseTimeSeries: ResponseTimePoint[]
   userPerformance: UserPerformance[]
+  currentWork?: {
+    id: string
+    reference: string
+    customerName: string
+    platform: Channel
+    sourceChannel: string
+    status: string
+    statusLabel: string
+    userName?: string
+    createdAt: string
+    slaState: AnalyticsSlaState
+  }[]
   options: {
     users: Pick<User, "id" | "fullName">[]
     customers: { id: string; name: string }[]

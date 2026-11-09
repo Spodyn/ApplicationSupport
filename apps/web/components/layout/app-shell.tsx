@@ -20,7 +20,7 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname()
 
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/activate") {
     return <>{children}</>
   }
 

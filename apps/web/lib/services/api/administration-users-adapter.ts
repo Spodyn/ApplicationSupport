@@ -1,90 +1,80 @@
 import { createApiClient } from "@usi/api-client/generated"
-import type { AdminUserItem } from "@usi/api-client/generated"
-import type {
-  AdministrationPermission,
-  AdministrationUser,
-} from "@/lib/domain/administration"
 import { administrationPermissions } from "@/lib/domain/administration"
-import type {
-  AdministrationUserQuery,
-  AdministrationUserRepository,
-} from "@/lib/services/administration"
+import type { AdministrationPermission, AdministrationUser, AdministrationUserInput } from "@/lib/domain/administration"
+import type { AdministrationUserRepository, CredentialActionToken } from "@/lib/services/administration"
 import { browserApiTransport } from "./http-transport"
 
-const client = createApiClient(browserApiTransport)
-const allowedPermissions = new Set<string>(administrationPermissions)
+type ApiUser = {
+  id: string
+  fullName: string
+  email: string
+  role: "USER" | "ADMIN"
+  active: boolean
+  validFrom?: string | null
+  validUntil?: string | null
+  lastLoginAt?: string | null
+  presence: "online" | "away" | "offline"
+  activeAssignedCases: number
+  permissions?: AdministrationPermission[]
+}
 
-function mapUser(user: AdminUserItem): AdministrationUser {
+function mapUser(user: ApiUser): AdministrationUser {
   return {
-    id: user.id,
-    fullName: user.fullName,
-    email: user.email,
-    role: user.role,
-    active: user.active,
-    presence: user.presence,
+    ...user,
+    permissions: user.permissions ?? [],
     validFrom: user.validFrom?.slice(0, 10) ?? "",
-    validUntil: user.validUntil?.slice(0, 10) ?? undefined,
-    activeAssignedCases: user.activeAssignedCases,
+    validUntil: user.validUntil?.slice(0, 10),
     lastLoginAt: user.lastLoginAt ?? undefined,
-    // The read-only directory does not yet expose other users' editable grants.
-    // Never invent grants or use the former mock administration data.
-    permissions: [],
   }
 }
 
-async function listUsers(query: AdministrationUserQuery = {}): Promise<AdministrationUser[]> {
-  const items: AdministrationUser[] = []
-  let cursor: string | undefined
-  do {
-    const page = await client.listAdminUsers({
-      search: query.search,
-      role: query.role,
-      active: query.active,
-      cursor,
-      limit: 100,
-    })
-    items.push(...page.items.map(mapUser))
-    cursor = page.nextCursor ?? undefined
-  } while (cursor)
-  return items
+function body(input: AdministrationUserInput) {
+  return {
+    ...input,
+    validFrom: input.validFrom ? `${input.validFrom}T00:00:00.000Z` : null,
+    validUntil: input.validUntil ? `${input.validUntil}T23:59:59.999Z` : null,
+  }
 }
 
-function mutationsNotAvailable(): never {
-  throw new Error(
-    "Zapisywanie zmian użytkowników wymaga wdrożenia osobnych operacji administracyjnych.",
-  )
-}
-
-/**
- * The directory is live; mutations are intentionally disabled until USI-72–75.
- * Never route real user IDs into the mock user mutation repository.
- */
 export const apiAdministrationUserRepository: AdministrationUserRepository = {
-  supportsMutations: false,
-
-  list: listUsers,
-
+  supportsMutations: true,
+  async list(query) {
+    const client = createApiClient(browserApiTransport)
+    const users: AdministrationUser[] = []
+    let cursor: string | undefined
+    do {
+      const page = await client.listAdminUsers({ ...query, cursor, limit: 100 })
+      users.push(...page.items.map((user) => mapUser({ ...user, permissions: user.permissions as AdministrationPermission[] | undefined })))
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
+    return users
+  },
   async getCurrent() {
+    const client = createApiClient(browserApiTransport)
     const session = await client.getCurrentSession()
     if (session.role !== "ADMIN") return undefined
     const page = await client.listAdminUsers({ search: session.email, limit: 100 })
-    const current = page.items.find((item) => item.id === session.id)
+    const current = page.items.find((user) => user.id === session.id)
     if (!current) return undefined
-    const permissions = session.effectivePermissions.filter(
-      (value): value is AdministrationPermission => allowedPermissions.has(value),
-    )
-    return { ...mapUser(current), permissions }
+    return mapUser({ ...current, permissions: session.effectivePermissions.filter((value): value is AdministrationPermission => (administrationPermissions as readonly string[]).includes(value)) })
   },
-
-  async save() {
-    return mutationsNotAvailable()
+  async save(input, id) {
+    return mapUser(await browserApiTransport.request<ApiUser>({
+      method: id ? "PUT" : "POST",
+      path: id ? `/api/v1/admin/users/${encodeURIComponent(id)}` : "/api/v1/admin/users",
+      body: body(input),
+    }))
   },
-
-  async deactivate() {
-    return mutationsNotAvailable()
+  async deactivate(id) {
+    return mapUser(await browserApiTransport.request<ApiUser>({ method: "PATCH", path: `/api/v1/admin/users/${encodeURIComponent(id)}/deactivate` }))
   },
-
-  async delete() {
-    return mutationsNotAvailable()
+  async delete(id) {
+    await browserApiTransport.request<void>({ method: "DELETE", path: `/api/v1/admin/users/${encodeURIComponent(id)}` })
+  },
+  async issueInvitation(id) {
+    return browserApiTransport.request<CredentialActionToken>({ method: "POST", path: `/api/v1/admin/users/${encodeURIComponent(id)}/invitation` })
+  },
+  async issuePasswordReset(id) {
+    return browserApiTransport.request<CredentialActionToken>({ method: "POST", path: `/api/v1/admin/users/${encodeURIComponent(id)}/password-reset` })
   },
 }

@@ -6,9 +6,9 @@ const authenticatedSession = {
   id: "018f0000-0000-7000-8000-000000000064",
   email: "anna.kowalska@firma.pl",
   displayName: "Anna Kowalska",
-  role: "USER",
+  role: "ADMIN",
   createdAt: "2024-01-12T08:00:00.000Z",
-  effectivePermissions: [],
+  effectivePermissions: ["manage_users"],
 }
 
 const caseId = "018f0000-0000-7000-8000-000000000201"
@@ -93,6 +93,32 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
         contentType: "application/json",
         body: JSON.stringify(authenticatedSession),
       })
+      return
+    }
+
+    if (requestUrl.pathname === "/api/v1/admin/users/current" && request.method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          id: authenticatedSession.id,
+          fullName: authenticatedSession.displayName,
+          email: authenticatedSession.email,
+          role: authenticatedSession.role,
+          active: true,
+          validFrom: authenticatedSession.createdAt,
+          validUntil: null,
+          lastLoginAt: authenticatedSession.createdAt,
+          presence: "online",
+          activeAssignedCases: 0,
+          permissions: authenticatedSession.effectivePermissions,
+        }),
+      })
+      return
+    }
+
+    if (requestUrl.pathname === "/api/v1/admin/users" && request.method() === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
       return
     }
 
@@ -256,6 +282,22 @@ async function prepareSettingsApi(page: Page, options: { forbidden?: boolean } =
     const path = new URL(request.url()).pathname
     const method = request.method()
 
+    if (path === "/api/v1/admin/settings" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        general: { organizationName: "Test organization", interfaceLanguage: "pl", compactMode: false },
+        rolePermissions: [{ role: "admin", permissions: ["manage_users", "manage_integrations"] }, { role: "user", permissions: [] }],
+        warningBeforeDeadlineMinutes: 15, businessHoursOnly: true,
+      }) })
+      return
+    }
+    if (["/api/v1/admin/customers", "/api/v1/admin/notifications/deliveries"].includes(path) && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" })
+      return
+    }
+    if (path === "/api/v1/admin/out-of-office/preview" && method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ message: "Poza biurem", timezone: "Europe/Warsaw" }) })
+      return
+    }
     if (path === "/api/v1/admin/integrations" && method === "GET") {
       if (options.forbidden) {
         await route.fulfill({
@@ -448,9 +490,11 @@ test("changing attachments after a failed send uses a fresh idempotency key", as
     buffer: Buffer.from("test"),
   })
   await conversation.getByRole("button", { name: "Wyślij" }).click()
-  await expect(conversation.getByText("Retry with evidence")).toBeVisible()
+  // The editor still contains this text while the asynchronous upload/send runs.
+  // Wait for the persisted conversation message, not the textarea's text node.
+  await expect(conversation.locator("p").filter({ hasText: "Retry with evidence" })).toBeVisible()
 
-  expect(sendKeys).toHaveLength(2)
+  await expect.poll(() => sendKeys.length).toBe(2)
   expect(sendKeys[0]).toMatch(/^[0-9a-f-]{36}$/)
   expect(sendKeys[1]).toMatch(/^[0-9a-f-]{36}$/)
   expect(sendKeys[1]).not.toBe(sendKeys[0])
@@ -511,10 +555,9 @@ test("empty persisted conversation renders an empty state", async ({ page }) => 
   await expect(conversation.getByText("Nie udało się wczytać wiadomości.")).toHaveCount(0)
 })
 
-test("API user directory is read-only until real user mutations exist", async ({ page }) => {
+test("API user directory opens a fresh account editor for an authorized administrator", async ({ page }) => {
   const { externalRequests } = await preparePage(page)
-  // Verify the read-only guard under a *permitted administrator*; a disabled
-  // button due to missing permissions alone would be a false-positive test.
+  // Exercise the real editor under an administrator allowed to manage users.
   await page.route("**/api/v1/auth/me", async (route) => {
     await route.fulfill({
       status: 200,
@@ -549,9 +592,20 @@ test("API user directory is read-only until real user mutations exist", async ({
     })
   })
   await page.goto("/users")
-  await expect(page.getByRole("heading", { name: "Użytkownicy" })).toBeVisible()
-  await expect(page.getByRole("button", { name: "Dodaj użytkownika" }).first()).toBeDisabled()
-  await expect(page.getByRole("dialog", { name: "Dodaj użytkownika" })).toHaveCount(0)
+  const addUserButton = page.getByRole("banner").getByRole("button", { name: "Dodaj użytkownika" })
+
+  await addUserButton.click()
+  const dialog = page.getByRole("dialog", { name: "Dodaj użytkownika" })
+  await expect(dialog).toBeVisible()
+
+  await dialog.getByLabel("Imię i nazwisko").fill("Test tymczasowy")
+  await dialog.getByLabel("E-mail").fill("test@example.invalid")
+  await dialog.getByRole("button", { name: "Anuluj" }).click()
+
+  await addUserButton.click()
+  const reopenedDialog = page.getByRole("dialog", { name: "Dodaj użytkownika" })
+  await expect(reopenedDialog.getByLabel("Imię i nazwisko")).toHaveValue("")
+  await expect(reopenedDialog.getByLabel("E-mail")).toHaveValue("")
   expect(externalRequests).toEqual([])
 })
 
@@ -560,12 +614,12 @@ test("Settings używa realnego common API do testowania i zmiany statusu integra
   const { writes } = await prepareSettingsApi(page)
 
   await page.goto("/settings")
-  await expect(page.getByText("Konfiguracja hybrydowa")).toBeVisible()
+  await expect(page.getByText("Konfiguracja chroniona")).toBeVisible()
   await page.getByRole("tab", { name: "Integracje" }).click()
 
   await expect(page.getByText("Acme Workspace").first()).toBeVisible()
   await expect(page.getByText("sandbox-secret-must-not-be-rendered")).toHaveCount(0)
-  await expect(page.getByRole("button", { name: "Konfiguruj" })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "Konfiguruj", exact: true })).toBeVisible()
 
   await page.getByRole("button", { name: "Testuj" }).click()
   await expect.poll(() => writes.some((write) => write.method === "POST" && write.path.endsWith("/test"))).toBe(true)

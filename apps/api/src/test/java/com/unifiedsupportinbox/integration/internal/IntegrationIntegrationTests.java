@@ -323,10 +323,8 @@ class IntegrationIntegrationTests {
         assertThat(denied.statusCode()).isEqualTo(403);
         assertThat(denied.body()).contains("\"code\":\"ACCESS_DENIED\"");
 
-        UUID delegatedUserId = createUser("delegated@example.com", "USER");
-        jdbc.update(
-                "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations')",
-                delegatedUserId);
+        UUID restrictedAdmin = createUser("delegated@example.com", "ADMIN");
+        jdbc.update("DELETE FROM user_permissions WHERE user_id = ?", restrictedAdmin);
         CookieManager delegated = login("delegated@example.com");
         assertThat(get(client(delegated), "/api/v1/admin/integrations").statusCode()).isEqualTo(403);
 
@@ -339,7 +337,7 @@ class IntegrationIntegrationTests {
     void testConnectionUpdatesOnlySanitizedHealthAndPreservesLastEvent() throws Exception {
         Instant eventAt = Instant.parse("2026-09-24T20:00:00Z");
         IntegrationRecord integration = integrations.create(
-                IntegrationProvider.SLACK, "Acme Slack", IntegrationStatus.ENABLED, IntegrationHealth.UNKNOWN,
+                IntegrationProvider.TEAMS, "Acme Teams", IntegrationStatus.ENABLED, IntegrationHealth.UNKNOWN,
                 "T123", "Acme", "test-secret", "{}");
         integrations.updateHealth(integration.id(), IntegrationHealth.DEGRADED, eventAt, "OLD_ERROR");
         createUser("admin@example.com", "ADMIN");
@@ -393,13 +391,17 @@ class IntegrationIntegrationTests {
     }
 
     private static UUID createUser(String email, String role) {
-        return jdbc.queryForObject(
+        UUID userId = jdbc.queryForObject(
                 "INSERT INTO users (email, display_name, password_hash, role, active) VALUES (?, ?, ?, ?, TRUE) RETURNING id",
                 UUID.class,
                 email,
                 email,
                 encoder.encode(testCredential()),
                 role);
+        if ("ADMIN".equals(role)) {
+            jdbc.update("INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations')", userId);
+        }
+        return userId;
     }
 
     private static CookieManager login(String email) throws Exception {

@@ -1,2 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+apps/api/mvnw text eol=lf
+apps/api/.mvn/wrapper/maven-wrapper.properties text eol=lf

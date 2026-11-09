@@ -162,3 +162,38 @@ Immediate stop/rollback criteria include data loss/corruption, incorrect custome
 Go-live requires green CI/security, completed UAT, load/resilience acceptance, restore/DR evidence, provider acceptance, monitoring/alerts/runbooks, no unresolved release blockers and protected human approval for production cutover.
 
 After first go-live: 72 hours heightened monitoring/hypercare, followed by formal release review. Noncritical improvements go to backlog rather than silently expanding v1.
+
+
+## Local Slack HTTPS tunnel (2026-11-09)
+
+Keep the existing tunnel running against `http://localhost:3000`. Set the exact
+HTTPS origin in root `.env` as `USI_PUBLIC_BASE_URL` and its Slack callback as
+`USI_SLACK_CALLBACK_URL`; set the same origin in web `.env.local` as the server-only
+`USI_DEV_PUBLIC_ORIGIN`. No wildcard origins are needed. Reload the API when its
+public origin changes; Next.js reloads its config when changed. The local WebSocket
+ingress also permits loopback web port 3000, with authenticated sessions and strict
+forwarded-origin validation. Production origin handling is unchanged.
+
+In Slack Event Subscriptions, verification alone does not save a Request URL change:
+click Save Changes and reload to verify the persisted Request URL. Required bot
+events are `message.channels` and `message.groups`. Existing bot scopes are sufficient
+when they include `channels:read`, `channels:history`, `groups:read`, `groups:history`,
+and `chat:write`. Membership reconciliation needs no DM scopes or OAuth onboarding.
+It runs every 30 seconds for ENABLED integrations in the local profile and preserves
+previous mappings on provider failure. An unknown channel retries until discovery;
+check `SLACK_CHANNEL_DISCOVERY_PENDING` if membership/scopes remain unavailable.
+The server-side secret resolver remains authoritative; never put provider credentials
+in web configuration or chat.
+
+### Development migration reconciliation
+
+The unpublished user-administration migration is numbered `38.1` to preserve the
+already published `V38__admin_user_list_indexes.sql`. Fresh databases apply both
+normally. A development database that already applied the former local
+`V38__user_administration_and_general_settings.sql` must preserve its SQL checksum
+and data: back up its Flyway history, verify that exact successful local migration,
+then relabel only that history entry to version `38.1` and the corresponding new
+filename. Apply the published index migration once with Flyway out-of-order enabled
+for that startup, then restore the normal setting. Never relabel the published
+index migration or reset application data. Remove any obsolete copy of the old
+filename from generated build resources before validating the new migration set.

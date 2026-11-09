@@ -165,6 +165,29 @@ class ChannelRepository {
                 .orElseThrow(() -> new IllegalArgumentException("Channel was not found."));
     }
 
+    ChannelRecord configure(UUID id, UUID customerId, boolean ignored) {
+        Objects.requireNonNull(id, "id");
+        return jdbc.query("""
+                UPDATE channels
+                SET customer_id = ?,
+                    ignored = ?
+                WHERE id = ?
+                RETURNING id
+                """, preparedStatement -> {
+            preparedStatement.setObject(1, customerId);
+            preparedStatement.setBoolean(2, ignored);
+            preparedStatement.setObject(3, id);
+        }, (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class)).stream()
+                .findFirst()
+                .flatMap(this::findById)
+                .orElseThrow(() -> new IllegalArgumentException("Channel was not found."));
+    }
+
+    void markAllInactive(UUID integrationId) {
+        Objects.requireNonNull(integrationId, "integrationId");
+        jdbc.update("UPDATE channels SET active = FALSE WHERE integration_id = ?", integrationId);
+    }
+
     private static ChannelRecord map(ResultSet resultSet, int rowNumber) throws SQLException {
         return new ChannelRecord(
                 resultSet.getObject("id", UUID.class),

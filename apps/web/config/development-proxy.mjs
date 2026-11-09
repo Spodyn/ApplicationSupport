@@ -8,6 +8,17 @@ export const DEVELOPMENT_BACKEND_ORIGIN_VARIABLE = "USI_DEV_BACKEND_ORIGIN"
 
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost"])
 
+/** @param {EnvironmentSource} source */
+export function developmentPublicOrigin(source) {
+  const value = source.USI_DEV_PUBLIC_ORIGIN
+  if (!value) return undefined
+  const parsed = new URL(value)
+  if (parsed.protocol !== "https:" || parsed.origin !== value || parsed.hostname.includes("*")) {
+    throw new Error("USI_DEV_PUBLIC_ORIGIN must be one exact HTTPS origin")
+  }
+  return parsed
+}
+
 /**
  * The Next.js development proxy is intentionally local-only. A configurable
  * target is useful when a developer runs the API on another local port, but a

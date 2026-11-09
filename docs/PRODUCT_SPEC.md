@@ -176,7 +176,7 @@ Retention defaults: messages 730d, inbound provider events 30d, audit 2555d, att
 ## 22. Provider behavior
 
 ### Slack
-V1: public/private/Slack Connect channels accessible to app; no DM/group DM. Root thread is Case grouping identity. Unmapped valid channel creates no Case/SLA. Edits update existing Message + unread; delete creates marker. HMAC over raw body with 5-minute replay window. No full historical import; bounded recovery default24h/max7d. Lightweight health check about every15m. Agent signature OFF by default.
+V1: public/private/Slack Connect channels accessible to app; no DM/group DM. Root thread is Case grouping identity. Automatically discovered active Slack channels without a customer mapping create visible intake Cases with customer NULL ("Nie przypisano"), per user-approved override 2026-11-09. Edits update existing Message + unread; delete creates marker. HMAC over raw body with 5-minute replay window. No full historical import; bounded recovery default24h/max7d. Lightweight health check about every15m. Agent signature OFF by default.
 
 ### Microsoft Teams
 V1: standard channels + group chats; private/shared channels out. Use RSC least privilege. Standard channel root/replies = Case; group chat = one active Case/chat. No full history import; bounded recovery where API supports it. Normal outbound uses supported app/bot path.

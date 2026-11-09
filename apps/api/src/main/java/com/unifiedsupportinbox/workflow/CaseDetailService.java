@@ -34,7 +34,7 @@ class CaseDetailService {
                        c.claimed_at, c.waiting_until, c.resolved_at, c.ignored_at, c.resolution_category,
                        c.related_case_id, related.reference AS related_case_reference,
                        c.created_at, c.updated_at, c.last_activity_at, c.version,
-                       customer.id AS customer_id, customer.name AS customer_name, customer.external_ref AS customer_external_ref,
+                       COALESCE(customer.id, '00000000-0000-0000-0000-000000000000'::uuid) AS customer_id, COALESCE(customer.name, 'Nie przypisano') AS customer_name, customer.external_ref AS customer_external_ref,
                        channel.id AS channel_id, channel.name AS channel_name, channel.external_channel_id, channel.grouping_strategy,
                        integration.id AS integration_id, integration.provider, integration.display_name AS integration_display_name,
                        integration.workspace_external_id, integration.workspace_name,
@@ -45,7 +45,7 @@ class CaseDetailService {
                        sla.in_progress_started_at, sla.in_progress_warning_at, sla.in_progress_breach_at,
                        sla.paused_at, sla.total_paused_seconds, sla.state AS sla_state, sla.unclaimed_completed_at, sla.unclaimed_outcome
                 FROM cases c
-                JOIN customers customer ON customer.id = c.customer_id
+                LEFT JOIN customers customer ON customer.id = c.customer_id
                 JOIN channels channel ON channel.id = c.channel_id
                 JOIN integrations integration ON integration.id = c.integration_id
                 LEFT JOIN users owner ON owner.id = c.owner_user_id
@@ -82,7 +82,11 @@ class CaseDetailService {
 
     private Actor actor(UUID caseId, UUID userId) {
         return jdbc.query("""
-                SELECT u.active, u.role,
+                SELECT u.active
+                           AND u.role IN ('USER', 'ADMIN')
+                           AND (u.valid_from IS NULL OR u.valid_from <= CURRENT_TIMESTAMP)
+                           AND (u.valid_until IS NULL OR u.valid_until > CURRENT_TIMESTAMP) AS eligible,
+                       u.role,
                        EXISTS (SELECT 1 FROM case_ignore_votes v WHERE v.case_id = ? AND v.user_id = ?) AS voted
                 FROM users u WHERE u.id = ?
                 """, (rs, rowNum) -> {
@@ -92,7 +96,7 @@ class CaseDetailService {
                     UNION
                     SELECT permission_code AS code FROM user_permissions WHERE user_id = ?
                     """, (permissionsRs, ignored) -> permissionsRs.getString("code"), role.name(), userId);
-            return new Actor(rs.getBoolean("active"), role, Set.copyOf(permissions), rs.getBoolean("voted"), userId);
+            return new Actor(rs.getBoolean("eligible"), role, Set.copyOf(permissions), rs.getBoolean("voted"), userId);
         }, caseId, userId, userId).stream().findFirst().orElseThrow(ApiProblemException::authenticationRequired);
     }
 

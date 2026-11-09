@@ -33,6 +33,9 @@ class ChannelAdminController {
             @PathVariable UUID channelId,
             @Valid @RequestBody ChannelUpdateRequest input,
             Authentication actor) {
+        if (Boolean.TRUE.equals(input.clearCustomer())) {
+            return channels.configure(actor, channelId, null, input.ignored());
+        }
         return channels.update(
                 actor,
                 channelId,
@@ -44,6 +47,7 @@ class ChannelAdminController {
     record ChannelUpdateRequest(
             Boolean ignored,
             UUID customerId,
-            ChannelGroupingStrategy groupingStrategy) {
+            ChannelGroupingStrategy groupingStrategy,
+            Boolean clearCustomer) {
     }
 }

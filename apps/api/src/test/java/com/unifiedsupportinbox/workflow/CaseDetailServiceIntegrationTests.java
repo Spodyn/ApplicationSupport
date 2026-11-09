@@ -81,6 +81,21 @@ class CaseDetailServiceIntegrationTests {
     }
 
     @Test
+    void unassignedIntakePreservesNonNullUuidTransportWithoutCreatingACustomer() {
+        UUID viewer = user("USER");
+        UUID caseId = caseId("unassigned-" + UUID.randomUUID());
+        jdbc.update("UPDATE cases SET customer_id = NULL WHERE id = ?", caseId);
+        UUID reserved = UUID.fromString("00000000-0000-0000-0000-000000000000");
+        var detail = details.detail(caseId, viewer);
+        assertThat(detail.customer().id()).isEqualTo(reserved);
+        assertThat(detail.customer().name()).isEqualTo("Nie przypisano");
+        var list = context.getBean(CaseListService.class).list(viewer, null, 100);
+        assertThat(list.items().stream().filter(item -> item.id().equals(caseId)).findFirst().orElseThrow().customerId()).isEqualTo(reserved);
+        assertThat(jdbc.queryForObject("SELECT customer_id FROM cases WHERE id = ?", UUID.class, caseId)).isNull();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM customers WHERE id = ?", Integer.class, reserved)).isZero();
+    }
+
+    @Test
     void rejectsMissingCaseAndUnknownAuthenticatedUser() {
         assertThatThrownBy(() -> details.detail(UUID.randomUUID(), UUID.randomUUID()))
                 .isInstanceOf(ApiProblemException.class);

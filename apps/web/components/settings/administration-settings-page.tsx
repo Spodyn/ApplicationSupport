@@ -3,6 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react"
 import {
   BellRing,
+  Building2,
   CalendarClock,
   CheckCircle2,
   Clock3,
@@ -66,12 +67,13 @@ import {
 import type {
   AdministrationPermission,
   AdministrationSettings,
-  GeneralSettings,
   ChannelGroupingStrategy,
+  GeneralSettings,
   ManagedChannel,
-  ManagedCustomerOption,
+  ManagedCustomer,
   ManagedIntegration,
   NotificationDestination,
+  NotificationDelivery,
   NotificationType,
   OutOfOfficeSettings,
   RolePermissions,
@@ -82,7 +84,6 @@ import type {
 import { channelLabels } from "@/lib/domain/labels"
 import { formatDate, formatDateTime } from "@/lib/format"
 import {
-  useAdministrationCustomers,
   useAdministrationSettings,
   useAdministrationSettingsActions,
 } from "@/lib/services/queries"
@@ -94,6 +95,7 @@ const tabItems = [
   { value: "schedule", label: "Godziny pracy", icon: CalendarClock },
   { value: "out-of-office", label: "Poza biurem", icon: MoonStar },
   { value: "integrations", label: "Integracje", icon: PlugZap },
+  { value: "customers", label: "Klienci", icon: Building2 },
   { value: "channels", label: "Kanały", icon: Radio },
   { value: "notifications", label: "Powiadomienia", icon: BellRing },
   { value: "permissions", label: "Uprawnienia", icon: ShieldCheck },
@@ -101,7 +103,6 @@ const tabItems = [
 
 export function AdministrationSettingsPage() {
   const settingsQuery = useAdministrationSettings()
-  const customersQuery = useAdministrationCustomers()
   const actions = useAdministrationSettingsActions()
   const unavailableIntegrations =
     settingsQuery.data?.integrations.filter((item) => item.status !== "enabled") ?? []
@@ -115,8 +116,8 @@ export function AdministrationSettingsPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => void Promise.all([settingsQuery.refetch(), customersQuery.refetch()])}
-            disabled={settingsQuery.isFetching || customersQuery.isFetching}
+            onClick={() => void settingsQuery.refetch()}
+            disabled={settingsQuery.isFetching}
           >
             <RefreshCw className={settingsQuery.isFetching ? "animate-spin" : undefined} />
             <span className="hidden sm:inline">Odśwież</span>
@@ -128,9 +129,9 @@ export function AdministrationSettingsPage() {
         <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4 p-4 md:p-6">
           <Alert className="bg-info/5 text-info">
             <Info />
-            <AlertTitle>Konfiguracja hybrydowa</AlertTitle>
+            <AlertTitle>Konfiguracja chroniona</AlertTitle>
             <AlertDescription>
-              Integracje, kanały, harmonogram, SLA i powiadomienia korzystają z trwałego API. Ustawienia ogólne i macierz ról pozostają lokalną konfiguracją demonstracyjną.
+              Dane integracji, klientów i kanałów są zapisywane w backendzie. Sekrety Slack pozostają wyłącznie w zewnętrznym katalogu sekretów.
             </AlertDescription>
           </Alert>
 
@@ -165,8 +166,9 @@ export function AdministrationSettingsPage() {
               <TabsContent value="schedule"><SchedulePanel data={settingsQuery.data.schedule} actions={actions} /></TabsContent>
               <TabsContent value="out-of-office"><OutOfOfficePanel data={settingsQuery.data.outOfOffice} actions={actions} /></TabsContent>
               <TabsContent value="integrations"><IntegrationsPanel data={settingsQuery.data.integrations} actions={actions} /></TabsContent>
-              <TabsContent value="channels"><ChannelsPanel data={settingsQuery.data.channels} customers={customersQuery.data ?? []} actions={actions} /></TabsContent>
-              <TabsContent value="notifications"><NotificationsPanel data={settingsQuery.data.notifications} integrations={settingsQuery.data.integrations} actions={actions} /></TabsContent>
+              <TabsContent value="customers"><CustomersPanel data={settingsQuery.data.customers} actions={actions} /></TabsContent>
+              <TabsContent value="channels"><ChannelsPanel data={settingsQuery.data.channels} customers={settingsQuery.data.customers} actions={actions} /></TabsContent>
+              <TabsContent value="notifications"><NotificationsPanel data={settingsQuery.data.notifications} deliveries={settingsQuery.data.notificationDeliveries ?? []} integrations={settingsQuery.data.integrations} actions={actions} /></TabsContent>
               <TabsContent value="permissions"><PermissionsPanel data={settingsQuery.data.rolePermissions} actions={actions} /></TabsContent>
             </Tabs>
           )}
@@ -311,7 +313,7 @@ const placeholders = ["customer_name", "next_opening_date", "next_opening_time",
 
 function OutOfOfficePanel({ data, actions }: { data: OutOfOfficeSettings; actions: SettingsActions }) {
   const [form, setForm] = useState(data)
-  const preview = form.template
+  const preview = (form.template === data.template && data.previewMessage ? data.previewMessage : form.template)
     .replaceAll("{{customer_name}}", "Joanno")
     .replaceAll("{{next_opening_date}}", "4 sierpnia 2026")
     .replaceAll("{{next_opening_time}}", "08:00")
@@ -349,7 +351,24 @@ const integrationHealthLabels: Record<ManagedIntegration["health"], string> = {
 }
 
 function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; actions: SettingsActions }) {
+  const [configured, setConfigured] = useState<ManagedIntegration | null>(null)
+  const [displayName, setDisplayName] = useState("Slack")
+  const [workspaceName, setWorkspaceName] = useState("")
+  const [workspaceId, setWorkspaceId] = useState("")
+  const [secretRef, setSecretRef] = useState("")
   const [disabledIntegration, setDisabledIntegration] = useState<ManagedIntegration | null>(null)
+
+  const openConfiguration = (integration?: ManagedIntegration) => {
+    setDisplayName(integration?.displayName ?? "Slack")
+    setWorkspaceName(integration?.workspace ?? "")
+    setWorkspaceId(integration?.workspaceId ?? "")
+    setSecretRef("")
+    if (!integration) {
+      setConfigured({ id: "", platform: "slack", displayName: "Slack", status: "configuring", workspace: "", workspaceId: "", hasSecretReference: false, health: "unknown" })
+      return
+    }
+    setConfigured(integration)
+  }
 
   const test = async (integration: ManagedIntegration) => {
     try {
@@ -360,12 +379,21 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
     }
   }
 
-  const enable = async (integration: ManagedIntegration) => {
+  const completeConfiguration = async (integration: ManagedIntegration) => {
     try {
       await actions.setIntegrationStatus.mutateAsync({ id: integration.id, status: "enabled" })
       notify.success("Integracja została włączona", channelLabels[integration.platform])
     } catch (error) {
       notify.error("Nie udało się włączyć integracji", getErrorMessage(error))
+    }
+  }
+
+  const discover = async (integration: ManagedIntegration) => {
+    try {
+      const channels = await actions.discoverChannels.mutateAsync(integration.id)
+      notify.success("Odświeżono kanały Slack", `Znaleziono ${channels.length} kanałów dostępnych dla aplikacji.`)
+    } catch (error) {
+      notify.error("Nie udało się pobrać kanałów Slack", getErrorMessage(error))
     }
   }
 
@@ -379,13 +407,9 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
         </AlertDescription>
       </Alert>
 
-      <Alert>
-        <Info />
-        <AlertTitle>Onboarding dostawcy</AlertTitle>
-        <AlertDescription>
-          Ten widok zarządza istniejącymi instalacjami przez wspólne API. Dodanie obszaru roboczego i danych uwierzytelniających pozostaje w procesie instalacyjnym właściwym dla Slack, Teams lub Telegram.
-        </AlertDescription>
-      </Alert>
+      <div className="flex justify-end">
+        <Button size="sm" onClick={() => openConfiguration()}><Plus /> Dodaj Slack</Button>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         {data.map((integration) => (
@@ -431,15 +455,41 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                 </div>
               </dl>
               <div className="flex flex-wrap gap-2 border-t pt-3">
-                <Button variant="outline" size="sm" disabled={integration.status !== "enabled" || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> Testuj</Button>
-                {integration.status !== "enabled" && integration.canEnable && <Button size="sm" disabled={actions.setIntegrationStatus.isPending} onClick={() => void enable(integration)}><RefreshCw /> Włącz</Button>}
-                {!integration.canEnable && <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"><Info className="size-3.5" /> Brak skonfigurowanych danych uwierzytelniających</span>}
+                <Button variant="outline" size="sm" onClick={() => openConfiguration(integration)}><Settings2 /> Konfiguruj</Button>
+                <Button variant="outline" size="sm" disabled={integration.status === "disabled" || !integration.hasSecretReference || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> Testuj</Button>
+                {integration.platform === "slack" && <Button variant="outline" size="sm" disabled={integration.status === "disabled" || integration.health !== "healthy" || actions.discoverChannels.isPending} onClick={() => void discover(integration)}><RefreshCw /> Pobierz kanały</Button>}
+                {integration.status === "configuring" && integration.health === "healthy" && <Button size="sm" onClick={() => void completeConfiguration(integration)}><CheckCircle2 /> Włącz</Button>}
+                {integration.status === "disabled" && <Button size="sm" disabled={!integration.hasSecretReference || actions.setIntegrationStatus.isPending} onClick={() => void completeConfiguration(integration)}><CheckCircle2 /> Włącz</Button>}
                 {integration.status !== "disabled" && <Button variant="destructive" size="sm" onClick={() => setDisabledIntegration(integration)}><Unplug /> Wyłącz</Button>}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      <Dialog open={Boolean(configured)} onOpenChange={(open) => !open && setConfigured(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>{configured?.id ? "Konfiguruj Slack" : "Dodaj Slack"}</DialogTitle><DialogDescription>Bezpieczny tryb konfiguracji przez zewnętrzną referencję sekretu. Wartości tokenu i signing secretu nigdy nie trafiają do przeglądarki ani bazy danych.</DialogDescription></DialogHeader>
+          <div className="grid gap-4">
+            <Field label="Nazwa połączenia"><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Slack — Support" /></Field>
+            <Field label="Nazwa workspace"><Input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder="Firma Support" /></Field>
+            <Field label="Slack Workspace ID" hint="Identyfikator team_id zwracany przez Slack, np. T012ABCDEF."><Input value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} placeholder="T012ABCDEF" /></Field>
+            <Field label="Referencja sekretu" hint="Względny katalog pod USI_INTEGRATION_SECRETS_DIRECTORY."><Input value={secretRef} onChange={(event) => setSecretRef(event.target.value)} placeholder="slack/firma-support" /></Field>
+          </div>
+          <Alert><Info /><AlertDescription>W tym katalogu muszą istnieć pliki <code>slack-bot-token</code> i <code>slack-signing-secret</code>. Po zapisie uruchom test, pobierz kanały i włącz integrację.</AlertDescription></Alert>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose>
+            <Button disabled={!displayName.trim() || !workspaceName.trim() || !workspaceId.trim() || !secretRef.trim() || actions.configureIntegration.isPending} onClick={async () => {
+              if (!configured) return
+              try {
+                await actions.configureIntegration.mutateAsync({ id: configured.id || undefined, platform: "slack", displayName, workspaceId, workspaceName, secretRef })
+                notify.success("Zapisano konfigurację", "Slack")
+                setConfigured(null)
+              } catch (error) { notify.error("Nie udało się zapisać konfiguracji", getErrorMessage(error)) }
+            }}>{actions.configureIntegration.isPending ? "Zapisywanie…" : "Zapisz konfigurację"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConfirmDialog
         open={Boolean(disabledIntegration)}
@@ -461,123 +511,70 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
   )
 }
 
-const channelGroupingOptions: Record<ManagedChannel["platform"], Array<{ value: ChannelGroupingStrategy; label: string }>> = {
-  slack: [{ value: "SLACK_ROOT_THREAD", label: "Wątek od wiadomości głównej" }],
-  teams: [{ value: "TEAMS_ROOT_REPLIES", label: "Wiadomość główna + odpowiedzi" }],
-  telegram: [
-    { value: "TELEGRAM_TOPIC", label: "Temat forum" },
-    { value: "TELEGRAM_CHAT_ACTIVE_CASE", label: "Aktywny case na czat" },
-  ],
+function CustomersPanel({ data, actions }: { data: ManagedCustomer[]; actions: SettingsActions }) {
+  const [edited, setEdited] = useState<ManagedCustomer | null>(null)
+  const [name, setName] = useState("")
+  const [externalRef, setExternalRef] = useState("")
+  const [deactivated, setDeactivated] = useState<ManagedCustomer | null>(null)
+
+  const open = (customer?: ManagedCustomer) => {
+    setEdited(customer ?? { id: "", name: "", active: true })
+    setName(customer?.name ?? "")
+    setExternalRef(customer?.externalRef ?? "")
+  }
+
+  return (
+    <SettingsCard title="Klienci" description="Klienci przypisywani do monitorowanych kanałów i spraw." actions={<Button size="sm" onClick={() => open()}><Plus /> Dodaj klienta</Button>}>
+      <div className="overflow-hidden rounded-lg border">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/40"><TableHead>Nazwa</TableHead><TableHead>Identyfikator zewnętrzny</TableHead><TableHead>Status</TableHead><TableHead><span className="sr-only">Akcje</span></TableHead></TableRow></TableHeader>
+          <TableBody>{data.map((customer) => <TableRow key={customer.id}><TableCell className="font-medium">{customer.name}</TableCell><TableCell className="font-mono text-xs">{customer.externalRef ?? "—"}</TableCell><TableCell><EnabledState enabled={customer.active} /></TableCell><TableCell className="text-right"><Button variant="ghost" size="icon-sm" aria-label={`Edytuj ${customer.name}`} onClick={() => open(customer)}><Pencil /></Button>{customer.active && <Button variant="ghost" size="icon-sm" aria-label={`Dezaktywuj ${customer.name}`} onClick={() => setDeactivated(customer)}><Unplug /></Button>}</TableCell></TableRow>)}</TableBody>
+        </Table>
+      </div>
+      <Dialog open={Boolean(edited)} onOpenChange={(value) => !value && setEdited(null)}>
+        <DialogContent><DialogHeader><DialogTitle>{edited?.id ? "Edytuj klienta" : "Dodaj klienta"}</DialogTitle><DialogDescription>Nazwa jest widoczna w skrzynce. Identyfikator zewnętrzny jest opcjonalny.</DialogDescription></DialogHeader><Field label="Nazwa"><Input value={name} onChange={(event) => setName(event.target.value)} /></Field><Field label="Identyfikator zewnętrzny"><Input value={externalRef} onChange={(event) => setExternalRef(event.target.value)} /></Field><DialogFooter><DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose><Button disabled={!name.trim() || actions.saveCustomer.isPending} onClick={() => { if (!edited) return; void actions.saveCustomer.mutateAsync({ id: edited.id || undefined, name, externalRef: externalRef.trim() || undefined }).then(() => { notify.success("Zapisano klienta", name); setEdited(null) }).catch((error) => notify.error("Nie udało się zapisać klienta", getErrorMessage(error))) }}>Zapisz</Button></DialogFooter></DialogContent>
+      </Dialog>
+      <ConfirmDialog open={Boolean(deactivated)} onOpenChange={(value) => !value && setDeactivated(null)} title="Dezaktywować klienta?" description={deactivated ? `Klient „${deactivated.name}” nie będzie dostępny do nowych przypisań.` : undefined} confirmLabel="Dezaktywuj" destructive onConfirm={() => { if (!deactivated) return; void actions.deactivateCustomer.mutateAsync(deactivated.id).then(() => { notify.success("Klient został dezaktywowany", deactivated.name); setDeactivated(null) }).catch((error) => notify.error("Nie udało się dezaktywować klienta", getErrorMessage(error))) }} />
+    </SettingsCard>
+  )
 }
 
-function ChannelsPanel({
-  data,
-  customers,
-  actions,
-}: {
-  data: ManagedChannel[]
-  customers: ManagedCustomerOption[]
-  actions: SettingsActions
-}) {
-  const [edited, setEdited] = useState<{
-    channel: ManagedChannel
-    customerId: string
-    groupingStrategy: ChannelGroupingStrategy
-  } | null>(null)
-
-  const setIgnored = async (channel: ManagedChannel, ignored: boolean) => {
+function ChannelsPanel({ data, customers, actions }: { data: ManagedChannel[]; customers: ManagedCustomer[]; actions: SettingsActions }) {
+  const configure = async (channel: ManagedChannel, customerId: string | undefined, ignored: boolean) => {
     try {
-      await actions.setChannelIgnored.mutateAsync({ id: channel.id, ignored })
-      notify.success(ignored ? "Kanał będzie ignorowany" : "Kanał będzie kwalifikowany", channel.channelName)
+      await actions.configureChannel.mutateAsync({ id: channel.id, customerId, ignored, groupingStrategy: channel.groupingStrategy })
+      notify.success("Zapisano kanał", channel.channelName)
     } catch (error) {
-      notify.error("Nie udało się zmienić reguły kanału", getErrorMessage(error))
-    }
-  }
-
-  const openEditor = (channel: ManagedChannel) => {
-    setEdited({
-      channel,
-      customerId: channel.customerId ?? customers[0]?.id ?? "",
-      groupingStrategy: channel.groupingStrategy,
-    })
-  }
-
-  const saveMapping = async () => {
-    if (!edited?.customerId) return
-    try {
-      await actions.configureChannel.mutateAsync({
-        id: edited.channel.id,
-        customerId: edited.customerId,
-        groupingStrategy: edited.groupingStrategy,
-      })
-      notify.success("Zapisano mapowanie kanału", edited.channel.channelName)
-      setEdited(null)
-    } catch (error) {
-      notify.error("Nie udało się zapisać mapowania kanału", getErrorMessage(error))
+      notify.error("Nie udało się zapisać kanału", getErrorMessage(error))
     }
   }
 
   return (
-    <>
-      <SettingsCard title="Kanały" description="Przypisz kanał do klienta, wybierz sposób grupowania wiadomości i zdecyduj, czy ma być ignorowany.">
-        <Alert>
-          <Info />
-          <AlertTitle>Zmiany dotyczą nowych wiadomości</AlertTitle>
-          <AlertDescription>Zmiana klienta lub sposobu grupowania nie przepisuje historycznych case’ów utworzonych wcześniej z tego kanału.</AlertDescription>
-        </Alert>
-        <div className="overflow-hidden rounded-lg border">
-          <Table>
-            <TableHeader><TableRow className="bg-muted/40"><TableHead>Platforma</TableHead><TableHead>Kanał</TableHead><TableHead>Klient</TableHead><TableHead>Grupowanie</TableHead><TableHead>Ignoruj</TableHead><TableHead>Ostatnia wiadomość</TableHead><TableHead><span className="sr-only">Akcje</span></TableHead></TableRow></TableHeader>
-            <TableBody>
-              {data.map((channel) => (
-                <TableRow key={channel.id}>
-                  <TableCell><div className="flex items-center gap-2"><PlatformIcon channel={channel.platform} /> <span className="text-xs">{channelLabels[channel.platform]}</span></div></TableCell>
-                  <TableCell className="font-medium">{channel.channelName}</TableCell>
-                  <TableCell>{channel.customer}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{channelGroupingOptions[channel.platform].find((item) => item.value === channel.groupingStrategy)?.label ?? channel.groupingStrategy}</TableCell>
-                  <TableCell><div className="flex items-center gap-2"><Switch checked={channel.ignored} onCheckedChange={(checked) => void setIgnored(channel, checked)} aria-label={`${channel.channelName}: ${channel.ignored ? "ignorowany" : "kwalifikowany"}`} /><span className={`text-xs ${channel.ignored ? "text-warning-foreground" : "text-muted-foreground"}`}>{channel.ignored ? "Ignorowany" : "Kwalifikowany"}</span></div></TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{channel.lastMessageAt ? formatDateTime(channel.lastMessageAt) : "Brak"}</TableCell>
-                  <TableCell><Button variant="ghost" size="icon-sm" disabled={customers.length === 0} aria-label={`Edytuj ${channel.channelName}`} onClick={() => openEditor(channel)}><Pencil /></Button></TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-        {customers.length === 0 && <p className="text-xs text-warning-foreground">Brak aktywnych klientów do przypisania. Dodaj lub aktywuj klienta przed zmianą mapowania.</p>}
-      </SettingsCard>
-
-      <Dialog open={Boolean(edited)} onOpenChange={(open) => !open && setEdited(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edytuj mapowanie kanału</DialogTitle>
-            <DialogDescription>{edited?.channel.channelName} · {edited ? channelLabels[edited.channel.platform] : ""}</DialogDescription>
-          </DialogHeader>
-          {edited && (
-            <div className="grid gap-4">
-              <Field label="Klient">
-                <Select value={edited.customerId} onValueChange={(value) => setEdited({ ...edited, customerId: String(value) })}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Wybierz klienta" /></SelectTrigger>
-                  <SelectContent>{customers.map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>)}</SelectContent>
-                </Select>
-              </Field>
-              <Field label="Sposób grupowania">
-                <Select value={edited.groupingStrategy} onValueChange={(value) => setEdited({ ...edited, groupingStrategy: String(value) as ChannelGroupingStrategy })}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                  <SelectContent>{channelGroupingOptions[edited.channel.platform].map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent>
-                </Select>
-              </Field>
-              <Alert><Info /><AlertDescription>Backend ponownie waliduje klienta i strategię dla danego providera. Istniejące case’y zachowują historyczne powiązanie.</AlertDescription></Alert>
-            </div>
-          )}
-          <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose>
-            <Button disabled={!edited?.customerId || actions.configureChannel.isPending} onClick={() => void saveMapping()}>
-              {actions.configureChannel.isPending ? "Zapisywanie…" : "Zapisz mapowanie"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+    <SettingsCard title="Kanały Slack" description="Przypisz dostępne kanały do klientów i określ regułę monitorowania.">
+      <Alert>
+        <Info />
+        <AlertTitle>Wiadomości bez case’a i SLA</AlertTitle>
+        <AlertDescription>Kanały ignorowane nie tworzą nowych spraw. Wiadomości Slack bez przypisanego klienta trafiają do skrzynki jako „Nie przypisano”.</AlertDescription>
+      </Alert>
+      <div className="overflow-hidden rounded-lg border">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/40"><TableHead>Platforma</TableHead><TableHead>Kanał</TableHead><TableHead>Klient</TableHead><TableHead>Stan</TableHead><TableHead>Grupowanie</TableHead><TableHead>Ostatnia wiadomość</TableHead></TableRow></TableHeader>
+          <TableBody>
+            {data.map((channel) => (
+              <TableRow key={channel.id}>
+                <TableCell><div className="flex items-center gap-2"><PlatformIcon channel={channel.platform} /> <span className="text-xs">{channelLabels[channel.platform]}</span></div></TableCell>
+                <TableCell className="font-medium">{channel.channelName}</TableCell>
+                <TableCell><Select value={channel.customerId ?? "__unmapped__"} onValueChange={(value) => void configure(channel, value === "__unmapped__" ? undefined : String(value), channel.ignored)}><SelectTrigger className="w-52"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__unmapped__">Nie przypisano</SelectItem>{customers.filter((customer) => customer.active).map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>)}</SelectContent></Select></TableCell>
+                <TableCell><div className="flex items-center gap-2"><Switch checked={!channel.ignored} onCheckedChange={(checked) => void configure(channel, channel.customerId, !checked)} aria-label={`${channel.channelName}: monitoring`} /><span className={`text-xs ${channel.ignored || !channel.customerId ? "text-warning-foreground" : "text-success"}`}>{!channel.active ? "Nieaktywny" : channel.ignored ? "Ignorowany" : !channel.customerId ? "Nieprzypisany" : "Monitorowany"}</span></div></TableCell>
+                <TableCell className="font-mono text-xs">{channel.platform === "telegram" ? <Select value={channel.groupingStrategy} onValueChange={(value) => { if (channel.customerId) void actions.configureChannel.mutateAsync({ id: channel.id, customerId: channel.customerId, ignored: channel.ignored, groupingStrategy: value as ChannelGroupingStrategy }).catch((error) => notify.error("Nie udało się zapisać grupowania", getErrorMessage(error))) }}><SelectTrigger aria-label={`${channel.channelName}: grupowanie`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="TELEGRAM_TOPIC">Temat forum</SelectItem><SelectItem value="TELEGRAM_CHAT_ACTIVE_CASE">Aktywny case na czat</SelectItem></SelectContent></Select> : channel.groupingStrategy === "SLACK_ROOT_THREAD" ? "Root + wątek" : channel.groupingStrategy}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{channel.lastMessageAt ? formatDateTime(channel.lastMessageAt) : "Brak"}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <p className="text-xs text-muted-foreground">Zmiana dotyczy nowych wiadomości przychodzących po zapisaniu reguły.</p>
+    </SettingsCard>
   )
 }
 
@@ -599,7 +596,7 @@ const blankNotification: NotificationDestination = {
   enabled: true,
 }
 
-function NotificationsPanel({ data, integrations, actions }: { data: NotificationDestination[]; integrations: ManagedIntegration[]; actions: SettingsActions }) {
+function NotificationsPanel({ data, deliveries, integrations, actions }: { data: NotificationDestination[]; deliveries: NotificationDelivery[]; integrations: ManagedIntegration[]; actions: SettingsActions }) {
   const [edited, setEdited] = useState<NotificationDestination | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [removed, setRemoved] = useState<NotificationDestination | null>(null)
@@ -621,6 +618,13 @@ function NotificationsPanel({ data, integrations, actions }: { data: Notificatio
       await actions.toggleNotification.mutateAsync({ id: item.id, enabled })
       notify.success(enabled ? "Powiadomienia włączone" : "Powiadomienia wyłączone", item.name)
     } catch (error) { notify.error("Nie udało się zmienić powiadomień", getErrorMessage(error)) }
+  }
+
+  const replay = async (delivery: NotificationDelivery) => {
+    try {
+      await actions.replayNotificationDelivery.mutateAsync(delivery.id)
+      notify.success("Dostawa została ponownie zakolejkowana")
+    } catch (error) { notify.error("Nie udało się ponowić dostawy", getErrorMessage(error)) }
   }
 
   return (
@@ -666,6 +670,24 @@ function NotificationsPanel({ data, integrations, actions }: { data: Notificatio
       </Dialog>
 
       <ConfirmDialog open={Boolean(removed)} onOpenChange={(open) => !open && setRemoved(null)} title="Usunąć cel powiadomień?" description={removed ? `Alerty nie będą już wysyłane do „${removed.name}”.` : undefined} confirmLabel="Usuń" destructive onConfirm={() => { if (removed) void saveDestinations(data.filter((item) => item.id !== removed.id), "Usunięto cel powiadomień") }} />
+
+      <div className="mt-6 grid gap-2">
+        <div><h3 className="text-sm font-semibold">Ostatnie dostawy</h3><p className="text-xs text-muted-foreground">Statusy, próby i bezpieczne kody błędów; treści wiadomości oraz sekrety nie są wyświetlane.</p></div>
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader><TableRow className="bg-muted/40"><TableHead>Zdarzenie</TableHead><TableHead>Cel</TableHead><TableHead>Status</TableHead><TableHead>Próby</TableHead><TableHead>Utworzono</TableHead><TableHead>Błąd</TableHead><TableHead><span className="sr-only">Akcja</span></TableHead></TableRow></TableHeader>
+            <TableBody>{deliveries.map((delivery) => <TableRow key={delivery.id}>
+              <TableCell className="font-mono text-xs">{delivery.eventType}</TableCell>
+              <TableCell>{delivery.targetRef}</TableCell>
+              <TableCell><Badge variant={delivery.status === "SENT" ? "secondary" : delivery.status === "DLQ" ? "destructive" : "outline"}>{delivery.status}</Badge></TableCell>
+              <TableCell className="tabular-nums">{delivery.attempts}</TableCell>
+              <TableCell className="text-xs text-muted-foreground">{formatDateTime(delivery.createdAt)}</TableCell>
+              <TableCell className="font-mono text-xs">{delivery.lastErrorCode ?? delivery.terminalReason ?? "—"}</TableCell>
+              <TableCell><Button size="sm" variant="outline" disabled={delivery.status !== "DLQ" || actions.replayNotificationDelivery.isPending} onClick={() => void replay(delivery)}><RefreshCw /> Ponów</Button></TableCell>
+            </TableRow>)}</TableBody>
+          </Table>
+        </div>
+      </div>
     </SettingsCard>
   )
 }

@@ -54,7 +54,7 @@ public class CaseClaimService {
 
     private IdempotencyResponse executeClaim(UUID caseId, UUID userId, String correlationId) {
         Actor actor = loadActor(caseId, userId);
-        if (!actor.active()) throw ApiProblemException.accessDenied();
+        if (!actor.eligible()) throw ApiProblemException.accessDenied();
         if (actor.lifetimeIgnoreVoter()) {
             throw ApiProblemException.conflict("A user who has voted Ignore cannot claim this Case.");
         }
@@ -98,10 +98,14 @@ public class CaseClaimService {
 
     private Actor loadActor(UUID caseId, UUID userId) {
         return jdbc.query("""
-                SELECT u.active, u.role,
+                SELECT u.active
+                           AND u.role IN ('USER', 'ADMIN')
+                           AND (u.valid_from IS NULL OR u.valid_from <= CURRENT_TIMESTAMP)
+                           AND (u.valid_until IS NULL OR u.valid_until > CURRENT_TIMESTAMP) AS eligible,
+                       u.role,
                        EXISTS (SELECT 1 FROM case_ignore_votes v WHERE v.case_id = ? AND v.user_id = ?) AS voted
                 FROM users u WHERE u.id = ?
-                """, (rs, rowNum) -> new Actor(rs.getBoolean("active"),
+                """, (rs, rowNum) -> new Actor(rs.getBoolean("eligible"),
                 UserRole.valueOf(rs.getString("role")), rs.getBoolean("voted")), caseId, userId, userId)
                 .stream().findFirst().orElseThrow(ApiProblemException::authenticationRequired);
     }
@@ -121,6 +125,6 @@ public class CaseClaimService {
         }
     }
 
-    private record Actor(boolean active, UserRole role, boolean lifetimeIgnoreVoter) {}
+    private record Actor(boolean eligible, UserRole role, boolean lifetimeIgnoreVoter) {}
     private record Claim(long version, java.time.Instant claimedAt) {}
 }

@@ -1,4 +1,4 @@
-import type { InboxAttachment, InboxCase, InboxMessage } from "@/lib/domain/inbox"
+import type { InboxAttachment, InboxActivity, InboxCase, InboxMessage, InboxStatus } from "@/lib/domain/inbox"
 import type { User } from "@/lib/domain/shared"
 import { mockInboxCaseRecords, mockInboxMessages } from "@/mocks/inbox"
 import { mockCurrentUser } from "@/mocks/users"
@@ -12,10 +12,43 @@ export interface InboxIgnoreInput {
 
 export interface InboxAskInput {
   message: string
+  waitingMinutes?: number
+  idempotencyKey?: string
 }
 
 export interface InboxResolveInput {
   category?: string
+  idempotencyKey?: string
+}
+
+export interface InboxListQuery {
+  view?: "active" | "snoozed"
+  mine?: boolean
+  unassigned?: boolean
+  unread?: boolean
+  slaAttention?: boolean
+  status?: InboxStatus
+  statusScope?: "all" | "active" | "terminal"
+  customerId?: string
+  channelId?: string
+  provider?: "slack" | "teams" | "telegram"
+  ownerId?: string
+  search?: string
+}
+
+export interface InboxAssignee {
+  id: string
+  displayName: string
+  eligible: boolean
+  ignoreWeight: number
+  ignoreWeightValidUntil?: string
+}
+
+export interface InboxFilterOptions {
+  customers: Array<{ id: string; name: string }>
+  channels: Array<{ id: string; name: string }>
+  owners: Array<{ id: string; name: string }>
+  providers: Array<"slack" | "teams" | "telegram">
 }
 
 export interface InboxPendingAttachment extends InboxAttachment {
@@ -24,7 +57,7 @@ export interface InboxPendingAttachment extends InboxAttachment {
 
 export interface InboxSendInput {
   body: string
-  attachments?: InboxPendingAttachment[]
+  attachments?: Array<File | InboxPendingAttachment | { fileName: string; size: string }>
   simulateFailure?: boolean
   idempotencyKey?: string
 }
@@ -35,9 +68,11 @@ export interface InboxPage<T> {
 }
 
 export interface InboxRepository {
-  list(cursor?: string): Promise<InboxPage<InboxCase>>
+  list(cursor?: string, query?: InboxListQuery): Promise<InboxPage<InboxCase>>
+  getFilterOptions(): Promise<InboxFilterOptions>
   getCase(caseId: string): Promise<InboxCase>
   getMessages(caseId: string, before?: string): Promise<InboxPage<InboxMessage>>
+  getActivity(caseId: string, cursor?: string): Promise<InboxPage<InboxActivity>>
   markRead(caseId: string, messageId: string): Promise<void>
   markAllResolvedRead(): Promise<void>
   claim(caseId: string): Promise<void>
@@ -45,10 +80,15 @@ export interface InboxRepository {
   askCustomer(caseId: string, input: InboxAskInput): Promise<void>
   resolve(caseId: string, input: InboxResolveInput): Promise<void>
   snooze(caseId: string, until: string): Promise<void>
+  cancelSnooze(caseId: string): Promise<void>
+  listAssignees(caseId: string): Promise<InboxAssignee[]>
+  assign(caseId: string, userId: string, reassign: boolean): Promise<void>
+  unassign(caseId: string): Promise<void>
+  forceResolve(caseId: string, input: InboxResolveInput): Promise<void>
+  sendMessage(caseId: string, input: InboxSendInput): Promise<InboxMessage>
   uploadAttachment(caseId: string, file: File): Promise<InboxPendingAttachment>
   removePendingAttachment(caseId: string, attachmentId: string): Promise<void>
   retryMessage(messageId: string, idempotencyKey?: string): Promise<void>
-  sendMessage(caseId: string, input: InboxSendInput): Promise<InboxMessage>
 }
 
 export class InboxConflictError extends Error {
@@ -116,12 +156,11 @@ const appendSupportMessage = (
     sender: mockCurrentUser.fullName,
     body: input.body,
     createdAt,
-    attachments: input.attachments?.map((attachment) => ({
-      id: attachment.id,
-      fileName: attachment.fileName,
-      size: attachment.size,
-      type: attachment.type,
-      downloadUrl: attachment.downloadUrl,
+    attachments: input.attachments?.map((attachment, index) => ({
+      id: createId(`${caseId}-attachment-${index}`),
+      fileName: attachment instanceof File ? attachment.name : attachment.fileName,
+      size: attachment instanceof File ? `${attachment.size} B` : attachment.size,
+      type: "document",
     })),
     deliveryStatus: "sent",
   }
@@ -161,6 +200,11 @@ export const mockInboxRepository: InboxRepository = {
     return wait({ items: cases })
   },
 
+  async getFilterOptions() {
+    const customers = [...new Map(mockInboxCaseRecords.map((item) => [item.customer.id, { id: item.customer.id, name: item.customer.name }])).values()]
+    return wait({ customers, channels: [], owners: [{ id: mockCurrentUser.id, name: mockCurrentUser.fullName }], providers: ["slack", "teams", "telegram"] })
+  },
+
   async getCase(caseId) {
     const { unreadForUserIds, snoozedUntilByUser, restrictedUserIds, ...item } = getRecord(caseId)
     return wait({
@@ -173,6 +217,10 @@ export const mockInboxRepository: InboxRepository = {
 
   async getMessages(caseId) {
     return wait({ items: [...(mockInboxMessages[caseId] ?? [])] }, 120)
+  },
+
+  async getActivity(caseId) {
+    return wait({ items: [...getRecord(caseId).activity] })
   },
 
   async markRead(caseId) {
@@ -304,31 +352,34 @@ export const mockInboxRepository: InboxRepository = {
     markCurrentUserRead(caseId)
   },
 
-  async uploadAttachment(_caseId, file) {
-    const type = file.type.startsWith("image/") ? "image" : "document"
-    return wait({
-      id: createId("pending-attachment"),
-      fileName: file.name,
-      size: `${file.size} B`,
-      type,
-      scanStatus: "clean",
-    }, 180)
-  },
-
-  async removePendingAttachment() {
+  async cancelSnooze(caseId) {
+    delete getRecord(caseId).snoozedUntilByUser[mockCurrentUser.id]
     await wait(undefined, 80)
   },
 
-  async retryMessage(messageId) {
-    for (const messages of Object.values(mockInboxMessages)) {
-      const message = messages.find((candidate) => candidate.id === messageId)
-      if (message?.kind === "support" && message.deliveryStatus === "failed") {
-        message.deliveryStatus = "sent"
-        await wait(undefined, 180)
-        return
-      }
-    }
-    throw new Error("Nie znaleziono wiadomości do ponowienia.")
+  async listAssignees() {
+    return wait([{ id: mockCurrentUser.id, displayName: mockCurrentUser.fullName, eligible: true, ignoreWeight: 1 }])
+  },
+
+  async assign(caseId, userId) {
+    const record = getRecord(caseId)
+    record.owner = userId === mockCurrentUser.id ? mockCurrentUser : { id: userId, fullName: "Agent" }
+    record.status = "verification"
+    await wait(undefined, 80)
+  },
+
+  async unassign(caseId) {
+    const record = getRecord(caseId)
+    record.owner = undefined
+    record.status = "new"
+    await wait(undefined, 80)
+  },
+
+  async forceResolve(caseId, input) {
+    const record = getRecord(caseId)
+    record.status = "resolved"
+    record.resolutionCategory = input.category
+    await wait(undefined, 80)
   },
 
   async sendMessage(caseId, input) {
@@ -350,5 +401,17 @@ export const mockInboxRepository: InboxRepository = {
       body: input.body,
       attachments: input.attachments,
     })
+  },
+
+  async uploadAttachment(_caseId, file) {
+    return wait({ id: createId("pending-attachment"), fileName: file.name, size: `${file.size} B`, type: file.type.startsWith("image/") ? "image" as const : "document" as const, scanStatus: "clean" as const }, 100)
+  },
+  async removePendingAttachment() { await wait(undefined, 50) },
+  async retryMessage(messageId) {
+    for (const messages of Object.values(mockInboxMessages)) {
+      const message = messages.find((item) => item.id === messageId)
+      if (message?.deliveryStatus === "failed") message.deliveryStatus = "queued"
+    }
+    await wait(undefined, 120)
   },
 }

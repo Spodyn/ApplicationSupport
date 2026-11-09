@@ -33,7 +33,7 @@ class CaseEntity {
     @Column(name = "reference", nullable = false, length = 32, updatable = false)
     private String reference;
 
-    @Column(name = "customer_id", nullable = false, updatable = false)
+    @Column(name = "customer_id", updatable = false)
     private UUID customerId;
 
     @Column(name = "integration_id", nullable = false, updatable = false)

@@ -4,7 +4,6 @@ import { useState, useSyncExternalStore } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useTheme } from "next-themes"
 import {
-  Bell,
   ChevronDown,
   LogOut,
   Moon,
@@ -104,7 +103,7 @@ export function UserMenu({
               aria-label={`Otwórz menu profilu: ${user.fullName}`}
             >
               <span className="relative grid size-[51px] place-items-center rounded-full bg-[linear-gradient(145deg,#6231e6,#3d159f)] text-[17px] font-medium text-white">
-                AK
+                {user.fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pl")}
                 <span className="absolute bottom-0 right-0 size-[13px] rounded-full border-[3px] border-[#08111f] bg-emerald-400" />
               </span>
             </Button>
@@ -151,16 +150,6 @@ export function UserMenu({
             {refreshing ? "Odświeżanie…" : "Odśwież dane"}
           </DropdownMenuItem>
           <DropdownMenuItem
-            onClick={() => notify.info("Powiadomienia", "Masz 2 nowe powiadomienia do sprawdzenia.")}
-            className="min-h-9 px-2"
-          >
-            <Bell />
-            Powiadomienia
-            <span className="ml-auto rounded-full bg-destructive px-1.5 py-0.5 text-[10px] font-semibold text-destructive-foreground">
-              2
-            </span>
-          </DropdownMenuItem>
-          <DropdownMenuItem
             onClick={() => setTheme(isDark ? "light" : "dark")}
             className="min-h-9 px-2"
           >
@@ -168,17 +157,17 @@ export function UserMenu({
             {isDark ? "Włącz tryb jasny" : "Włącz tryb ciemny"}
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem onClick={() => notify.info("Profil", "Widok profilu będzie dostępny wkrótce.")} className="min-h-9 px-2">
-            <User />
-            Mój profil
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => goTo("/settings")} className="min-h-9 px-2">
-            <Settings />
-            Ustawienia i preferencje
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
+        {user.role === "admin" ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuItem onClick={() => goTo("/settings")} className="min-h-9 px-2">
+                <Settings />
+                Ustawienia i preferencje
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+          </>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"

@@ -86,6 +86,7 @@ export interface InboxCase {
     tags: string[]
   }
   relatedCase?: {
+    id?: string
     reference: string
     subject: string
   }
@@ -109,6 +110,7 @@ export interface InboxMessage {
   body: string
   createdAt: string
   edited?: boolean
+  deleted?: boolean
   attachments?: InboxAttachment[]
   codeBlock?: {
     language: string

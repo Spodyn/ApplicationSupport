@@ -144,7 +144,7 @@ class CaseCreationDomainService implements CaseCreationService {
         if (!channel.active()) {
             throw rejected(Reason.CHANNEL_INACTIVE, "Inactive channels cannot create Cases.");
         }
-        if (channel.customerId() == null) {
+        if (channel.customerId() == null && provider != IntegrationProvider.SLACK) {
             throw rejected(Reason.CHANNEL_CUSTOMER_UNMAPPED, "Channel must be mapped to a Customer before Case creation.");
         }
     }
@@ -216,7 +216,8 @@ class CaseCreationDomainService implements CaseCreationService {
         ObjectNode payload = json.createObjectNode();
         payload.put("caseId", created.id().toString());
         payload.put("reference", created.reference());
-        payload.put("customerId", created.customerId().toString());
+        if (created.customerId() == null) payload.putNull("customerId");
+        else payload.put("customerId", created.customerId().toString());
         payload.put("integrationId", created.integrationId().toString());
         payload.put("channelId", created.channelId().toString());
         payload.put("provider", created.provider().name());

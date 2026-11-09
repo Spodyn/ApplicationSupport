@@ -128,12 +128,19 @@ export const mockAdministrationSettings: AdministrationSettings = {
     sendOncePerClosure: true,
   },
   integrations: [
-    { id: "int-slack", platform: "slack", status: "enabled", workspace: "firma.slack.com", canEnable: true, lastEventAt: "2026-08-03T10:51:00.000Z", health: "healthy" },
-    { id: "int-teams", platform: "teams", status: "configuring", workspace: "firma.onmicrosoft.com", canEnable: false, lastEventAt: "2026-08-03T10:43:00.000Z", health: "degraded" },
-    { id: "int-telegram", platform: "telegram", status: "disabled", workspace: "@firma_support_bot", canEnable: true, lastEventAt: "2026-07-28T14:10:00.000Z", health: "unavailable" },
+    { id: "int-slack", platform: "slack", displayName: "Slack", status: "enabled", workspace: "Firma", workspaceId: "T01FIRMA", hasSecretReference: true, lastEventAt: "2026-08-03T10:51:00.000Z", health: "healthy" },
+    { id: "int-teams", platform: "teams", displayName: "Teams", status: "configuring", workspace: "firma.onmicrosoft.com", workspaceId: "tenant-firma", hasSecretReference: true, lastEventAt: "2026-08-03T10:43:00.000Z", health: "degraded" },
+    { id: "int-telegram", platform: "telegram", displayName: "Telegram", status: "disabled", workspace: "@firma_support_bot", workspaceId: "firma_support_bot", hasSecretReference: true, lastEventAt: "2026-07-28T14:10:00.000Z", health: "unavailable" },
+  ],
+  customers: [
+    { id: "customer-allegro", name: "Allegro Retail", active: true },
+    { id: "customer-nova", name: "Nova Logistics", active: true },
+    { id: "customer-acme", name: "ACME Polska", active: true },
+    { id: "customer-baltic", name: "Baltic Energy", active: true },
+    { id: "customer-orion", name: "Orion Bank", active: true },
   ],
   channels: [
-    { id: "ch-1", platform: "slack", externalChannelId: "C01HELP", channelName: "#help-produkcja", customer: "Allegro Retail", ignored: false, groupingStrategy: "SLACK_ROOT_THREAD", active: true, lastMessageAt: "2026-08-03T10:49:00.000Z" },
+    { id: "ch-1", platform: "slack", externalChannelId: "C01HELP", channelName: "#help-produkcja", customerId: "customer-allegro", customer: "Allegro Retail", ignored: false, groupingStrategy: "SLACK_ROOT_THREAD", active: true, lastMessageAt: "2026-08-03T10:49:00.000Z" },
     { id: "ch-2", platform: "teams", externalChannelId: "19:ops-general", channelName: "Obsługa / Ogólny", customer: "Nova Logistics", ignored: false, groupingStrategy: "TEAMS_ROOT_REPLIES", active: true, lastMessageAt: "2026-08-03T10:37:00.000Z" },
     { id: "ch-3", platform: "telegram", externalChannelId: "-1001830001", channelName: "@acme_support", customer: "ACME Polska", ignored: true, groupingStrategy: "TELEGRAM_CHAT_ACTIVE_CASE", active: false, lastMessageAt: "2026-07-28T14:10:00.000Z" },
     { id: "ch-4", platform: "slack", externalChannelId: "C04PARTNER", channelName: "#partner-support", customer: "Baltic Energy", ignored: false, groupingStrategy: "SLACK_ROOT_THREAD", active: true, lastMessageAt: "2026-08-03T09:58:00.000Z" },

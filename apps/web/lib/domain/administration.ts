@@ -83,6 +83,7 @@ export interface OutOfOfficeSettings {
   enabled: boolean
   template: string
   sendOncePerClosure: boolean
+  previewMessage?: string
 }
 
 export type IntegrationStatus = "configuring" | "enabled" | "disabled"
@@ -91,9 +92,12 @@ export type IntegrationHealth = "unknown" | "healthy" | "degraded" | "unavailabl
 export interface ManagedIntegration {
   id: string
   platform: Channel
+  displayName: string
   status: IntegrationStatus
   workspace: string
-  canEnable: boolean
+  workspaceId: string
+  hasSecretReference: boolean
+  canEnable?: boolean
   lastEventAt?: string
   lastErrorCode?: string
   health: IntegrationHealth
@@ -123,6 +127,22 @@ export interface ManagedChannel {
   lastMessageAt?: string
 }
 
+export interface ManagedCustomer {
+  id: string
+  name: string
+  externalRef?: string
+  active: boolean
+}
+
+export interface IntegrationConfigurationInput {
+  id?: string
+  platform: Channel
+  displayName: string
+  workspaceId: string
+  workspaceName: string
+  secretRef: string
+}
+
 export type NotificationType =
   | "unclaimed_too_long"
   | "in_progress_too_long"
@@ -140,6 +160,19 @@ export interface NotificationDestination {
   enabled: boolean
 }
 
+export interface NotificationDelivery {
+  id: string
+  eventType: string
+  targetRef: string
+  status: "PENDING" | "PROCESSING" | "RETRY_SCHEDULED" | "SENT" | "DLQ" | "CANCELLED"
+  attempts: number
+  replayCount: number
+  lastErrorCode?: string
+  terminalReason?: string
+  createdAt: string
+  sentAt?: string
+}
+
 export interface RolePermissions {
   role: AdministrationRole
   permissions: AdministrationPermission[]
@@ -151,8 +184,10 @@ export interface AdministrationSettings {
   schedule: WorkScheduleSettings
   outOfOffice: OutOfOfficeSettings
   integrations: ManagedIntegration[]
+  customers: ManagedCustomer[]
   channels: ManagedChannel[]
   notifications: NotificationDestination[]
+  notificationDeliveries?: NotificationDelivery[]
   rolePermissions: RolePermissions[]
 }
 

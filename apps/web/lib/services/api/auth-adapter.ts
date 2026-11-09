@@ -1,6 +1,10 @@
 import { createApiClient } from "@usi/api-client/generated"
 import type { CurrentSession, UserRole as ApiUserRole } from "@usi/api-client/generated"
-import type { AuthenticatedUser, LoginCredentials } from "@/lib/domain/auth"
+import type {
+  AuthenticatedUser,
+  CredentialAction,
+  LoginCredentials,
+} from "@/lib/domain/auth"
 import {
   AuthenticationRequiredError,
   type CurrentUserRepository,
@@ -66,5 +70,15 @@ export const apiCurrentUserRepository: CurrentUserRepository = {
     } catch (error) {
       if (!isUnauthorizedApiError(error)) throw error
     }
+  },
+
+  async acceptInvitation(action: CredentialAction) {
+    await prepareCsrfCookie()
+    await authClient.acceptInvitation({ body: action })
+  },
+
+  async completePasswordReset(action: CredentialAction) {
+    await prepareCsrfCookie()
+    await authClient.completePasswordReset({ body: action })
   },
 }

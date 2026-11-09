@@ -43,7 +43,8 @@ class RealtimeWebSocketConfiguration implements WebSocketMessageBrokerConfigurer
             // allowed origin is the configured local web ingress, while our
             // interceptor still requires a loopback proxy and matching headers.
             var publicBaseUrl = configuration.publicBaseUrl();
-            endpoint.setAllowedOrigins(publicBaseUrl.getScheme() + "://" + publicBaseUrl.getRawAuthority());
+            endpoint.setAllowedOrigins(publicBaseUrl.getScheme() + "://" + publicBaseUrl.getRawAuthority(),
+                    "http://localhost:3000", "http://127.0.0.1:3000");
         }
     }
 

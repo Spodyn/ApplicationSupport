@@ -184,7 +184,7 @@ class ChannelIntegrationTests {
 
         UUID administratorId = createUser("channel-admin@example.com", "ADMIN");
         jdbc.update(
-                "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations')",
+                "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations') ON CONFLICT DO NOTHING",
                 administratorId);
         CookieManager administrator = login("channel-admin@example.com");
 
@@ -230,7 +230,7 @@ class ChannelIntegrationTests {
 
         UUID delegatedId = createUser("mapping-admin@example.com", "ADMIN");
         jdbc.update(
-                "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations')",
+                "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations') ON CONFLICT DO NOTHING",
                 delegatedId);
         CookieManager delegated = login("mapping-admin@example.com");
 
@@ -249,6 +249,15 @@ class ChannelIntegrationTests {
                 "SELECT customer_id FROM cases WHERE id = ?",
                 UUID.class,
                 caseId)).isEqualTo(originalCustomer);
+
+        jdbc.update("UPDATE channels SET ignored = TRUE WHERE id = ?", channel.id());
+        HttpResponse<String> unassigned = mutate(delegated, "PATCH",
+                "/api/v1/admin/channels/" + channel.id(), "{\"clearCustomer\":true}");
+        assertThat(unassigned.statusCode()).isEqualTo(200);
+        assertThat(jdbc.queryForObject("SELECT customer_id IS NULL AND ignored FROM channels WHERE id = ?",
+                Boolean.class, channel.id())).isTrue();
+        assertThat(jdbc.queryForObject("SELECT customer_id FROM cases WHERE id = ?",
+                UUID.class, caseId)).isEqualTo(originalCustomer);
     }
 
     @Test
@@ -343,7 +352,7 @@ class ChannelIntegrationTests {
     }
 
     @Test
-    void adminWithoutExplicitPermissionRowsUsesDefaultManageIntegrations() throws Exception {
+    void adminWithPermissionsRemovedCannotManageChannels() throws Exception {
         UUID integrationId = createIntegration("SLACK", "Support Slack");
         ChannelView channel = discovery.upsert(new DiscoveredChannel(
                 integrationId,
@@ -355,19 +364,20 @@ class ChannelIntegrationTests {
                 "{}"));
 
         UUID adminId = createUser("default-admin@example.com", "ADMIN");
+        jdbc.update("DELETE FROM user_permissions WHERE user_id = ?", adminId);
         assertThat(jdbc.queryForObject(
                 "SELECT count(*) FROM user_permissions WHERE user_id = ?", Integer.class, adminId)).isZero();
         CookieManager administrator = login("default-admin@example.com");
 
-        assertThat(get(client(administrator), "/api/v1/admin/channels").statusCode()).isEqualTo(200);
+        assertThat(get(client(administrator), "/api/v1/admin/channels").statusCode()).isEqualTo(403);
         HttpResponse<String> updated = mutate(
                 administrator,
                 "PATCH",
                 "/api/v1/admin/channels/" + channel.id(),
                 "{\"ignored\":true}");
-        assertThat(updated.statusCode()).isEqualTo(200);
+        assertThat(updated.statusCode()).isEqualTo(403);
         assertThat(jdbc.queryForObject(
-                "SELECT ignored FROM channels WHERE id = ?", Boolean.class, channel.id())).isTrue();
+                "SELECT ignored FROM channels WHERE id = ?", Boolean.class, channel.id())).isFalse();
     }
 
     private static UUID createIntegration(String provider, String name) {
@@ -386,13 +396,17 @@ class ChannelIntegrationTests {
     }
 
     private static UUID createUser(String email, String role) {
-        return jdbc.queryForObject(
+        UUID userId = jdbc.queryForObject(
                 "INSERT INTO users (email, display_name, password_hash, role, active) VALUES (?, ?, ?, ?, TRUE) RETURNING id",
                 UUID.class,
                 email,
                 email,
                 encoder.encode(testCredential()),
                 role);
+        if ("ADMIN".equals(role)) {
+            jdbc.update("INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_integrations') ON CONFLICT DO NOTHING", userId);
+        }
+        return userId;
     }
 
     private static CookieManager login(String email) throws Exception {

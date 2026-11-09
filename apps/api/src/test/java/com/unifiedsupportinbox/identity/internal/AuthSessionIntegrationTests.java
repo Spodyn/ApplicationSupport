@@ -90,6 +90,9 @@ class AuthSessionIntegrationTests {
                 true,
                 null,
                 null);
+        for (String permission : PermissionCatalog.ALL) {
+            jdbc.update("INSERT INTO user_permissions (user_id, permission_code) VALUES (?, ?)", user.id(), permission);
+        }
 
         CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
         HttpClient firstClient = client(cookies);

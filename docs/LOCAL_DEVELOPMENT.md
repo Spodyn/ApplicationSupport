@@ -90,6 +90,12 @@ The local profile also enables the message-delivery worker. It consumes queued
 support replies from `usi.messages.delivery` and redispatches due retries when
 the API is running. The bot token remains in the external secret directory.
 
+Alternatively, skip `pnpm local:slack:seed` and use the authenticated
+**Ustawienia -> Integracje** flow documented in `SLACK_DEVELOPMENT.md`. That
+path creates the Integration, tests the external secret reference, discovers
+accessible Slack channels, creates Customers, and persists Channel mappings
+through the normal administration API.
+
 To follow one service only:
 
 ```bash

@@ -4,9 +4,10 @@ import type {
   AdministrationSettings,
   AdministrationUser,
   AdministrationUserInput,
-  ManagedIntegration,
+  IntegrationConfigurationInput,
   ManagedChannel,
-  ManagedCustomerOption,
+  ManagedCustomer,
+  ManagedIntegration,
   ChannelGroupingStrategy,
 } from "@/lib/domain/administration"
 import {
@@ -33,6 +34,13 @@ export interface AdministrationUserRepository {
   save(input: AdministrationUserInput, id?: string): Promise<AdministrationUser>
   deactivate(id: string): Promise<AdministrationUser>
   delete(id: string): Promise<void>
+  issueInvitation(id: string): Promise<CredentialActionToken>
+  issuePasswordReset(id: string): Promise<CredentialActionToken>
+}
+
+export interface CredentialActionToken {
+  token: string
+  expiresAt: string
 }
 
 export interface AdministrationSettingsRepository {
@@ -41,19 +49,19 @@ export interface AdministrationSettingsRepository {
     key: K,
     value: AdministrationSettings[K],
   ): Promise<AdministrationSettings[K]>
+  configureIntegration(input: IntegrationConfigurationInput): Promise<ManagedIntegration>
   setIntegrationStatus(
     id: string,
     status: ManagedIntegration["status"],
   ): Promise<ManagedIntegration>
   testIntegration(id: string): Promise<ManagedIntegration>
-  listCustomers(): Promise<ManagedCustomerOption[]>
-  configureChannel(
-    id: string,
-    customerId: string,
-    groupingStrategy: ChannelGroupingStrategy,
-  ): Promise<ManagedChannel>
-  setChannelIgnored(id: string, ignored: boolean): Promise<void>
+  discoverChannels(id: string): Promise<ManagedChannel[]>
+  listCustomers(): Promise<import("@/lib/domain/administration").ManagedCustomerOption[]>
+  configureChannel(id: string, customerId: string | undefined, ignored: boolean, groupingStrategy?: import("@/lib/domain/administration").ChannelGroupingStrategy): Promise<void>
+  saveCustomer(input: Pick<ManagedCustomer, "name" | "externalRef">, id?: string): Promise<ManagedCustomer>
+  deactivateCustomer(id: string): Promise<ManagedCustomer>
   toggleNotification(id: string, enabled: boolean): Promise<void>
+  replayNotificationDelivery(id: string): Promise<void>
 }
 
 let usersState = structuredClone(mockAdministrationUsers)
@@ -190,6 +198,14 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
     usersState = usersState.filter((item) => item.id !== id)
     return delay(undefined)
   },
+
+  async issueInvitation() {
+    throw new Error("Zaproszenia są dostępne wyłącznie przez API.")
+  },
+
+  async issuePasswordReset() {
+    throw new Error("Reset hasła jest dostępny wyłącznie przez API.")
+  },
 }
 
 export const mockAdministrationSettingsRepository: AdministrationSettingsRepository = {
@@ -220,6 +236,31 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     return delay(settingsState[key])
   },
 
+  async configureIntegration(input) {
+    requireCurrentAdministrationPermission("manage_integrations")
+    const integration = input.id
+      ? settingsState.integrations.find((item) => item.id === input.id)
+      : undefined
+    const configured: ManagedIntegration = integration ?? {
+      id: `int-${Date.now()}`,
+      platform: input.platform,
+      displayName: input.displayName,
+      status: "configuring",
+      workspace: input.workspaceName,
+      workspaceId: input.workspaceId,
+      hasSecretReference: true,
+      health: "unknown",
+    }
+    configured.displayName = input.displayName
+    configured.workspace = input.workspaceName
+    configured.workspaceId = input.workspaceId
+    configured.hasSecretReference = true
+    configured.status = "configuring"
+    configured.health = "unknown"
+    if (!integration) settingsState.integrations.push(configured)
+    return delay(configured)
+  },
+
   async setIntegrationStatus(id, status) {
     requireCurrentAdministrationPermission("manage_integrations")
     const integration = settingsState.integrations.find((item) => item.id === id)
@@ -243,31 +284,44 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     return delay(integration, 600)
   },
 
+  async discoverChannels() {
+    requireCurrentAdministrationPermission("manage_integrations")
+    return delay(settingsState.channels)
+  },
+
   async listCustomers() {
     requireCurrentAdministrationPermission("manage_integrations")
-    const names = [...new Set(settingsState.channels.map((channel) => channel.customer))]
-    return delay(names.map((name, index) => ({ id: `mock-customer-${index + 1}`, name })))
+    return delay(settingsState.customers.filter((customer) => customer.active).map(({ id, name }) => ({ id, name })))
   },
 
-  async configureChannel(id, customerId, groupingStrategy) {
+  async configureChannel(id, customerId, ignored, groupingStrategy) {
     requireCurrentAdministrationPermission("manage_integrations")
     const channel = settingsState.channels.find((item) => item.id === id)
     if (!channel) throw new Error("Nie znaleziono kanału.")
-    const customers = await this.listCustomers()
-    const customer = customers.find((item) => item.id === customerId)
-    if (!customer) throw new Error("Nie znaleziono klienta.")
-    channel.customerId = customer.id
-    channel.customer = customer.name
-    channel.groupingStrategy = groupingStrategy
-    return delay(channel)
-  },
-
-  async setChannelIgnored(id, ignored) {
-    requireCurrentAdministrationPermission("manage_integrations")
-    const channel = settingsState.channels.find((item) => item.id === id)
-    if (!channel) throw new Error("Nie znaleziono kanału.")
+    const customer = settingsState.customers.find((item) => item.id === customerId)
+    channel.customerId = customer?.id
+    channel.customer = customer?.name ?? "Nie przypisano"
     channel.ignored = ignored
+    if (groupingStrategy) channel.groupingStrategy = groupingStrategy
     return delay(undefined)
+  },
+
+  async saveCustomer(input, id) {
+    requireCurrentAdministrationPermission("manage_integrations")
+    const existing = id ? settingsState.customers.find((item) => item.id === id) : undefined
+    const customer = existing ?? { id: `customer-${Date.now()}`, name: "", active: true }
+    customer.name = input.name
+    customer.externalRef = input.externalRef
+    if (!existing) settingsState.customers.push(customer)
+    return delay(customer)
+  },
+
+  async deactivateCustomer(id) {
+    requireCurrentAdministrationPermission("manage_integrations")
+    const customer = settingsState.customers.find((item) => item.id === id)
+    if (!customer) throw new Error("Nie znaleziono klienta.")
+    customer.active = false
+    return delay(customer)
   },
 
   async toggleNotification(id, enabled) {
@@ -276,5 +330,9 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     if (!destination) throw new Error("Nie znaleziono celu powiadomień.")
     destination.enabled = enabled
     return delay(undefined)
+  },
+
+  async replayNotificationDelivery() {
+    throw new Error("Ponowienie dostawy jest dostępne wyłącznie przez API.")
   },
 }

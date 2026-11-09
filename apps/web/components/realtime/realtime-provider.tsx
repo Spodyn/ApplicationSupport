@@ -16,7 +16,14 @@ const CASE_LIFECYCLE_EVENTS = new Set([
   "case.claimed",
   "case.sla_changed",
 ])
-const CONVERSATION_EVENTS = new Set(["message.created", "message.delivery_updated"])
+const PERSONAL_STATE_EVENTS = new Set([
+  "case.unread_changed",
+  "case.read_position_changed",
+  "case.snoozed",
+  "case.snooze_cancelled",
+  "case.snooze_due",
+])
+const CONVERSATION_EVENTS = new Set(["message.created", "message.updated", "message.delivery_updated"])
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export function RealtimeProvider({ children }: { children: ReactNode }) {
@@ -25,8 +32,25 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
   const client = useMemo(() => new RealtimeStompClient(), [])
 
   useEffect(() => {
-    const unsubscribe = client.subscribe(setState)
+    let connectedOnce = false
+    let resyncAfterReconnect = false
+    const unsubscribe = client.subscribe((nextState) => {
+      setState(nextState)
+      if (nextState === "disconnected" && connectedOnce) {
+        resyncAfterReconnect = true
+      }
+      if (nextState === "connected") {
+        if (resyncAfterReconnect) {
+          // Events can be missed while the socket is down. Refetch every active Inbox
+          // projection after reconnect instead of attempting to replay client-side state.
+          void queryClient.invalidateQueries({ queryKey: ["support-inbox"] })
+          resyncAfterReconnect = false
+        }
+        connectedOnce = true
+      }
+    })
     const unsubscribeCases = client.subscribeDestination("/topic/cases")
+    const unsubscribePersonal = client.subscribeDestination("/user/queue/personal")
     const unsubscribeFrames = client.subscribeFrames((destination, body) => {
       const event = parseRealtimeEventEnvelope(body)
       // Unknown/future/malformed notifications are deliberately a safe refetch, never a local patch.
@@ -38,6 +62,21 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         // REST/DB remains the source of truth. Invalidation avoids overwriting a local pending
         // workflow mutation while still making changes from another browser visible promptly.
         void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() })
+        const caseId = typeof event.payload.caseId === "string" ? event.payload.caseId : null
+        if (caseId && UUID_PATTERN.test(caseId)) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCase(caseId) })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.inboxActivity(caseId) })
+        }
+        return
+      }
+      if (destination === "/user/queue/personal" && PERSONAL_STATE_EVENTS.has(event.eventType)) {
+        // The server resolves this destination from the authenticated Principal. Personal state
+        // never carries or trusts a browser-supplied user id; refetch current-user projections only.
+        void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() })
+        const caseId = typeof event.payload.caseId === "string" ? event.payload.caseId : null
+        if (caseId && UUID_PATTERN.test(caseId)) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCase(caseId) })
+        }
         return
       }
       if (CONVERSATION_EVENTS.has(event.eventType)) {
@@ -46,6 +85,8 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           // Query refetch is intentionally idempotent: duplicate/out-of-order realtime hints never
           // append another Message locally and therefore cannot duplicate the conversation.
           void queryClient.invalidateQueries({ queryKey: queryKeys.inboxMessages(caseId) })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCase(caseId) })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.inboxActivity(caseId) })
           void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() })
           return
         }
@@ -55,6 +96,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     client.start()
     return () => {
       unsubscribeFrames()
+      unsubscribePersonal()
       unsubscribeCases()
       unsubscribe()
       client.stop()

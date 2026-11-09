@@ -11,6 +11,8 @@ export interface NavItem {
   href: string
   icon: LucideIcon
   description: string
+  adminOnly?: boolean
+  requiredPermission?: string
 }
 
 /** Główna nawigacja aplikacji (lewa listwa). */
@@ -26,17 +28,27 @@ export const navItems: NavItem[] = [
     href: "/statistics",
     icon: ChartColumn,
     description: "Wskaźniki i trendy zespołu wsparcia",
+    requiredPermission: "view_global_statistics",
   },
   {
     label: "Użytkownicy",
     href: "/users",
     icon: Users,
     description: "Agenci i klienci w systemie",
+    requiredPermission: "manage_users",
   },
   {
     label: "Ustawienia",
     href: "/settings",
     icon: Settings,
     description: "Ustawienia aplikacji",
+    adminOnly: true,
   },
 ]
+
+export function visibleNavItems(user: { role: string; effectivePermissions: string[] } | undefined) {
+  return navItems.filter((item) => {
+    if (item.adminOnly && user?.role !== "admin") return false
+    return !item.requiredPermission || user?.effectivePermissions.includes(item.requiredPermission)
+  })
+}

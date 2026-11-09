@@ -54,6 +54,17 @@ class MessageCreatedRealtimeRabbitListenerTests {
     }
 
     @Test
+    void publishesMessageUpdatedWithoutForwardingContent() {
+        UUID caseId = UUID.randomUUID();
+        UUID messageId = UUID.randomUUID();
+        listener.onMessageCreated(message("message.updated", "corr-update",
+                "{\"messageId\":\"" + messageId + "\",\"caseId\":\"" + caseId + "\"}"));
+        ArgumentCaptor<Object> envelope = ArgumentCaptor.forClass(Object.class);
+        verify(messaging).convertAndSend(eq("/topic/cases/" + caseId), envelope.capture());
+        assertThat(((Map<?, ?>) envelope.getValue()).get("eventType")).isEqualTo("message.updated");
+    }
+
+    @Test
     void rejectsWrongRoutingKeyOrMalformedPayloadWithoutRequeue() {
         UUID caseId = UUID.randomUUID();
         UUID messageId = UUID.randomUUID();

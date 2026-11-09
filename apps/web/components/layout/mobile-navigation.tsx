@@ -3,11 +3,13 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { navItems } from "@/lib/navigation"
+import { visibleNavItems } from "@/lib/navigation"
+import { useCurrentUser } from "@/lib/services/queries"
 import { UserMenu } from "./user-menu"
 
 export function MobileNavigation({ onNavigate }: { onNavigate: () => void }) {
   const pathname = usePathname()
+  const currentUser = useCurrentUser()
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-card">
@@ -18,7 +20,7 @@ export function MobileNavigation({ onNavigate }: { onNavigate: () => void }) {
 
       <nav aria-label="Nawigacja mobilna" className="min-h-0 flex-1 overflow-y-auto p-3">
         <ul className="grid gap-1">
-          {navItems.map((item) => {
+          {visibleNavItems(currentUser.data).map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
             return (
               <li key={item.href}>

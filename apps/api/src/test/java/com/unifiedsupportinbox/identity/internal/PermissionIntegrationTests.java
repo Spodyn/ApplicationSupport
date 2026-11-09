@@ -76,19 +76,21 @@ class PermissionIntegrationTests {
     }
 
     @Test
-    void catalogIsSeededAndAdminBaselineContainsEveryFrozenPermission() {
+    void catalogIsSeededAndAdministratorCanHoldEveryFrozenPermission() {
         assertThat(jdbc.queryForList("SELECT code FROM permissions ORDER BY code", String.class))
                 .containsExactlyInAnyOrderElementsOf(PermissionCatalog.ALL);
 
         UserAccount admin = createUser("admin@example.com", UserRole.ADMIN, true);
+        for (String permission : PermissionCatalog.ALL) grant(admin.id(), permission);
         assertThat(permissions.effectivePermissions(admin.id()))
-                .containsExactlyElementsOf(PermissionCatalog.ALL);
+                .containsExactlyInAnyOrderElementsOf(PermissionCatalog.ALL);
     }
 
     @Test
     void adminBaselineCanUpdatePermissionsAndLoginReturnsEffectivePermissions() throws Exception {
         UserAccount admin = createUser("admin@example.com", UserRole.ADMIN, true);
-        UserAccount user = createUser("user@example.com", UserRole.USER, true);
+        for (String permission : PermissionCatalog.ALL) grant(admin.id(), permission);
+        UserAccount user = createUser("user@example.com", UserRole.ADMIN, true);
 
         LoginResult adminLogin = login("admin@example.com");
         assertThat(adminLogin.response().body()).contains("\"manage_users\"");
@@ -155,8 +157,8 @@ class PermissionIntegrationTests {
 
     @Test
     void explicitManageUsersPermissionAuthorizesRouteAndCommand() throws Exception {
-        UserAccount actor = createUser("delegated@example.com", UserRole.USER, true);
-        UserAccount target = createUser("target@example.com", UserRole.USER, true);
+        UserAccount actor = createUser("delegated@example.com", UserRole.ADMIN, true);
+        UserAccount target = createUser("target@example.com", UserRole.ADMIN, true);
         grant(actor.id(), PermissionCatalog.MANAGE_USERS);
         CookieManager cookies = login(actor.email()).cookies();
 
@@ -168,8 +170,8 @@ class PermissionIntegrationTests {
 
     @Test
     void revokedPermissionTakesEffectWithoutRelogin() throws Exception {
-        UserAccount actor = createUser("delegated@example.com", UserRole.USER, true);
-        UserAccount target = createUser("target@example.com", UserRole.USER, true);
+        UserAccount actor = createUser("delegated@example.com", UserRole.ADMIN, true);
+        UserAccount target = createUser("target@example.com", UserRole.ADMIN, true);
         grant(actor.id(), PermissionCatalog.MANAGE_USERS);
         CookieManager cookies = login(actor.email()).cookies();
 

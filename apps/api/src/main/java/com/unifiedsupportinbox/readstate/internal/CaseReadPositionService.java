@@ -1,21 +1,32 @@
 package com.unifiedsupportinbox.readstate.internal;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.OutboxEventStore;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
+import org.slf4j.MDC;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /** Updates only the caller's personal cursor and never moves it backwards. */
 @Service
 class CaseReadPositionService {
 
-    private final JdbcTemplate jdbc;
+    static final String OUTBOX_TYPE = "case.read_position_changed";
+    private static final String AGGREGATE_TYPE = "case";
 
-    CaseReadPositionService(JdbcTemplate jdbc) {
+    private final JdbcTemplate jdbc;
+    private final OutboxEventStore outbox;
+    private final ObjectMapper json;
+
+    CaseReadPositionService(JdbcTemplate jdbc, OutboxEventStore outbox, ObjectMapper json) {
         this.jdbc = jdbc;
+        this.outbox = outbox;
+        this.json = json;
     }
 
     @Transactional
@@ -26,7 +37,7 @@ class CaseReadPositionService {
         requireEligibleUser(userId);
         requireMessageInCase(caseId, messageId);
 
-        jdbc.update("""
+        int changed = jdbc.update("""
                 INSERT INTO case_read_states (
                     user_id, case_id, last_read_message_id, last_read_at, updated_at
                 ) VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -53,7 +64,7 @@ class CaseReadPositionService {
                    )
                 """, userId, caseId, messageId);
 
-        return jdbc.query("""
+        ReadPosition position = jdbc.query("""
                 SELECT last_read_message_id, last_read_at
                 FROM case_read_states
                 WHERE user_id = ? AND case_id = ?
@@ -61,6 +72,31 @@ class CaseReadPositionService {
                 caseId, resultSet.getObject("last_read_message_id", UUID.class),
                 resultSet.getTimestamp("last_read_at").toInstant()), userId, caseId)
                 .stream().findFirst().orElseThrow();
+
+        if (changed == 1) {
+            outbox.append(
+                    OUTBOX_TYPE,
+                    AGGREGATE_TYPE,
+                    caseId,
+                    payload(caseId, userId, position.messageId()),
+                    correlationId());
+        }
+        return position;
+    }
+
+    private String payload(UUID caseId, UUID userId, UUID messageId) {
+        ObjectNode payload = json.createObjectNode();
+        payload.put("caseId", caseId.toString());
+        payload.put("userId", userId.toString());
+        payload.put("messageId", messageId.toString());
+        return payload.toString();
+    }
+
+    private static String correlationId() {
+        String value = MDC.get("correlationId");
+        return value == null || value.isBlank() || value.length() > 128
+                ? UUID.randomUUID().toString()
+                : value;
     }
 
     private void requireEligibleUser(UUID userId) {

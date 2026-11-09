@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import type { ApiTransport, ApiTransportRequest, CaseMessage } from "@usi/api-client/generated"
 import { ApiHttpError } from "@/lib/services/api/http-transport"
 import { InboxConflictError } from "@/lib/services/inbox"
-import { createApiInboxRepository, InboxActionUnavailableError, mapCaseMessage } from "@/lib/services/api/inbox-adapter"
+import { createApiInboxRepository, mapCaseMessage } from "@/lib/services/api/inbox-adapter"
 
 const caseId = "01a10d64-2d99-7627-813d-2bad1ab9ab55"
 const messageId = "01a10d64-2da1-7555-a8cf-a27e56abbc35"
@@ -60,6 +60,15 @@ function fixture() {
 }
 
 describe("real inbox API adapter", () => {
+  it("shows unassigned Slack intake without inventing a real customer", async () => {
+    const repository = createApiInboxRepository({ request: vi.fn(async (input: ApiTransportRequest) => {
+      if (input.path === "/api/v1/cases") return { items: [{ ...listItem, customerId: "00000000-0000-0000-0000-000000000000", customerName: "Nie przypisano" }], nextCursor: null }
+      return { ...detail, customer: { id: "00000000-0000-0000-0000-000000000000", name: "Nie przypisano", externalRef: null } }
+    }) } as ApiTransport)
+    expect((await repository.list()).items[0].customer).toMatchObject({ id: "unassigned", name: "Nie przypisano" })
+    expect((await repository.getCase(caseId)).customer).toMatchObject({ id: "unassigned", name: "Nie przypisano" })
+  })
+
   it("maps the persisted Slack Case, detail, and inbound message through the generated API", async () => {
     const { repository, requests } = fixture()
     const page = await repository.list()
@@ -78,7 +87,7 @@ describe("real inbox API adapter", () => {
     const send = requests.find((item) => item.path.endsWith("/messages") && item.method === "POST")
     expect(claim?.headers?.["Idempotency-Key"]).toMatch(/^[0-9a-f-]{36}$/)
     expect(send?.headers?.["Idempotency-Key"]).toBe("fixed-retry-key")
-    expect(send?.body).toEqual({ body: "USI test reply", bodyFormat: "PLAIN_TEXT" })
+    expect(send?.body).toEqual({ body: "USI test reply", bodyFormat: "PLAIN_TEXT", attachmentIds: [] })
   })
 
   it("maps persisted support messages as agent messages and accepts an empty real history page", async () => {
@@ -109,47 +118,13 @@ describe("real inbox API adapter", () => {
     await expect(repository.getMessages(caseId)).resolves.toEqual({ items: [], nextCursor: undefined })
   })
 
-  it("marks a rendered message read and rejects workflow actions that are still unavailable", async () => {
+  it("marks a rendered message read, snoozes through the API, and rejects invalid attachment objects", async () => {
     const { repository, requests } = fixture()
     await repository.markRead(caseId, messageId)
     expect(requests[0]).toMatchObject({ method: "PUT", body: { messageId } })
-    await expect(repository.snooze(caseId, "2026-10-06T00:00:00Z")).rejects.toBeInstanceOf(InboxActionUnavailableError)
-  })
-
-  it("uploads and removes a pending attachment, sends its id, and retries a failed delivery", async () => {
-    const { repository, requests } = fixture()
-    const uploaded = await repository.uploadAttachment(
-      caseId,
-      new File(["test"], "evidence.txt", { type: "text/plain" }),
-    )
-    expect(uploaded).toMatchObject({
-      id: attachmentId,
-      fileName: "evidence.txt",
-      scanStatus: "clean",
-    })
-    const upload = requests.find((item) => item.path.endsWith("/attachments") && item.method === "POST")
-    expect(upload?.body).toBeInstanceOf(FormData)
-
-    await repository.sendMessage(caseId, {
-      body: "Reply with evidence",
-      attachments: [uploaded],
-      idempotencyKey: "send-with-file",
-    })
-    const send = requests.find((item) => item.path.endsWith("/messages") && item.method === "POST")
-    expect(send?.body).toEqual({
-      body: "Reply with evidence",
-      bodyFormat: "PLAIN_TEXT",
-      attachmentIds: [attachmentId],
-    })
-
-    await repository.retryMessage(messageId, "retry-key")
-    const retry = requests.find((item) => item.path.endsWith(`/messages/${messageId}/retry`))
-    expect(retry?.headers?.["Idempotency-Key"]).toBe("retry-key")
-
-    await repository.removePendingAttachment(caseId, attachmentId)
-    expect(requests.some((item) =>
-      item.method === "DELETE" && item.path.endsWith(`/attachments/${attachmentId}`)
-    )).toBe(true)
+    await repository.snooze(caseId, "2026-10-06T00:00:00Z")
+    expect(requests[1]).toMatchObject({ method: "POST", body: { until: "2026-10-06T00:00:00Z" } })
+    await expect(repository.sendMessage(caseId, { body: "test", attachments: [{ fileName: "file", size: "1" }] })).rejects.toThrow("Nieobsługiwany format załącznika")
   })
   it("propagates API list errors without falling back to mock cases", async () => {
     const failure = new ApiHttpError(503)

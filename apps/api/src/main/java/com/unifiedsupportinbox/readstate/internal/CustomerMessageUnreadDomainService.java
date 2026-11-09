@@ -64,6 +64,20 @@ class CustomerMessageUnreadDomainService implements CustomerMessageUnreadService
                 correlationId);
     }
 
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void customerMessageEdited(UUID caseId, UUID messageId, String correlationId) {
+        customerMessageCreated(caseId, messageId, correlationId);
+        jdbc.update("""
+                UPDATE case_read_states reads
+                SET last_read_message_id = NULL, last_read_at = NULL, updated_at = CURRENT_TIMESTAMP
+                FROM users u WHERE reads.user_id = u.id AND reads.case_id = ?
+                  AND u.active = TRUE AND u.role IN ('USER', 'ADMIN')
+                  AND (u.valid_from IS NULL OR u.valid_from <= CURRENT_TIMESTAMP)
+                  AND (u.valid_until IS NULL OR u.valid_until > CURRENT_TIMESTAMP)
+                """, caseId);
+    }
+
     private void verifyCustomerMessage(UUID caseId, UUID messageId) {
         Integer count = jdbc.queryForObject("""
                 SELECT count(*)

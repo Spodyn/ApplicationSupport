@@ -12,6 +12,8 @@ public interface ProviderIntegrationCredentialLookup {
 
     List<CredentialReference> findForProvider(IntegrationProvider provider);
 
+    List<CredentialReference> findEnabledForProvider(IntegrationProvider provider);
+
     record CredentialReference(
             UUID integrationId,
             String workspaceExternalId,

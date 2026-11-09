@@ -69,3 +69,6 @@ These are implementation directions already implied by Jira and architecture and
 ## Human-decision boundary
 
 A human decision is required only when a proposed change alters the frozen contract, including scope, workflow, roles/permissions, security boundary, destructive retention semantics, paid/commercial commitments, production authority, pricing/customer commitments, or new legal/compliance obligations.
+
+
+Slack intake override (user request, 2026-11-09): discover authorized bot channel membership automatically. Active supported Slack channels without a customer mapping create visible Cases with customer NULL, labeled "Nie przypisano". Preserve existing customer mappings and ignored flags; never guess a customer. See INTEGRATIONS.md section 2.4.

@@ -1,7 +1,7 @@
 "use client"
 
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import type { LoginCredentials } from "@/lib/domain/auth"
+import type { CredentialAction, LoginCredentials } from "@/lib/domain/auth"
 import { currentUserQueryKey } from "@/lib/services/current-user"
 import { serviceRegistry } from "@/lib/services/registry"
 
@@ -25,5 +25,19 @@ export function useLogout() {
     onSuccess: () => {
       queryClient.removeQueries({ queryKey: currentUserQueryKey })
     },
+  })
+}
+
+export function useAcceptInvitation() {
+  return useMutation({
+    mutationFn: (action: CredentialAction) =>
+      serviceRegistry.currentUser.acceptInvitation(action),
+  })
+}
+
+export function useCompletePasswordReset() {
+  return useMutation({
+    mutationFn: (action: CredentialAction) =>
+      serviceRegistry.currentUser.completePasswordReset(action),
   })
 }

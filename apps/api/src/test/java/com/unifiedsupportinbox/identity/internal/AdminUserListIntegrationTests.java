@@ -204,8 +204,12 @@ class AdminUserListIntegrationTests {
     }
 
     private static UUID createUser(String email, UserRole role, boolean active) {
-        return users.saveAndFlush(new UserAccount(
+        UUID userId = users.saveAndFlush(new UserAccount(
                 email, email, encoder.encode(testCredential()), role, active, null, null)).id();
+        if (role == UserRole.ADMIN) {
+            jdbc.update("INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_users')", userId);
+        }
+        return userId;
     }
 
     private static CookieManager login(String email) throws Exception {

@@ -136,6 +136,52 @@ class IntegrationRepository {
                 """, status.name(), id);
     }
 
+    IntegrationRecord updateConfiguration(
+            UUID id,
+            String displayName,
+            String workspaceExternalId,
+            String workspaceName,
+            String secretRef) {
+        Objects.requireNonNull(id, "id");
+        String normalizedDisplayName = requiredText(displayName, "displayName", 160);
+        String normalizedWorkspaceExternalId = requiredText(workspaceExternalId, "workspaceExternalId", 255);
+        String normalizedWorkspaceName = requiredText(workspaceName, "workspaceName", 255);
+        String normalizedSecretRef = requiredText(secretRef, "secretRef", 512);
+
+        return jdbc.query("""
+                UPDATE integrations
+                SET display_name = ?,
+                    workspace_external_id = ?,
+                    workspace_name = ?,
+                    secret_ref = ?,
+                    status = 'CONFIGURING',
+                    health = 'UNKNOWN',
+                    last_error_code = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                RETURNING id,
+                          provider,
+                          display_name,
+                          status,
+                          health,
+                          workspace_external_id,
+                          workspace_name,
+                          secret_ref,
+                          config_json::text AS config_json,
+                          last_event_at,
+                          last_error_code,
+                          created_at,
+                          updated_at
+                """, preparedStatement -> {
+            preparedStatement.setString(1, normalizedDisplayName);
+            preparedStatement.setString(2, normalizedWorkspaceExternalId);
+            preparedStatement.setString(3, normalizedWorkspaceName);
+            preparedStatement.setString(4, normalizedSecretRef);
+            preparedStatement.setObject(5, id);
+        }, ROW_MAPPER).stream().findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Integration was not found."));
+    }
+
     IntegrationRecord updateHealth(
             UUID id,
             IntegrationHealth health,

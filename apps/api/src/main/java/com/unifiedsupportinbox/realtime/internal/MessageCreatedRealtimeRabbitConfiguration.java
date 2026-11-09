@@ -61,6 +61,13 @@ class MessageCreatedRealtimeRabbitConfiguration {
     }
 
     @Bean
+    Binding messageUpdatedRealtimeBinding(
+            @Qualifier("messageCreatedRealtimeQueue") Queue queue,
+            TopicExchange usiOutboxExchange) {
+        return BindingBuilder.bind(queue).to(usiOutboxExchange).with("message.updated");
+    }
+
+    @Bean
     Binding messageCreatedRealtimeDeadLetterBinding(
             @Qualifier("messageCreatedRealtimeDeadLetterQueue") Queue queue,
             DirectExchange messageCreatedRealtimeDeadLetterExchange) {
@@ -91,7 +98,7 @@ class MessageCreatedRealtimeRabbitListener {
     void onMessageCreated(Message message) {
         ParsedMessageCreated event = parse(message);
         Map<String, Object> envelope = new LinkedHashMap<>();
-        envelope.put("eventType", "message.created");
+        envelope.put("eventType", message.getMessageProperties().getReceivedRoutingKey());
         envelope.put("version", 1);
         envelope.put("entityId", event.messageId().toString());
         envelope.put("occurredAt", event.occurredAt().toString());
@@ -117,7 +124,7 @@ class MessageCreatedRealtimeRabbitListener {
     private ParsedMessageCreated parse(Message message) {
         try {
             String routingKey = message.getMessageProperties().getReceivedRoutingKey();
-            if (!MessageCreatedRealtimeRabbitConfiguration.ROUTING_KEY.equals(routingKey)) {
+            if (!MessageCreatedRealtimeRabbitConfiguration.ROUTING_KEY.equals(routingKey) && !"message.updated".equals(routingKey)) {
                 throw new IllegalArgumentException("Unexpected Message-created routing key.");
             }
             JsonNode root = json.readTree(message.getBody());

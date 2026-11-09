@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
-import { navItems } from "@/lib/navigation"
+import { visibleNavItems } from "@/lib/navigation"
+import { useCurrentUser } from "@/lib/services/queries"
 import { UserMenu } from "@/components/layout/user-menu"
 
 /**
@@ -16,6 +17,7 @@ export function AppRail({
   onNavigate?: () => void
 }) {
   const pathname = usePathname()
+  const currentUser = useCurrentUser()
 
   return (
     <nav
@@ -34,7 +36,7 @@ export function AppRail({
       </Link>
 
       <ul className="flex w-full flex-col items-center gap-[12px] px-[13px]">
-        {navItems.map((item) => {
+        {visibleNavItems(currentUser.data).map((item) => {
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
           return (
             <li key={item.href} className="w-full">
