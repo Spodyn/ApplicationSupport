@@ -100,3 +100,13 @@ Staging/production use runtime secret injection/deployment store; integration co
 Actionable Critical/High security findings block merge. Suppression requires an explicit reason and expiration.
 
 Codex/CI may work in controlled worktrees, tests and fake/sandbox providers, but must not receive production provider secrets, production DB/object-storage credentials or authority for autonomous production cutover, PITR, destructive recovery, secret rotation or DNS/provider callback cutover. Those actions require explicit human approval.
+
+## Implementation evidence
+
+The [2026-11-09 security audit](SECURITY_AUDIT_REPORT.md) records implemented
+controls, regression evidence and outstanding deployment/release checks. It does
+not replace this frozen baseline or certify production readiness. Authentication
+budgets use durable PostgreSQL reservations; their IP dimension uses the actual
+transport peer while forwarding headers remain disabled by default. A reviewed
+trusted-proxy/client-attribution configuration and legitimate multi-agent traffic
+verification are required before rollout behind an ingress proxy.

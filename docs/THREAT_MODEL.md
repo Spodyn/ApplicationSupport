@@ -74,6 +74,12 @@ control and must not be represented as complete in release evidence.
 - [ ] **SR-09: abuse controls.** Implement reusable rate limits with isolation and
   stable 429 semantics in E20-T06.
 
+Implementation progress and validation limits are recorded in
+[SECURITY_AUDIT_REPORT.md](SECURITY_AUDIT_REPORT.md). Document CSP and durable
+login/reset/completion budgets now have local regressions. The unchecked release
+items above still require complete scope and deployment evidence; a local pass
+does not establish trusted-proxy, file-scanner or production readiness.
+
 ## Residual risk and change control
 
 Real provider sandboxes may be unavailable, and self-hosted scanner availability is
