@@ -151,6 +151,7 @@ class SlackNormalizer {
         if (authorizations == null || !authorizations.isArray()) return false;
         for (JsonNode authorization : authorizations) {
             if (authorization != null && authorization.isObject()
+                    && authorization.path("is_bot").asBoolean(false)
                     && author.equals(optionalText(authorization, "user_id"))) {
                 return true;
             }

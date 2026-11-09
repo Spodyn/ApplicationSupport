@@ -77,8 +77,12 @@ final class AuthenticatedWebSocketHandshakeInterceptor implements HandshakeInter
         }
         URI forwardedOrigin = URI.create(forwardedProto + "://" + forwardedHost);
         return validOrigin(forwardedOrigin)
-                && sameOrigin(forwardedOrigin, localPublicOrigin)
+                && (sameOrigin(forwardedOrigin, localPublicOrigin) || localDevelopmentWebOrigin(forwardedOrigin))
                 && sameOrigin(originUri, forwardedOrigin);
+    }
+
+    private static boolean localDevelopmentWebOrigin(URI origin) {
+        return "http".equals(origin.getScheme()) && loopbackHost(origin.getHost()) && origin.getPort() == 3000;
     }
 
     private static String singleHeader(ServerHttpRequest request, String name) {

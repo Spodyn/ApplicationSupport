@@ -23,6 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 class InboundRootMessageCommandService implements InboundMessageCommandHandler {
 
     private final CaseCreationService cases;
+    private final InboundMessageMutationService mutations;
     private final CustomerMessageUnreadService unread;
     private final OutOfOfficeResponder outOfOffice;
     private final CustomerReplyWaitingService waitingReplies;
@@ -31,12 +32,14 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
 
     InboundRootMessageCommandService(
             CaseCreationService cases,
+            InboundMessageMutationService mutations,
             CustomerMessageUnreadService unread,
             OutOfOfficeResponder outOfOffice,
             CustomerReplyWaitingService waitingReplies,
             JdbcTemplate jdbc,
             MessageCreatedOutboxPublisher messageCreated) {
         this.cases = cases;
+        this.mutations = mutations;
         this.unread = unread;
         this.outOfOffice = outOfOffice;
         this.waitingReplies = waitingReplies;
@@ -49,6 +52,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
     public Result handle(Command command) {
         Objects.requireNonNull(command, "command");
         validateInboundCreate(command);
+        if (command.mutation() != Mutation.CREATE) return mutations.apply(command);
 
         CaseCreationService.Result caseResult = cases.create(new CaseCreationService.Command(
                 command.inboundEventId(),
@@ -137,13 +141,11 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         requiredText(command.externalThreadKey(), "externalThreadKey", 255);
         requiredText(command.externalChannelId(), "externalChannelId", 255);
         requiredText(command.authorExternalId(), "authorExternalId", 255);
-        Objects.requireNonNull(command.body(), "body");
+        if (command.mutation() != Mutation.DELETE) Objects.requireNonNull(command.body(), "body");
         Objects.requireNonNull(command.providerOccurredAt(), "providerOccurredAt");
         requiredText(command.correlationId(), "correlationId", 128);
 
-        if (command.mutation() != Mutation.CREATE) {
-            throw notReady("Inbound message mutations are handled by a later messaging task.");
-        }
+        Objects.requireNonNull(command.mutation(), "mutation");
         if (provider != IntegrationProvider.SLACK && provider != IntegrationProvider.TELEGRAM) {
             throw notReady("Only Slack and Telegram inbound message mapping is active in the current phase.");
         }

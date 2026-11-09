@@ -305,7 +305,11 @@ decisions:
       supported: [PUBLIC_CHANNEL, PRIVATE_CHANNEL, SLACK_CONNECT_CHANNEL]
       unsupported_v1: [DM, GROUP_DM]
       human_non_app_message_is_customer: true
-      unmapped_channel_creates_case: false
+      unmapped_channel_creates_case: true
+      unmapped_customer: null
+      unmapped_customer_label: Nie przypisano
+      membership_reconciliation_seconds: 30
+      override_source: user_explicit_request_2026_11_09
       request_replay_window_minutes: 5
       no_full_history_import: true
       recovery_default_hours: 24

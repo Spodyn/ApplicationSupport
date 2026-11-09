@@ -44,6 +44,7 @@ class NotificationConfigurationIntegrationTests {
         context = new SpringApplicationBuilder(UsiApiApplication.class)
                 .profiles("test")
                 .run(
+                        "--server.port=0",
                         "--spring.datasource.url=" + POSTGRES.getJdbcUrl(),
                         "--spring.datasource.username=" + POSTGRES.getUsername(),
                         "--spring.datasource.password=" + POSTGRES.getPassword(),

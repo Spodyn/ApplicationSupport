@@ -216,3 +216,5 @@ Staging may auto-deploy after gates. Production cutover requires protected human
 ## 10. Source hierarchy
 
 For implementation precedence use `AGENTS.md`: current Jira + later final overrides -> `PRODUCT_CONTRACT.md` -> `decision-registry.yaml` -> canonical area docs -> older historical/current-state docs -> code fixtures only where non-conflicting.
+
+Slack Message edits/deletes are applied to the original persisted identity under targeted Case/Message row locks. The same transaction writes sanitized provider audit metadata and a `message.updated` outbox event. The existing per-Case realtime consumer routes that event without content; clients refetch authoritative history. Mutation processing never calls Case creation or provider HTTP.

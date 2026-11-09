@@ -137,7 +137,7 @@ class SlackRootCaseMappingIntegrationTests {
     }
 
     @Test
-    void customerUnmappedChannelIsRecordedWithoutCreatingBusinessRows() {
+    void customerUnmappedChannelCreatesVisibleIntakeWithoutGuessingCustomer() {
         UUID integrationId = createSlackIntegration();
         UUID channelId = createChannel(integrationId, "C-unmapped-customer", null, true, false);
         assertThat(channelId).isNotNull();
@@ -148,11 +148,13 @@ class SlackRootCaseMappingIntegrationTests {
 
         assertThat(worker.process(event.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
         assertThat(jdbc.queryForObject(
-                "SELECT processing_outcome FROM inbound_events WHERE id = ?", String.class, event.id()))
-                .isEqualTo(InboundEventOutcomeStore.UNMAPPED_CHANNEL);
-        assertThat(count("cases")).isZero();
-        assertThat(count("messages")).isZero();
-        assertThat(countOutbox("case.created")).isZero();
+                "SELECT processing_outcome FROM inbound_events WHERE id = ?", String.class, event.id())).isNull();
+        assertThat(count("cases")).isEqualTo(1);
+        assertThat(count("messages")).isEqualTo(1);
+        assertThat(countOutbox("case.created")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT customer_id FROM cases", UUID.class)).isNull();
+        assertThat(worker.process(event.id())).isEqualTo(SlackInboundWorker.AttemptResult.ALREADY_PROCESSED);
+        assertThat(count("messages")).isEqualTo(1);
     }
 
     @Test
@@ -270,6 +272,73 @@ class SlackRootCaseMappingIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT kind FROM messages WHERE delivery_status = 'QUEUED'", String.class))
                 .isEqualTo("SYSTEM");
         assertThat(countOutbox("message.send_requested")).isEqualTo(1);
+    }
+
+    @Test
+    void editsPreserveMessageIdentityMarkReadMessagesUnreadAndIgnoreStaleDuplicates() {
+        Fixture fixture = mappedFixture("C-mutations");
+        UUID viewer = jdbc.queryForObject("INSERT INTO users (email, display_name, role, active) VALUES ('edit-viewer@example.invalid', 'Viewer', 'USER', TRUE) RETURNING id", UUID.class);
+        String ts = "1720000700.1";
+        InboundEvent root = persist(fixture.integrationId(), "Ev-edit-root", rootMessage("Ev-edit-root", fixture.externalChannelId(), "U-customer", "original", ts));
+        assertThat(worker.process(root.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        UUID messageId = jdbc.queryForObject("SELECT id FROM messages", UUID.class);
+        UUID caseId = jdbc.queryForObject("SELECT id FROM cases", UUID.class);
+        jdbc.update("UPDATE case_read_states SET last_read_message_id = ?, last_read_at = CURRENT_TIMESTAMP WHERE user_id = ?", messageId, viewer);
+        for (String eventId : new String[]{"Ev-edit-first", "Ev-edit-duplicate", "Ev-edit-stale"}) {
+            InboundEvent edit = persist(fixture.integrationId(), eventId, mutation(eventId, fixture.externalChannelId(), ts, eventId.endsWith("stale") ? "1720000705.1" : "1720000710.1", false));
+            assertThat(worker.process(edit.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        }
+        assertThat(count("cases")).isEqualTo(1);
+        assertThat(count("messages")).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT body FROM messages WHERE id = ?", String.class, messageId)).isEqualTo("edited content");
+        assertThat(jdbc.queryForObject("SELECT edited_at IS NOT NULL FROM messages WHERE id = ?", Boolean.class, messageId)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT last_read_message_id FROM case_read_states WHERE case_id = ? AND user_id = ?", UUID.class, caseId, viewer)).isNull();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE action = 'CUSTOMER_MESSAGE_EDITED'", Integer.class)).isEqualTo(1);
+        assertThat(countOutbox("message.updated")).isEqualTo(1);
+        assertThat(countOutbox("case.updated")).isEqualTo(1);
+    }
+
+    @Test
+    void mutationsTargetOriginalTerminalCaseAndDeletionCannotBeResurrected() {
+        Fixture fixture = mappedFixture("C-terminal-mutation");
+        String ts = "1720000800.1";
+        InboundEvent root = persist(fixture.integrationId(), "Ev-terminal-root", rootMessage("Ev-terminal-root", fixture.externalChannelId(), "U-customer", "original", ts));
+        assertThat(worker.process(root.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        UUID originalCase = jdbc.queryForObject("SELECT id FROM cases", UUID.class);
+        jdbc.update("UPDATE cases SET status = 'RESOLVED', resolution_category = 'SOLVED', resolved_at = CURRENT_TIMESTAMP WHERE id = ?", originalCase);
+        InboundEvent reply = persist(fixture.integrationId(), "Ev-new-generation", threadReply("Ev-new-generation", fixture.externalChannelId(), "U-customer", "new question", "1720000810.1", ts));
+        assertThat(worker.process(reply.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        for (String eventId : new String[]{"Ev-delete-original", "Ev-delete-duplicate"}) {
+            InboundEvent deletion = persist(fixture.integrationId(), eventId, mutation(eventId, fixture.externalChannelId(), ts, "1720000820.1", true));
+            assertThat(worker.process(deletion.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        }
+        InboundEvent laterEdit = persist(fixture.integrationId(), "Ev-edit-deleted", mutation("Ev-edit-deleted", fixture.externalChannelId(), ts, "1720000830.1", false));
+        assertThat(worker.process(laterEdit.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        assertThat(count("cases")).isEqualTo(2);
+        assertThat(count("messages")).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT status FROM cases WHERE id = ?", String.class, originalCase)).isEqualTo("RESOLVED");
+        assertThat(jdbc.queryForObject("SELECT body FROM messages WHERE case_id = ?", String.class, originalCase)).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT deleted_at IS NOT NULL FROM messages WHERE case_id = ?", Boolean.class, originalCase)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE action = 'CUSTOMER_MESSAGE_DELETED'", Integer.class)).isEqualTo(1);
+        assertThat(countOutbox("message.updated")).isEqualTo(1);
+        assertThat(countOutbox("case.updated")).isEqualTo(1);
+    }
+
+    @Test
+    void mutationBeforeOriginalRetriesWithoutCreatingAnyCase() {
+        Fixture fixture = mappedFixture("C-mutation-race");
+        InboundEvent edit = persist(fixture.integrationId(), "Ev-early-edit", mutation("Ev-early-edit", fixture.externalChannelId(), "1720000900.1", "1720000910.1", false));
+        assertThat(worker.process(edit.id())).isEqualTo(SlackInboundWorker.AttemptResult.RETRY_SCHEDULED);
+        assertThat(jdbc.queryForObject("SELECT error_code FROM inbound_events WHERE id = ?", String.class, edit.id())).isEqualTo("MESSAGE_MUTATION_TARGET_PENDING");
+        assertThat(count("cases")).isZero();
+        assertThat(count("messages")).isZero();
+    }
+
+    private String mutation(String eventId, String channel, String ts, String occurredAt, boolean delete) {
+        String nested = "{\"type\":\"message\",\"user\":\"U-customer\",\"ts\":\"" + ts + "\",\"text\":\"edited content\"}";
+        return "{\"type\":\"event_callback\",\"event_id\":\"" + eventId + "\",\"event\":{\"type\":\"message\",\"channel\":\"" + channel
+                + "\",\"channel_type\":\"channel\",\"subtype\":\"" + (delete ? "message_deleted" : "message_changed")
+                + "\",\"event_ts\":\"" + occurredAt + "\",\"" + (delete ? "previous_message" : "message") + "\":" + nested + "}}";
     }
 
     private Fixture mappedFixture(String externalChannelId) {

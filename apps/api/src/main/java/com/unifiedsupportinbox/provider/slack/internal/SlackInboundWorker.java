@@ -154,6 +154,9 @@ class SlackInboundWorker {
     }
 
     private FailureDisposition classify(RuntimeException failure) {
+        if (failure instanceof com.unifiedsupportinbox.messaging.InboundMessageMutationPendingException) {
+            return new FailureDisposition(FailureCategory.TRANSIENT, "MESSAGE_MUTATION_TARGET_PENDING");
+        }
         if (failure instanceof SlackInboundProcessingException classified) {
             return switch (classified.kind()) {
                 case TRANSIENT -> new FailureDisposition(FailureCategory.TRANSIENT, classified.errorCode());

@@ -42,12 +42,12 @@ class AnalyticsRecordsController {
                        EXTRACT(isodow FROM c.created_at AT TIME ZONE business.timezone_id)::integer - 1 AS created_day_index,
                        EXTRACT(hour FROM c.created_at AT TIME ZONE business.timezone_id)::integer AS created_hour,
                        c.owner_user_id, u.display_name AS user_name,
-                       c.customer_id, customer.name AS customer_name, c.provider,
+                       COALESCE(c.customer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS customer_id, COALESCE(customer.name, 'Nie przypisano') AS customer_name, c.provider,
                        channel.name AS channel_name, c.status, c.resolution_category,
                        sla.first_response_completed_at, sla.first_response_due_at, sla.state AS sla_state,
                        EXISTS (SELECT 1 FROM audit_events a WHERE a.case_id = c.id AND a.action = 'CASE_FORCE_RESOLVE') AS force_resolved
                 FROM cases c
-                JOIN customers customer ON customer.id = c.customer_id
+                LEFT JOIN customers customer ON customer.id = c.customer_id
                 JOIN channels channel ON channel.id = c.channel_id
                 LEFT JOIN users u ON u.id = c.owner_user_id
                 LEFT JOIN case_sla sla ON sla.case_id = c.id

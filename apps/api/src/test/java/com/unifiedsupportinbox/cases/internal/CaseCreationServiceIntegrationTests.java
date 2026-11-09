@@ -159,10 +159,18 @@ class CaseCreationServiceIntegrationTests {
     }
 
     @Test
-    void rejectsChannelsThatCannotCreateCases() {
+    void slackIntakePreservesUnknownCustomerAndDeduplicatesCase() {
         Fixture unmapped = fixture(false, false, true);
-        assertRejected(command(unmapped, "unmapped", "root-unmapped"), Reason.CHANNEL_CUSTOMER_UNMAPPED);
+        var command = command(unmapped, "unmapped", "root-unmapped");
+        var intake = service.create(command);
+        assertThat(intake.customerId()).isNull();
+        assertThat(intake.created()).isTrue();
+        assertThat(service.create(command).caseId()).isEqualTo(intake.caseId());
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM cases", Integer.class)).isEqualTo(1);
+    }
 
+    @Test
+    void rejectsChannelsThatCannotCreateCases() {
         Fixture ignored = fixture(true, true, true);
         assertRejected(command(ignored, "ignored", "root-ignored"), Reason.CHANNEL_IGNORED);
 

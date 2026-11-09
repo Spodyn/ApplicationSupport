@@ -50,6 +50,14 @@ class AuditEventSchemaIntegrationTests {
     }
 
     @Test
+    void activityQueryBindsParametersForInitialAndCursorPages() {
+        CaseActivityRepository repository = new CaseActivityRepository(jdbc);
+        UUID absentCase = UUID.randomUUID();
+        assertThat(repository.find(absentCase, null, null, 50)).isEmpty();
+        assertThat(repository.find(absentCase, java.time.Instant.now(), UUID.randomUUID(), 50)).isEmpty();
+    }
+
+    @Test
     void providesCaseEntityAndTimeIndexes() {
         List<String> indexes = jdbc.queryForList(
                 "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'audit_events'",

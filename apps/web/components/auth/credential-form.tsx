@@ -66,7 +66,7 @@ export function CredentialForm() {
         <CardDescription>Użyj jednorazowego tokenu otrzymanego od administratora.</CardDescription>
       </CardHeader>
       <CardContent>
-        <form className="space-y-4" onSubmit={(event) => void submit(event)}>
+        <form method="post" className="space-y-4" onSubmit={(event) => void submit(event)}>
           <fieldset className="grid grid-cols-2 gap-2">
             <legend className="sr-only">Rodzaj tokenu</legend>
             <Button type="button" variant={mode === "invitation" ? "default" : "outline"} onClick={() => setMode("invitation")}>

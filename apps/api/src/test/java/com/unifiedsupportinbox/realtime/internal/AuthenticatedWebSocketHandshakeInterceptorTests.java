@@ -15,6 +15,15 @@ class AuthenticatedWebSocketHandshakeInterceptorTests {
     private static final URI LOCAL_WEB_ORIGIN = URI.create("http://localhost:3000");
 
     @Test
+    void localDevelopmentWebStillWorksWhenPublicTunnelIsConfigured() {
+        URI tunnel = URI.create("https://tunnel.example.test");
+        assertThat(handshake(tunnel, "127.0.0.1", "http://localhost:3000", "localhost:3000", "http")).isEqualTo(200);
+        assertThat(handshake(tunnel, "127.0.0.1", "https://tunnel.example.test", "tunnel.example.test", "https")).isEqualTo(200);
+        assertThat(handshake(tunnel, "127.0.0.1", "http://localhost:4000", "localhost:4000", "http")).isEqualTo(403);
+        assertThat(handshake(tunnel, "192.0.2.1", "http://localhost:3000", "localhost:3000", "http")).isEqualTo(403);
+    }
+
+    @Test
     void onlyLocalLoopbackProxyMayUseTheConfiguredForwardedOrigin() {
         assertThat(handshake(LOCAL_WEB_ORIGIN, "127.0.0.1", "http://localhost:3000",
                 "localhost:3000", "http")).isEqualTo(200);

@@ -8,5 +8,7 @@ import java.util.UUID;
  */
 public interface CustomerMessageUnreadService {
 
+    void customerMessageEdited(UUID caseId, UUID messageId, String correlationId);
+
     void customerMessageCreated(UUID caseId, UUID messageId, String correlationId);
 }

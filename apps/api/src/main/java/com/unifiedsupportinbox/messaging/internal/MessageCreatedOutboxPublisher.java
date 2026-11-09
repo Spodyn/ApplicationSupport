@@ -23,11 +23,23 @@ class MessageCreatedOutboxPublisher {
     }
 
     void publish(UUID messageId, UUID caseId, String correlationId) {
+        publish(OUTBOX_TYPE, messageId, caseId, correlationId);
+    }
+
+    void publishUpdated(UUID messageId, UUID caseId, String correlationId) {
+        publish("message.updated", messageId, caseId, correlationId);
+        // Also refresh lists in clients that are viewing a different conversation.
+        ObjectNode payload = json.createObjectNode();
+        payload.put("caseId", caseId.toString());
+        outbox.append("case.updated", "case", caseId, payload.toString(), correlationId);
+    }
+
+    private void publish(String type, UUID messageId, UUID caseId, String correlationId) {
         Objects.requireNonNull(messageId, "messageId");
         Objects.requireNonNull(caseId, "caseId");
         ObjectNode payload = json.createObjectNode();
         payload.put("messageId", messageId.toString());
         payload.put("caseId", caseId.toString());
-        outbox.append(OUTBOX_TYPE, AGGREGATE_TYPE, messageId, payload.toString(), correlationId);
+        outbox.append(type, AGGREGATE_TYPE, messageId, payload.toString(), correlationId);
     }
 }

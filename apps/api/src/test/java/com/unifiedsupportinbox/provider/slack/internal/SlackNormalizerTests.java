@@ -22,6 +22,17 @@ class SlackNormalizerTests {
     private final UUID channelId = UUID.randomUUID();
 
     @Test
+    void authorizationForHumanInstallerDoesNotFilterHumanMessage() throws Exception {
+        SlackInboundEvent inbound = inbound("""
+                {"type":"event_callback","event_id":"Ev-human-installer",
+                 "authorizations":[{"user_id":"U-customer","is_bot":false}],
+                 "event":{"type":"message","channel":"C-support","channel_type":"channel",
+                          "user":"U-customer","text":"human","ts":"1720000000.123456"}}
+                """);
+        assertThat(normalizer.normalize(inbound, channelId)).isInstanceOf(SlackNormalizer.Accepted.class);
+    }
+
+    @Test
     void normalizesHumanRootMessage() throws Exception {
         SlackInboundEvent inbound = inbound("""
                 {
@@ -97,7 +108,7 @@ class SlackNormalizerTests {
                 {
                   "type":"event_callback",
                   "event_id":"Ev-own",
-                  "authorizations":[{"user_id":"U-usi-bot"}],
+                  "authorizations":[{"user_id":"U-usi-bot","is_bot":true}],
                   "event":{"type":"message","channel":"C-support","channel_type":"channel","user":"U-usi-bot","text":"our reply","ts":"1720000000.2"}
                 }
                 """);

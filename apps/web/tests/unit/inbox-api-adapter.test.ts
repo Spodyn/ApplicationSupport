@@ -47,6 +47,15 @@ function fixture() {
 }
 
 describe("real inbox API adapter", () => {
+  it("shows unassigned Slack intake without inventing a real customer", async () => {
+    const repository = createApiInboxRepository({ request: vi.fn(async (input: ApiTransportRequest) => {
+      if (input.path === "/api/v1/cases") return { items: [{ ...listItem, customerId: "00000000-0000-0000-0000-000000000000", customerName: "Nie przypisano" }], nextCursor: null }
+      return { ...detail, customer: { id: "00000000-0000-0000-0000-000000000000", name: "Nie przypisano", externalRef: null } }
+    }) } as ApiTransport)
+    expect((await repository.list()).items[0].customer).toMatchObject({ id: "unassigned", name: "Nie przypisano" })
+    expect((await repository.getCase(caseId)).customer).toMatchObject({ id: "unassigned", name: "Nie przypisano" })
+  })
+
   it("maps the persisted Slack Case, detail, and inbound message through the generated API", async () => {
     const { repository, requests } = fixture()
     const page = await repository.list()

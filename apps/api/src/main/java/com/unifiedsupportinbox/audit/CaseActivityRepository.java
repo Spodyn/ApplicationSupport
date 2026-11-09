@@ -31,7 +31,7 @@ class CaseActivityRepository {
                 FROM audit_events event
                 LEFT JOIN users user_account ON user_account.id = event.actor_user_id
                 LEFT JOIN cases related_case ON related_case.id = CASE
-                    WHEN event.metadata_json ? 'relatedCaseId'
+                    WHEN jsonb_exists(event.metadata_json, 'relatedCaseId')
                      AND event.metadata_json ->> 'relatedCaseId' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
                     THEN (event.metadata_json ->> 'relatedCaseId')::uuid
                 END

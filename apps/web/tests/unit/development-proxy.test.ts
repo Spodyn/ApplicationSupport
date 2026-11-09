@@ -1,11 +1,12 @@
 // @vitest-environment node
 
 import { NextRequest } from "next/server"
-import { describe, expect, test } from "vitest"
+import { afterEach, describe, expect, test, vi } from "vitest"
 
 import {
   DEFAULT_DEVELOPMENT_BACKEND_ORIGIN,
   developmentProxyRewrites,
+  developmentPublicOrigin,
   parseDevelopmentBackendOrigin,
 } from "../../config/development-proxy.mjs"
 import { classifyBrowserOrigin } from "../../config/same-origin-policy.mjs"
@@ -72,6 +73,30 @@ describe("same-origin development proxy routing", () => {
         "production",
       ),
     ).toEqual([])
+  })
+})
+
+describe("explicit development tunnel origin", () => {
+  afterEach(() => vi.unstubAllEnvs())
+
+  test("accepts only an exact HTTPS origin", () => {
+    expect(developmentPublicOrigin({ USI_DEV_PUBLIC_ORIGIN: "https://tunnel.example.test" })?.hostname).toBe("tunnel.example.test")
+    for (const value of ["https://*.example.test", "http://example.test", "https://example.test/path", "https://user:pass@example.test"]) {
+      expect(() => developmentPublicOrigin({ USI_DEV_PUBLIC_ORIGIN: value })).toThrow()
+    }
+  })
+
+  test("accepts TLS termination only for the configured origin and matching Host", () => {
+    vi.stubEnv("NODE_ENV", "development")
+    vi.stubEnv("USI_DEV_PUBLIC_ORIGIN", "https://tunnel.example.test")
+    const request = (host: string, origin: string) => new NextRequest("http://localhost:3000/api/v1/auth/login", {
+      method: "POST", headers: { host, origin },
+    })
+    expect(proxy(request("tunnel.example.test", "https://tunnel.example.test")).status).toBe(200)
+    expect(proxy(request("localhost:3000", "https://tunnel.example.test")).status).toBe(403)
+    expect(proxy(request("tunnel.example.test", "https://attacker.example.test")).status).toBe(403)
+    vi.stubEnv("NODE_ENV", "production")
+    expect(proxy(request("tunnel.example.test", "https://tunnel.example.test")).status).toBe(403)
   })
 })
 

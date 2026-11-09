@@ -1,10 +1,12 @@
-import { developmentProxyRewrites } from "./config/development-proxy.mjs"
+import { developmentProxyRewrites, developmentPublicOrigin } from "./config/development-proxy.mjs"
 import { parsePublicEnvironment } from "./config/public-environment.mjs"
 
 parsePublicEnvironment(process.env)
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  allowedDevOrigins: developmentPublicOrigin(process.env)
+    ? [developmentPublicOrigin(process.env).hostname] : [],
   images: {
     unoptimized: true,
   },

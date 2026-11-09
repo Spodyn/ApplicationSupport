@@ -18,6 +18,17 @@ class ProviderIntegrationCredentialLookupAdapter implements ProviderIntegrationC
 
     @Override
     @Transactional(readOnly = true)
+    public List<CredentialReference> findEnabledForProvider(IntegrationProvider provider) {
+        return integrations.findAll().stream()
+                .filter(integration -> integration.provider() == provider)
+                .filter(integration -> integration.status() == IntegrationStatus.ENABLED)
+                .filter(integration -> integration.secretRef() != null && !integration.secretRef().isBlank())
+                .map(integration -> new CredentialReference(integration.id(), integration.workspaceExternalId(), integration.secretRef()))
+                .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<CredentialReference> findForProvider(IntegrationProvider provider) {
         return integrations.findAll().stream()
                 .filter(integration -> integration.provider() == provider)

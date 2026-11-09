@@ -105,7 +105,7 @@ Każdy adapter ma używać fake/sandbox providera i testować:
 - durable ingest przed async processing,
 - dedup provider retries,
 - grouping i post-terminal linking,
-- ignored/unmapped/disabled contexts bez niedozwolonych business records,
+- ignored/disabled contexts bez niedozwolonych business records,
 - edit/delete semantics,
 - transient/permanent outbound failures i Retry-After,
 - recovery/resync bez pełnego history importu.
@@ -168,3 +168,5 @@ cd apps/api
 Dedicated command tests must additionally exercise their durable audit/outbox,
 vote/SLA/personal-state effects and API idempotency. The shared boundary's tests
 isolate transaction behavior; they do not substitute for those acceptance tests.
+
+Slack override 2026-11-09: discovered active Slack channels with no customer mapping create visible intake Cases with customer NULL; undiscovered channels retry pending authorized membership reconciliation. See INTEGRATIONS.md section 2.4.

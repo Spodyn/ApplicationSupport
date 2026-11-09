@@ -14,7 +14,7 @@ Only Slack Events API `message` events from a configured, active, non-ignored Ch
 - `thread_ts`, when present, is the stable conversation/thread key. Otherwise the message `ts` is the root key.
 - Slack `ts`/`event_ts` values are normalized to `Instant`; raw Slack payloads do not cross into the core command contract.
 
-Case creation/grouping and Message persistence are deliberately downstream responsibilities. USI-130 produces the provider-neutral command; E12-T05/E12-T06 consume it after the Core Case and Message domain dependencies exist.
+Case creation/grouping, Message persistence and mutations are downstream responsibilities. Existing-message edits/deletes update the original Message in place, including in terminal Cases, and publish `message.updated` after commit. They never create/reopen Cases. Out-of-order edits and duplicate mutations are suppressed; an original Message not yet persisted retries durably.
 
 ## Filtered events
 
@@ -23,12 +23,13 @@ Filtering is intentional technical processing, not a retryable failure.
 | Condition | `inbound_events.processing_outcome` | Business effect |
 | --- | --- | --- |
 | Channel has `ignored=true` | `IGNORED_BY_CHANNEL` | None |
-| Channel is unknown for the integration | `UNMAPPED_CHANNEL` | None |
+| Channel is not discovered yet | Retry with `SLACK_CHANNEL_DISCOVERY_PENDING` | No business writes until authorized membership discovery |
+| Discovered active Slack channel has no Customer | None | Create visible intake Case/Message/SLA with customer NULL, labeled "Nie przypisano" (user-approved 2026-11-09 override) |
 | Channel exists but is inactive | `INACTIVE_CHANNEL` | None |
 | Bot/app-originated message, including the installed app user | `IGNORED_BOT_MESSAGE` | None |
 | Non-message event or unsupported message subtype | `UNSUPPORTED_PROVIDER_EVENT` | None |
 
-Bot/app activity is excluded because v1 CUSTOMER content is human content. In addition to Slack bot/app markers, a message authored by a `user_id` present in the callback authorization set is treated as USI's own activity, preventing outbound-reply loops.
+Bot/app activity is excluded because v1 CUSTOMER content is human content. In addition to Slack bot/app markers, a message authored by a `user_id` present in a callback authorization entry with `is_bot=true` is treated as USI's own activity, preventing outbound-reply loops.
 
 ## Malformed supported events
 
@@ -36,6 +37,8 @@ A payload that claims to be a supported human message mutation but lacks require
 
 ## Worker activation boundary
 
-The durable Slack worker remains disabled by default after USI-130. This is intentional: E07/E08 Case/Message persistence and E12-T05's provider-neutral consumer are not available yet. Processing a valid customer message as successful before that consumer exists would lose the durable event.
-
-Once E12-T05 provides the unique `InboundMessageCommandHandler`, the worker can be enabled without changing Slack-specific normalization semantics.
+The shared/test baseline keeps the durable Slack worker disabled. The local profile
+enables inbound/outbound and realtime workers plus membership reconciliation every
+30 seconds. Membership discovery calls Slack outside database transactions and
+replaces the snapshot only after all pages succeed. Existing channel mappings and
+ignored flags are preserved. A callback racing discovery retries durably.

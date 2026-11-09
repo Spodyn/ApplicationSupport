@@ -29,6 +29,15 @@ Obowiązująca granica:
 
 `apps/web/components/cases/cases-page.tsx` i lokalne fixture'y prezentacyjne nie są kontraktem backendu. USI-88 zamraża jeden jawny mapper; kierunek nie jest już otwartą decyzją.
 
+### Slack intake without a Customer
+
+User-approved override (2026-11-09): Case persistence keeps customer NULL
+for Slack intake. To preserve the existing non-null UUID transport contract, Case
+read DTOs use reserved zero UUID `00000000-0000-0000-0000-000000000000` for that
+projection only. The service mapper displays "Nie przypisano" and uses the
+presentation-only ID `unassigned`; it never creates or assigns a Customer record.
+Existing mappings and historical Case customers are preserved.
+
 ## Messages i Activity
 
 `InboxMessage` reprezentuje content rozmowy. Kanoniczni autorzy backendowi to `CUSTOMER`, `SUPPORT`, `SYSTEM`.

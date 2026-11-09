@@ -63,11 +63,11 @@ class CaseListService {
                     SELECT c.id, c.reference, c.status, c.owner_user_id,
                            owner.display_name AS owner_display_name,
                            c.created_at, c.updated_at, c.last_activity_at, c.waiting_until,
-                           customer.id AS customer_id, customer.name AS customer_name,
+                           COALESCE(customer.id, '00000000-0000-0000-0000-000000000000'::uuid) AS customer_id, COALESCE(customer.name, 'Nie przypisano') AS customer_name,
                            channel.id AS channel_id, channel.name AS channel_name,
                            channel.external_channel_id, integration.provider,
                            integration.workspace_external_id, c.external_thread_key,
-                           latest.id AS last_message_id, LEFT(latest.body, 240) AS last_message_preview,
+                           latest.id AS last_message_id, CASE WHEN latest.deleted_at IS NOT NULL THEN 'Wiadomość została usunięta w Slack.' ELSE LEFT(latest.body, 240) END AS last_message_preview,
                            reads.last_read_message_id, snoozes.until_at AS snoozed_until,
                            sla.state AS sla_state,
                            CASE WHEN c.status IN ('NEW', 'PARTIALLY_IGNORED')
@@ -85,7 +85,7 @@ class CaseListService {
                                       > (COALESCE(marker.provider_created_at, marker.created_at), marker.id))
                            ) AS unread
                     FROM cases c
-                    JOIN customers customer ON customer.id = c.customer_id
+                    LEFT JOIN customers customer ON customer.id = c.customer_id
                     JOIN channels channel ON channel.id = c.channel_id
                     JOIN integrations integration ON integration.id = c.integration_id
                     LEFT JOIN users owner ON owner.id = c.owner_user_id
@@ -93,7 +93,7 @@ class CaseListService {
                     LEFT JOIN case_snoozes snoozes ON snoozes.case_id = c.id AND snoozes.user_id = ?
                     LEFT JOIN case_sla sla ON sla.case_id = c.id
                     LEFT JOIN LATERAL (
-                        SELECT id, body FROM messages
+                        SELECT id, body, deleted_at FROM messages
                         WHERE case_id = c.id
                         ORDER BY COALESCE(provider_created_at, created_at) DESC, id DESC LIMIT 1
                     ) latest ON TRUE

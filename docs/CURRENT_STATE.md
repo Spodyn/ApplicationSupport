@@ -100,7 +100,7 @@ Repo nie zawiera jeszcze realnych inbound adapterów. Zamrożony kontrakt okreś
 - Slack: root + thread,
 - Teams standard channel: root + replies; group chat: one active Case per chat,
 - Telegram forum topic: one active Case per topic; bez topic: one active Case per chat,
-- ignored/unmapped/disabled contexts nie mogą przypadkowo tworzyć business records niezgodnie z kontraktem.
+- ignored/disabled contexts nie mogą przypadkowo tworzyć business records niezgodnie z kontraktem.
 
 Bieżące fixture'y nie są źródłem prawdy dla tych reguł.
 
@@ -153,3 +153,5 @@ Baseline chroni layout/styl, ale **nie może nadpisywać późniejszego kontrakt
 6. Testy zastanego mocka trzeba etapami przestawiać z historycznego zachowania na frozen contract podczas realizacji właściwych Jira tickets.
 
 Żaden z tych punktów nie jest obecnie znaną nierozstrzygniętą decyzją produktową/architektoniczną. `OPEN_DECISIONS.md` zawiera zasady tworzenia nowego human blockera, a `PRODUCT_CONTRACT.md` i `decision-registry.yaml` pozostają źródłami nadrzędnymi.
+
+Slack override 2026-11-09: discovered active Slack channels with no customer mapping create visible intake Cases with customer NULL; undiscovered channels retry pending authorized membership reconciliation. See INTEGRATIONS.md section 2.4.

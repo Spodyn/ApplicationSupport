@@ -112,6 +112,17 @@ class SlackFilteringInboundIntegrationTests {
     }
 
     @Test
+    void unsupportedDirectMessagesDoNotEnterChannelDiscoveryRetry() {
+        UUID integrationId = createSlackIntegration();
+        InboundEvent event = persist(integrationId, "Ev-dm", """
+                {"type":"event_callback","event_id":"Ev-dm","event":{"type":"message","channel":"D-unmonitored","channel_type":"im","user":"U-customer","text":"not supported","ts":"1720000000.1"}}
+                """);
+        assertThat(worker.process(event.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        assertThat(outcome(event.id())).isEqualTo(InboundEventOutcomeStore.UNSUPPORTED_PROVIDER_EVENT);
+        assertThat(sink.commands()).isEmpty();
+    }
+
+    @Test
     void inactiveAndUnmappedChannelsDoNotReachBusinessBoundary() {
         UUID integrationId = createSlackIntegration();
         createChannel(integrationId, "C-inactive", false, false);
@@ -120,9 +131,9 @@ class SlackFilteringInboundIntegrationTests {
         InboundEvent unmapped = persist(integrationId, "Ev-unmapped", message("Ev-unmapped", "C-unknown"));
 
         assertThat(worker.process(inactive.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
-        assertThat(worker.process(unmapped.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        assertThat(worker.process(unmapped.id())).isEqualTo(SlackInboundWorker.AttemptResult.RETRY_SCHEDULED);
         assertThat(outcome(inactive.id())).isEqualTo(InboundEventOutcomeStore.INACTIVE_CHANNEL);
-        assertThat(outcome(unmapped.id())).isEqualTo(InboundEventOutcomeStore.UNMAPPED_CHANNEL);
+        assertThat(outcome(unmapped.id())).isNull();
         assertThat(sink.commands()).isEmpty();
     }
 
@@ -172,7 +183,7 @@ class SlackFilteringInboundIntegrationTests {
     private static String message(String eventId, String channel) {
         return "{\"type\":\"event_callback\",\"event_id\":\"" + eventId
                 + "\",\"event\":{\"type\":\"message\",\"channel\":\"" + channel
-                + "\",\"user\":\"U-customer\",\"text\":\"hello\",\"ts\":\"1720000000.1\"}}";
+                + "\",\"channel_type\":\"channel\",\"user\":\"U-customer\",\"text\":\"hello\",\"ts\":\"1720000000.1\"}}";
     }
 
     private String outcome(UUID id) {

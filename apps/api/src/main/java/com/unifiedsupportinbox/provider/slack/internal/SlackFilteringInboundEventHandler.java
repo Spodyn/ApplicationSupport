@@ -2,7 +2,6 @@ package com.unifiedsupportinbox.provider.slack.internal;
 
 import static com.unifiedsupportinbox.InboundEventOutcomeStore.IGNORED_BOT_MESSAGE;
 import static com.unifiedsupportinbox.InboundEventOutcomeStore.INACTIVE_CHANNEL;
-import static com.unifiedsupportinbox.InboundEventOutcomeStore.UNMAPPED_CHANNEL;
 import static com.unifiedsupportinbox.InboundEventOutcomeStore.UNSUPPORTED_PROVIDER_EVENT;
 
 import com.unifiedsupportinbox.InboundEventOutcomeStore;
@@ -53,21 +52,22 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
             outcomes.mark(inbound.inboundEventId(), UNSUPPORTED_PROVIDER_EVENT);
             return;
         }
+        String conversationType = event.path("channel_type").asText("");
+        if (!"channel".equals(conversationType) && !"group".equals(conversationType)) {
+            outcomes.mark(inbound.inboundEventId(), UNSUPPORTED_PROVIDER_EVENT);
+            return;
+        }
 
         String externalChannelId = requiredChannel(event);
         Optional<Decision> resolved = channelPolicy.resolve(inbound.integrationId(), externalChannelId);
         if (resolved.isEmpty()) {
-            outcomes.mark(inbound.inboundEventId(), UNMAPPED_CHANNEL);
-            return;
+            throw SlackInboundProcessingException.transientFailure(
+                    "SLACK_CHANNEL_DISCOVERY_PENDING", "Channel membership reconciliation is pending.");
         }
 
         Decision channel = resolved.orElseThrow();
         if (channel.ignoredForInbound()) {
             outcomes.markIgnoredByChannel(inbound.inboundEventId());
-            return;
-        }
-        if (!channel.customerMapped()) {
-            outcomes.mark(inbound.inboundEventId(), UNMAPPED_CHANNEL);
             return;
         }
         if (!channel.active()) {

@@ -29,7 +29,7 @@ function commonCase(input: {
   id: string
   reference: string
   status: CaseListItem["status"]
-  customerId: string
+  customerId: string | null
   customerName: string
   channelName: string
   provider: CaseListItem["provider"]
@@ -54,7 +54,7 @@ function commonCase(input: {
     subject: input.subject,
     platform: mapApiChannel(input.provider),
     sourceChannel: input.provider === "SLACK" ? `#${input.channelName}` : input.channelName,
-    customer: { id: input.customerId, name: input.customerName, contactName: input.customerName },
+    customer: { id: !input.customerId || input.customerId === "00000000-0000-0000-0000-000000000000" ? "unassigned" : input.customerId, name: input.customerName, contactName: input.customerName },
     status: input.status.toLowerCase() as InboxCase["status"],
     owner: input.ownerUserId && input.ownerDisplayName
       ? { id: input.ownerUserId, fullName: input.ownerDisplayName }
