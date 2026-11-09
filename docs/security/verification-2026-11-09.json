@@ -57,6 +57,7 @@
     "API coverage/backpressure",
     "Jira source reconciliation"
   ],
-  "githubExactHeadCI": "PENDING PR",
-  "actionlint": "PASS"
+  "githubExactHeadCI": "PENDING: inspect final PR HEAD",
+  "actionlint": "PASS",
+  "pullRequest": "https://github.com/Spodyn/ApplicationSupport/pull/147"
 }

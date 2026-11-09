@@ -6,6 +6,12 @@
 
 Base: `2df2621` on `main`; branch: `codex/security-audit-2026-11-09`. The owner explicitly grouped this audit/remediation scope. The initial worktree was clean, main matched origin/main, and open PRs/worktrees were reconciled. No existing database, service volume, running application, production system, provider setting or customer conversation was modified. No real provider credential was used in tests. No deployment, credential rotation or merge was performed.
 
+Review artifact: [draft PR #147](https://github.com/Spodyn/ApplicationSupport/pull/147).
+The branch is pushed; the draft retains the remaining production acceptance gaps.
+Code/dependency validation covers commits through `093fe09`; subsequent audit
+documentation commits do not change application behavior. Required GitHub checks
+must still be verified on the PR's exact final HEAD.
+
 **Suspected credential exposure:** the audited revision already used an explicit HTML POST form, JSON POST transport and a POST-only backend login controller. No confirmed credential-in-URL exposure was found. New browser tests verify the exact URL/body with JavaScript and native POST submission without JavaScript. GET/query input cannot authenticate. Historical deployments, access logs, browser history and traces were NOT TESTED. If operators identify historical GET submissions containing credentials, rotate affected credentials through the protected process and restrict/sanitize affected edge/application/analytics/telemetry records without copying credential values into tickets. This audit found no evidence establishing such a breach.
 
 Jira discovery returned HTTP 403 (Atlassian app not installed). Current ticket/E00/parent comments could not be independently reconciled. Work follows the owner's request and the frozen repository product, authentication, security and orchestrator contracts. No Jira mutation occurred.
@@ -85,7 +91,7 @@ Local logs are retained outside Git in task-specific `usi-security-*` temporary 
 | Compose config | PASS; existing volumes untouched; full image rebuild/lifecycle NOT RUN |
 | Semgrep | REVIEWED, PARTIAL: 1.183.0, 286 Java/TS/Python/Docker rules, 456 tracked files including new source; one MEDIUM ClamAV warning remains, one TypeScript partial-parse limitation |
 | YAML/diff/source precedence | PASS: 7 YAML files parsed, actionlint passed, 89 relative source links verified, diff clean; Jira reconciliation unavailable as stated above |
-| GitHub exact-HEAD CI | NOT RUN until commits/PR exist |
+| GitHub exact-HEAD CI | PENDING on draft PR #147; inspect its current HEAD/checks, not an earlier revision |
 
 A concurrency regression detected false limiter backoff because transaction-start now() preceded a concurrent lock winner. Reading DB wall time after the row lock fixes it; the exact 50-of-60 admission assertion was retained. Browser CSP attacks are injected at the HTML parser boundary, not privileged DevTools execution. Version/matcher snapshots were updated; no failing security assertion was skipped or weakened.
 
@@ -109,7 +115,7 @@ A concurrency regression detected false limiter backoff because transaction-star
 - [x] Review each major subsystem boundary and explicitly record missing controls.
 - [x] Patch npm/Maven advisories, pin actions and add repeatable supply-chain gates.
 - [x] Complete final backend/Semgrep/compatibility/diff review and update ledger.
-- [ ] Commit coherent groups, push and create PR with exact validation and release limitations.
+- [x] Commit coherent groups, push and create draft PR #147 with exact validation and release limitations.
 - [ ] Independently check final-HEAD required CI; no developer merge.
 - [ ] Complete the ten continuation items before production approval.
 
