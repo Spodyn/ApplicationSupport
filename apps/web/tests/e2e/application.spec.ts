@@ -490,9 +490,11 @@ test("changing attachments after a failed send uses a fresh idempotency key", as
     buffer: Buffer.from("test"),
   })
   await conversation.getByRole("button", { name: "Wyślij" }).click()
-  await expect(conversation.getByText("Retry with evidence")).toBeVisible()
+  // The editor still contains this text while the asynchronous upload/send runs.
+  // Wait for the persisted conversation message, not the textarea's text node.
+  await expect(conversation.locator("p").filter({ hasText: "Retry with evidence" })).toBeVisible()
 
-  expect(sendKeys).toHaveLength(2)
+  await expect.poll(() => sendKeys.length).toBe(2)
   expect(sendKeys[0]).toMatch(/^[0-9a-f-]{36}$/)
   expect(sendKeys[1]).toMatch(/^[0-9a-f-]{36}$/)
   expect(sendKeys[1]).not.toBe(sendKeys[0])
