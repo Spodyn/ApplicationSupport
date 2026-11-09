@@ -22,6 +22,8 @@ export function LoginForm() {
       router.replace("/cases")
     } catch {
       // Mutation state renders the generic error without exposing account state.
+    } finally {
+      setPassword("")
     }
   }
 

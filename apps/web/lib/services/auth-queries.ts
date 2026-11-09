@@ -11,6 +11,7 @@ export function useLogin() {
   return useMutation({
     mutationFn: (credentials: LoginCredentials) =>
       serviceRegistry.currentUser.login(credentials),
+    gcTime: 0,
     onSuccess: (user) => {
       queryClient.setQueryData(currentUserQueryKey, user)
     },
@@ -23,7 +24,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => serviceRegistry.currentUser.logout(),
     onSuccess: () => {
-      queryClient.removeQueries({ queryKey: currentUserQueryKey })
+      queryClient.clear()
     },
   })
 }
@@ -32,6 +33,7 @@ export function useAcceptInvitation() {
   return useMutation({
     mutationFn: (action: CredentialAction) =>
       serviceRegistry.currentUser.acceptInvitation(action),
+    gcTime: 0,
   })
 }
 
@@ -39,5 +41,6 @@ export function useCompletePasswordReset() {
   return useMutation({
     mutationFn: (action: CredentialAction) =>
       serviceRegistry.currentUser.completePasswordReset(action),
+    gcTime: 0,
   })
 }

@@ -87,6 +87,8 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
 
     if (requestUrl.pathname === "/api/v1/auth/login" && request.method() === "POST") {
       expect(request.headers()["x-xsrf-token"]).toBe("e2e-csrf")
+      expect(requestUrl.search).toBe("")
+      expect(request.postDataJSON()).toEqual({ email: "anna.kowalska@firma.pl", password: "test-only-credential" })
       authenticated = true
       await route.fulfill({
         status: 200,

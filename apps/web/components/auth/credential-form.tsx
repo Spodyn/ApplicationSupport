@@ -35,6 +35,9 @@ export function CredentialForm() {
 
     try {
       await mutation.mutateAsync({ token: token.trim(), password })
+      setToken("")
+      setPassword("")
+      setConfirmation("")
       setCompleted(true)
     } catch {
       // The mutation state renders a safe error without revealing account data.
