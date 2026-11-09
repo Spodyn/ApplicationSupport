@@ -12,12 +12,14 @@ class SessionAuthenticationService {
 
     private final UserAccountRepository users;
     private final PasswordEncoder encoder;
+    private final String dummyHash;
 
     SessionAuthenticationService(
             UserAccountRepository users,
             PasswordEncoder encoder) {
         this.users = users;
         this.encoder = encoder;
+        this.dummyHash = encoder.encode(java.util.UUID.randomUUID().toString());
     }
 
     @Transactional
@@ -27,15 +29,13 @@ class SessionAuthenticationService {
             throw ApiProblemException.invalidCredentials();
         }
 
-        UserAccount user = users.findByEmailIgnoreCase(email)
-                .orElseThrow(ApiProblemException::invalidCredentials);
+        UserAccount user = users.findByEmailIgnoreCase(email).orElse(null);
 
-        String storedHash = user.passwordHash();
-        boolean matches = storedHash != null
-                && encoder.matches(suppliedPassword, storedHash);
+        String storedHash = user == null ? null : user.passwordHash();
+        boolean matches = encoder.matches(suppliedPassword, storedHash == null ? dummyHash : storedHash);
         Instant now = Instant.now();
 
-        if (!matches || !user.isSessionEligibleAt(now)) {
+        if (!matches || user == null || storedHash == null || !user.isSessionEligibleAt(now)) {
             throw ApiProblemException.invalidCredentials();
         }
 

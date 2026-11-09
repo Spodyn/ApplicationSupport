@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.identity.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.unifiedsupportinbox.UsiApiApplication;
 import com.unifiedsupportinbox.identity.UserRole;
@@ -72,6 +73,7 @@ class AuthSessionIntegrationTests {
 
     @BeforeEach
     void resetState() {
+        jdbc.update("DELETE FROM authentication_abuse_budgets");
         jdbc.update("DELETE FROM spring_session_attributes");
         jdbc.update("DELETE FROM spring_session");
         jdbc.update(
@@ -79,6 +81,92 @@ class AuthSessionIntegrationTests {
                         + "SET consumed = FALSE, consumed_at = NULL, admin_user_id = NULL "
                         + "WHERE id = 1");
         jdbc.update("DELETE FROM users");
+    }
+
+    @Test
+    void credentialsInGetOrQueryCannotAuthenticateAndOversizedBodiesAreRejected() throws Exception {
+        createUser("url@example.com", "URL test", UserRole.USER, true, null, null);
+        CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+        HttpClient http = client(cookies);
+        primeCsrf(http, cookies);
+        var queryLogin = get(http, "/api/v1/auth/login?email=url%40example.com&password=test-only-query");
+        assertThat(queryLogin.statusCode()).isBetween(400, 499);
+        assertThat(queryLogin.body()).doesNotContain("test-only-query", "url@example.com");
+        assertThat(queryInt("SELECT count(*) FROM spring_session")).isZero();
+        assertThat(postJson(http, "/api/v1/auth/login", " ".repeat(8193), csrfToken(cookies)).statusCode()).isEqualTo(413);
+        assertThat(queryInt("SELECT count(*) FROM spring_session")).isZero();
+    }
+
+    @Test
+    void failedLoginReservationsSurviveRollbackAndForwardedHeadersCannotBypassBackoff() throws Exception {
+        CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+        HttpClient http = client(cookies);
+        primeCsrf(http, cookies);
+        for (int attempt = 0; attempt < 5; attempt++) {
+            assertThat(login(http, cookies, "unknown@example.com", testCredential()).statusCode()).isEqualTo(401);
+        }
+        var blocked = http.send(HttpRequest.newBuilder(baseUri.resolve("/api/v1/auth/login"))
+                .header("Content-Type", "application/json").header("X-XSRF-TOKEN", csrfToken(cookies))
+                .header("X-Forwarded-For", "198.51.100.1")
+                .POST(HttpRequest.BodyPublishers.ofString(loginJson(" UNKNOWN@example.com ", testCredential())))
+                .build(), HttpResponse.BodyHandlers.ofString());
+        assertThat(blocked.statusCode()).isEqualTo(429);
+        assertThat(blocked.headers().firstValue("Retry-After")).isPresent();
+        assertThat(blocked.body()).contains("RATE_LIMITED").doesNotContain("unknown@example.com");
+        jdbc.update("UPDATE authentication_abuse_budgets SET expires_at = now() - interval '1 second'");
+        assertThat(login(http, cookies, "unknown@example.com", testCredential()).statusCode()).isEqualTo(401);
+        assertThat(jdbc.queryForList("SELECT bucket_key FROM authentication_abuse_budgets", String.class))
+                .allSatisfy(key -> assertThat(key).doesNotContain("@", "127.0.0.1"));
+    }
+
+    @Test
+    void ipBudgetIsAtomicAcrossConcurrentRequestsAndResetBudgetsAreIndependent() throws Exception {
+        var guard = context.getBean(AuthenticationAbuseGuard.class);
+        try (var pool = java.util.concurrent.Executors.newFixedThreadPool(8)) {
+            var jobs = new java.util.ArrayList<java.util.concurrent.Callable<Long>>();
+            for (int i = 0; i < 60; i++) {
+                int index = i;
+                jobs.add(() -> guard.login("random-" + index + "@example.com", "198.51.100.12"));
+            }
+            int accepted = 0;
+            for (var result : pool.invokeAll(jobs)) if (result.get() == 0) accepted++;
+            assertThat(accepted).isEqualTo(50);
+        }
+        assertThat(guard.login("other@example.com", "198.51.100.13")).isZero();
+        for (int i = 0; i < 5; i++) assertThat(guard.reset("reset@example.com", "198.51.100.12")).isZero();
+        assertThat(guard.reset(" RESET@example.com ", "198.51.100.14")).isPositive();
+        assertThat(guard.reset("another@example.com", "198.51.100.14")).isZero();
+        for (int i = 0; i < 50; i++) assertThat(guard.actionToken("198.51.100.15")).isZero();
+        assertThat(guard.actionToken("198.51.100.15")).isPositive();
+    }
+
+    @Test
+    void resetIsOneTimeInvalidatesSessionsAndCannotReactivateDisabledUsers() throws Exception {
+        UserAccount manager = createUser("manager@example.com", "Manager", UserRole.ADMIN, true, null, null);
+        jdbc.update("INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'manage_users')", manager.id());
+        UserAccount agent = createUser("reset-agent@example.com", "Agent", UserRole.USER, true, null, null);
+        var service = context.getBean(UserAdministrationService.class);
+        var actor = UsiSessionPrincipal.from(manager);
+        CookieManager cookies = new CookieManager(null, CookiePolicy.ACCEPT_ALL);
+        HttpClient http = client(cookies);
+        primeCsrf(http, cookies);
+        assertThat(login(http, cookies, agent.email(), testCredential()).statusCode()).isEqualTo(200);
+        var token = service.issuePasswordReset(actor, agent.id());
+        assertThat(jdbc.queryForObject("SELECT token_hash FROM account_action_tokens WHERE user_id = ? AND used_at IS NULL",
+                String.class, agent.id())).isNotEqualTo(token.token());
+        service.consumeToken(token.token(), testCredential(), "PASSWORD_RESET");
+        assertThat(get(http, "/api/v1/auth/me").statusCode()).isEqualTo(401);
+        assertThatThrownBy(() -> service.consumeToken(token.token(), testCredential(), "PASSWORD_RESET"))
+                .isInstanceOf(com.unifiedsupportinbox.ApiProblemException.class);
+        var disabledToken = service.issuePasswordReset(actor, agent.id());
+        service.deactivate(actor, agent.id());
+        assertThatThrownBy(() -> service.consumeToken(disabledToken.token(), testCredential(), "PASSWORD_RESET"))
+                .isInstanceOf(com.unifiedsupportinbox.ApiProblemException.class);
+        assertThat(users.findById(agent.id()).orElseThrow().active()).isFalse();
+        assertThatThrownBy(() -> service.update(actor, manager.id(), new UserAdministrationService.UserInput(
+                manager.displayName(), manager.email(), UserRole.ADMIN, true, null, null,
+                List.of("manage_users", "manage_integrations"))))
+                .isInstanceOf(com.unifiedsupportinbox.ApiProblemException.class);
     }
 
     @Test

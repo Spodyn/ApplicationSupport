@@ -81,13 +81,6 @@ class SlackWebhookService {
             if (exact.size() > 1) throw ApiProblemException.authenticationRequired();
         }
 
-        List<CredentialReference> unbound = verified.stream()
-                .filter(reference -> reference.workspaceExternalId() == null || reference.workspaceExternalId().isBlank())
-                .toList();
-        if (unbound.size() == 1) return unbound.getFirst();
-        if (verified.size() == 1 && verified.getFirst().workspaceExternalId() == null) {
-            return verified.getFirst();
-        }
         throw ApiProblemException.authenticationRequired();
     }
 

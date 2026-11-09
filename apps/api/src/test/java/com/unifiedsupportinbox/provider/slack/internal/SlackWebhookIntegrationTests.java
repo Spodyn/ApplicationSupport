@@ -105,6 +105,16 @@ class SlackWebhookIntegrationTests {
     }
 
     @Test
+    void unboundSigningCredentialCannotAuthorizeWorkspaceBusinessEvents() throws Exception {
+        createSlackIntegration(null);
+        writeSigningSecret();
+        String body = "{\"type\":\"event_callback\",\"team_id\":\"T-UNBOUND\",\"event_id\":\"unbound-event\",\"event\":{\"type\":\"message\"}}";
+        String timestamp = currentTimestamp();
+        assertThat(post(body, timestamp, sign(body, timestamp)).statusCode()).isEqualTo(401);
+        assertThat(countInboundEvents()).isZero();
+    }
+
+    @Test
     void urlVerificationWithoutTeamIdUsesTheOnlyVerifiedIntegration() throws Exception {
         createSlackIntegration(TEAM_ID);
         writeSigningSecret();

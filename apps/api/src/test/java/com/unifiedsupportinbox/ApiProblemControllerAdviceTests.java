@@ -95,6 +95,11 @@ class ApiProblemControllerAdviceTests {
 
     @Test
     void fallback500DoesNotExposeExceptionOrStackTrace() throws Exception {
+        var logger = (ch.qos.logback.classic.Logger) org.slf4j.LoggerFactory.getLogger(ApiProblemControllerAdvice.class);
+        var captured = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+        captured.start();
+        logger.addAppender(captured);
+        try {
         mockMvc.perform(get("/test/unexpected"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
@@ -103,6 +108,14 @@ class ApiProblemControllerAdviceTests {
                 .andExpect(content().string(not(containsString("sensitive-provider-token"))))
                 .andExpect(content().string(not(containsString("IllegalStateException"))))
                 .andExpect(content().string(not(containsString("stackTrace"))));
+            org.assertj.core.api.Assertions.assertThat(captured.list).isNotEmpty().allSatisfy(event -> {
+                org.assertj.core.api.Assertions.assertThat(event.getFormattedMessage()).doesNotContain("sensitive-provider-token");
+                org.assertj.core.api.Assertions.assertThat(event.getThrowableProxy()).isNull();
+            });
+        } finally {
+            logger.detachAppender(captured);
+            captured.stop();
+        }
     }
 
     private void assertControlled(String path, int expectedStatus, String expectedCode) throws Exception {

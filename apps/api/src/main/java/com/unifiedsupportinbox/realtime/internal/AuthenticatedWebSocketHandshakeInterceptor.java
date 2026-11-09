@@ -8,6 +8,7 @@ import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
+import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
@@ -39,6 +40,10 @@ final class AuthenticatedWebSocketHandshakeInterceptor implements HandshakeInter
         if (principal == null) {
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
+        }
+        if (request instanceof ServletServerHttpRequest servletRequest) {
+            var session = servletRequest.getServletRequest().getSession(false);
+            if (session != null) attributes.put(SessionBoundWebSocketHandlerDecorator.HTTP_SESSION_ID, session.getId());
         }
         return true;
     }

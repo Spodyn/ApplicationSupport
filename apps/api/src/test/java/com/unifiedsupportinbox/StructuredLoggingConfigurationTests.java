@@ -22,10 +22,10 @@ class StructuredLoggingConfigurationTests {
     }
 
     @Test
-    void localProfileHasExplicitlyMoreVerboseStructuredDiagnostics() throws IOException {
+    void localProfileDoesNotEnableFrameworkPayloadDiagnostics() throws IOException {
         String properties = new ClassPathResource("application-local.properties")
                 .getContentAsString(StandardCharsets.UTF_8);
 
-        assertThat(properties).contains("logging.level.root=DEBUG");
+        assertThat(properties).contains("logging.level.root=INFO").doesNotContain("logging.level.root=DEBUG");
     }
 }

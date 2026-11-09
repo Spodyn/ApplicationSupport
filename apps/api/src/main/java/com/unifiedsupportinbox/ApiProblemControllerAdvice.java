@@ -85,7 +85,9 @@ public class ApiProblemControllerAdvice {
     public ResponseEntity<ApiProblem> handleUnexpectedFailure(
             Exception exception,
             HttpServletRequest request) {
-        LOGGER.error("Unexpected API failure for {} {}", request.getMethod(), request.getRequestURI(), exception);
+        // Throwable messages/cause chains may contain SQL parameters, provider payloads
+        // and credentials. Emit only the failure type; correlation/trace IDs are in MDC.
+        LOGGER.error("Unexpected API failure of type {}", exception.getClass().getName());
         ApiProblem problem = problemFactory.create(
                 HttpStatus.INTERNAL_SERVER_ERROR,
                 ApiProblemCode.INTERNAL_ERROR,

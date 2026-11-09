@@ -6,6 +6,8 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -29,8 +31,12 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 class UserAdministrationController {
 
     private final UserAdministrationService service;
+    private final AuthenticationAbuseGuard abuse;
 
-    UserAdministrationController(UserAdministrationService service) { this.service = service; }
+    UserAdministrationController(UserAdministrationService service, AuthenticationAbuseGuard abuse) {
+        this.service = service;
+        this.abuse = abuse;
+    }
 
     @GetMapping("/admin/users/current")
     UserAdministrationService.UserView current(Authentication authentication) {
@@ -71,19 +77,24 @@ class UserAdministrationController {
     }
 
     @PostMapping("/auth/password-reset/request")
-    ResponseEntity<Void> requestReset(@Valid @RequestBody ResetRequest input) {
-        service.requestPasswordReset(input.email());
+    ResponseEntity<Void> requestReset(@Valid @RequestBody ResetRequest input, HttpServletRequest request) {
+        // Keep the external response neutral even when a reset is suppressed.
+        if (abuse.reset(input.email(), request.getRemoteAddr()) == 0) service.requestPasswordReset(input.email());
         return ResponseEntity.accepted().build();
     }
 
     @PostMapping("/auth/invitations/accept")
-    ResponseEntity<Void> acceptInvitation(@Valid @RequestBody CredentialRequest input) {
+    ResponseEntity<Void> acceptInvitation(@Valid @RequestBody CredentialRequest input,
+            HttpServletRequest request, HttpServletResponse response) {
+        guardActionToken(request, response);
         service.consumeToken(input.token(), input.password(), "INVITATION");
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/auth/password-reset/complete")
-    ResponseEntity<Void> completeReset(@Valid @RequestBody CredentialRequest input) {
+    ResponseEntity<Void> completeReset(@Valid @RequestBody CredentialRequest input,
+            HttpServletRequest request, HttpServletResponse response) {
+        guardActionToken(request, response);
         service.consumeToken(input.token(), input.password(), "PASSWORD_RESET");
         return ResponseEntity.noContent().build();
     }
@@ -94,6 +105,14 @@ class UserAdministrationController {
             throw ApiProblemException.authenticationRequired();
         }
         return principal;
+    }
+
+    private void guardActionToken(HttpServletRequest request, HttpServletResponse response) {
+        long retryAfter = abuse.actionToken(request.getRemoteAddr());
+        if (retryAfter > 0) {
+            response.setHeader("Retry-After", Long.toString(retryAfter));
+            throw ApiProblemException.rateLimited("Too many authentication attempts. Try again later.");
+        }
     }
 
     record UserRequest(@NotBlank String fullName, @Email @NotBlank String email, @NotNull UserRole role,

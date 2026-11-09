@@ -92,6 +92,7 @@ class RealtimeWebSocketIntegrationTests {
 
     @BeforeEach
     void resetState() {
+        jdbc.update("DELETE FROM authentication_abuse_budgets");
         jdbc.update("DELETE FROM spring_session_attributes");
         jdbc.update("DELETE FROM spring_session");
         jdbc.update(
@@ -99,6 +100,19 @@ class RealtimeWebSocketIntegrationTests {
                         + "SET consumed = FALSE, consumed_at = NULL, admin_user_id = NULL "
                         + "WHERE id = 1");
         jdbc.update("DELETE FROM users");
+    }
+
+    @Test
+    void revokedServerSessionStopsAnExistingRealtimeConnection() throws Exception {
+        createUser("revoked-realtime@example.com");
+        SessionClient session = login("revoked-realtime@example.com");
+        RealtimeListener listener = new RealtimeListener();
+        WebSocket socket = connect(session.httpClient(), session.cookies(), websocketUri, sameOrigin, listener);
+        socket.sendText(stompConnect("0,100"), true).join();
+        assertThat(listener.connectedFrame().get(WAIT.toMillis(), TimeUnit.MILLISECONDS)).startsWith("CONNECTED\n");
+        jdbc.update("DELETE FROM spring_session");
+        CloseFrame close = listener.closed().get(WAIT.toMillis(), TimeUnit.MILLISECONDS);
+        assertThat(close.statusCode()).isEqualTo(1008);
     }
 
     @Test
