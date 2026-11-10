@@ -100,12 +100,32 @@ test('real session cookies and CSRF reject cross-boundary mutations; service wor
   expect(cookie.sameSite).toBe('Lax')
   const denied = await page.request.post('/api/v1/admin/customers', {data: {name: 'Must not persist'}})
   expect(denied.status()).toBe(403)
-  await page.request.get('/api/v1/cases')
   await page.evaluate(async () => { await navigator.serviceWorker.ready })
+  await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true)
+  // APIRequestContext bypasses service workers. Use actual controlled-page fetches.
   expect(await page.evaluate(async () => {
+    const statuses = []
+    for (const path of ['/api/v1/auth/me', '/api/v1/cases']) {
+      const response = await fetch(path, {credentials: 'same-origin', cache: 'no-store'})
+      await response.json()
+      statuses.push(response.status)
+    }
+    return statuses
+  })).toEqual([200, 200])
+  const cachedPaths = await page.evaluate(async () => {
     const entries = await Promise.all((await caches.keys()).map(async key => (await (await caches.open(key)).keys()).map(request => new URL(request.url).pathname)))
-    return entries.flat().filter(path => path.startsWith('/api/'))
-  })).toEqual([])
+    return entries.flat()
+  })
+  expect(cachedPaths).toContain('/manifest.webmanifest')
+  expect(cachedPaths.filter(path => path.startsWith('/api/'))).toEqual([])
+  await context.setOffline(true)
+  try {
+    expect(await page.evaluate(async () => (await fetch('/manifest.webmanifest')).status)).toBe(200)
+    expect(await page.evaluate(async () => {
+      try { return (await fetch('/api/v1/auth/me', {credentials: 'same-origin', cache: 'no-store'})).status }
+      catch { return null }
+    })).toBeNull()
+  } finally { await context.setOffline(false) }
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => /session|token|password/i.test(key)))).toEqual([])
 })
 

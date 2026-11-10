@@ -1,6 +1,6 @@
 # Regression implementation evidence — 2026-11-10
 
-Implementation delivered in stacked draft [PR #148](https://github.com/Spodyn/ApplicationSupport/pull/148); final documentation/traceability commit is awaiting its own exact-HEAD CI. Branch `codex/regression-ci-gates-2026-11-10`, sibling worktree `ApplicationSupport-regression`, baseline security PR #147 HEAD `1791527b16418dfc437142585c3000dd790c1699`. Main/security PR remain unmerged and unchanged.
+Implementation available in stacked [PR #148](https://github.com/Spodyn/ApplicationSupport/pull/148). This report records completed checkpoints; the current exact-HEAD CI result is authoritative on the [PR checks page](https://github.com/Spodyn/ApplicationSupport/pull/148/checks). Branch `codex/regression-ci-gates-2026-11-10`, sibling worktree `ApplicationSupport-regression`, baseline security PR #147 HEAD `1791527b16418dfc437142585c3000dd790c1699`. Main/security PR remain unmerged and unchanged.
 
 - [x] Reconcile main, security PR, clean local work and active ruleset.
 - [x] Red/green gate-policy regression; currently 71 gate/cleanup/workflow tests pass, including actual nonzero process exit.
@@ -20,7 +20,7 @@ Implementation delivered in stacked draft [PR #148](https://github.com/Spodyn/Ap
 - [x] Full local `pnpm check` passed with explicit synthetic public environment; full-history secret scan, all config/generator/client/adapter, lint/typecheck/build/unit/UI E2E included.
 - [x] Maven OSV scan: 247 packages, no findings.
 - [x] Three grouped implementation commits pushed; PR #148 targets security baseline #147. CI run [42727434036](https://github.com/Spodyn/ApplicationSupport/actions/runs/42727434036) on implementation HEAD `78187ff58d5c1cdbd0d5fc2adbb475fcb1130db8`: all eight jobs succeeded; matching push CI succeeded too.
-- [ ] Final report/traceability commit exact-HEAD CI verification. This line is an activation checklist, not an assertion that a future SHA was tested.
+- [x] Traceability checkpoint `fc09cab608e31dff156a1f7753b4eaf5cfe398ba`: PR CI [42728680489](https://github.com/Spodyn/ApplicationSupport/actions/runs/42728680489) and push CI both passed all eight jobs. Later commits require their own checks; a previous green SHA never substitutes for current results.
 
 Known red evidence: initial archived-error UI and quarantine HTTP test failed (2/4); Snooze replay failed after deadline; malformed query parameters and limit=0 returned 500; architecture test rejected an initial root-to-storage exception dependency (moved translation to storage HTTP controller). Existing UI fixture now returns the same server retry availability as the backend after QUEUED. No assertions removed or retries raised.
 
@@ -31,3 +31,5 @@ Remaining limits: not every per-route success/invalid/object-state permutation i
 Existing owner services/data remain untouched in the original checkout. New real-stack services use disposable Testcontainers and a test-classpath-only HTTP provider. No developer .env/provider account is loaded. Jira connector availability was insufficient for live ticket lookup; current explicit user regression request and frozen repository contracts govern this work.
 
 The additional inventory regression rejects removal of a required feature, an empty inventory and missing/out-of-repository test links; all four workflow/traceability tests also passed in an isolated Linux Node 22 container. Provider documentation distinguishes implemented Telegram inbound from absent outbound/Teams behavior.
+
+Final test review strengthened the service-worker assertion: it waits for an active controller, uses browser fetches (APIRequestContext bypasses workers), verifies the static cache exists, and checks that offline static assets work while authenticated API requests fail rather than returning cached data. All 12 repeated full-stack executions passed after this change, without retries. The production JAR was inspected and contains neither the test HTTP server nor regression fixture classes.
