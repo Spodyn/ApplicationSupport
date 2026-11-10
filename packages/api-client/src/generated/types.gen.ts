@@ -482,6 +482,22 @@ export type CaseAssignmentRequest = {
   "targetUserId": string
 }
 
+export type CaseBulkItem = {
+  "caseId": string
+  "status": "SUCCEEDED" | "SKIPPED" | "FAILED"
+  "code": string
+}
+
+export type CaseBulkRequest = {
+  "caseIds": Array<string>
+  "action": "ASSIGN" | "RESOLVE" | "IGNORE" | "CLAIM"
+  "targetUserId": string | null
+}
+
+export type CaseBulkResponse = {
+  "items": Array<CaseBulkItem>
+}
+
 export type CaseChannel = {
   "id": string
   "name": string
