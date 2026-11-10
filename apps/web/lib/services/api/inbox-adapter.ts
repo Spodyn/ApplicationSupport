@@ -1,3 +1,4 @@
+import { translate as t } from "@/lib/i18n/catalog"
 import { createApiClient } from "@usi/api-client/generated"
 import type {
   ApiTransport,
@@ -155,6 +156,18 @@ function formatBytes(bytes: number): string {
 export function createApiInboxRepository(transport: ApiTransport): InboxRepository {
   const client = createApiClient(transport)
   const repository: InboxRepository = {
+    async bulk(input) {
+      if (!input.caseIds.length || input.caseIds.length > 1000) throw new Error(t("Select 1 to 1000 Cases."))
+      const results: import("../inbox").InboxBulkResult[] = []
+      for (let offset = 0; offset < input.caseIds.length; offset += 100) {
+        const response = await client.bulkCases({
+          "Idempotency-Key": `${input.idempotencyKey}:${offset / 100}`,
+          body: { caseIds: input.caseIds.slice(offset, offset + 100), action: input.action, targetUserId: input.targetUserId ?? null },
+        })
+        results.push(...response.items)
+      }
+      return results
+    },
     async list(cursor, query = {}) {
       const page = await client.listCases({
         cursor,
@@ -274,23 +287,23 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
       })
     },
     async sendMessage(caseId, input) {
-      if (input.simulateFailure) throw new Error("Symulowanie błędu jest dostępne wyłącznie w trybie demonstracyjnym.")
+      if (input.simulateFailure) throw new Error(t("Symulowanie błędu jest dostępne wyłącznie w trybie demonstracyjnym."))
       const body = input.body.trim()
-      if (!body) throw new Error("Wiadomość nie może być pusta.")
+      if (!body) throw new Error(t("Wiadomość nie może być pusta."))
       const attachments = input.attachments ?? []
       const files = attachments.filter((attachment): attachment is File => attachment instanceof File)
       const pending = attachments.filter((attachment): attachment is InboxPendingAttachment => !(attachment instanceof File) && "id" in attachment && "scanStatus" in attachment)
-      if (files.length + pending.length !== attachments.length) throw new Error("Nieobsługiwany format załącznika.")
-      if (pending.some((attachment) => attachment.scanStatus !== "clean")) throw new Error("Wiadomość może zawierać tylko poprawnie zeskanowane załączniki.")
-      if (attachments.length > 10) throw new Error("Jedna wiadomość może zawierać maksymalnie 10 plików.")
-      if (files.some((file) => file.size > 25 * 1024 * 1024)) throw new Error("Pojedynczy plik nie może przekraczać 25 MiB.")
-      if (files.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) throw new Error("Łączny rozmiar plików nie może przekraczać 50 MiB.")
+      if (files.length + pending.length !== attachments.length) throw new Error(t("Nieobsługiwany format załącznika."))
+      if (pending.some((attachment) => attachment.scanStatus !== "clean")) throw new Error(t("Wiadomość może zawierać tylko poprawnie zeskanowane załączniki."))
+      if (attachments.length > 10) throw new Error(t("Jedna wiadomość może zawierać maksymalnie 10 plików."))
+      if (files.some((file) => file.size > 25 * 1024 * 1024)) throw new Error(t("Pojedynczy plik nie może przekraczać 25 MiB."))
+      if (files.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) throw new Error(t("Łączny rozmiar plików nie może przekraczać 50 MiB."))
       const uploaded: InboxPendingAttachment[] = []
       try {
         for (const file of files) {
           const result = await repository.uploadAttachment(caseId, file)
           uploaded.push(result)
-          if (result.scanStatus !== "clean") throw new Error(`Plik ${file.name} nie przeszedł kontroli bezpieczeństwa.`)
+          if (result.scanStatus !== "clean") throw new Error(t("Plik {{value0}} nie przeszedł kontroli bezpieczeństwa.", { value0: file.name }))
         }
         const accepted = await client.sendCaseMessage({
           caseId,
@@ -299,7 +312,7 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
         })
         const history = await client.getCaseMessages({ caseId, limit: 50 })
         const persisted = history.items.find((message) => message.id === accepted.messageId)
-        if (!persisted) throw new Error("Wysłana wiadomość nie pojawiła się w historii case’u.")
+        if (!persisted) throw new Error(t("Wysłana wiadomość nie pojawiła się w historii case’u."))
         return mapCaseMessage(persisted, caseId)
       } catch (error) {
         await Promise.all(uploaded.map((item) => repository.removePendingAttachment(caseId, item.id)))

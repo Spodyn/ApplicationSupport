@@ -1,5 +1,6 @@
 "use client"
 
+import { useT } from "@/lib/i18n/provider"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -16,12 +17,13 @@ export function AppRail({
 }: {
   onNavigate?: () => void
 }) {
+  const t = useT()
   const pathname = usePathname()
   const currentUser = useCurrentUser()
 
   return (
     <nav
-      aria-label="Nawigacja główna"
+      aria-label={t("Nawigacja główna")}
       className="app-rail flex w-[88px] shrink-0 flex-col items-center border-r border-white/[0.09] bg-[#08111f] py-[14px] text-[#aeb8c7]"
     >
       <Link
@@ -50,11 +52,11 @@ export function AppRail({
                     ? "bg-[#28124f] text-[#f0eaff] shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]"
                     : "text-[#aeb8c7] hover:bg-white/[0.045] hover:text-white",
                 )}
-                title={item.label}
+                title={t(item.label)}
               >
                 <item.icon className="size-[25px] shrink-0" strokeWidth={1.65} />
                 <span className="sr-only">
-                  {item.label}
+                  {t(item.label)}
                 </span>
               </Link>
             </li>

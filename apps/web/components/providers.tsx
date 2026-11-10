@@ -7,9 +7,12 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { Toaster } from "@/components/ui/sonner"
 import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration"
 
+import { LanguageProvider } from "@/lib/i18n/provider"
+import type { Language } from "@/lib/i18n/catalog"
+
 const AppThemeProvider = ThemeProvider as ComponentType<PropsWithChildren<ThemeProviderProps>>
 
-export function Providers({ children, nonce }: { children: ReactNode; nonce?: string }) {
+export function Providers({ children, nonce, initialLanguage }: { children: ReactNode; nonce?: string; initialLanguage: Language }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -24,6 +27,7 @@ export function Providers({ children, nonce }: { children: ReactNode; nonce?: st
   )
 
   return (
+    <LanguageProvider initialLanguage={initialLanguage}>
     <AppThemeProvider
       nonce={nonce}
       attribute="class"
@@ -39,5 +43,6 @@ export function Providers({ children, nonce }: { children: ReactNode; nonce?: st
         <ServiceWorkerRegistration />
       </QueryClientProvider>
     </AppThemeProvider>
+    </LanguageProvider>
   )
 }

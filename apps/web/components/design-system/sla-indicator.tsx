@@ -1,3 +1,7 @@
+"use client"
+
+import { locale } from "@/lib/i18n/catalog"
+import { useT } from "@/lib/i18n/provider"
 import {
   CircleCheck,
   Clock,
@@ -27,10 +31,11 @@ export function SlaIndicator({
   dueAt?: string
   className?: string
 }) {
+  const t = useT()
   const effectiveState = getEffectiveSlaState({ state, dueAt })
   const { icon: Icon, className: colorClass } = slaConfig[effectiveState]
   const due = dueAt
-    ? new Intl.DateTimeFormat("pl-PL", {
+    ? new Intl.DateTimeFormat(locale(), {
         hour: "2-digit",
         minute: "2-digit",
         day: "2-digit",
@@ -41,7 +46,7 @@ export function SlaIndicator({
   return (
     <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", colorClass, className)}>
       <Icon className="size-3.5" aria-hidden />
-      <span>{slaStateLabels[effectiveState]}</span>
+      <span>{t(slaStateLabels[effectiveState])}</span>
       {due && <span className="text-muted-foreground">· {due}</span>}
     </span>
   )

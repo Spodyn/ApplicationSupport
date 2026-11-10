@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
+import { cookies } from 'next/headers'
+import { language, LANGUAGE_COOKIE, translate } from '@/lib/i18n/catalog'
 import { headers } from 'next/headers'
 import { Providers } from '@/components/providers'
 import { AppShell } from '@/components/layout/app-shell'
@@ -21,6 +23,8 @@ const description =
   'Ujednolicona skrzynka wsparcia dla zespołów obsługujących zgłoszenia ze Slacka, Microsoft Teams i Telegrama.'
 
 export async function generateMetadata(): Promise<Metadata> {
+  const selectedLanguage = language((await cookies()).get(LANGUAGE_COOKIE)?.value)
+  const t = (key: string) => translate(key, undefined, selectedLanguage)
   const requestHeaders = await headers()
   const host = requestHeaders.get('x-forwarded-host') ?? requestHeaders.get('host') ?? 'localhost:3000'
   const protocol = requestHeaders.get('x-forwarded-proto') ?? (host.startsWith('localhost') ? 'http' : 'https')
@@ -28,7 +32,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
   return {
     title: 'Unified Support Inbox',
-    description,
+    description: t(description),
     applicationName: 'Unified Support Inbox',
     manifest: '/manifest.webmanifest',
     appleWebApp: {
@@ -39,22 +43,22 @@ export async function generateMetadata(): Promise<Metadata> {
     formatDetection: { telephone: false },
     openGraph: {
       title: 'Unified Support Inbox',
-      description: 'Jedna skrzynka. Wszystkie kanały.',
+      description: t('Jedna skrzynka. Wszystkie kanały.'),
       type: 'website',
-      locale: 'pl_PL',
+      locale: selectedLanguage === 'en' ? 'en_GB' : 'pl_PL',
       images: [
         {
           url: `${origin}/og.png`,
           width: 1734,
           height: 907,
-          alt: 'Unified Support Inbox — jedna skrzynka, wszystkie kanały',
+          alt: t('Unified Support Inbox — jedna skrzynka, wszystkie kanały'),
         },
       ],
     },
     twitter: {
       card: 'summary_large_image',
       title: 'Unified Support Inbox',
-      description: 'Jedna skrzynka. Wszystkie kanały.',
+      description: t('Jedna skrzynka. Wszystkie kanały.'),
       images: [`${origin}/og.png`],
     },
   }
@@ -73,11 +77,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const initialLanguage = language((await cookies()).get(LANGUAGE_COOKIE)?.value)
   const nonce = (await headers()).get('x-nonce') ?? undefined
   return (
-    <html lang="pl" suppressHydrationWarning className="bg-background">
+    <html lang={initialLanguage} suppressHydrationWarning className="bg-background">
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-        <Providers nonce={nonce}>
+        <Providers nonce={nonce} initialLanguage={initialLanguage}>
           <AppShell>{children}</AppShell>
         </Providers>
       </body>

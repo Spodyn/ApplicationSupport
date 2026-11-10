@@ -1,5 +1,6 @@
 "use client"
 
+import { useT } from "@/lib/i18n/provider"
 import { useState } from "react"
 import { Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -50,6 +51,7 @@ const notifications: Notification[] = [
 ]
 
 export function NotificationBell() {
+  const t = useT()
   const [items, setItems] = useState(notifications)
   const unreadCount = items.filter((n) => n.unread).length
 
@@ -57,7 +59,7 @@ export function NotificationBell() {
     <Popover>
       <PopoverTrigger
         render={
-          <Button variant="ghost" size="icon-sm" className="relative" aria-label="Powiadomienia">
+          <Button variant="ghost" size="icon-sm" className="relative" aria-label={t("Powiadomienia")}>
             <Bell />
             {unreadCount > 0 && (
               <span className="absolute top-0.5 right-0.5 flex size-4 items-center justify-center rounded-full bg-destructive text-[10px] font-semibold text-destructive-foreground ring-2 ring-background">
@@ -69,10 +71,9 @@ export function NotificationBell() {
       />
       <PopoverContent align="end" className="w-80 p-0">
         <div className="flex items-center justify-between p-3">
-          <span className="text-sm font-medium">Powiadomienia</span>
+          <span className="text-sm font-medium">{t("Powiadomienia")}</span>
           <Button variant="link" size="xs" className="h-auto p-0" disabled={unreadCount === 0} onClick={() => setItems((current) => current.map((item) => ({ ...item, unread: false })))}>
-            Oznacz wszystkie jako przeczytane
-          </Button>
+            {t("Oznacz wszystkie jako przeczytane")} </Button>
         </div>
         <Separator />
         <ul className="max-h-80 overflow-y-auto">
@@ -80,22 +81,22 @@ export function NotificationBell() {
             <li key={notification.id}>
               <button
                 type="button"
-                aria-label={`${notification.title}. ${notification.unread ? "Nieprzeczytane." : "Przeczytane."}`}
+                aria-label={`${t(notification.title)}. ${notification.unread ? t("Nieprzeczytane.") : t("Przeczytane.")}`}
                 onClick={() => setItems((current) => current.map((item) => item.id === notification.id ? { ...item, unread: false } : item))}
                 className="flex w-full items-start gap-3 p-3 text-left transition-colors hover:bg-muted/60"
               >
                 <PlatformIcon channel={notification.channel} />
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium">{notification.title}</span>
+                    <span className="truncate text-sm font-medium">{t(notification.title)}</span>
                     {notification.unread && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary"><span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />Nowe</span>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary"><span className="size-1.5 shrink-0 rounded-full bg-primary" aria-hidden />{t("Nowe")}</span>
                     )}
                   </span>
                   <span className="truncate text-xs text-muted-foreground">
                     {notification.detail}
                   </span>
-                  <span className="text-xs text-muted-foreground/80">{notification.time}</span>
+                  <span className="text-xs text-muted-foreground/80">{t(notification.time)}</span>
                 </span>
               </button>
             </li>

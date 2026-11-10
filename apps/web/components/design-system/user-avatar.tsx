@@ -1,3 +1,6 @@
+"use client"
+
+import { useT } from "@/lib/i18n/provider"
 import { Ban, Check, Clock3, Minus, type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Avatar, AvatarBadge, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -32,6 +35,7 @@ export function UserAvatar({
   showPresence?: boolean
   className?: string
 }) {
+  const t = useT()
   const presence = presenceConfig[user.presence]
   const PresenceIcon = presence.icon
 
@@ -45,11 +49,11 @@ export function UserAvatar({
         <AvatarBadge
           className={cn("bg-blend-normal", presence.className)}
           role="img"
-          aria-label={`Obecność: ${userPresenceLabels[user.presence]}`}
-          title={userPresenceLabels[user.presence]}
+          aria-label={t("Obecność: {{value0}}", { value0: t(userPresenceLabels[user.presence]) })}
+          title={t(userPresenceLabels[user.presence])}
         >
           <PresenceIcon aria-hidden />
-          <span className="sr-only">{userPresenceLabels[user.presence]}</span>
+          <span className="sr-only">{t(userPresenceLabels[user.presence])}</span>
         </AvatarBadge>
       )}
     </Avatar>

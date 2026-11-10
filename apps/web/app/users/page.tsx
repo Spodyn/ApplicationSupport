@@ -1,5 +1,7 @@
 "use client"
 
+import { userError } from "@/lib/i18n/errors"
+import { useT } from "@/lib/i18n/provider"
 import { useCallback, useMemo, useState, type FormEvent, type ReactNode } from "react"
 import {
   MoreHorizontal,
@@ -88,6 +90,7 @@ const emptyForm: AdministrationUserInput = {
 }
 
 export default function UsersRoute() {
+  const t = useT()
   const [search, setSearch] = useState("")
   const [role, setRole] = useState(ALL_VALUE)
   const [active, setActive] = useState(ALL_VALUE)
@@ -129,9 +132,9 @@ export default function UsersRoute() {
         : await actions.issuePasswordReset.mutateAsync(user.id)
       setCredentialResult({ kind, user, ...result })
     } catch (error) {
-      notify.error("Nie udało się wygenerować bezpiecznego linku", getErrorMessage(error))
+      notify.error(t("Nie udało się wygenerować bezpiecznego linku"), getErrorMessage(error))
     }
-  }, [actions.issueInvitation, actions.issuePasswordReset])
+  }, [actions.issueInvitation, actions.issuePasswordReset, t])
 
   const openCreate = () => {
     setEditedUser(null)
@@ -146,7 +149,7 @@ export default function UsersRoute() {
     () => [
       {
         id: "user",
-        header: "Użytkownik",
+        header: t("Użytkownik"),
         className: "min-w-64",
         cell: (user) => (
           <div className="flex items-center gap-3">
@@ -160,17 +163,17 @@ export default function UsersRoute() {
       },
       {
         id: "role",
-        header: "Rola",
+        header: t("Rola"),
         cell: (user) => (
           <Badge variant={user.role === "ADMIN" ? "default" : "secondary"}>
             {user.role === "ADMIN" && <ShieldCheck />}
-            {roleLabels[user.role]}
+            {t(roleLabels[user.role])}
           </Badge>
         ),
       },
       {
         id: "active",
-        header: "Status",
+        header: t("Status"),
         cell: (user) => (
           <Badge
             variant="secondary"
@@ -181,83 +184,78 @@ export default function UsersRoute() {
             }
           >
             {user.active ? <CheckCircle2 /> : <UserX />}
-            {user.active ? "Aktywny" : "Nieaktywny"}
+            {user.active ? t("Aktywny") : t("Nieaktywny")}
           </Badge>
         ),
       },
       {
         id: "validity",
-        header: "Okres ważności",
+        header: t("Okres ważności"),
         className: "min-w-40 text-xs",
         cell: (user) => (
           <div>
-            <p>{user.validFrom ? `od ${formatDate(user.validFrom)}` : "bez daty początkowej"}</p>
+            <p>{user.validFrom ? t("od {{date}}", { date: formatDate(user.validFrom) }) : t("bez daty początkowej")}</p>
             <p className="text-muted-foreground">
-              {user.validUntil ? `do ${formatDate(user.validUntil)}` : "bezterminowo"}
+              {user.validUntil ? t("do {{date}}", { date: formatDate(user.validUntil) }) : t("bezterminowo")}
             </p>
           </div>
         ),
       },
       {
         id: "cases",
-        header: "Aktywne case’y",
+        header: t("Aktywne case’y"),
         align: "center",
         cell: (user) => <span className="font-medium tabular-nums">{user.activeAssignedCases}</span>,
       },
       {
         id: "login",
-        header: "Ostatnie logowanie",
+        header: t("Ostatnie logowanie"),
         className: "min-w-40 text-xs text-muted-foreground",
-        cell: (user) => user.lastLoginAt ? formatDateTime(user.lastLoginAt) : "Jeszcze nigdy",
+        cell: (user) => user.lastLoginAt ? formatDateTime(user.lastLoginAt) : t("Jeszcze nigdy"),
       },
       {
         id: "actions",
-        header: <span className="sr-only">Akcje</span>,
+        header: <span className="sr-only">{t("Akcje")}</span>,
         align: "end",
         cell: (user) => (
           <DropdownMenu>
             <DropdownMenuTrigger
-              render={<Button variant="ghost" size="icon-sm" aria-label={`Akcje dla ${user.fullName}`} />}
+              render={<Button variant="ghost" size="icon-sm" aria-label={t("Akcje dla {{value0}}", { value0: user.fullName })} />}
             >
               <MoreHorizontal />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
               <DropdownMenuItem disabled={!canManageUsers} onClick={() => openEdit(user)}>
-                <Pencil /> Edytuj
-              </DropdownMenuItem>
+                <Pencil /> {t("Edytuj")} </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!canManageUsers}
                 onClick={() => void issueCredential(user, "invitation")}
               >
-                <MailPlus /> Wygeneruj zaproszenie
-              </DropdownMenuItem>
+                <MailPlus /> {t("Wygeneruj zaproszenie")} </DropdownMenuItem>
               <DropdownMenuItem
                 disabled={!canManageUsers}
                 onClick={() => void issueCredential(user, "reset")}
               >
-                <KeyRound /> Resetuj hasło
-              </DropdownMenuItem>
+                <KeyRound /> {t("Resetuj hasło")} </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 variant="destructive"
                 disabled={!user.active || !canManageUsers}
                 onClick={() => setDeactivatedUser(user)}
               >
-                <UserX /> Dezaktywuj
-              </DropdownMenuItem>
+                <UserX /> {t("Dezaktywuj")} </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
                 disabled={!canManageUsers || user.id === currentAdministrationUserQuery.data?.id}
                 onClick={() => setDeletedUser(user)}
               >
-                <Trash2 /> Usuń użytkownika
-              </DropdownMenuItem>
+                <Trash2 /> {t("Usuń użytkownika")} </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ),
       },
     ],
-    [canManageUsers, currentAdministrationUserQuery.data?.id, issueCredential],
+    [canManageUsers, currentAdministrationUserQuery.data?.id, issueCredential, t],
   )
 
   const activeCount = users.filter((user) => user.active).length
@@ -274,10 +272,10 @@ export default function UsersRoute() {
     if (!deactivatedUser) return
     try {
       await actions.deactivate.mutateAsync(deactivatedUser.id)
-      notify.success("Użytkownik został dezaktywowany", deactivatedUser.fullName)
+      notify.success(t("Użytkownik został dezaktywowany"), deactivatedUser.fullName)
       setDeactivatedUser(null)
     } catch (error) {
-      notify.error("Nie udało się dezaktywować użytkownika", getErrorMessage(error))
+      notify.error(t("Nie udało się dezaktywować użytkownika"), getErrorMessage(error))
     }
   }
 
@@ -285,18 +283,18 @@ export default function UsersRoute() {
     if (!deletedUser) return
     try {
       await actions.delete.mutateAsync(deletedUser.id)
-      notify.success("Użytkownik został usunięty", deletedUser.fullName)
+      notify.success(t("Użytkownik został usunięty"), deletedUser.fullName)
       setDeletedUser(null)
     } catch (error) {
-      notify.error("Nie udało się usunąć użytkownika", getErrorMessage(error))
+      notify.error(t("Nie udało się usunąć użytkownika"), getErrorMessage(error))
     }
   }
 
   return (
     <>
       <PageHeader
-        title="Użytkownicy"
-        description="Konta i uprawnienia zespołu wsparcia"
+        title={t("Użytkownicy")}
+        description={t("Konta i uprawnienia zespołu wsparcia")}
         actions={
           <div className="flex items-center gap-2">
             <Button
@@ -306,49 +304,48 @@ export default function UsersRoute() {
               disabled={usersQuery.isFetching}
             >
               <RefreshCw className={usersQuery.isFetching ? "animate-spin" : undefined} />
-              <span className="hidden sm:inline">Odśwież</span>
+              <span className="hidden sm:inline">{t("Odśwież")}</span>
             </Button>
             <Button size="sm" onClick={openCreate} disabled={!canManageUsers}>
-              <Plus /> Dodaj użytkownika
-            </Button>
+              <Plus /> {t("Dodaj użytkownika")} </Button>
           </div>
         }
       />
 
       <main className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
         <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 p-4 md:p-6">
-          <section className="grid gap-2 sm:grid-cols-3" aria-label="Podsumowanie użytkowników">
-            <Metric label="Aktywne konta" value={activeCount} />
-            <Metric label="Administratorzy" value={adminCount} />
-            <Metric label="Przypisane aktywne case’y" value={assignedCount} />
+          <section className="grid gap-2 sm:grid-cols-3" aria-label={t("Podsumowanie użytkowników")}>
+            <Metric label={t("Aktywne konta")} value={activeCount} />
+            <Metric label={t("Administratorzy")} value={adminCount} />
+            <Metric label={t("Przypisane aktywne case’y")} value={assignedCount} />
           </section>
 
           <div className="flex flex-col gap-3">
             <div className="rounded-lg border bg-card p-3">
               <FilterBar>
-                <SearchFilter value={search} onChange={setSearch} placeholder="Szukaj po nazwie lub e-mailu…" />
+                <SearchFilter value={search} onChange={setSearch} placeholder={t("Szukaj po nazwie lub e-mailu…")} />
                 <FilterSelect
                   value={role}
                   onChange={setRole}
-                  placeholder="Rola"
-                  allLabel="Wszystkie role"
+                  placeholder={t("Rola")}
+                  allLabel={t("Wszystkie role")}
                   options={[
-                    { value: "USER", label: "Użytkownik" },
-                    { value: "ADMIN", label: "Administrator" },
+                    { value: "USER", label: t("Użytkownik") },
+                    { value: "ADMIN", label: t("Administrator") },
                   ]}
                 />
                 <FilterSelect
                   value={active}
                   onChange={setActive}
-                  placeholder="Status"
-                  allLabel="Wszystkie statusy"
+                  placeholder={t("Status")}
+                  allLabel={t("Wszystkie statusy")}
                   options={[
-                    { value: "active", label: "Aktywni" },
-                    { value: "inactive", label: "Nieaktywni" },
+                    { value: "active", label: t("Aktywni") },
+                    { value: "inactive", label: t("Nieaktywni") },
                   ]}
                 />
                 {(search || role !== ALL_VALUE || active !== ALL_VALUE) && (
-                  <Button variant="ghost" size="sm" onClick={resetFilters}>Wyczyść filtry</Button>
+                  <Button variant="ghost" size="sm" onClick={resetFilters}>{t("Wyczyść filtry")}</Button>
                 )}
               </FilterBar>
             </div>
@@ -366,9 +363,9 @@ export default function UsersRoute() {
                 emptyState={
                   <EmptyState
                     icon={Users}
-                    title="Nie znaleziono użytkowników"
-                    description="Zmień kryteria wyszukiwania albo dodaj pierwsze konto."
-                    action={<Button onClick={openCreate} disabled={!canManageUsers}><Plus /> Dodaj użytkownika</Button>}
+                    title={t("Nie znaleziono użytkowników")}
+                    description={t("Zmień kryteria wyszukiwania albo dodaj pierwsze konto.")}
+                    action={<Button onClick={openCreate} disabled={!canManageUsers}><Plus /> {t("Dodaj użytkownika")}</Button>}
                   />
                 }
               />
@@ -387,10 +384,10 @@ export default function UsersRoute() {
           onSave={async (input) => {
             try {
               await actions.save.mutateAsync({ input, id: editedUser?.id })
-              notify.success(editedUser ? "Zapisano zmiany użytkownika" : "Dodano użytkownika", input.fullName)
+              notify.success(editedUser ? t("Zapisano zmiany użytkownika") : t("Dodano użytkownika"), input.fullName)
               setDialogOpen(false)
             } catch (error) {
-              notify.error("Nie udało się zapisać użytkownika", getErrorMessage(error))
+              notify.error(t("Nie udało się zapisać użytkownika"), getErrorMessage(error))
             }
           }}
         />
@@ -399,9 +396,9 @@ export default function UsersRoute() {
       <ConfirmDialog
         open={Boolean(deactivatedUser)}
         onOpenChange={(open) => !open && setDeactivatedUser(null)}
-        title="Dezaktywować użytkownika?"
-        description={deactivatedUser ? `${deactivatedUser.fullName} utraci dostęp do aplikacji. Aktywne case’y pozostaną widoczne i będzie można je przepisać.` : undefined}
-        confirmLabel="Dezaktywuj"
+        title={t("Dezaktywować użytkownika?")}
+        description={deactivatedUser ? t("{{value0}} utraci dostęp do aplikacji. Aktywne case’y pozostaną widoczne i będzie można je przepisać.", { value0: deactivatedUser.fullName }) : undefined}
+        confirmLabel={t("Dezaktywuj")}
         destructive
         onConfirm={() => void deactivate()}
       />
@@ -409,9 +406,9 @@ export default function UsersRoute() {
       <ConfirmDialog
         open={Boolean(deletedUser)}
         onOpenChange={(open) => !open && setDeletedUser(null)}
-        title="Usunąć użytkownika?"
-        description={deletedUser ? `${deletedUser.fullName} zostanie trwale usunięty z listy użytkowników. Tej operacji nie można cofnąć.` : undefined}
-        confirmLabel="Usuń"
+        title={t("Usunąć użytkownika?")}
+        description={deletedUser ? t("{{value0}} zostanie trwale usunięty z listy użytkowników. Tej operacji nie można cofnąć.", { value0: deletedUser.fullName }) : undefined}
+        confirmLabel={t("Usuń")}
         destructive
         onConfirm={() => void deleteUser()}
       />
@@ -419,17 +416,17 @@ export default function UsersRoute() {
       <Dialog open={Boolean(credentialResult)} onOpenChange={(open) => !open && setCredentialResult(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{credentialResult?.kind === "invitation" ? "Zaproszenie gotowe" : "Reset hasła gotowy"}</DialogTitle>
+            <DialogTitle>{credentialResult?.kind === "invitation" ? t("Zaproszenie gotowe") : t("Reset hasła gotowy")}</DialogTitle>
             <DialogDescription>
-              Token jest widoczny tylko teraz. Przekaż go użytkownikowi bezpiecznym kanałem i poproś o ustawienie hasła na stronie /activate; wygaśnie {credentialResult ? formatDateTime(credentialResult.expiresAt) : ""}.
+              {t("Token jest widoczny tylko teraz. Przekaż go użytkownikowi bezpiecznym kanałem i poproś o ustawienie hasła na stronie /activate; wygaśnie")} {credentialResult ? formatDateTime(credentialResult.expiresAt) : ""}.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-2">
-            <Label htmlFor="credential-token">Jednorazowy token dla {credentialResult?.user.fullName}</Label>
+            <Label htmlFor="credential-token">{t("Jednorazowy token dla")} {credentialResult?.user.fullName}</Label>
             <Input id="credential-token" readOnly value={credentialResult?.token ?? ""} onFocus={(event) => event.currentTarget.select()} />
           </div>
           <DialogFooter>
-            <Button type="button" onClick={() => setCredentialResult(null)}>Gotowe</Button>
+            <Button type="button" onClick={() => setCredentialResult(null)}>{t("Gotowe")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -450,6 +447,7 @@ function UserDialog({
   saving: boolean
   onSave: (input: AdministrationUserInput) => Promise<void>
 }) {
+  const t = useT()
   const [form, setForm] = useState<AdministrationUserInput>(() =>
     user
       ? {
@@ -476,7 +474,7 @@ function UserDialog({
   const submit = (event: FormEvent) => {
     event.preventDefault()
     if (!form.fullName.trim() || !form.email.trim()) {
-      notify.warning("Uzupełnij wymagane pola", "Nazwa i adres e-mail są wymagane.")
+      notify.warning(t("Uzupełnij wymagane pola"), t("Nazwa i adres e-mail są wymagane."))
       return
     }
     void onSave(form)
@@ -490,20 +488,19 @@ function UserDialog({
       <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-2xl">
         <form onSubmit={submit} className="grid gap-4">
           <DialogHeader>
-            <DialogTitle>{user ? "Edytuj użytkownika" : "Dodaj użytkownika"}</DialogTitle>
+            <DialogTitle>{user ? t("Edytuj użytkownika") : t("Dodaj użytkownika")}</DialogTitle>
             <DialogDescription>
-              Konto i uprawnienia zostaną zapisane w backendzie aplikacji.
-            </DialogDescription>
+              {t("Konto i uprawnienia zostaną zapisane w backendzie aplikacji.")} </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Imię i nazwisko" required>
+            <Field label={t("Imię i nazwisko")} required>
               <Input value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} autoFocus />
             </Field>
-            <Field label="E-mail" required>
+            <Field label={t("E-mail")} required>
               <Input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
             </Field>
-            <Field label="Rola">
+            <Field label={t("Rola")}>
               <Select
                 value={form.role}
                 onValueChange={(next) => {
@@ -518,30 +515,30 @@ function UserDialog({
               >
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="USER">Użytkownik</SelectItem>
-                  <SelectItem value="ADMIN">Administrator</SelectItem>
+                  <SelectItem value="USER">{t("Użytkownik")}</SelectItem>
+                  <SelectItem value="ADMIN">{t("Administrator")}</SelectItem>
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Ważny od">
+            <Field label={t("Ważny od")}>
               <Input type="date" value={form.validFrom} onChange={(event) => setForm({ ...form, validFrom: event.target.value })} />
             </Field>
-            <Field label="Ważny do (opcjonalnie)">
+            <Field label={t("Ważny do (opcjonalnie)")}>
               <Input type="date" value={form.validUntil ?? ""} onChange={(event) => setForm({ ...form, validUntil: event.target.value || undefined })} />
             </Field>
           </div>
 
           <div className="flex items-center justify-between rounded-lg border p-3">
             <div>
-              <Label htmlFor="user-active">Aktywne konto</Label>
-              <p className="text-xs text-muted-foreground">Użytkownik może zalogować się do aplikacji.</p>
+              <Label htmlFor="user-active">{t("Aktywne konto")}</Label>
+              <p className="text-xs text-muted-foreground">{t("Użytkownik może zalogować się do aplikacji.")}</p>
             </div>
             <Switch id="user-active" checked={form.active} onCheckedChange={(checked) => setForm({ ...form, active: checked })} />
           </div>
 
           <fieldset className="grid gap-2 rounded-lg border p-3">
-            <legend className="px-1 text-sm font-medium">Uprawnienia indywidualne</legend>
-            <p className="text-xs text-muted-foreground">Uprawnienia administracyjne można nadać wyłącznie roli Administrator. Rola Użytkownik nie uzyskuje dostępu przez indywidualny grant.</p>
+            <legend className="px-1 text-sm font-medium">{t("Uprawnienia indywidualne")}</legend>
+            <p className="text-xs text-muted-foreground">{t("Uprawnienia administracyjne można nadać wyłącznie roli Administrator. Rola Użytkownik nie uzyskuje dostępu przez indywidualny grant.")}</p>
             <div className="grid gap-2 sm:grid-cols-2">
               {allAdministrationPermissions.map((permission) => (
                 <label key={permission} className="flex items-center gap-2 rounded-md p-2 text-sm hover:bg-muted/50">
@@ -552,15 +549,15 @@ function UserDialog({
                     disabled={form.role !== "ADMIN"}
                     onChange={(event) => togglePermission(permission, event.target.checked)}
                   />
-                  {administrationPermissionLabels[permission]}
+                  {t(administrationPermissionLabels[permission])}
                 </label>
               ))}
             </div>
           </fieldset>
 
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" type="button" />}>Anuluj</DialogClose>
-            <Button type="submit" disabled={saving}>{saving ? "Zapisywanie…" : "Zapisz"}</Button>
+            <DialogClose render={<Button variant="outline" type="button" />}>{t("Anuluj")}</DialogClose>
+            <Button type="submit" disabled={saving}>{saving ? t("Zapisywanie…") : t("Zapisz")}</Button>
           </DialogFooter>
         </form>
       </DialogContent>
@@ -587,5 +584,5 @@ function Metric({ label, value }: { label: string; value: number }) {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Spróbuj ponownie."
+  return userError(error)
 }

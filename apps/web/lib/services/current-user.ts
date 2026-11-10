@@ -1,3 +1,4 @@
+import { translate as t } from "@/lib/i18n/catalog"
 import type {
   AuthenticatedUser,
   CredentialAction,
@@ -8,7 +9,7 @@ export const currentUserQueryKey = ["current-user"] as const
 
 export class AuthenticationRequiredError extends Error {
   constructor() {
-    super("Authentication required")
+    super(t("Authentication required"))
     this.name = "AuthenticationRequiredError"
   }
 }

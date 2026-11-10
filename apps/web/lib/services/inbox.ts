@@ -1,3 +1,4 @@
+import { translate as t } from "@/lib/i18n/catalog"
 import type { InboxAttachment, InboxActivity, InboxCase, InboxMessage, InboxStatus } from "@/lib/domain/inbox"
 import type { User } from "@/lib/domain/shared"
 import { mockInboxCaseRecords, mockInboxMessages } from "@/mocks/inbox"
@@ -67,7 +68,20 @@ export interface InboxPage<T> {
   nextCursor?: string
 }
 
+export interface InboxBulkInput {
+  caseIds: string[]
+  action: "ASSIGN" | "RESOLVE" | "IGNORE" | "CLAIM"
+  targetUserId?: string
+  idempotencyKey: string
+}
+export interface InboxBulkResult {
+  caseId: string
+  status: "SUCCEEDED" | "SKIPPED" | "FAILED"
+  code: string
+}
+
 export interface InboxRepository {
+  bulk(input: InboxBulkInput): Promise<InboxBulkResult[]>
   list(cursor?: string, query?: InboxListQuery): Promise<InboxPage<InboxCase>>
   getFilterOptions(): Promise<InboxFilterOptions>
   getCase(caseId: string): Promise<InboxCase>
@@ -99,8 +113,8 @@ export class InboxConflictError extends Error {
   constructor(owner?: Pick<User, "id" | "fullName">) {
     super(
       owner
-        ? `Case został już przejęty przez: ${owner.fullName}.`
-        : "Case został już przejęty przez innego agenta.",
+        ? t("Case został już przejęty przez: {{value0}}.", { value0: owner.fullName })
+        : t("Case został już przejęty przez innego agenta."),
     )
     this.name = "InboxConflictError"
     this.owner = owner
@@ -115,7 +129,7 @@ const createId = (prefix: string) =>
 
 const getRecord = (caseId: string) => {
   const record = mockInboxCaseRecords.find((candidate) => candidate.id === caseId)
-  if (!record) throw new Error("Nie znaleziono case’u.")
+  if (!record) throw new Error(t("Nie znaleziono case’u."))
   return record
 }
 
@@ -182,6 +196,7 @@ const canUseUnassignedActions = (caseId: string) => {
 }
 
 export const mockInboxRepository: InboxRepository = {
+  async bulk() { throw new Error(t("Bulk operations require the API.")) },
   async list() {
     const cases = mockInboxCaseRecords.map(
       ({ unreadForUserIds, snoozedUntilByUser, restrictedUserIds, ...item }) => {
@@ -246,20 +261,20 @@ export const mockInboxRepository: InboxRepository = {
       throw new InboxConflictError(record.owner)
     }
     if (!canUseUnassignedActions(caseId)) {
-      throw new Error("Case nie może zostać przejęty w aktualnym stanie.")
+      throw new Error(t("Case nie może zostać przejęty w aktualnym stanie."))
     }
     record.owner = mockCurrentUser
     record.status = "verification"
     record.waitingUntil = undefined
     delete record.snoozedUntilByUser[mockCurrentUser.id]
     markCurrentUserRead(caseId)
-    appendSystemEvent(caseId, `${mockCurrentUser.fullName} przejęła case`)
+    appendSystemEvent(caseId, t("{{value0}} przejęła case", { value0: mockCurrentUser.fullName }))
   },
 
   async ignore(caseId, input) {
     await wait(undefined, 260)
     if (!canUseUnassignedActions(caseId)) {
-      throw new Error("Nie możesz oddać głosu dla tego case’u.")
+      throw new Error(t("Nie możesz oddać głosu dla tego case’u."))
     }
     const record = getRecord(caseId)
     record.ignoreVotes.current = Math.min(
@@ -281,10 +296,10 @@ export const mockInboxRepository: InboxRepository = {
       record.sla = { state: "paused", dueAt: undefined }
     }
     markCurrentUserRead(caseId)
-    const reason = input.reason?.trim() ? ` Powód: ${input.reason.trim()}` : ""
+    const reason = input.reason?.trim() ? t(" Powód: {{value0}}", { value0: input.reason.trim() }) : ""
     appendSystemEvent(
       caseId,
-      `${mockCurrentUser.fullName} oddała głos ignorowania.${reason}`,
+      t("{{value0}} oddała głos ignorowania.{{value1}}", { value0: mockCurrentUser.fullName, value1: reason }),
     )
   },
 
@@ -295,10 +310,10 @@ export const mockInboxRepository: InboxRepository = {
       record.status !== "verification" ||
       record.owner?.id !== mockCurrentUser.id
     ) {
-      throw new Error("Nie możesz dopytać klienta w aktualnym stanie case’u.")
+      throw new Error(t("Nie możesz dopytać klienta w aktualnym stanie case’u."))
     }
     if (!input.message.trim()) {
-      throw new Error("Wiadomość do klienta nie może być pusta.")
+      throw new Error(t("Wiadomość do klienta nie może być pusta."))
     }
     appendSupportMessage(caseId, { body: input.message })
     record.owner = undefined
@@ -309,7 +324,7 @@ export const mockInboxRepository: InboxRepository = {
     }
     appendSystemEvent(
       caseId,
-      "Case oczekuje na odpowiedź klienta przez 24 godziny i został zwolniony z przypisania",
+      t("Case oczekuje na odpowiedź klienta przez 24 godziny i został zwolniony z przypisania"),
     )
   },
 
@@ -317,16 +332,16 @@ export const mockInboxRepository: InboxRepository = {
     await wait(undefined, 260)
     const record = getRecord(caseId)
     if (record.status === "resolved" || record.status === "ignored") {
-      throw new Error("Case ma już status końcowy.")
+      throw new Error(t("Case ma już status końcowy."))
     }
     if (record.status === "waiting_for_customer") {
-      throw new Error("Case oczekujący na klienta jest tylko do odczytu.")
+      throw new Error(t("Case oczekujący na klienta jest tylko do odczytu."))
     }
     if (record.status !== "verification") {
-      throw new Error("Case nie może zostać rozwiązany w aktualnym stanie.")
+      throw new Error(t("Case nie może zostać rozwiązany w aktualnym stanie."))
     }
     if (record.owner?.id !== mockCurrentUser.id) {
-      throw new Error("Tylko przypisany agent może rozwiązać ten case.")
+      throw new Error(t("Tylko przypisany agent może rozwiązać ten case."))
     }
     record.status = "resolved"
     record.resolutionCategory = input.category?.trim() || undefined
@@ -336,8 +351,8 @@ export const mockInboxRepository: InboxRepository = {
     appendSystemEvent(
       caseId,
       input.category
-        ? `Case oznaczony jako rozwiązany. Kategoria: ${input.category}`
-        : "Case oznaczony jako rozwiązany",
+        ? t("Case oznaczony jako rozwiązany. Kategoria: {{value0}}", { value0: input.category })
+        : t("Case oznaczony jako rozwiązany"),
     )
   },
 
@@ -346,7 +361,7 @@ export const mockInboxRepository: InboxRepository = {
     const record = getRecord(caseId)
     const assignedToCurrentUser = record.owner?.id === mockCurrentUser.id
     if (!assignedToCurrentUser && !canUseUnassignedActions(caseId)) {
-      throw new Error("Nie możesz odłożyć tego case’u.")
+      throw new Error(t("Nie możesz odłożyć tego case’u."))
     }
     record.snoozedUntilByUser[mockCurrentUser.id] = until
     markCurrentUserRead(caseId)
@@ -363,7 +378,7 @@ export const mockInboxRepository: InboxRepository = {
 
   async assign(caseId, userId) {
     const record = getRecord(caseId)
-    record.owner = userId === mockCurrentUser.id ? mockCurrentUser : { id: userId, fullName: "Agent" }
+    record.owner = userId === mockCurrentUser.id ? mockCurrentUser : { id: userId, fullName: t("Agent") }
     record.status = "verification"
     await wait(undefined, 80)
   },
@@ -392,10 +407,10 @@ export const mockInboxRepository: InboxRepository = {
       record.status === "ignored" ||
       record.restrictedUserIds.includes(mockCurrentUser.id)
     ) {
-      throw new Error("Odpowiadanie jest niedostępne w aktualnym stanie case’u.")
+      throw new Error(t("Odpowiadanie jest niedostępne w aktualnym stanie case’u."))
     }
     if (input.simulateFailure) {
-      throw new Error("Symulowany błąd dostarczenia wiadomości.")
+      throw new Error(t("Symulowany błąd dostarczenia wiadomości."))
     }
     return appendSupportMessage(caseId, {
       body: input.body,

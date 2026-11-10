@@ -1,5 +1,6 @@
 "use client"
 
+import { translate as t } from "@/lib/i18n/catalog"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRealtimeCase } from "@/lib/realtime/realtime-context"
 import { serviceRegistry } from "./registry"
@@ -123,7 +124,7 @@ export function useMarkInboxCaseRead() {
 export function useInboxWorkflow(caseId?: string) {
   const queryClient = useQueryClient()
   const requireCaseId = () => {
-    if (!caseId) throw new Error("Nie wybrano case’u.")
+    if (!caseId) throw new Error(t("Nie wybrano case’u."))
     return caseId
   }
   const invalidateCases = () =>
@@ -331,5 +332,39 @@ export function useAnalytics(filters: AnalyticsFilters) {
     placeholderData: (previous) => previous,
     refetchInterval: 5_000,
     refetchOnWindowFocus: true,
+  })
+}
+
+export function useBulkInboxCases() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (input: import("./inbox").InboxBulkInput) => serviceRegistry.inbox.bulk(input),
+    // A lost response can still mean committed effects; refresh on either outcome.
+    onSettled: async () => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: ["support-inbox"] }),
+        client.invalidateQueries({ queryKey: ["analytics"] }),
+        client.invalidateQueries({ queryKey: ["administration", "users"] }),
+      ])
+    },
+  })
+}
+
+export function useSelectMatchingCases() {
+  return useMutation({
+    mutationFn: async (query: InboxListQuery) => {
+      const ids = new Set<string>()
+      let cursor: string | undefined
+      const cursors = new Set<string>()
+      do {
+        const page = await serviceRegistry.inbox.list(cursor, query)
+        for (const item of page.items) ids.add(item.id)
+        if (ids.size > 1000) throw new Error(t("Zbyt wiele spraw. Zawęź filtry do 1000 spraw."))
+        cursor = page.nextCursor
+        if (cursor && cursors.has(cursor)) throw new Error(t("Nie udało się wczytać zaznaczenia."))
+        if (cursor) cursors.add(cursor)
+      } while (cursor)
+      return [...ids]
+    },
   })
 }

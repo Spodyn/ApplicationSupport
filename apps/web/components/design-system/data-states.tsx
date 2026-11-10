@@ -1,3 +1,6 @@
+"use client"
+
+import { useT } from "@/lib/i18n/provider"
 import type { ReactNode } from "react"
 import { CircleAlert, RefreshCw, type LucideIcon } from "lucide-react"
 import {
@@ -27,6 +30,7 @@ export function EmptyState({
   action?: ReactNode
   className?: string
 }) {
+  const t = useT()
   return (
     <Empty className={cn("min-h-64", className)}>
       <EmptyHeader>
@@ -35,8 +39,8 @@ export function EmptyState({
             <Icon />
           </EmptyMedia>
         )}
-        <EmptyTitle>{title}</EmptyTitle>
-        {description && <EmptyDescription>{description}</EmptyDescription>}
+        <EmptyTitle>{t(title)}</EmptyTitle>
+        {description && <EmptyDescription>{t(description)}</EmptyDescription>}
       </EmptyHeader>
       {action && <EmptyContent>{action}</EmptyContent>}
     </Empty>
@@ -55,21 +59,21 @@ export function ErrorState({
   onRetry?: () => void
   className?: string
 }) {
+  const t = useT()
   return (
     <Empty className={cn("min-h-64 border-destructive/30", className)}>
       <EmptyHeader>
         <EmptyMedia variant="icon" className="bg-destructive/10 text-destructive">
           <CircleAlert />
         </EmptyMedia>
-        <EmptyTitle>{title}</EmptyTitle>
-        <EmptyDescription>{description}</EmptyDescription>
+        <EmptyTitle>{t(title)}</EmptyTitle>
+        <EmptyDescription>{t(description)}</EmptyDescription>
       </EmptyHeader>
       {onRetry && (
         <EmptyContent>
           <Button variant="outline" onClick={onRetry}>
             <RefreshCw data-icon="inline-start" />
-            Spróbuj ponownie
-          </Button>
+            {t("Spróbuj ponownie")} </Button>
         </EmptyContent>
       )}
     </Empty>
@@ -84,6 +88,7 @@ export function LoadingState({
   label?: string
   className?: string
 }) {
+  const t = useT()
   return (
     <div
       className={cn(
@@ -94,7 +99,7 @@ export function LoadingState({
       aria-live="polite"
     >
       <Spinner className="size-6" />
-      <span>{label}</span>
+      <span>{t(label)}</span>
     </div>
   )
 }

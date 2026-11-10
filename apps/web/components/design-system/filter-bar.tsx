@@ -1,5 +1,6 @@
 "use client"
 
+import { useT } from "@/lib/i18n/provider"
 import type { ReactNode } from "react"
 import { Search, X } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -48,6 +49,7 @@ export function SearchFilter({
   placeholder?: string
   className?: string
 }) {
+  const t = useT()
   return (
     <div className={cn("relative w-full sm:w-64", className)}>
       <Search
@@ -57,9 +59,9 @@ export function SearchFilter({
       <Input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
+        placeholder={t(placeholder)}
         className="h-8 pl-8"
-        aria-label={placeholder}
+        aria-label={t(placeholder)}
       />
       {value && (
         <Button
@@ -67,7 +69,7 @@ export function SearchFilter({
           size="icon-xs"
           className="absolute top-1/2 right-1 -translate-y-1/2"
           onClick={() => onChange("")}
-          aria-label="Wyczyść wyszukiwanie"
+          aria-label={t("Wyczyść wyszukiwanie")}
         >
           <X />
         </Button>
@@ -97,16 +99,17 @@ export function FilterSelect({
   allLabel?: string
   className?: string
 }) {
+  const t = useT()
   return (
     <Select
       value={value}
       onValueChange={(next) => onChange(String(next))}
     >
-      <SelectTrigger className={cn("h-8 w-full sm:w-44", className)} aria-label={placeholder}>
-        <SelectValue placeholder={placeholder} />
+      <SelectTrigger className={cn("h-8 w-full sm:w-44", className)} aria-label={t(placeholder)}>
+        <SelectValue placeholder={t(placeholder)} />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={ALL_VALUE}>{allLabel}</SelectItem>
+        <SelectItem value={ALL_VALUE}>{t(allLabel)}</SelectItem>
         {options.map((option) => (
           <SelectItem key={option.value} value={option.value}>
             {option.label}

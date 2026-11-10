@@ -1,5 +1,6 @@
 "use client"
 
+import { useT } from "@/lib/i18n/provider"
 import { useState, useSyncExternalStore } from "react"
 import { useQueryClient } from "@tanstack/react-query"
 import { useTheme } from "next-themes"
@@ -29,6 +30,8 @@ import { userRoleLabels } from "@/lib/domain/labels"
 import { useLogout } from "@/lib/services/auth-queries"
 import { useCurrentUser } from "@/lib/services/queries"
 
+import { LanguageSelector } from "@/lib/i18n/provider"
+
 const subscribe = () => () => {}
 const getClientSnapshot = () => true
 const getServerSnapshot = () => false
@@ -40,6 +43,7 @@ export function UserMenu({
   variant?: "rail" | "mobile"
   onNavigate?: () => void
 }) {
+  const t = useT()
   const router = useRouter()
   const queryClient = useQueryClient()
   const logout = useLogout()
@@ -55,7 +59,7 @@ export function UserMenu({
     try {
       await queryClient.invalidateQueries()
       router.refresh()
-      notify.success("Dane odświeżone", "Widok pokazuje najnowsze dostępne informacje.")
+      notify.success(t("Dane odświeżone"), t("Widok pokazuje najnowsze dostępne informacje."))
     } finally {
       setRefreshing(false)
     }
@@ -66,9 +70,9 @@ export function UserMenu({
       await logout.mutateAsync()
       queryClient.clear()
       router.replace("/login")
-      notify.message("Wylogowano", "Sesja została zakończona.")
+      notify.message(t("Wylogowano"), t("Sesja została zakończona."))
     } catch {
-      notify.message("Nie udało się wylogować", "Spróbuj ponownie.")
+      notify.message(t("Nie udało się wylogować"), t("Spróbuj ponownie."))
     }
   }
 
@@ -83,7 +87,7 @@ export function UserMenu({
         variant="ghost"
         size="icon-lg"
         disabled
-        aria-label="Wczytywanie profilu"
+        aria-label={t("Wczytywanie profilu")}
         className={variant === "rail" ? "mb-2 text-sidebar-foreground" : undefined}
       >
         <User />
@@ -100,7 +104,7 @@ export function UserMenu({
               variant="ghost"
               size="icon-lg"
               className="mb-2 size-[54px] rounded-full border-0 bg-transparent p-0 text-white shadow-none hover:bg-white/[0.04] hover:text-white"
-              aria-label={`Otwórz menu profilu: ${user.fullName}`}
+              aria-label={t("Otwórz menu profilu: {{value0}}", { value0: user.fullName })}
             >
               <span className="relative grid size-[51px] place-items-center rounded-full bg-[linear-gradient(145deg,#6231e6,#3d159f)] text-[17px] font-medium text-white">
                 {user.fullName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toLocaleUpperCase("pl")}
@@ -113,7 +117,7 @@ export function UserMenu({
               <span className="flex min-w-0 flex-col text-left leading-tight">
                 <span className="truncate text-xs font-semibold">{user.fullName}</span>
                 <span className="truncate text-[11px] text-muted-foreground">
-                  {userRoleLabels[user.role]}
+                  {t(userRoleLabels[user.role])}
                 </span>
               </span>
               <ChevronDown className="ml-auto text-muted-foreground" />
@@ -134,12 +138,13 @@ export function UserMenu({
               <span className="truncate text-sm font-semibold text-foreground">{user.fullName}</span>
               <span className="truncate text-xs font-normal text-muted-foreground">{user.email}</span>
               <span className="text-[11px] font-normal text-muted-foreground">
-                {userRoleLabels[user.role]}
+                {t(userRoleLabels[user.role])}
               </span>
             </span>
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
+        <LanguageSelector />
         <DropdownMenuGroup>
           <DropdownMenuItem
             onClick={() => void refreshData()}
@@ -147,14 +152,14 @@ export function UserMenu({
             className="min-h-9 px-2"
           >
             <RefreshCw className={refreshing ? "animate-spin" : undefined} />
-            {refreshing ? "Odświeżanie…" : "Odśwież dane"}
+            {refreshing ? t("Odświeżanie…") : t("Odśwież dane")}
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => setTheme(isDark ? "light" : "dark")}
             className="min-h-9 px-2"
           >
             {isDark ? <Sun /> : <Moon />}
-            {isDark ? "Włącz tryb jasny" : "Włącz tryb ciemny"}
+            {isDark ? t("Włącz tryb jasny") : t("Włącz tryb ciemny")}
           </DropdownMenuItem>
         </DropdownMenuGroup>
         {user.role === "admin" ? (
@@ -163,8 +168,7 @@ export function UserMenu({
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={() => goTo("/settings")} className="min-h-9 px-2">
                 <Settings />
-                Ustawienia i preferencje
-              </DropdownMenuItem>
+                {t("Ustawienia i preferencje")} </DropdownMenuItem>
             </DropdownMenuGroup>
           </>
         ) : null}
@@ -176,7 +180,7 @@ export function UserMenu({
           onClick={() => void signOut()}
         >
           <LogOut />
-          {logout.isPending ? "Wylogowywanie…" : "Wyloguj się"}
+          {logout.isPending ? t("Wylogowywanie…") : t("Wyloguj się")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

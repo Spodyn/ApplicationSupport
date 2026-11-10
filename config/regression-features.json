@@ -414,6 +414,33 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramWebhookIntegrationTests.java"
       ],
       "gap": "Telegram inbound has synthetic tests; Teams adapter and Telegram outbound acceptance are absent on this baseline. Live provider sandbox is NOT RUN."
+    },
+    {
+      "id": "I18N",
+      "feature": "Polish and English interface",
+      "status": "IMPLEMENTED",
+      "risk": "MEDIUM",
+      "expected": "Polish default; immediate persisted switch; complete catalogs, locale formatting and unchanged user/provider data",
+      "tests": [
+        "apps/web/tests/unit/i18n.test.tsx",
+        "apps/web/tests/e2e/application.spec.ts"
+      ],
+      "gap": "Preference is browser-specific, not synchronized across devices"
+    },
+    {
+      "id": "BULK",
+      "feature": "Bulk Case workflow composition",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Explicit selection, bounded sequential batches, per-Case authorization/workflow, durable partial outcomes and replay, audit/realtime",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceIntegrationTests.java",
+        "apps/web/tests/unit/bulk-inbox-adapter.test.ts",
+        "apps/web/tests/e2e/application.spec.ts",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Select all matching enumerates at most 1000 explicit IDs; larger result sets require narrower filters"
     }
   ]
 }
