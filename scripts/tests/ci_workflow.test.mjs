@@ -4,6 +4,7 @@ import test from 'node:test'
 import {spawnSync} from 'node:child_process'
 import {fileURLToPath} from 'node:url'
 import {REGRESSION_JOBS} from '../testing/ci-gate.mjs'
+import {checkInventory} from '../testing/check-inventory.mjs'
 
 const workflow = readFileSync(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8')
 test('mandatory CI definitions and fail-closed aggregator cannot silently diverge', () => {
@@ -37,4 +38,18 @@ test('validation base handles a first branch push but refuses an invalid authori
   assert.equal(first.stdout.trim(), expected)
   const bad = spawnSync(process.execPath, [script], {encoding: 'utf8', env: {...process.env, BASE_SHA: 'invalid-commit-test-only'}})
   assert.notEqual(bad.status, 0)
+})
+
+test('traceability rejects erased features, broken test links and out-of-repository paths', () => {
+  const inventory = JSON.parse(readFileSync(new URL('../../config/regression-features.json', import.meta.url), 'utf8'))
+  assert.equal(checkInventory(inventory), 28)
+  assert.throws(() => checkInventory({features: []}), /Required feature mappings missing/)
+  const missing = structuredClone(inventory)
+  missing.features = missing.features.filter(feature => feature.id !== 'AUTH')
+  assert.throws(() => checkInventory(missing), /AUTH/)
+  for (const path of ['missing-test-source.java', '../../AGENTS.md']) {
+    const invalid = structuredClone(inventory)
+    invalid.features[0].tests = [path]
+    assert.throws(() => checkInventory(invalid), /Missing or out-of-repository test/)
+  }
 })
