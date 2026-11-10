@@ -168,3 +168,7 @@ Implementation must prove through tests that:
 - scheduler workers use safe claiming (for example `FOR UPDATE SKIP LOCKED`) so a deadline/event is not processed concurrently by multiple workers.
 
 The exact locking/query implementation is a delegated technical choice so long as these invariants hold.
+
+## Owner-authorized bulk composition (2026-11-10)
+
+Bulk Claim, Assign/Reassign, normal Resolve and Ignore compose the individual commands above. Availability is re-evaluated on the server under each Case row lock; no new transition or permission exists. Normal bulk Resolve remains owner-only. Each item has an independent transaction, audit/outbox and durable outcome, so ineligible/failed items do not prevent later items. See [UX_BULK_I18N.md](UX_BULK_I18N.md) for bounded selection and replay semantics.

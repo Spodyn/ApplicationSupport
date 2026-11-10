@@ -72,3 +72,11 @@ A human decision is required only when a proposed change alters the frozen contr
 
 
 Slack intake override (user request, 2026-11-09): discover authorized bot channel membership automatically. Active supported Slack channels without a customer mapping create visible Cases with customer NULL, labeled "Nie przypisano". Preserve existing customer mappings and ignored flags; never guess a customer. See INTEGRATIONS.md section 2.4.
+
+## Owner interface extension, 2026-11-10
+
+- DEC-UX-I18N-001: Polish default and English interface, immediate switching, browser-persistent preference, structured catalogs, unchanged user/provider content and technical enums.
+- DEC-UX-BULK-001: explicit bounded selection, per-Case permissions/workflow, confirmation and durable partial results for existing Claim/Assign/Resolve/Ignore; normal Resolve never implies Force Resolve.
+- DEC-UX-PRESENTATION-001: gray resolved indicators, accessible button feedback, Enter/Shift+Enter composer, SLA shortcut without arrow, no Customer/Channel inbox filter choices, wrapping long conversation messages.
+
+Source: explicit grouped owner implementation request dated 2026-11-10. Jira lookup is unavailable (403); no Jira freeze comment or status is invented. These decisions add the requested UI/bulk composition only. The detailed contract is [UX_BULK_I18N.md](UX_BULK_I18N.md).
