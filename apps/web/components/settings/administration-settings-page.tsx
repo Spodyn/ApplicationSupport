@@ -1,6 +1,10 @@
 "use client"
 
-import { useMemo, useState, type ReactNode } from "react"
+import { userError } from "@/lib/i18n/errors"
+import { locale } from "@/lib/i18n/catalog"
+import { translate as t } from "@/lib/i18n/catalog"
+import { LanguageSelector, useT } from "@/lib/i18n/provider"
+import { useState, type ReactNode } from "react"
 import {
   BellRing,
   Building2,
@@ -102,6 +106,7 @@ const tabItems = [
 ] as const
 
 export function AdministrationSettingsPage() {
+  const t = useT()
   const settingsQuery = useAdministrationSettings()
   const actions = useAdministrationSettingsActions()
   const unavailableIntegrations =
@@ -110,8 +115,8 @@ export function AdministrationSettingsPage() {
   return (
     <>
       <PageHeader
-        title="Ustawienia"
-        description="Zasady pracy skrzynki, integracje i uprawnienia zespołu"
+        title={t("Ustawienia")}
+        description={t("Zasady pracy skrzynki, integracje i uprawnienia zespołu")}
         actions={
           <Button
             variant="outline"
@@ -120,7 +125,7 @@ export function AdministrationSettingsPage() {
             disabled={settingsQuery.isFetching}
           >
             <RefreshCw className={settingsQuery.isFetching ? "animate-spin" : undefined} />
-            <span className="hidden sm:inline">Odśwież</span>
+            <span className="hidden sm:inline">{t("Odśwież")}</span>
           </Button>
         }
       />
@@ -129,19 +134,17 @@ export function AdministrationSettingsPage() {
         <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-4 p-4 md:p-6">
           <Alert className="bg-info/5 text-info">
             <Info />
-            <AlertTitle>Konfiguracja chroniona</AlertTitle>
+            <AlertTitle>{t("Konfiguracja chroniona")}</AlertTitle>
             <AlertDescription>
-              Dane integracji, klientów i kanałów są zapisywane w backendzie. Sekrety Slack pozostają wyłącznie w zewnętrznym katalogu sekretów.
-            </AlertDescription>
+              {t("Dane integracji, klientów i kanałów są zapisywane w backendzie. Sekrety Slack pozostają wyłącznie w zewnętrznym katalogu sekretów.")} </AlertDescription>
           </Alert>
 
           {unavailableIntegrations.length > 0 && (
             <Alert className="border-warning/30 bg-warning/10 text-warning-foreground">
               <Unplug />
-              <AlertTitle>Nie wszystkie integracje są włączone</AlertTitle>
+              <AlertTitle>{t("Nie wszystkie integracje są włączone")}</AlertTitle>
               <AlertDescription>
-                {unavailableIntegrations.map((item) => channelLabels[item.platform]).join(", ")} — sprawdź status w zakładce Integracje. Odbiór nowych wiadomości z tych źródeł może być ograniczony.
-              </AlertDescription>
+                {unavailableIntegrations.map((item) => channelLabels[item.platform]).join(", ")} {t("— sprawdź status w zakładce Integracje. Odbiór nowych wiadomości z tych źródeł może być ograniczony.")} </AlertDescription>
             </Alert>
           )}
 
@@ -155,7 +158,7 @@ export function AdministrationSettingsPage() {
                 <TabsList variant="line" className="h-11 min-w-max">
                   {tabItems.map(({ value, label, icon: Icon }) => (
                     <TabsTrigger key={value} value={value} className="px-3">
-                      <Icon /> {label}
+                      <Icon /> {t(label)}
                     </TabsTrigger>
                   ))}
                 </TabsList>
@@ -181,39 +184,39 @@ export function AdministrationSettingsPage() {
 type SettingsActions = ReturnType<typeof useAdministrationSettingsActions>
 
 function GeneralPanel({ data, actions }: { data: GeneralSettings; actions: SettingsActions }) {
+  const t = useT()
   const [form, setForm] = useState(data)
 
   return (
-    <SettingsCard title="Ogólne" description="Podstawowe zachowanie i wygląd skrzynki.">
+    <SettingsCard title={t("Ogólne")} description={t("Podstawowe zachowanie i wygląd skrzynki.")}>
       <div className="grid max-w-2xl gap-4 sm:grid-cols-2">
-        <Field label="Nazwa organizacji">
+        <Field label={t("Nazwa organizacji")}>
           <Input value={form.organizationName} onChange={(event) => setForm({ ...form, organizationName: event.target.value })} />
         </Field>
-        <Field label="Język interfejsu">
-          <Select value="pl" disabled><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pl">Polski</SelectItem></SelectContent></Select>
-        </Field>
-        <SettingSwitch label="Widok kompaktowy" description="Zmniejsza odstępy w tabelach i listach." checked={form.compactMode} onChange={(checked) => setForm({ ...form, compactMode: checked })} />
+        <div className="self-end"><LanguageSelector /></div>
+        <SettingSwitch label={t("Widok kompaktowy")} description={t("Zmniejsza odstępy w tabelach i listach.")} checked={form.compactMode} onChange={(checked) => setForm({ ...form, compactMode: checked })} />
       </div>
-      <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "general", form, "Zapisano ustawienia ogólne")} />
+      <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "general", form, t("Zapisano ustawienia ogólne"))} />
     </SettingsCard>
   )
 }
 
 function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActions }) {
+  const t = useT()
   const [form, setForm] = useState(data)
-  const example = useMemo(() => calculateSlaExample(form), [form])
+  const example = calculateSlaExample(form)
 
   const numberFields: { key: keyof Pick<SlaSettings, "firstResponseMinutes" | "unclaimedReminderMinutes" | "inProgressReminderMinutes" | "warningBeforeDeadlineMinutes" | "repeatedBreachMinutes">; label: string; hint: string }[] = [
-    { key: "firstResponseMinutes", label: "SLA pierwszej odpowiedzi", hint: "Czas od otrzymania do pierwszej odpowiedzi." },
-    { key: "unclaimedReminderMinutes", label: "Przypomnienie o nieprzejętym case’ie", hint: "Pierwszy alert, gdy case nadal nie ma właściciela." },
-    { key: "inProgressReminderMinutes", label: "Przypomnienie w trakcie", hint: "Alert o zbyt długiej pracy bez aktualizacji." },
-    { key: "warningBeforeDeadlineMinutes", label: "Ostrzeżenie przed terminem", hint: "Kiedy case otrzymuje stan ostrzegawczy." },
-    { key: "repeatedBreachMinutes", label: "Interwał ponawiania przekroczenia", hint: "Jak często ponawiać alert po przekroczeniu." },
+    { key: "firstResponseMinutes", label: t("SLA pierwszej odpowiedzi"), hint: t("Czas od otrzymania do pierwszej odpowiedzi.") },
+    { key: "unclaimedReminderMinutes", label: t("Przypomnienie o nieprzejętym case’ie"), hint: t("Pierwszy alert, gdy case nadal nie ma właściciela.") },
+    { key: "inProgressReminderMinutes", label: t("Przypomnienie w trakcie"), hint: t("Alert o zbyt długiej pracy bez aktualizacji.") },
+    { key: "warningBeforeDeadlineMinutes", label: t("Ostrzeżenie przed terminem"), hint: t("Kiedy case otrzymuje stan ostrzegawczy.") },
+    { key: "repeatedBreachMinutes", label: t("Interwał ponawiania przekroczenia"), hint: t("Jak często ponawiać alert po przekroczeniu.") },
   ]
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-      <SettingsCard title="Polityka SLA" description="Czasy podawane są w minutach i obowiązują wszystkie kanały z tą polityką.">
+      <SettingsCard title={t("Polityka SLA")} description={t("Czasy podawane są w minutach i obowiązują wszystkie kanały z tą polityką.")}>
         <div className="grid gap-4 md:grid-cols-2">
           {numberFields.map((field) => (
             <Field key={field.key} label={field.label} hint={field.hint}>
@@ -222,20 +225,20 @@ function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActio
           ))}
         </div>
         <div className="grid gap-2 border-t pt-4 sm:grid-cols-2">
-          <SettingSwitch label="Tylko w godzinach pracy" description="Odliczanie pomija zamknięte godziny i wyjątki." checked={form.businessHoursOnly} onChange={(checked) => setForm({ ...form, businessHoursOnly: checked })} />
-          <SettingSwitch label="Wstrzymaj przy oczekiwaniu" description="SLA nie biegnie podczas oczekiwania na klienta." checked={form.pauseWhileWaiting} onChange={(checked) => setForm({ ...form, pauseWhileWaiting: checked })} />
+          <SettingSwitch label={t("Tylko w godzinach pracy")} description={t("Odliczanie pomija zamknięte godziny i wyjątki.")} checked={form.businessHoursOnly} onChange={(checked) => setForm({ ...form, businessHoursOnly: checked })} />
+          <SettingSwitch label={t("Wstrzymaj przy oczekiwaniu")} description={t("SLA nie biegnie podczas oczekiwania na klienta.")} checked={form.pauseWhileWaiting} onChange={(checked) => setForm({ ...form, pauseWhileWaiting: checked })} />
         </div>
-        <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "sla", form, "Zapisano politykę SLA")} />
+        <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "sla", form, t("Zapisano politykę SLA"))} />
       </SettingsCard>
 
       <Card className="h-fit border-primary/20 bg-primary/[0.03]">
-        <CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="size-4 text-primary" /> Przykład na żywo</CardTitle><CardDescription>Case otrzymany w poniedziałek o 16:30.</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="size-4 text-primary" /> {t("Przykład na żywo")}</CardTitle><CardDescription>{t("Case otrzymany w poniedziałek o 16:30.")}</CardDescription></CardHeader>
         <CardContent className="grid gap-4">
-          <TimelineItem label="Otrzymano" value="pon., 16:30" />
-          <TimelineItem label="Ostrzeżenie" value={example.warning} accent="warning" />
-          <TimelineItem label="Termin SLA" value={example.deadline} accent="destructive" />
+          <TimelineItem label={t("Otrzymano")} value="pon., 16:30" />
+          <TimelineItem label={t("Ostrzeżenie")} value={example.warning} accent="warning" />
+          <TimelineItem label={t("Termin SLA")} value={example.deadline} accent="destructive" />
           <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
-            {form.businessHoursOnly ? "Po 17:00 licznik zatrzymuje się i rusza ponownie o 08:00 następnego dnia roboczego." : "SLA liczone jest w sposób ciągły, również poza godzinami pracy."}
+            {form.businessHoursOnly ? t("Po 17:00 licznik zatrzymuje się i rusza ponownie o 08:00 następnego dnia roboczego.") : t("SLA liczone jest w sposób ciągły, również poza godzinami pracy.")}
           </p>
         </CardContent>
       </Card>
@@ -244,6 +247,7 @@ function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActio
 }
 
 function SchedulePanel({ data, actions }: { data: WorkScheduleSettings; actions: SettingsActions }) {
+  const t = useT()
   const [form, setForm] = useState(data)
   const [exceptionOpen, setExceptionOpen] = useState(false)
   const [exception, setException] = useState<Omit<ScheduleException, "id">>({ date: "", name: "", closed: true })
@@ -254,8 +258,8 @@ function SchedulePanel({ data, actions }: { data: WorkScheduleSettings; actions:
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
-      <SettingsCard title="Tygodniowy harmonogram" description="Godziny używane przez SLA, automatyczne odpowiedzi i przypomnienia.">
-        <Field label="Strefa czasowa">
+      <SettingsCard title={t("Tygodniowy harmonogram")} description={t("Godziny używane przez SLA, automatyczne odpowiedzi i przypomnienia.")}>
+        <Field label={t("Strefa czasowa")}>
           <Select value={form.timezone} onValueChange={(value) => setForm({ ...form, timezone: String(value) })}>
             <SelectTrigger className="w-full sm:w-72"><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value="Europe/Warsaw">Europe/Warsaw (CET/CEST)</SelectItem><SelectItem value="Europe/London">Europe/London</SelectItem><SelectItem value="UTC">UTC</SelectItem></SelectContent>
@@ -263,46 +267,46 @@ function SchedulePanel({ data, actions }: { data: WorkScheduleSettings; actions:
         </Field>
         <div className="overflow-x-auto rounded-lg border">
           <Table>
-            <TableHeader><TableRow className="bg-muted/40"><TableHead>Dzień</TableHead><TableHead>Otwarte</TableHead><TableHead>Godziny</TableHead><TableHead>Przerwa</TableHead><TableHead>Godziny przerwy</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow className="bg-muted/40"><TableHead>{t("Dzień")}</TableHead><TableHead>{t("Otwarte")}</TableHead><TableHead>{t("Godziny")}</TableHead><TableHead>{t("Przerwa")}</TableHead><TableHead>{t("Godziny przerwy")}</TableHead></TableRow></TableHeader>
             <TableBody>
               {form.days.map((day, index) => (
                 <TableRow key={day.key}>
-                  <TableCell className="font-medium">{day.label}</TableCell>
-                  <TableCell><Switch checked={day.enabled} onCheckedChange={(checked) => updateDay(index, { enabled: checked })} aria-label={`${day.label}: otwarte`} /></TableCell>
+                  <TableCell className="font-medium">{t(day.label)}</TableCell>
+                  <TableCell><Switch checked={day.enabled} onCheckedChange={(checked) => updateDay(index, { enabled: checked })} aria-label={t("{{value0}}: otwarte", { value0: t(day.label) })} /></TableCell>
                   <TableCell><div className="flex items-center gap-1.5"><Input type="time" value={day.start} disabled={!day.enabled} onChange={(event) => updateDay(index, { start: event.target.value })} className="w-28" /><span className="text-muted-foreground">–</span><Input type="time" value={day.end} disabled={!day.enabled} onChange={(event) => updateDay(index, { end: event.target.value })} className="w-28" /></div></TableCell>
-                  <TableCell><Switch checked={day.breakEnabled} disabled={!day.enabled} onCheckedChange={(checked) => updateDay(index, { breakEnabled: checked })} aria-label={`${day.label}: przerwa`} /></TableCell>
+                  <TableCell><Switch checked={day.breakEnabled} disabled={!day.enabled} onCheckedChange={(checked) => updateDay(index, { breakEnabled: checked })} aria-label={t("{{value0}}: przerwa", { value0: t(day.label) })} /></TableCell>
                   <TableCell><div className="flex items-center gap-1.5"><Input type="time" value={day.breakStart} disabled={!day.enabled || !day.breakEnabled} onChange={(event) => updateDay(index, { breakStart: event.target.value })} className="w-28" /><span className="text-muted-foreground">–</span><Input type="time" value={day.breakEnd} disabled={!day.enabled || !day.breakEnabled} onChange={(event) => updateDay(index, { breakEnd: event.target.value })} className="w-28" /></div></TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
-        <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "schedule", form, "Zapisano harmonogram pracy")} />
+        <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "schedule", form, t("Zapisano harmonogram pracy"))} />
       </SettingsCard>
 
-      <SettingsCard title="Święta i wyjątki" description="Daty, w których standardowy harmonogram nie obowiązuje." actions={<Button variant="outline" size="sm" onClick={() => setExceptionOpen(true)}><Plus /> Dodaj</Button>}>
+      <SettingsCard title={t("Święta i wyjątki")} description={t("Daty, w których standardowy harmonogram nie obowiązuje.")} actions={<Button variant="outline" size="sm" onClick={() => setExceptionOpen(true)}><Plus /> {t("Dodaj")}</Button>}>
         <div className="grid gap-2">
           {form.exceptions.map((item) => (
             <div key={item.id} className="flex items-center gap-3 rounded-lg border p-3">
               <div className="flex size-9 items-center justify-center rounded-lg bg-muted"><CalendarClock className="size-4" /></div>
-              <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{item.name}</p><p className="text-xs text-muted-foreground">{formatDate(item.date)} · {item.closed ? "zamknięte" : `${item.start}–${item.end}`}</p></div>
-              <Button variant="ghost" size="icon-sm" aria-label={`Usuń ${item.name}`} onClick={() => setForm({ ...form, exceptions: form.exceptions.filter((entry) => entry.id !== item.id) })}><Trash2 /></Button>
+              <div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{item.nameIsDefault ? t(item.name) : item.name}</p><p className="text-xs text-muted-foreground">{formatDate(item.date)} · {item.closed ? t("zamknięte") : `${item.start}–${item.end}`}</p></div>
+              <Button variant="ghost" size="icon-sm" aria-label={t("Usuń {{value0}}", { value0: item.name })} onClick={() => setForm({ ...form, exceptions: form.exceptions.filter((entry) => entry.id !== item.id) })}><Trash2 /></Button>
             </div>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground">Usunięcia zostaną zastosowane po zapisaniu harmonogramu.</p>
+        <p className="text-xs text-muted-foreground">{t("Usunięcia zostaną zastosowane po zapisaniu harmonogramu.")}</p>
       </SettingsCard>
 
       <Dialog open={exceptionOpen} onOpenChange={setExceptionOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Dodaj wyjątek</DialogTitle><DialogDescription>Ustaw dzień zamknięty lub niestandardowe godziny pracy.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{t("Dodaj wyjątek")}</DialogTitle><DialogDescription>{t("Ustaw dzień zamknięty lub niestandardowe godziny pracy.")}</DialogDescription></DialogHeader>
           <div className="grid gap-3">
-            <Field label="Nazwa"><Input value={exception.name} onChange={(event) => setException({ ...exception, name: event.target.value })} /></Field>
-            <Field label="Data"><Input type="date" value={exception.date} onChange={(event) => setException({ ...exception, date: event.target.value })} /></Field>
-            <SettingSwitch label="Dzień zamknięty" description="W tym dniu SLA nie będzie naliczane." checked={exception.closed} onChange={(checked) => setException({ ...exception, closed: checked })} />
-            {!exception.closed && <div className="grid grid-cols-2 gap-3"><Field label="Od"><Input type="time" value={exception.start ?? "08:00"} onChange={(event) => setException({ ...exception, start: event.target.value })} /></Field><Field label="Do"><Input type="time" value={exception.end ?? "16:00"} onChange={(event) => setException({ ...exception, end: event.target.value })} /></Field></div>}
+            <Field label={t("Nazwa")}><Input value={exception.name} onChange={(event) => setException({ ...exception, name: event.target.value })} /></Field>
+            <Field label={t("Data")}><Input type="date" value={exception.date} onChange={(event) => setException({ ...exception, date: event.target.value })} /></Field>
+            <SettingSwitch label={t("Dzień zamknięty")} description={t("W tym dniu SLA nie będzie naliczane.")} checked={exception.closed} onChange={(checked) => setException({ ...exception, closed: checked })} />
+            {!exception.closed && <div className="grid grid-cols-2 gap-3"><Field label={t("Od")}><Input type="time" value={exception.start ?? "08:00"} onChange={(event) => setException({ ...exception, start: event.target.value })} /></Field><Field label={t("Do")}><Input type="time" value={exception.end ?? "16:00"} onChange={(event) => setException({ ...exception, end: event.target.value })} /></Field></div>}
           </div>
-          <DialogFooter><DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose><Button onClick={() => { if (!exception.date || !exception.name.trim()) { notify.warning("Uzupełnij nazwę i datę"); return }; setForm({ ...form, exceptions: [...form.exceptions, { ...exception, id: `ex-${Date.now()}` }] }); setExceptionOpen(false); setException({ date: "", name: "", closed: true }); notify.success("Dodano wyjątek", "Zapisz harmonogram, aby utrwalić zmianę.") }}>Dodaj wyjątek</Button></DialogFooter>
+          <DialogFooter><DialogClose render={<Button variant="outline" />}>{t("Anuluj")}</DialogClose><Button onClick={() => { if (!exception.date || !exception.name.trim()) { notify.warning(t("Uzupełnij nazwę i datę")); return }; setForm({ ...form, exceptions: [...form.exceptions, { ...exception, id: `ex-${Date.now()}` }] }); setExceptionOpen(false); setException({ date: "", name: "", closed: true }); notify.success(t("Dodano wyjątek"), t("Zapisz harmonogram, aby utrwalić zmianę.")) }}>{t("Dodaj wyjątek")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -312,27 +316,28 @@ function SchedulePanel({ data, actions }: { data: WorkScheduleSettings; actions:
 const placeholders = ["customer_name", "next_opening_date", "next_opening_time", "timezone"] as const
 
 function OutOfOfficePanel({ data, actions }: { data: OutOfOfficeSettings; actions: SettingsActions }) {
+  const t = useT()
   const [form, setForm] = useState(data)
   const preview = (form.template === data.template && data.previewMessage ? data.previewMessage : form.template)
     .replaceAll("{{customer_name}}", "Joanno")
-    .replaceAll("{{next_opening_date}}", "4 sierpnia 2026")
+    .replaceAll("{{next_opening_date}}", t("4 sierpnia 2026"))
     .replaceAll("{{next_opening_time}}", "08:00")
     .replaceAll("{{timezone}}", "Europe/Warsaw")
 
   return (
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_420px]">
-      <SettingsCard title="Poza biurem" description="Automatyczna odpowiedź wysyłana poza harmonogramem pracy.">
-        <SettingSwitch label="Włącz automatyczną odpowiedź" description="Dotyczy wszystkich włączonych kanałów." checked={form.enabled} onChange={(checked) => setForm({ ...form, enabled: checked })} />
-        <Field label="Szablon wiadomości" hint="Kliknij zmienną, aby dodać ją na końcu treści.">
+      <SettingsCard title={t("Poza biurem")} description={t("Automatyczna odpowiedź wysyłana poza harmonogramem pracy.")}>
+        <SettingSwitch label={t("Włącz automatyczną odpowiedź")} description={t("Dotyczy wszystkich włączonych kanałów.")} checked={form.enabled} onChange={(checked) => setForm({ ...form, enabled: checked })} />
+        <Field label={t("Szablon wiadomości")} hint={t("Kliknij zmienną, aby dodać ją na końcu treści.")}>
           <textarea value={form.template} onChange={(event) => setForm({ ...form, template: event.target.value })} rows={7} className="w-full resize-y rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30" />
         </Field>
         <div className="flex flex-wrap gap-2">
           {placeholders.map((placeholder) => <Button key={placeholder} variant="secondary" size="xs" onClick={() => setForm({ ...form, template: `${form.template}${form.template.endsWith(" ") ? "" : " "}{{${placeholder}}}` })}>{`{{${placeholder}}}`}</Button>)}
         </div>
-        <SettingSwitch label="Wyślij raz na okres zamknięcia" description="Klient nie otrzyma wielu identycznych wiadomości przed kolejnym otwarciem." checked={form.sendOncePerClosure} onChange={(checked) => setForm({ ...form, sendOncePerClosure: checked })} />
-        <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "outOfOffice", form, "Zapisano ustawienia nieobecności")} />
+        <SettingSwitch label={t("Wyślij raz na okres zamknięcia")} description={t("Klient nie otrzyma wielu identycznych wiadomości przed kolejnym otwarciem.")} checked={form.sendOncePerClosure} onChange={(checked) => setForm({ ...form, sendOncePerClosure: checked })} />
+        <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "outOfOffice", form, t("Zapisano ustawienia nieobecności"))} />
       </SettingsCard>
-      <Card className="h-fit"><CardHeader><CardTitle className="flex items-center gap-2"><MessageSquareText className="size-4 text-primary" /> Podgląd</CardTitle><CardDescription>Przykładowa wiadomość dla klienta.</CardDescription></CardHeader><CardContent><div className="rounded-2xl rounded-bl-sm bg-muted p-4 text-sm leading-relaxed">{preview}</div><p className="mt-3 text-xs text-muted-foreground">Zmienne zostaną uzupełnione na podstawie klienta i aktywnego harmonogramu.</p></CardContent></Card>
+      <Card className="h-fit"><CardHeader><CardTitle className="flex items-center gap-2"><MessageSquareText className="size-4 text-primary" /> {t("Podgląd")}</CardTitle><CardDescription>{t("Przykładowa wiadomość dla klienta.")}</CardDescription></CardHeader><CardContent><div className="rounded-2xl rounded-bl-sm bg-muted p-4 text-sm leading-relaxed">{preview}</div><p className="mt-3 text-xs text-muted-foreground">{t("Zmienne zostaną uzupełnione na podstawie klienta i aktywnego harmonogramu.")}</p></CardContent></Card>
     </div>
   )
 }
@@ -351,6 +356,7 @@ const integrationHealthLabels: Record<ManagedIntegration["health"], string> = {
 }
 
 function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; actions: SettingsActions }) {
+  const t = useT()
   const [configured, setConfigured] = useState<ManagedIntegration | null>(null)
   const [displayName, setDisplayName] = useState("Slack")
   const [workspaceName, setWorkspaceName] = useState("")
@@ -373,27 +379,27 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
   const test = async (integration: ManagedIntegration) => {
     try {
       await actions.testIntegration.mutateAsync(integration.id)
-      notify.success("Test połączenia zakończony powodzeniem", channelLabels[integration.platform])
+      notify.success(t("Test połączenia zakończony powodzeniem"), channelLabels[integration.platform])
     } catch (error) {
-      notify.error("Test połączenia nie powiódł się", getErrorMessage(error))
+      notify.error(t("Test połączenia nie powiódł się"), getErrorMessage(error))
     }
   }
 
   const completeConfiguration = async (integration: ManagedIntegration) => {
     try {
       await actions.setIntegrationStatus.mutateAsync({ id: integration.id, status: "enabled" })
-      notify.success("Integracja została włączona", channelLabels[integration.platform])
+      notify.success(t("Integracja została włączona"), channelLabels[integration.platform])
     } catch (error) {
-      notify.error("Nie udało się włączyć integracji", getErrorMessage(error))
+      notify.error(t("Nie udało się włączyć integracji"), getErrorMessage(error))
     }
   }
 
   const discover = async (integration: ManagedIntegration) => {
     try {
       const channels = await actions.discoverChannels.mutateAsync(integration.id)
-      notify.success("Odświeżono kanały Slack", `Znaleziono ${channels.length} kanałów dostępnych dla aplikacji.`)
+      notify.success(t("Odświeżono kanały Slack"), t("Znaleziono {{value0}} kanałów dostępnych dla aplikacji.", { value0: channels.length }))
     } catch (error) {
-      notify.error("Nie udało się pobrać kanałów Slack", getErrorMessage(error))
+      notify.error(t("Nie udało się pobrać kanałów Slack"), getErrorMessage(error))
     }
   }
 
@@ -401,14 +407,13 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
     <div className="grid gap-4">
       <Alert className="border-warning/30 bg-warning/10 text-warning-foreground">
         <TriangleAlert />
-        <AlertTitle>Zakres Microsoft Teams</AlertTitle>
+        <AlertTitle>{t("Zakres Microsoft Teams")}</AlertTitle>
         <AlertDescription>
-          Początkowo obsługiwane są standardowe kanały i czaty grupowe z RSC. Kanały prywatne i udostępnione wymagają osobnej walidacji.
-        </AlertDescription>
+          {t("Początkowo obsługiwane są standardowe kanały i czaty grupowe z RSC. Kanały prywatne i udostępnione wymagają osobnej walidacji.")} </AlertDescription>
       </Alert>
 
       <div className="flex justify-end">
-        <Button size="sm" onClick={() => openConfiguration()}><Plus /> Dodaj Slack</Button>
+        <Button size="sm" onClick={() => openConfiguration()}><Plus /> {t("Dodaj Slack")}</Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -419,7 +424,7 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                 <PlatformIcon channel={integration.platform} className="size-10" />
                 <div className="min-w-0 flex-1">
                   <CardTitle>{channelLabels[integration.platform]}</CardTitle>
-                  <CardDescription className="truncate">{integration.workspace || "Nie skonfigurowano"}</CardDescription>
+                  <CardDescription className="truncate">{integration.workspace || t("Nie skonfigurowano")}</CardDescription>
                 </div>
                 <Badge
                   variant="secondary"
@@ -432,16 +437,16 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                   }
                 >
                   {integration.status === "enabled" ? <CheckCircle2 /> : integration.status === "configuring" ? <TriangleAlert /> : <Unplug />}
-                  {integrationStatusLabels[integration.status]}
+                  {t(integrationStatusLabels[integration.status])}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent className="grid gap-4">
               <dl className="grid gap-3 text-xs">
-                <div className="flex items-start justify-between gap-3"><dt className="text-muted-foreground">Obszar roboczy / dzierżawa</dt><dd className="max-w-48 truncate text-right font-mono">{integration.workspace || "—"}</dd></div>
-                <div className="flex items-start justify-between gap-3"><dt className="text-muted-foreground">Ostatnie zdarzenie</dt><dd className="text-right">{integration.lastEventAt ? formatDateTime(integration.lastEventAt) : "Brak"}</dd></div>
+                <div className="flex items-start justify-between gap-3"><dt className="text-muted-foreground">{t("Obszar roboczy / dzierżawa")}</dt><dd className="max-w-48 truncate text-right font-mono">{integration.workspace || "—"}</dd></div>
+                <div className="flex items-start justify-between gap-3"><dt className="text-muted-foreground">{t("Ostatnie zdarzenie")}</dt><dd className="text-right">{integration.lastEventAt ? formatDateTime(integration.lastEventAt) : t("Brak")}</dd></div>
                 <div className="flex items-center justify-between gap-3">
-                  <dt className="text-muted-foreground">Health check</dt>
+                  <dt className="text-muted-foreground">{t("Health check")}</dt>
                   <dd className="flex items-center gap-1.5">
                     {integration.health === "healthy"
                       ? <CheckCircle2 className="size-3.5 text-success" />
@@ -450,17 +455,17 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                         : integration.health === "unknown"
                           ? <Info className="size-3.5 text-muted-foreground" />
                           : <Unplug className="size-3.5 text-destructive" />}
-                    {integrationHealthLabels[integration.health]}
+                    {t(integrationHealthLabels[integration.health])}
                   </dd>
                 </div>
               </dl>
               <div className="flex flex-wrap gap-2 border-t pt-3">
-                <Button variant="outline" size="sm" onClick={() => openConfiguration(integration)}><Settings2 /> Konfiguruj</Button>
-                <Button variant="outline" size="sm" disabled={integration.status === "disabled" || !integration.hasSecretReference || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> Testuj</Button>
-                {integration.platform === "slack" && <Button variant="outline" size="sm" disabled={integration.status === "disabled" || integration.health !== "healthy" || actions.discoverChannels.isPending} onClick={() => void discover(integration)}><RefreshCw /> Pobierz kanały</Button>}
-                {integration.status === "configuring" && integration.health === "healthy" && <Button size="sm" onClick={() => void completeConfiguration(integration)}><CheckCircle2 /> Włącz</Button>}
-                {integration.status === "disabled" && <Button size="sm" disabled={!integration.hasSecretReference || actions.setIntegrationStatus.isPending} onClick={() => void completeConfiguration(integration)}><CheckCircle2 /> Włącz</Button>}
-                {integration.status !== "disabled" && <Button variant="destructive" size="sm" onClick={() => setDisabledIntegration(integration)}><Unplug /> Wyłącz</Button>}
+                <Button variant="outline" size="sm" onClick={() => openConfiguration(integration)}><Settings2 /> {t("Konfiguruj")}</Button>
+                <Button variant="outline" size="sm" disabled={integration.status === "disabled" || !integration.hasSecretReference || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> {t("Testuj")}</Button>
+                {integration.platform === "slack" && <Button variant="outline" size="sm" disabled={integration.status === "disabled" || integration.health !== "healthy" || actions.discoverChannels.isPending} onClick={() => void discover(integration)}><RefreshCw /> {t("Pobierz kanały")}</Button>}
+                {integration.status === "configuring" && integration.health === "healthy" && <Button size="sm" onClick={() => void completeConfiguration(integration)}><CheckCircle2 /> {t("Włącz")}</Button>}
+                {integration.status === "disabled" && <Button size="sm" disabled={!integration.hasSecretReference || actions.setIntegrationStatus.isPending} onClick={() => void completeConfiguration(integration)}><CheckCircle2 /> {t("Włącz")}</Button>}
+                {integration.status !== "disabled" && <Button variant="destructive" size="sm" onClick={() => setDisabledIntegration(integration)}><Unplug /> {t("Wyłącz")}</Button>}
               </div>
             </CardContent>
           </Card>
@@ -469,24 +474,24 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
 
       <Dialog open={Boolean(configured)} onOpenChange={(open) => !open && setConfigured(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{configured?.id ? "Konfiguruj Slack" : "Dodaj Slack"}</DialogTitle><DialogDescription>Bezpieczny tryb konfiguracji przez zewnętrzną referencję sekretu. Wartości tokenu i signing secretu nigdy nie trafiają do przeglądarki ani bazy danych.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{configured?.id ? t("Konfiguruj Slack") : t("Dodaj Slack")}</DialogTitle><DialogDescription>{t("Bezpieczny tryb konfiguracji przez zewnętrzną referencję sekretu. Wartości tokenu i signing secretu nigdy nie trafiają do przeglądarki ani bazy danych.")}</DialogDescription></DialogHeader>
           <div className="grid gap-4">
-            <Field label="Nazwa połączenia"><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Slack — Support" /></Field>
-            <Field label="Nazwa workspace"><Input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder="Firma Support" /></Field>
-            <Field label="Slack Workspace ID" hint="Identyfikator team_id zwracany przez Slack, np. T012ABCDEF."><Input value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} placeholder="T012ABCDEF" /></Field>
-            <Field label="Referencja sekretu" hint="Względny katalog pod USI_INTEGRATION_SECRETS_DIRECTORY."><Input value={secretRef} onChange={(event) => setSecretRef(event.target.value)} placeholder="slack/firma-support" /></Field>
+            <Field label={t("Nazwa połączenia")}><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={t("Slack — Support")} /></Field>
+            <Field label={t("Nazwa workspace")}><Input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder={t("Firma Support")} /></Field>
+            <Field label={t("Slack Workspace ID")} hint={t("Identyfikator team_id zwracany przez Slack, np. T012ABCDEF.")}><Input value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} placeholder="T012ABCDEF" /></Field>
+            <Field label={t("Referencja sekretu")} hint={t("Względny katalog pod USI_INTEGRATION_SECRETS_DIRECTORY.")}><Input value={secretRef} onChange={(event) => setSecretRef(event.target.value)} placeholder="slack/firma-support" /></Field>
           </div>
-          <Alert><Info /><AlertDescription>W tym katalogu muszą istnieć pliki <code>slack-bot-token</code> i <code>slack-signing-secret</code>. Po zapisie uruchom test, pobierz kanały i włącz integrację.</AlertDescription></Alert>
+          <Alert><Info /><AlertDescription>{t("W tym katalogu muszą istnieć pliki")} <code>slack-bot-token</code> {t("i")} <code>slack-signing-secret</code>{t(". Po zapisie uruchom test, pobierz kanały i włącz integrację.")}</AlertDescription></Alert>
           <DialogFooter>
-            <DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose>
+            <DialogClose render={<Button variant="outline" />}>{t("Anuluj")}</DialogClose>
             <Button disabled={!displayName.trim() || !workspaceName.trim() || !workspaceId.trim() || !secretRef.trim() || actions.configureIntegration.isPending} onClick={async () => {
               if (!configured) return
               try {
                 await actions.configureIntegration.mutateAsync({ id: configured.id || undefined, platform: "slack", displayName, workspaceId, workspaceName, secretRef })
-                notify.success("Zapisano konfigurację", "Slack")
+                notify.success(t("Zapisano konfigurację"), "Slack")
                 setConfigured(null)
-              } catch (error) { notify.error("Nie udało się zapisać konfiguracji", getErrorMessage(error)) }
-            }}>{actions.configureIntegration.isPending ? "Zapisywanie…" : "Zapisz konfigurację"}</Button>
+              } catch (error) { notify.error(t("Nie udało się zapisać konfiguracji"), getErrorMessage(error)) }
+            }}>{actions.configureIntegration.isPending ? t("Zapisywanie…") : t("Zapisz konfigurację")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -494,17 +499,17 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
       <ConfirmDialog
         open={Boolean(disabledIntegration)}
         onOpenChange={(open) => !open && setDisabledIntegration(null)}
-        title="Wyłączyć integrację?"
-        description={disabledIntegration ? `Nowe zdarzenia z ${channelLabels[disabledIntegration.platform]} nie będą tworzyły nowych spraw. Istniejące case’y pozostaną dostępne.` : undefined}
-        confirmLabel="Wyłącz"
+        title={t("Wyłączyć integrację?")}
+        description={disabledIntegration ? t("Nowe zdarzenia z {{value0}} nie będą tworzyły nowych spraw. Istniejące case’y pozostaną dostępne.", { value0: channelLabels[disabledIntegration.platform] }) : undefined}
+        confirmLabel={t("Wyłącz")}
         destructive
         onConfirm={() => {
           if (!disabledIntegration) return
           const integration = disabledIntegration
           void actions.setIntegrationStatus.mutateAsync({ id: integration.id, status: "disabled" }).then(() => {
-            notify.success("Integracja została wyłączona", channelLabels[integration.platform])
+            notify.success(t("Integracja została wyłączona"), channelLabels[integration.platform])
             setDisabledIntegration(null)
-          }).catch((error) => notify.error("Nie udało się wyłączyć integracji", getErrorMessage(error)))
+          }).catch((error) => notify.error(t("Nie udało się wyłączyć integracji"), getErrorMessage(error)))
         }}
       />
     </div>
@@ -512,6 +517,7 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
 }
 
 function CustomersPanel({ data, actions }: { data: ManagedCustomer[]; actions: SettingsActions }) {
+  const t = useT()
   const [edited, setEdited] = useState<ManagedCustomer | null>(null)
   const [name, setName] = useState("")
   const [externalRef, setExternalRef] = useState("")
@@ -524,56 +530,57 @@ function CustomersPanel({ data, actions }: { data: ManagedCustomer[]; actions: S
   }
 
   return (
-    <SettingsCard title="Klienci" description="Klienci przypisywani do monitorowanych kanałów i spraw." actions={<Button size="sm" onClick={() => open()}><Plus /> Dodaj klienta</Button>}>
+    <SettingsCard title={t("Klienci")} description={t("Klienci przypisywani do monitorowanych kanałów i spraw.")} actions={<Button size="sm" onClick={() => open()}><Plus /> {t("Dodaj klienta")}</Button>}>
       <div className="overflow-hidden rounded-lg border">
         <Table>
-          <TableHeader><TableRow className="bg-muted/40"><TableHead>Nazwa</TableHead><TableHead>Identyfikator zewnętrzny</TableHead><TableHead>Status</TableHead><TableHead><span className="sr-only">Akcje</span></TableHead></TableRow></TableHeader>
-          <TableBody>{data.map((customer) => <TableRow key={customer.id}><TableCell className="font-medium">{customer.name}</TableCell><TableCell className="font-mono text-xs">{customer.externalRef ?? "—"}</TableCell><TableCell><EnabledState enabled={customer.active} /></TableCell><TableCell className="text-right"><Button variant="ghost" size="icon-sm" aria-label={`Edytuj ${customer.name}`} onClick={() => open(customer)}><Pencil /></Button>{customer.active && <Button variant="ghost" size="icon-sm" aria-label={`Dezaktywuj ${customer.name}`} onClick={() => setDeactivated(customer)}><Unplug /></Button>}</TableCell></TableRow>)}</TableBody>
+          <TableHeader><TableRow className="bg-muted/40"><TableHead>{t("Nazwa")}</TableHead><TableHead>{t("Identyfikator zewnętrzny")}</TableHead><TableHead>{t("Status")}</TableHead><TableHead><span className="sr-only">{t("Akcje")}</span></TableHead></TableRow></TableHeader>
+          <TableBody>{data.map((customer) => <TableRow key={customer.id}><TableCell className="font-medium">{customer.name}</TableCell><TableCell className="font-mono text-xs">{customer.externalRef ?? "—"}</TableCell><TableCell><EnabledState enabled={customer.active} /></TableCell><TableCell className="text-right"><Button variant="ghost" size="icon-sm" aria-label={t("Edytuj {{name}}", { name: customer.name })} onClick={() => open(customer)}><Pencil /></Button>{customer.active && <Button variant="ghost" size="icon-sm" aria-label={t("Dezaktywuj {{name}}", { name: customer.name })} onClick={() => setDeactivated(customer)}><Unplug /></Button>}</TableCell></TableRow>)}</TableBody>
         </Table>
       </div>
       <Dialog open={Boolean(edited)} onOpenChange={(value) => !value && setEdited(null)}>
-        <DialogContent><DialogHeader><DialogTitle>{edited?.id ? "Edytuj klienta" : "Dodaj klienta"}</DialogTitle><DialogDescription>Nazwa jest widoczna w skrzynce. Identyfikator zewnętrzny jest opcjonalny.</DialogDescription></DialogHeader><Field label="Nazwa"><Input value={name} onChange={(event) => setName(event.target.value)} /></Field><Field label="Identyfikator zewnętrzny"><Input value={externalRef} onChange={(event) => setExternalRef(event.target.value)} /></Field><DialogFooter><DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose><Button disabled={!name.trim() || actions.saveCustomer.isPending} onClick={() => { if (!edited) return; void actions.saveCustomer.mutateAsync({ id: edited.id || undefined, name, externalRef: externalRef.trim() || undefined }).then(() => { notify.success("Zapisano klienta", name); setEdited(null) }).catch((error) => notify.error("Nie udało się zapisać klienta", getErrorMessage(error))) }}>Zapisz</Button></DialogFooter></DialogContent>
+        <DialogContent><DialogHeader><DialogTitle>{edited?.id ? t("Edytuj klienta") : t("Dodaj klienta")}</DialogTitle><DialogDescription>{t("Nazwa jest widoczna w skrzynce. Identyfikator zewnętrzny jest opcjonalny.")}</DialogDescription></DialogHeader><Field label={t("Nazwa")}><Input value={name} onChange={(event) => setName(event.target.value)} /></Field><Field label={t("Identyfikator zewnętrzny")}><Input value={externalRef} onChange={(event) => setExternalRef(event.target.value)} /></Field><DialogFooter><DialogClose render={<Button variant="outline" />}>{t("Anuluj")}</DialogClose><Button disabled={!name.trim() || actions.saveCustomer.isPending} onClick={() => { if (!edited) return; void actions.saveCustomer.mutateAsync({ id: edited.id || undefined, name, externalRef: externalRef.trim() || undefined }).then(() => { notify.success(t("Zapisano klienta"), name); setEdited(null) }).catch((error) => notify.error(t("Nie udało się zapisać klienta"), getErrorMessage(error))) }}>{t("Zapisz")}</Button></DialogFooter></DialogContent>
       </Dialog>
-      <ConfirmDialog open={Boolean(deactivated)} onOpenChange={(value) => !value && setDeactivated(null)} title="Dezaktywować klienta?" description={deactivated ? `Klient „${deactivated.name}” nie będzie dostępny do nowych przypisań.` : undefined} confirmLabel="Dezaktywuj" destructive onConfirm={() => { if (!deactivated) return; void actions.deactivateCustomer.mutateAsync(deactivated.id).then(() => { notify.success("Klient został dezaktywowany", deactivated.name); setDeactivated(null) }).catch((error) => notify.error("Nie udało się dezaktywować klienta", getErrorMessage(error))) }} />
+      <ConfirmDialog open={Boolean(deactivated)} onOpenChange={(value) => !value && setDeactivated(null)} title={t("Dezaktywować klienta?")} description={deactivated ? t("Klient „{{value0}}” nie będzie dostępny do nowych przypisań.", { value0: deactivated.name }) : undefined} confirmLabel={t("Dezaktywuj")} destructive onConfirm={() => { if (!deactivated) return; void actions.deactivateCustomer.mutateAsync(deactivated.id).then(() => { notify.success(t("Klient został dezaktywowany"), deactivated.name); setDeactivated(null) }).catch((error) => notify.error(t("Nie udało się dezaktywować klienta"), getErrorMessage(error))) }} />
     </SettingsCard>
   )
 }
 
 function ChannelsPanel({ data, customers, actions }: { data: ManagedChannel[]; customers: ManagedCustomer[]; actions: SettingsActions }) {
+  const t = useT()
   const configure = async (channel: ManagedChannel, customerId: string | undefined, ignored: boolean) => {
     try {
       await actions.configureChannel.mutateAsync({ id: channel.id, customerId, ignored, groupingStrategy: channel.groupingStrategy })
-      notify.success("Zapisano kanał", channel.channelName)
+      notify.success(t("Zapisano kanał"), channel.channelName)
     } catch (error) {
-      notify.error("Nie udało się zapisać kanału", getErrorMessage(error))
+      notify.error(t("Nie udało się zapisać kanału"), getErrorMessage(error))
     }
   }
 
   return (
-    <SettingsCard title="Kanały Slack" description="Przypisz dostępne kanały do klientów i określ regułę monitorowania.">
+    <SettingsCard title={t("Kanały Slack")} description={t("Przypisz dostępne kanały do klientów i określ regułę monitorowania.")}>
       <Alert>
         <Info />
-        <AlertTitle>Wiadomości bez case’a i SLA</AlertTitle>
-        <AlertDescription>Kanały ignorowane nie tworzą nowych spraw. Wiadomości Slack bez przypisanego klienta trafiają do skrzynki jako „Nie przypisano”.</AlertDescription>
+        <AlertTitle>{t("Wiadomości bez case’a i SLA")}</AlertTitle>
+        <AlertDescription>{t("Kanały ignorowane nie tworzą nowych spraw. Wiadomości Slack bez przypisanego klienta trafiają do skrzynki jako „Nie przypisano”.")}</AlertDescription>
       </Alert>
       <div className="overflow-hidden rounded-lg border">
         <Table>
-          <TableHeader><TableRow className="bg-muted/40"><TableHead>Platforma</TableHead><TableHead>Kanał</TableHead><TableHead>Klient</TableHead><TableHead>Stan</TableHead><TableHead>Grupowanie</TableHead><TableHead>Ostatnia wiadomość</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow className="bg-muted/40"><TableHead>{t("Platforma")}</TableHead><TableHead>{t("Kanał")}</TableHead><TableHead>{t("Klient")}</TableHead><TableHead>{t("Stan")}</TableHead><TableHead>{t("Grupowanie")}</TableHead><TableHead>{t("Ostatnia wiadomość")}</TableHead></TableRow></TableHeader>
           <TableBody>
             {data.map((channel) => (
               <TableRow key={channel.id}>
                 <TableCell><div className="flex items-center gap-2"><PlatformIcon channel={channel.platform} /> <span className="text-xs">{channelLabels[channel.platform]}</span></div></TableCell>
-                <TableCell className="font-medium">{channel.channelName}</TableCell>
-                <TableCell><Select value={channel.customerId ?? "__unmapped__"} onValueChange={(value) => void configure(channel, value === "__unmapped__" ? undefined : String(value), channel.ignored)}><SelectTrigger className="w-52"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__unmapped__">Nie przypisano</SelectItem>{customers.filter((customer) => customer.active).map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>)}</SelectContent></Select></TableCell>
-                <TableCell><div className="flex items-center gap-2"><Switch checked={!channel.ignored} onCheckedChange={(checked) => void configure(channel, channel.customerId, !checked)} aria-label={`${channel.channelName}: monitoring`} /><span className={`text-xs ${channel.ignored || !channel.customerId ? "text-warning-foreground" : "text-success"}`}>{!channel.active ? "Nieaktywny" : channel.ignored ? "Ignorowany" : !channel.customerId ? "Nieprzypisany" : "Monitorowany"}</span></div></TableCell>
-                <TableCell className="font-mono text-xs">{channel.platform === "telegram" ? <Select value={channel.groupingStrategy} onValueChange={(value) => { if (channel.customerId) void actions.configureChannel.mutateAsync({ id: channel.id, customerId: channel.customerId, ignored: channel.ignored, groupingStrategy: value as ChannelGroupingStrategy }).catch((error) => notify.error("Nie udało się zapisać grupowania", getErrorMessage(error))) }}><SelectTrigger aria-label={`${channel.channelName}: grupowanie`}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="TELEGRAM_TOPIC">Temat forum</SelectItem><SelectItem value="TELEGRAM_CHAT_ACTIVE_CASE">Aktywny case na czat</SelectItem></SelectContent></Select> : channel.groupingStrategy === "SLACK_ROOT_THREAD" ? "Root + wątek" : channel.groupingStrategy}</TableCell>
-                <TableCell className="text-xs text-muted-foreground">{channel.lastMessageAt ? formatDateTime(channel.lastMessageAt) : "Brak"}</TableCell>
+                <TableCell className="font-medium">{channel.channelName} · {channel.active ? t("Aktywny") : t("Nieaktywny")}</TableCell>
+                <TableCell><Select value={channel.customerId ?? "__unmapped__"} onValueChange={(value) => void configure(channel, value === "__unmapped__" ? undefined : String(value), channel.ignored)}><SelectTrigger className="w-52"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__unmapped__">{t("Nie przypisano")}</SelectItem>{customers.filter((customer) => customer.active).map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>)}</SelectContent></Select></TableCell>
+                <TableCell><div className="flex items-center gap-2"><Switch checked={!channel.ignored} onCheckedChange={(checked) => void configure(channel, channel.customerId, !checked)} aria-label={`${channel.channelName}: monitoring`} /><span className={`text-xs ${channel.ignored || !channel.customerId ? "text-warning-foreground" : "text-success"}`}>{!channel.active ? t("Nieaktywny") : channel.ignored ? t("Ignorowany") : !channel.customerId ? t("Nieprzypisany") : t("Monitorowany")}</span></div></TableCell>
+                <TableCell className="font-mono text-xs">{channel.platform === "telegram" ? <Select value={channel.groupingStrategy} onValueChange={(value) => { if (channel.customerId) void actions.configureChannel.mutateAsync({ id: channel.id, customerId: channel.customerId, ignored: channel.ignored, groupingStrategy: value as ChannelGroupingStrategy }).catch((error) => notify.error(t("Nie udało się zapisać grupowania"), getErrorMessage(error))) }}><SelectTrigger aria-label={t("{{value0}}: grupowanie", { value0: channel.channelName })}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="TELEGRAM_TOPIC">{t("Temat forum")}</SelectItem><SelectItem value="TELEGRAM_CHAT_ACTIVE_CASE">{t("Aktywny case na czat")}</SelectItem></SelectContent></Select> : channel.groupingStrategy === "SLACK_ROOT_THREAD" ? t("Root + wątek") : channel.groupingStrategy}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{channel.lastMessageAt ? formatDateTime(channel.lastMessageAt) : t("Brak")}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-      <p className="text-xs text-muted-foreground">Zmiana dotyczy nowych wiadomości przychodzących po zapisaniu reguły.</p>
+      <p className="text-xs text-muted-foreground">{t("Zmiana dotyczy nowych wiadomości przychodzących po zapisaniu reguły.")}</p>
     </SettingsCard>
   )
 }
@@ -597,6 +604,7 @@ const blankNotification: NotificationDestination = {
 }
 
 function NotificationsPanel({ data, deliveries, integrations, actions }: { data: NotificationDestination[]; deliveries: NotificationDelivery[]; integrations: ManagedIntegration[]; actions: SettingsActions }) {
+  const t = useT()
   const [edited, setEdited] = useState<NotificationDestination | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [removed, setRemoved] = useState<NotificationDestination | null>(null)
@@ -610,28 +618,28 @@ function NotificationsPanel({ data, deliveries, integrations, actions }: { data:
       notify.success(message)
       setDialogOpen(false)
       setRemoved(null)
-    } catch (error) { notify.error("Nie udało się zapisać powiadomień", getErrorMessage(error)) }
+    } catch (error) { notify.error(t("Nie udało się zapisać powiadomień"), getErrorMessage(error)) }
   }
 
   const toggle = async (item: NotificationDestination, enabled: boolean) => {
     try {
       await actions.toggleNotification.mutateAsync({ id: item.id, enabled })
-      notify.success(enabled ? "Powiadomienia włączone" : "Powiadomienia wyłączone", item.name)
-    } catch (error) { notify.error("Nie udało się zmienić powiadomień", getErrorMessage(error)) }
+      notify.success(enabled ? t("Powiadomienia włączone") : t("Powiadomienia wyłączone"), item.name)
+    } catch (error) { notify.error(t("Nie udało się zmienić powiadomień"), getErrorMessage(error)) }
   }
 
   const replay = async (delivery: NotificationDelivery) => {
     try {
       await actions.replayNotificationDelivery.mutateAsync(delivery.id)
-      notify.success("Dostawa została ponownie zakolejkowana")
-    } catch (error) { notify.error("Nie udało się ponowić dostawy", getErrorMessage(error)) }
+      notify.success(t("Dostawa została ponownie zakolejkowana"))
+    } catch (error) { notify.error(t("Nie udało się ponowić dostawy"), getErrorMessage(error)) }
   }
 
   return (
-    <SettingsCard title="Cele powiadomień" description="Alerty operacyjne wysyłane do wybranych kanałów." actions={<Button size="sm" onClick={openCreate}><Plus /> Dodaj cel</Button>}>
+    <SettingsCard title={t("Cele powiadomień")} description={t("Alerty operacyjne wysyłane do wybranych kanałów.")} actions={<Button size="sm" onClick={openCreate}><Plus /> {t("Dodaj cel")}</Button>}>
       <div className="overflow-hidden rounded-lg border">
         <Table>
-          <TableHeader><TableRow className="bg-muted/40"><TableHead>Nazwa</TableHead><TableHead>Dostawca</TableHead><TableHead>Integracja</TableHead><TableHead>Kanał</TableHead><TableHead className="min-w-80">Typy</TableHead><TableHead>Włączone</TableHead><TableHead><span className="sr-only">Akcje</span></TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow className="bg-muted/40"><TableHead>{t("Nazwa")}</TableHead><TableHead>{t("Dostawca")}</TableHead><TableHead>{t("Integracja")}</TableHead><TableHead>{t("Kanał")}</TableHead><TableHead className="min-w-80">{t("Typy")}</TableHead><TableHead>{t("Włączone")}</TableHead><TableHead><span className="sr-only">{t("Akcje")}</span></TableHead></TableRow></TableHeader>
           <TableBody>
             {data.map((item) => (
               <TableRow key={item.id}>
@@ -639,11 +647,11 @@ function NotificationsPanel({ data, deliveries, integrations, actions }: { data:
                 <TableCell><div className="flex items-center gap-2"><PlatformIcon channel={item.provider} /> {channelLabels[item.provider]}</div></TableCell>
                 <TableCell className="font-mono text-xs">{integrations.find((integration) => integration.id === item.integrationId)?.workspace ?? "—"}</TableCell>
                 <TableCell>{item.channelName}</TableCell>
-                <TableCell><div className="flex max-w-96 flex-wrap gap-1">{item.types.map((type) => <Badge key={type} variant="secondary">{notificationTypeLabels[type]}</Badge>)}</div></TableCell>
-                <TableCell><div className="flex items-center gap-2"><Switch checked={item.enabled} onCheckedChange={(checked) => void toggle(item, checked)} aria-label={`${item.name}: ${item.enabled ? "włączone" : "wyłączone"}`} /><EnabledState enabled={item.enabled} /></div></TableCell>
+                <TableCell><div className="flex max-w-96 flex-wrap gap-1">{item.types.map((type) => <Badge key={type} variant="secondary">{t(notificationTypeLabels[type])}</Badge>)}</div></TableCell>
+                <TableCell><div className="flex items-center gap-2"><Switch checked={item.enabled} onCheckedChange={(checked) => void toggle(item, checked)} aria-label={`${item.name}: ${item.enabled ? t("włączone") : t("wyłączone")}`} /><EnabledState enabled={item.enabled} /></div></TableCell>
                 <TableCell>
-                  <Button variant="ghost" size="icon-sm" aria-label={`Edytuj ${item.name}`} onClick={() => openEdit(item)}><Pencil /></Button>
-                  <Button variant="ghost" size="icon-sm" aria-label={`Usuń ${item.name}`} onClick={() => setRemoved(item)}><Trash2 /></Button>
+                  <Button variant="ghost" size="icon-sm" aria-label={t("Edytuj {{name}}", { name: item.name })} onClick={() => openEdit(item)}><Pencil /></Button>
+                  <Button variant="ghost" size="icon-sm" aria-label={t("Usuń {{value0}}", { value0: item.name })} onClick={() => setRemoved(item)}><Trash2 /></Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -653,37 +661,37 @@ function NotificationsPanel({ data, deliveries, integrations, actions }: { data:
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
-          <DialogHeader><DialogTitle>{edited?.id ? "Edytuj cel powiadomień" : "Dodaj cel powiadomień"}</DialogTitle><DialogDescription>Wybierz integrację, kanał docelowy i zdarzenia generujące alert.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{edited?.id ? t("Edytuj cel powiadomień") : t("Dodaj cel powiadomień")}</DialogTitle><DialogDescription>{t("Wybierz integrację, kanał docelowy i zdarzenia generujące alert.")}</DialogDescription></DialogHeader>
           {edited && <div className="grid gap-4">
-            <Field label="Nazwa"><Input value={edited.name} onChange={(event) => setEdited({ ...edited, name: event.target.value })} /></Field>
-            <Field label="Integracja">
+            <Field label={t("Nazwa")}><Input value={edited.name} onChange={(event) => setEdited({ ...edited, name: event.target.value })} /></Field>
+            <Field label={t("Integracja")}>
               <Select value={edited.integrationId} onValueChange={(value) => { const integration = integrations.find((item) => item.id === String(value)); if (integration) setEdited({ ...edited, integrationId: integration.id, provider: integration.platform }) }}>
                 <SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{integrations.map((integration) => <SelectItem key={integration.id} value={integration.id}>{channelLabels[integration.platform]} · {integration.workspace}</SelectItem>)}</SelectContent>
               </Select>
             </Field>
-            <Field label="Kanał docelowy"><Input value={edited.channelName} onChange={(event) => setEdited({ ...edited, channelName: event.target.value })} placeholder="#support-alerts" /></Field>
-            <fieldset className="grid gap-2 rounded-lg border p-3"><legend className="px-1 text-sm font-medium">Typy powiadomień</legend>{(Object.entries(notificationTypeLabels) as [NotificationType, string][]).map(([type, label]) => <label key={type} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-primary" checked={edited.types.includes(type)} onChange={(event) => setEdited({ ...edited, types: event.target.checked ? [...edited.types, type] : edited.types.filter((item) => item !== type) })} />{label}</label>)}</fieldset>
-            <SettingSwitch label="Cel aktywny" description="Wyłączony cel nie otrzymuje żadnych alertów." checked={edited.enabled} onChange={(enabled) => setEdited({ ...edited, enabled })} />
+            <Field label={t("Kanał docelowy")}><Input value={edited.channelName} onChange={(event) => setEdited({ ...edited, channelName: event.target.value })} placeholder="#support-alerts" /></Field>
+            <fieldset className="grid gap-2 rounded-lg border p-3"><legend className="px-1 text-sm font-medium">{t("Typy powiadomień")}</legend>{(Object.entries(notificationTypeLabels) as [NotificationType, string][]).map(([type, label]) => <label key={type} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-primary" checked={edited.types.includes(type)} onChange={(event) => setEdited({ ...edited, types: event.target.checked ? [...edited.types, type] : edited.types.filter((item) => item !== type) })} />{t(label)}</label>)}</fieldset>
+            <SettingSwitch label={t("Cel aktywny")} description={t("Wyłączony cel nie otrzymuje żadnych alertów.")} checked={edited.enabled} onChange={(enabled) => setEdited({ ...edited, enabled })} />
           </div>}
-          <DialogFooter><DialogClose render={<Button variant="outline" />}>Anuluj</DialogClose><Button disabled={!edited?.name.trim() || !edited.channelName.trim() || edited.types.length === 0 || actions.saveSection.isPending} onClick={() => { if (!edited) return; const saved = { ...edited, id: edited.id || `not-${Date.now()}` }; const next = edited.id ? data.map((item) => item.id === edited.id ? saved : item) : [...data, saved]; void saveDestinations(next, edited.id ? "Zapisano cel powiadomień" : "Dodano cel powiadomień") }}>Zapisz</Button></DialogFooter>
+          <DialogFooter><DialogClose render={<Button variant="outline" />}>{t("Anuluj")}</DialogClose><Button disabled={!edited?.name.trim() || !edited.channelName.trim() || edited.types.length === 0 || actions.saveSection.isPending} onClick={() => { if (!edited) return; const saved = { ...edited, id: edited.id || `not-${Date.now()}` }; const next = edited.id ? data.map((item) => item.id === edited.id ? saved : item) : [...data, saved]; void saveDestinations(next, edited.id ? t("Zapisano cel powiadomień") : t("Dodano cel powiadomień")) }}>{t("Zapisz")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog open={Boolean(removed)} onOpenChange={(open) => !open && setRemoved(null)} title="Usunąć cel powiadomień?" description={removed ? `Alerty nie będą już wysyłane do „${removed.name}”.` : undefined} confirmLabel="Usuń" destructive onConfirm={() => { if (removed) void saveDestinations(data.filter((item) => item.id !== removed.id), "Usunięto cel powiadomień") }} />
+      <ConfirmDialog open={Boolean(removed)} onOpenChange={(open) => !open && setRemoved(null)} title={t("Usunąć cel powiadomień?")} description={removed ? t("Alerty nie będą już wysyłane do „{{value0}}”.", { value0: removed.name }) : undefined} confirmLabel={t("Usuń")} destructive onConfirm={() => { if (removed) void saveDestinations(data.filter((item) => item.id !== removed.id), t("Usunięto cel powiadomień")) }} />
 
       <div className="mt-6 grid gap-2">
-        <div><h3 className="text-sm font-semibold">Ostatnie dostawy</h3><p className="text-xs text-muted-foreground">Statusy, próby i bezpieczne kody błędów; treści wiadomości oraz sekrety nie są wyświetlane.</p></div>
+        <div><h3 className="text-sm font-semibold">{t("Ostatnie dostawy")}</h3><p className="text-xs text-muted-foreground">{t("Statusy, próby i bezpieczne kody błędów; treści wiadomości oraz sekrety nie są wyświetlane.")}</p></div>
         <div className="overflow-x-auto rounded-lg border">
           <Table>
-            <TableHeader><TableRow className="bg-muted/40"><TableHead>Zdarzenie</TableHead><TableHead>Cel</TableHead><TableHead>Status</TableHead><TableHead>Próby</TableHead><TableHead>Utworzono</TableHead><TableHead>Błąd</TableHead><TableHead><span className="sr-only">Akcja</span></TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow className="bg-muted/40"><TableHead>{t("Zdarzenie")}</TableHead><TableHead>{t("Cel")}</TableHead><TableHead>{t("Status")}</TableHead><TableHead>{t("Próby")}</TableHead><TableHead>{t("Utworzono")}</TableHead><TableHead>{t("Błąd")}</TableHead><TableHead><span className="sr-only">{t("Akcja")}</span></TableHead></TableRow></TableHeader>
             <TableBody>{deliveries.map((delivery) => <TableRow key={delivery.id}>
               <TableCell className="font-mono text-xs">{delivery.eventType}</TableCell>
               <TableCell>{delivery.targetRef}</TableCell>
-              <TableCell><Badge variant={delivery.status === "SENT" ? "secondary" : delivery.status === "DLQ" ? "destructive" : "outline"}>{delivery.status}</Badge></TableCell>
+              <TableCell><Badge variant={delivery.status === "SENT" ? "secondary" : delivery.status === "DLQ" ? "destructive" : "outline"}>{t(delivery.status)}</Badge></TableCell>
               <TableCell className="tabular-nums">{delivery.attempts}</TableCell>
               <TableCell className="text-xs text-muted-foreground">{formatDateTime(delivery.createdAt)}</TableCell>
               <TableCell className="font-mono text-xs">{delivery.lastErrorCode ?? delivery.terminalReason ?? "—"}</TableCell>
-              <TableCell><Button size="sm" variant="outline" disabled={delivery.status !== "DLQ" || actions.replayNotificationDelivery.isPending} onClick={() => void replay(delivery)}><RefreshCw /> Ponów</Button></TableCell>
+              <TableCell><Button size="sm" variant="outline" disabled={delivery.status !== "DLQ" || actions.replayNotificationDelivery.isPending} onClick={() => void replay(delivery)}><RefreshCw /> {t("Ponów")}</Button></TableCell>
             </TableRow>)}</TableBody>
           </Table>
         </div>
@@ -693,6 +701,7 @@ function NotificationsPanel({ data, deliveries, integrations, actions }: { data:
 }
 
 function PermissionsPanel({ data, actions }: { data: RolePermissions[]; actions: SettingsActions }) {
+  const t = useT()
   const [form, setForm] = useState(data)
 
   const toggle = (role: RolePermissions["role"], permission: AdministrationPermission, checked: boolean) => {
@@ -703,22 +712,22 @@ function PermissionsPanel({ data, actions }: { data: RolePermissions[]; actions:
   }
 
   return (
-    <SettingsCard title="Uprawnienia ról" description="Granularny zakres funkcji administracyjnych. Rola Użytkownik nie otrzymuje uprawnień administracyjnych.">
+    <SettingsCard title={t("Uprawnienia ról")} description={t("Granularny zakres funkcji administracyjnych. Rola Użytkownik nie otrzymuje uprawnień administracyjnych.")}>
       <div className="overflow-hidden rounded-lg border">
         <Table>
-          <TableHeader><TableRow className="bg-muted/40"><TableHead>Uprawnienie</TableHead><TableHead className="w-32 text-center">Użytkownik</TableHead><TableHead className="w-32 text-center">Administrator</TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow className="bg-muted/40"><TableHead>{t("Uprawnienie")}</TableHead><TableHead className="w-32 text-center">{t("Użytkownik")}</TableHead><TableHead className="w-32 text-center">{t("Administrator")}</TableHead></TableRow></TableHeader>
           <TableBody>
             {allAdministrationPermissions.map((permission) => (
               <TableRow key={permission}>
-                <TableCell><p className="font-medium">{administrationPermissionLabels[permission]}</p><p className="text-xs text-muted-foreground">{permissionDescriptions[permission]}</p></TableCell>
-                {(["USER", "ADMIN"] as const).map((role) => <TableCell key={role} className="text-center"><Switch checked={form.find((entry) => entry.role === role)?.permissions.includes(permission) ?? false} disabled={role === "USER"} onCheckedChange={(checked) => toggle(role, permission, checked)} aria-label={`${administrationPermissionLabels[permission]}: ${role}`} /></TableCell>)}
+                <TableCell><p className="font-medium">{t(administrationPermissionLabels[permission])}</p><p className="text-xs text-muted-foreground">{t(permissionDescriptions[permission])}</p></TableCell>
+                {(["USER", "ADMIN"] as const).map((role) => <TableCell key={role} className="text-center"><Switch checked={form.find((entry) => entry.role === role)?.permissions.includes(permission) ?? false} disabled={role === "USER"} onCheckedChange={(checked) => toggle(role, permission, checked)} aria-label={`${t(administrationPermissionLabels[permission])}: ${role}`} /></TableCell>)}
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </div>
-      <Alert><ShieldCheck /><AlertTitle>Zasada najmniejszych uprawnień</AlertTitle><AlertDescription>Zmiany dotyczą nowych sesji. Administrator nie może odebrać sam sobie prawa do zarządzania użytkownikami w docelowym systemie.</AlertDescription></Alert>
-      <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "rolePermissions", form, "Zapisano uprawnienia ról")} />
+      <Alert><ShieldCheck /><AlertTitle>{t("Zasada najmniejszych uprawnień")}</AlertTitle><AlertDescription>{t("Zmiany dotyczą nowych sesji. Administrator nie może odebrać sam sobie prawa do zarządzania użytkownikami w docelowym systemie.")}</AlertDescription></Alert>
+      <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "rolePermissions", form, t("Zapisano uprawnienia ról"))} />
     </SettingsCard>
   )
 }
@@ -756,11 +765,13 @@ function SettingSwitch({ label, description, checked, onChange }: { label: strin
 }
 
 function EnabledState({ enabled }: { enabled: boolean }) {
-  return <span className={`inline-flex items-center gap-1 text-xs ${enabled ? "text-success" : "text-muted-foreground"}`}>{enabled ? <CheckCircle2 className="size-3.5" /> : <Unplug className="size-3.5" />}{enabled ? "Włączone" : "Wyłączone"}</span>
+  const t = useT()
+  return <span className={`inline-flex items-center gap-1 text-xs ${enabled ? "text-success" : "text-muted-foreground"}`}>{enabled ? <CheckCircle2 className="size-3.5" /> : <Unplug className="size-3.5" />}{enabled ? t("Włączone") : t("Wyłączone")}</span>
 }
 
 function SaveButton({ pending, onClick }: { pending: boolean; onClick: () => void }) {
-  return <div className="flex justify-end border-t pt-4"><Button onClick={onClick} disabled={pending}><Save /> {pending ? "Zapisywanie…" : "Zapisz zmiany"}</Button></div>
+  const t = useT()
+  return <div className="flex justify-end border-t pt-4"><Button onClick={onClick} disabled={pending}><Save /> {pending ? t("Zapisywanie…") : t("Zapisz zmiany")}</Button></div>
 }
 
 function TimelineItem({ label, value, accent }: { label: string; value: string; accent?: "warning" | "destructive" }) {
@@ -772,14 +783,14 @@ async function saveSection<K extends keyof AdministrationSettings>(actions: Sett
     await actions.saveSection.mutateAsync({ key, value } as AdministrationSectionInput)
     notify.success(successMessage)
   } catch (error) {
-    notify.error("Nie udało się zapisać zmian", getErrorMessage(error))
+    notify.error(t("Nie udało się zapisać zmian"), getErrorMessage(error))
   }
 }
 
 function calculateSlaExample(settings: SlaSettings) {
   const start = new Date(2026, 7, 3, 16, 30)
   const add = (minutes: number) => settings.businessHoursOnly ? addBusinessMinutes(start, minutes) : new Date(start.getTime() + minutes * 60_000)
-  const format = (date: Date) => new Intl.DateTimeFormat("pl-PL", { weekday: "short", hour: "2-digit", minute: "2-digit" }).format(date)
+  const format = (date: Date) => new Intl.DateTimeFormat(locale(), { weekday: "short", hour: "2-digit", minute: "2-digit" }).format(date)
   return {
     warning: format(add(Math.max(0, settings.firstResponseMinutes - settings.warningBeforeDeadlineMinutes))),
     deadline: format(add(settings.firstResponseMinutes)),
@@ -816,5 +827,5 @@ function addBusinessMinutes(start: Date, amount: number) {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Spróbuj ponownie."
+  return userError(error)
 }

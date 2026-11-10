@@ -1,3 +1,4 @@
+import { translate as t } from "@/lib/i18n/catalog"
 import type {
   AdministrationPermission,
   AdministrationRole,
@@ -80,7 +81,7 @@ export class PermissionDeniedError extends Error {
   readonly code = "PERMISSION_DENIED"
 
   constructor(permission: AdministrationPermission) {
-    super(`Brak wymaganego uprawnienia: ${administrationPermissionLabels[permission]}.`)
+    super(t("Brak wymaganego uprawnienia: {{value0}}.", { value0: administrationPermissionLabels[permission] }))
     this.name = "PermissionDeniedError"
   }
 }
@@ -90,7 +91,7 @@ export class AdministratorRoleRequiredError extends Error {
   readonly code = "ADMINISTRATOR_ROLE_REQUIRED"
 
   constructor() {
-    super("Ta funkcja wymaga roli administratora.")
+    super(t("Ta funkcja wymaga roli administratora."))
     this.name = "AdministratorRoleRequiredError"
   }
 }
@@ -154,16 +155,16 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
   async save(input, id) {
     requireCurrentAdministrationPermission("manage_users")
     if (input.role === "USER" && input.permissions.length > 0) {
-      throw new Error("Rola USER nie może otrzymywać uprawnień administracyjnych.")
+      throw new Error(t("Rola USER nie może otrzymywać uprawnień administracyjnych."))
     }
     const duplicate = usersState.find(
       (user) => normalize(user.email) === normalize(input.email) && user.id !== id,
     )
-    if (duplicate) throw new Error("Użytkownik z tym adresem e-mail już istnieje.")
+    if (duplicate) throw new Error(t("Użytkownik z tym adresem e-mail już istnieje."))
 
     if (id) {
       const index = usersState.findIndex((user) => user.id === id)
-      if (index < 0) throw new Error("Nie znaleziono użytkownika.")
+      if (index < 0) throw new Error(t("Nie znaleziono użytkownika."))
       usersState[index] = { ...usersState[index], ...structuredClone(input) }
       return delay(usersState[index])
     }
@@ -181,7 +182,7 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
   async deactivate(id) {
     requireCurrentAdministrationPermission("manage_users")
     const user = usersState.find((item) => item.id === id)
-    if (!user) throw new Error("Nie znaleziono użytkownika.")
+    if (!user) throw new Error(t("Nie znaleziono użytkownika."))
     user.active = false
     user.presence = "offline"
     user.validUntil = new Date().toISOString().slice(0, 10)
@@ -191,20 +192,20 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
   async delete(id) {
     requireCurrentAdministrationPermission("manage_users")
     const user = usersState.find((item) => item.id === id)
-    if (!user) throw new Error("Nie znaleziono użytkownika.")
+    if (!user) throw new Error(t("Nie znaleziono użytkownika."))
     if (normalize(user.email) === normalize(mockCurrentUser.email)) {
-      throw new Error("Nie możesz usunąć własnego konta.")
+      throw new Error(t("Nie możesz usunąć własnego konta."))
     }
     usersState = usersState.filter((item) => item.id !== id)
     return delay(undefined)
   },
 
   async issueInvitation() {
-    throw new Error("Zaproszenia są dostępne wyłącznie przez API.")
+    throw new Error(t("Zaproszenia są dostępne wyłącznie przez API."))
   },
 
   async issuePasswordReset() {
-    throw new Error("Reset hasła jest dostępny wyłącznie przez API.")
+    throw new Error(t("Reset hasła jest dostępny wyłącznie przez API."))
   },
 }
 
@@ -264,7 +265,7 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
   async setIntegrationStatus(id, status) {
     requireCurrentAdministrationPermission("manage_integrations")
     const integration = settingsState.integrations.find((item) => item.id === id)
-    if (!integration) throw new Error("Nie znaleziono integracji.")
+    if (!integration) throw new Error(t("Nie znaleziono integracji."))
     integration.status = status
     return delay(integration)
   },
@@ -272,12 +273,12 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
   async testIntegration(id) {
     requireCurrentAdministrationPermission("manage_integrations")
     const integration = settingsState.integrations.find((item) => item.id === id)
-    if (!integration) throw new Error("Nie znaleziono integracji.")
+    if (!integration) throw new Error(t("Nie znaleziono integracji."))
     if (integration.status === "disabled") {
-      throw new Error("Najpierw włącz integrację.")
+      throw new Error(t("Najpierw włącz integrację."))
     }
     if (integration.status === "configuring") {
-      throw new Error("Najpierw dokończ konfigurację integracji.")
+      throw new Error(t("Najpierw dokończ konfigurację integracji."))
     }
     integration.health = "healthy"
     integration.lastEventAt = new Date().toISOString()
@@ -297,10 +298,10 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
   async configureChannel(id, customerId, ignored, groupingStrategy) {
     requireCurrentAdministrationPermission("manage_integrations")
     const channel = settingsState.channels.find((item) => item.id === id)
-    if (!channel) throw new Error("Nie znaleziono kanału.")
+    if (!channel) throw new Error(t("Nie znaleziono kanału."))
     const customer = settingsState.customers.find((item) => item.id === customerId)
     channel.customerId = customer?.id
-    channel.customer = customer?.name ?? "Nie przypisano"
+    channel.customer = customer?.name ?? t("Nie przypisano")
     channel.ignored = ignored
     if (groupingStrategy) channel.groupingStrategy = groupingStrategy
     return delay(undefined)
@@ -319,7 +320,7 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
   async deactivateCustomer(id) {
     requireCurrentAdministrationPermission("manage_integrations")
     const customer = settingsState.customers.find((item) => item.id === id)
-    if (!customer) throw new Error("Nie znaleziono klienta.")
+    if (!customer) throw new Error(t("Nie znaleziono klienta."))
     customer.active = false
     return delay(customer)
   },
@@ -327,12 +328,12 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
   async toggleNotification(id, enabled) {
     requireCurrentAdministrationPermission("manage_notifications")
     const destination = settingsState.notifications.find((item) => item.id === id)
-    if (!destination) throw new Error("Nie znaleziono celu powiadomień.")
+    if (!destination) throw new Error(t("Nie znaleziono celu powiadomień."))
     destination.enabled = enabled
     return delay(undefined)
   },
 
   async replayNotificationDelivery() {
-    throw new Error("Ponowienie dostawy jest dostępne wyłącznie przez API.")
+    throw new Error(t("Ponowienie dostawy jest dostępne wyłącznie przez API."))
   },
 }

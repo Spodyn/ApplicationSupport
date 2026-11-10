@@ -155,3 +155,5 @@ Baseline chroni layout/styl, ale **nie może nadpisywać późniejszego kontrakt
 Żaden z tych punktów nie jest obecnie znaną nierozstrzygniętą decyzją produktową/architektoniczną. `OPEN_DECISIONS.md` zawiera zasady tworzenia nowego human blockera, a `PRODUCT_CONTRACT.md` i `decision-registry.yaml` pozostają źródłami nadrzędnymi.
 
 Slack override 2026-11-09: discovered active Slack channels with no customer mapping create visible intake Cases with customer NULL; undiscovered channels retry pending authorized membership reconciliation. See INTEGRATIONS.md section 2.4.
+
+Owner UX extension (2026-11-10): Polish/English catalogs, browser preference and bounded bulk composition of existing Claim/Assign/Resolve/Ignore. Existing six statuses, role/permission boundaries and individual workflow rules are unchanged. Details: [UX_BULK_I18N.md](UX_BULK_I18N.md); actual verification: [UX_VALIDATION.md](UX_VALIDATION.md).

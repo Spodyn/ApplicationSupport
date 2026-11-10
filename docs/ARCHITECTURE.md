@@ -218,3 +218,7 @@ Staging may auto-deploy after gates. Production cutover requires protected human
 For implementation precedence use `AGENTS.md`: current Jira + later final overrides -> `PRODUCT_CONTRACT.md` -> `decision-registry.yaml` -> canonical area docs -> older historical/current-state docs -> code fixtures only where non-conflicting.
 
 Slack Message edits/deletes are applied to the original persisted identity under targeted Case/Message row locks. The same transaction writes sanitized provider audit metadata and a `message.updated` outbox event. The existing per-Case realtime consumer routes that event without content; clients refetch authoritative history. Mutation processing never calls Case creation or provider HTTP.
+
+## Interface and bulk orchestration (owner request, 2026-11-10)
+
+The UI -> query hooks -> registry -> typed repositories -> API adapter boundary also owns bulk commands. OpenAPI defines a bounded explicit-ID request; backend workflow orchestration reuses existing commands and idempotency, with one transaction/Case row lock/result per item and no provider HTTP in transactions. The client enumerates selections and sends bounded batches sequentially. Request-local i18next providers and feature catalogs handle interface language without new routing/authentication boundaries. See [UX_BULK_I18N.md](UX_BULK_I18N.md).

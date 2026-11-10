@@ -199,3 +199,7 @@ Staging is isolated and visibly marked. Initial pilot is about 5-10 support user
 Agents solve normal implementation choices without Product Owner interruption: naming, packages/classes, indexes implied by query/race requirements, equivalent locking, retries, tests, local refactors, compatible vendor SDK details and Git conflict resolution.
 
 They stop only for a real frozen-contract change, production authority/credentials, new legal/compliance requirement, paid/commercial commitment or another explicitly protected human-decision boundary.
+
+## 25. Owner-requested interface improvements (2026-11-10)
+
+The interface supports Polish (default) and English with immediate switching and a persistent browser preference. Structured catalogs contain interface copy; user/provider content and domain codes are unchanged. Cases support explicit multi-selection, visible/all-matching controls, confirmation and per-Case outcomes for bounded bulk Claim, Assign/Reassign, normal Resolve and Ignore. Existing authorization/workflow rules apply to every item; bulk Resolve never escalates to Force Resolve. Resolved indicators are gray; controls have accessible interaction feedback; Enter sends and Shift+Enter inserts a newline; the SLA shortcut has no arrow; Customer/Channel choices are absent from inbox filters; incoming/outgoing messages wrap within available width. See [UX_BULK_I18N.md](UX_BULK_I18N.md) for API, retry, partial-failure and language boundaries.

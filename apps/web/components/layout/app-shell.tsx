@@ -1,5 +1,6 @@
 "use client"
 
+import { useT } from "@/lib/i18n/provider"
 import { useEffect, useState, type ReactNode } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -13,6 +14,8 @@ import { API_AUTHENTICATION_REQUIRED_EVENT } from "@/lib/services/api/http-trans
 import { AuthenticationRequiredError } from "@/lib/services/current-user"
 import { useCurrentUser } from "@/lib/services/queries"
 
+import { LanguageSelector } from "@/lib/i18n/provider"
+
 interface AppShellProps {
   children: ReactNode
 }
@@ -21,13 +24,14 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname()
 
   if (pathname === "/login" || pathname === "/activate") {
-    return <>{children}</>
+    return <><div className="absolute right-4 top-3 z-10"><LanguageSelector /></div>{children}</>
   }
 
   return <AuthenticatedAppShell>{children}</AuthenticatedAppShell>
 }
 
 function AuthenticatedAppShell({ children }: AppShellProps) {
+  const t = useT()
   const router = useRouter()
   const currentUser = useCurrentUser()
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
@@ -47,7 +51,7 @@ function AuthenticatedAppShell({ children }: AppShellProps) {
   if (currentUser.isPending || currentUser.error instanceof AuthenticationRequiredError) {
     return (
       <main className="grid min-h-svh place-items-center bg-background">
-        <p className="text-sm text-muted-foreground">Sprawdzanie sesji…</p>
+        <p className="text-sm text-muted-foreground">{t("Sprawdzanie sesji…")}</p>
       </main>
     )
   }
@@ -56,10 +60,9 @@ function AuthenticatedAppShell({ children }: AppShellProps) {
     return (
       <main className="grid min-h-svh place-items-center bg-background px-4">
         <div className="space-y-3 text-center">
-          <p className="text-sm text-destructive">Nie udało się sprawdzić bieżącej sesji.</p>
+          <p className="text-sm text-destructive">{t("Nie udało się sprawdzić bieżącej sesji.")}</p>
           <Button variant="outline" onClick={() => void currentUser.refetch()}>
-            Spróbuj ponownie
-          </Button>
+            {t("Spróbuj ponownie")} </Button>
         </div>
       </main>
     )
@@ -70,15 +73,14 @@ function AuthenticatedAppShell({ children }: AppShellProps) {
       <ShellProvider value={{ openMobileNav: () => setMobileNavOpen(true) }}>
         <div className="flex h-svh w-full overflow-hidden bg-background">
           <a href="#main-content" className="sr-only z-[100] rounded-md bg-background px-3 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:ring-2 focus:ring-ring">
-            Przejdź do treści
-          </a>
+            {t("Przejdź do treści")} </a>
           <div className="hidden lg:flex">
             <AppRail />
           </div>
 
           <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
             <SheetContent side="left" className="w-[min(88vw,22rem)] gap-0 p-0">
-              <SheetTitle className="sr-only">Nawigacja</SheetTitle>
+              <SheetTitle className="sr-only">{t("Nawigacja")}</SheetTitle>
               <MobileNavigation onNavigate={() => setMobileNavOpen(false)} />
             </SheetContent>
           </Sheet>

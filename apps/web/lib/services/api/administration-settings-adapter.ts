@@ -1,3 +1,4 @@
+import { translate as t } from "@/lib/i18n/catalog"
 import type {
   AdministrationSettings,
   ChannelGroupingStrategy,
@@ -169,12 +170,11 @@ let outOfOfficeVersion: number | undefined
 let slaPolicyVersion: number | undefined
 
 function mapChannel(channel: ApiChannelRecord): ManagedChannel {
-  const activity = channel.active ? "Aktywny" : "Nieaktywny"
   return {
     id: channel.id,
     platform: mapApiChannel(channel.provider),
     externalChannelId: channel.externalChannelId,
-    channelName: `${channel.name} · ${activity}`,
+    channelName: channel.name,
     customerId: channel.customerId ?? undefined,
     customer: channel.customerName ?? "Nie przypisano",
     ignored: channel.ignored,
@@ -237,6 +237,7 @@ export function mapApiBusinessHours(
   exceptions: ScheduleException[] = (schedule.exceptions ?? []).map((item) => ({
     id: item.date,
     date: item.date,
+    nameIsDefault: item.note == null,
     name: item.note ?? (item.type === "CLOSED" ? "Dzień wolny" : "Wyjątek godzin pracy"),
     closed: item.type === "CLOSED",
     start: item.start?.slice(0, 5) ?? undefined,
@@ -249,7 +250,7 @@ export function mapApiBusinessHours(
     )
     if (intervals.length > 2) {
       throw new Error(
-        `${label}: bieżący edytor obsługuje maksymalnie dwa rozłączne przedziały czasu.`,
+        t("{{value0}}: bieżący edytor obsługuje maksymalnie dwa rozłączne przedziały czasu.", { value0: label }),
       )
     }
     if (intervals.length === 0) {
@@ -355,7 +356,7 @@ async function saveBusinessHoursExceptions(schedule: WorkScheduleSettings) {
       type: item.closed ? "CLOSED" : "OVERRIDE",
       start: item.closed ? null : item.start,
       end: item.closed ? null : item.end,
-      note: item.name,
+      note: item.nameIsDefault ? null : item.name,
     })),
   })
 }
@@ -531,7 +532,7 @@ async function saveNotifications(
     )
     if (existingRules.length > 1) {
       throw new Error(
-        "Ten cel ma wiele zaawansowanych reguł i nie może być edytowany w uproszczonym widoku Settings.",
+        t("Ten cel ma wiele zaawansowanych reguł i nie może być edytowany w uproszczonym widoku Settings."),
       )
     }
     const existingRule = existingRules[0]
@@ -651,7 +652,7 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
       })
       return saved.rolePermissions as AdministrationSettings[K]
     }
-    throw new Error(`Sekcja ${String(key)} nie obsługuje bezpośredniego zapisu.`)
+    throw new Error(t("Sekcja {{value0}} nie obsługuje bezpośredniego zapisu.", { value0: String(key) }))
   },
 
   async configureIntegration(input) {
@@ -687,7 +688,7 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
       path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/test`,
     })
     if (result.outcome !== "SUCCESS") {
-      throw new Error(result.errorCode ?? "Test połączenia nie powiódł się.")
+      throw new Error(result.errorCode ?? t("Test połączenia nie powiódł się."))
     }
     return mapIntegration(result.integration)
   },
@@ -742,7 +743,7 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
       await readNotificationConfiguration()
       version = notificationDestinationVersions.get(id)
     }
-    if (version === undefined) throw new Error("Nie znaleziono celu powiadomień.")
+    if (version === undefined) throw new Error(t("Nie znaleziono celu powiadomień."))
     const saved = await browserApiTransport.request<ApiNotificationDestination>({
       method: "PATCH",
       path: `/api/v1/admin/notifications/destinations/${encodeURIComponent(id)}/enabled`,

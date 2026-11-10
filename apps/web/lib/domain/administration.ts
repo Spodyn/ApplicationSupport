@@ -65,6 +65,7 @@ export interface WorkDay {
 }
 
 export interface ScheduleException {
+  nameIsDefault?: boolean
   id: string
   date: string
   name: string

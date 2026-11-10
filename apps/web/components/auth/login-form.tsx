@@ -1,5 +1,6 @@
 "use client"
 
+import { useT } from "@/lib/i18n/provider"
 import { useState, type FormEvent } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -10,6 +11,7 @@ import { AuthenticationRequiredError } from "@/lib/services/current-user"
 import { useLogin } from "@/lib/services/auth-queries"
 
 export function LoginForm() {
+  const t = useT()
   const router = useRouter()
   const login = useLogin()
   const [email, setEmail] = useState("")
@@ -29,25 +31,24 @@ export function LoginForm() {
 
   const message =
     login.error instanceof AuthenticationRequiredError
-      ? "Nieprawidłowy e-mail lub hasło."
+      ? t("Nieprawidłowy e-mail lub hasło.")
       : login.error
-        ? "Nie udało się zalogować. Spróbuj ponownie."
+        ? t("Nie udało się zalogować. Spróbuj ponownie.")
         : null
 
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>
-          <h1>Zaloguj się</h1>
+          <h1>{t("Zaloguj się")}</h1>
         </CardTitle>
         <CardDescription>
-          Użyj konta Unified Support Inbox, aby przejść do skrzynki wsparcia.
-        </CardDescription>
+          {t("Użyj konta Unified Support Inbox, aby przejść do skrzynki wsparcia.")} </CardDescription>
       </CardHeader>
       <CardContent>
         <form method="post" className="space-y-4" onSubmit={(event) => void submit(event)}>
           <div className="space-y-2">
-            <Label htmlFor="email">E-mail</Label>
+            <Label htmlFor="email">{t("E-mail")}</Label>
             <Input
               id="email"
               name="email"
@@ -60,7 +61,7 @@ export function LoginForm() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Hasło</Label>
+            <Label htmlFor="password">{t("Hasło")}</Label>
             <Input
               id="password"
               name="password"
@@ -78,7 +79,7 @@ export function LoginForm() {
             </p>
           ) : null}
           <Button type="submit" className="w-full" disabled={login.isPending}>
-            {login.isPending ? "Logowanie…" : "Zaloguj się"}
+            {login.isPending ? t("Logowanie…") : t("Zaloguj się")}
           </Button>
         </form>
       </CardContent>

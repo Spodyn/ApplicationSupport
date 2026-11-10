@@ -1,5 +1,6 @@
 "use client"
 
+import { useT } from "@/lib/i18n/provider"
 import type { ReactNode } from "react"
 import { PanelLeftIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -12,6 +13,7 @@ interface PageHeaderProps {
 }
 
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
+  const t = useT()
   const shell = useShell()
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border bg-card px-3 sm:h-16 sm:gap-3 sm:px-4 md:px-6">
@@ -20,7 +22,7 @@ export function PageHeader({ title, description, actions }: PageHeaderProps) {
         size="icon"
         className="lg:hidden"
         onClick={() => shell?.openMobileNav()}
-        aria-label="Przełącz panel boczny"
+        aria-label={t("Przełącz panel boczny")}
       >
         <PanelLeftIcon />
       </Button>

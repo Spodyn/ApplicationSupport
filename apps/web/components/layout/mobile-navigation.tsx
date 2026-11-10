@@ -1,5 +1,6 @@
 "use client"
 
+import { useT } from "@/lib/i18n/provider"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
@@ -8,6 +9,7 @@ import { useCurrentUser } from "@/lib/services/queries"
 import { UserMenu } from "./user-menu"
 
 export function MobileNavigation({ onNavigate }: { onNavigate: () => void }) {
+  const t = useT()
   const pathname = usePathname()
   const currentUser = useCurrentUser()
 
@@ -18,7 +20,7 @@ export function MobileNavigation({ onNavigate }: { onNavigate: () => void }) {
         <p className="text-xs font-medium text-muted-foreground">Support Inbox</p>
       </div>
 
-      <nav aria-label="Nawigacja mobilna" className="min-h-0 flex-1 overflow-y-auto p-3">
+      <nav aria-label={t("Nawigacja mobilna")} className="min-h-0 flex-1 overflow-y-auto p-3">
         <ul className="grid gap-1">
           {visibleNavItems(currentUser.data).map((item) => {
             const active = pathname === item.href || pathname.startsWith(`${item.href}/`)
@@ -37,8 +39,8 @@ export function MobileNavigation({ onNavigate }: { onNavigate: () => void }) {
                     <item.icon className="size-4.5" />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium">{item.label}</span>
-                    <span className="block truncate text-xs text-muted-foreground">{item.description}</span>
+                    <span className="block text-sm font-medium">{t(item.label)}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{t(item.description)}</span>
                   </span>
                 </Link>
               </li>

@@ -14,6 +14,8 @@ import java.util.Objects;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -55,7 +57,9 @@ class CaseIgnoreService {
                 () -> execute(caseId, userId, normalizedReason, correlationId));
     }
 
-    private IdempotencyResponse execute(UUID caseId, UUID userId, String reason, String correlationId) {
+    /** Composed commands must share their caller's atomic transaction. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    IdempotencyResponse execute(UUID caseId, UUID userId, String reason, String correlationId) {
         Actor actor = actor(userId);
         Snapshot before = jdbc.query("""
                 SELECT status, version

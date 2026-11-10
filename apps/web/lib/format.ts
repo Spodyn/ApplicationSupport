@@ -1,69 +1,31 @@
-/** Wspólne funkcje formatujące w polskiej lokalizacji. */
-
-const dateTimeFormatter = new Intl.DateTimeFormat("pl-PL", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-})
-
-const dateFormatter = new Intl.DateTimeFormat("pl-PL", {
-  day: "2-digit",
-  month: "long",
-  year: "numeric",
-})
-
-const timeFormatter = new Intl.DateTimeFormat("pl-PL", {
-  hour: "2-digit",
-  minute: "2-digit",
-})
+import { locale } from "@/lib/i18n/catalog"
 
 export function formatDateTime(value: string | Date): string {
-  return dateTimeFormatter.format(new Date(value))
+  return new Intl.DateTimeFormat(locale(), { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value))
 }
-
 export function formatDate(value: string | Date): string {
-  return dateFormatter.format(new Date(value))
+  return new Intl.DateTimeFormat(locale(), { day: "2-digit", month: "long", year: "numeric" }).format(new Date(value))
 }
-
 export function formatTime(value: string | Date): string {
-  return timeFormatter.format(new Date(value))
+  return new Intl.DateTimeFormat(locale(), { hour: "2-digit", minute: "2-digit" }).format(new Date(value))
 }
-
-/** Względny czas typu "2 godz. temu" w języku polskim. */
 export function formatRelative(value: string | Date): string {
-  const date = new Date(value)
-  const diffMs = date.getTime() - Date.now()
-  const diffMinutes = Math.round(diffMs / 60000)
-  const rtf = new Intl.RelativeTimeFormat("pl-PL", { numeric: "auto" })
-
-  const abs = Math.abs(diffMinutes)
-  if (abs < 60) return rtf.format(diffMinutes, "minute")
-  const diffHours = Math.round(diffMinutes / 60)
-  if (Math.abs(diffHours) < 24) return rtf.format(diffHours, "hour")
-  const diffDays = Math.round(diffHours / 24)
-  return rtf.format(diffDays, "day")
+  const minutes = Math.round((new Date(value).getTime() - Date.now()) / 60_000)
+  const format = new Intl.RelativeTimeFormat(locale(), { numeric: "auto" })
+  if (Math.abs(minutes) < 60) return format.format(minutes, "minute")
+  const hours = Math.round(minutes / 60)
+  if (Math.abs(hours) < 24) return format.format(hours, "hour")
+  return format.format(Math.round(hours / 24), "day")
 }
-
-/** Formatuje liczbę w polskiej lokalizacji. */
-export function formatNumber(value: number): string {
-  return new Intl.NumberFormat("pl-PL").format(value)
-}
-
-/** Formatuje wartość procentową (0–1 lub 0–100). */
+export function formatNumber(value: number): string { return new Intl.NumberFormat(locale()).format(value) }
 export function formatPercent(value: number): string {
-  const normalized = value > 1 ? value / 100 : value
-  return new Intl.NumberFormat("pl-PL", {
-    style: "percent",
-    maximumFractionDigits: 1,
-  }).format(normalized)
+  return new Intl.NumberFormat(locale(), { style: "percent", maximumFractionDigits: 1 }).format(value > 1 ? value / 100 : value)
 }
-
-/** Zamienia minuty na czytelny zapis, np. "1 godz. 20 min". */
 export function formatDuration(minutes: number): string {
-  if (minutes < 60) return `${Math.round(minutes)} min`
+  const minute = new Intl.NumberFormat(locale(), { style: "unit", unit: "minute", unitDisplay: "short" })
+  if (minutes < 60) return minute.format(Math.round(minutes))
   const hours = Math.floor(minutes / 60)
   const rest = Math.round(minutes % 60)
-  return rest > 0 ? `${hours} godz. ${rest} min` : `${hours} godz.`
+  const hour = new Intl.NumberFormat(locale(), { style: "unit", unit: "hour", unitDisplay: "short" }).format(hours)
+  return rest ? `${hour} ${minute.format(rest)}` : hour
 }

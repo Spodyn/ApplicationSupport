@@ -47,3 +47,6 @@ Routine technical choices are delegated. Agents must not stop for naming, packag
 Human approval is required only for a real contract change such as v1 scope expansion, a fundamental workflow change, a new role or permission, a new security boundary, destructive data semantics outside the contract, a paid third-party service, production credentials/actions, pricing/customer commitments, or a new legal/compliance decision.
 
 Development/review/merge automation follows `ORCHESTRATOR_CONTRACT.md`; that automation never grants autonomous production authority.
+
+- [Interface language and bulk Case contract](UX_BULK_I18N.md)
+- [UX implementation verification](UX_VALIDATION.md)

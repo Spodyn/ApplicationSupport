@@ -52,7 +52,7 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   const customerId = (await customer.json()).id
   expect((await command(page, `/api/v1/admin/channels/${fixture.channelId}`, {customerId, groupingStrategy: 'SLACK_ROOT_THREAD'}, 'PATCH')).status()).toBe(200)
   const first = await inbound(page, `Synthetic request ${marker}`)
-  const option = page.getByRole('option', {name: new RegExp(`Regression ${marker}`)})
+  const option = page.getByRole('button', {name: new RegExp(`Regression ${marker}`)})
   await expect(option).toContainText(`Synthetic request ${marker}`)
   const list = await (await page.request.get('/api/v1/cases')).json()
   const caseId = list.items.find((item: {lastMessagePreview: string}) => item.lastMessagePreview === `Synthetic request ${marker}`).id
@@ -117,10 +117,13 @@ test('real session cookies and CSRF reject cross-boundary mutations; service wor
     return entries.flat()
   })
   expect(cachedPaths).toContain('/manifest.webmanifest')
+  expect(cachedPaths).toContain('/pwa/manifest/en')
+  expect(cachedPaths).toContain('/pwa/manifest/pl')
   expect(cachedPaths.filter(path => path.startsWith('/api/'))).toEqual([])
   await context.setOffline(true)
   try {
     expect(await page.evaluate(async () => (await fetch('/manifest.webmanifest')).status)).toBe(200)
+    expect(await page.evaluate(async () => (await (await fetch('/pwa/manifest/en')).json()).lang)).toBe('en')
     expect(await page.evaluate(async () => {
       try { return (await fetch('/api/v1/auth/me', {credentials: 'same-origin', cache: 'no-store'})).status }
       catch { return null }
@@ -182,7 +185,7 @@ test('archived Slack failure shows the actual reason and never offers an ineligi
   await login(page)
   const marker = randomUUID().slice(0, 8)
   await inbound(page, `Archived scenario ${marker}`)
-  const option = page.getByRole('option').filter({hasText: `Archived scenario ${marker}`})
+  const option = page.getByRole('button').filter({hasText: `Archived scenario ${marker}`})
   await expect(option).toBeVisible()
   await option.click()
   await page.getByRole('button', {name: 'Przejmij', exact: true}).click()
@@ -190,4 +193,42 @@ test('archived Slack failure shows the actual reason and never offers an ineligi
   await page.getByRole('button', {name: 'Wyślij', exact: true}).click()
   await expect(page.getByText('Kanał Slack jest zarchiwizowany.')).toBeVisible()
   await expect(page.getByRole('button', {name: 'Ponów wysyłkę'})).toHaveCount(0)
+})
+
+test('real bulk workflow preserves per-Case rules, audit, realtime and replay', async ({page}) => {
+  const frames: string[] = []
+  page.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))
+  await login(page)
+  const marker = randomUUID().slice(0, 8)
+  await inbound(page, `Bulk first ${marker}`)
+  // Separate root timestamps produce two distinct Cases.
+  await expect.poll(async () => (await (await page.request.get('/api/v1/cases')).json()).items
+    .filter((item: {lastMessagePreview: string}) => item.lastMessagePreview === `Bulk first ${marker}`).length).toBe(1)
+  await inbound(page, `Bulk second ${marker}`)
+  const matching = async () => (await (await page.request.get('/api/v1/cases')).json()).items
+    .filter((item: {lastMessagePreview: string}) => item.lastMessagePreview.includes(marker))
+  await expect.poll(async () => (await matching()).length).toBe(2)
+  const ids = (await matching()).map((item: {id: string}) => item.id)
+  const missing = randomUUID()
+  const selection = {caseIds: [...ids, missing], action: 'CLAIM', targetUserId: null}
+  const key = randomUUID()
+  const claim = await command(page, '/api/v1/cases/bulk', selection, 'POST', key)
+  expect(claim.status()).toBe(200)
+  const claimed = await claim.json()
+  expect(claimed.items.map((item: {status: string}) => item.status)).toEqual(['SUCCEEDED','SUCCEEDED','SKIPPED'])
+  expect(await (await command(page, '/api/v1/cases/bulk', selection, 'POST', key)).json()).toEqual(claimed)
+  expect((await command(page, '/api/v1/cases/bulk', {...selection, action:'IGNORE'}, 'POST', key)).status()).toBe(409)
+  await expect.poll(() => frames.some(frame => frame.includes('case.claimed'))).toBe(true)
+  const resolutionKey = randomUUID()
+  const resolve = {caseIds: ids, action:'RESOLVE', targetUserId:null}
+  expect((await command(page, '/api/v1/cases/bulk', resolve, 'POST', resolutionKey)).status()).toBe(200)
+  for (const id of ids) {
+    const detail = await (await page.request.get(`/api/v1/cases/${id}`)).json()
+    expect(detail.status).toBe('RESOLVED')
+    const history = await (await page.request.get(`/api/v1/cases/${id}/activity`)).json()
+    expect(history.items.filter((item: {action: string}) => item.action === 'CASE_RESOLVE')).toHaveLength(1)
+    const replay = await command(page, '/api/v1/cases/bulk', resolve, 'POST', resolutionKey)
+    expect(replay.status()).toBe(200)
+    expect((await (await page.request.get(`/api/v1/cases/${id}`)).json()).version).toBe(detail.version)
+  }
 })
