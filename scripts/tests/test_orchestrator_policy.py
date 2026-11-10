@@ -30,7 +30,7 @@ class OrchestratorPolicyContractTest(unittest.TestCase):
         self.assertIn("manual_review_required_by_default: false", self.policy)
         self.assertIn("never_fabricate_approval: true", self.policy)
         self.assertIn("required_workflow: CI", self.policy)
-        for job in ("configuration", "backend", "integration", "infrastructure", "openapi", "validate"):
+        for job in ("configuration", "backend", "integration", "infrastructure", "openapi", "web", "fullstack", "validate"):
             self.assertRegex(self.policy, rf"required_workflow_jobs: \[[^\]]*\b{job}\b")
         self.assertIn("full_required_ci_and_security_green", self.policy)
         self.assertIn("validated_head_sha_equals_current_pr_head", self.policy)

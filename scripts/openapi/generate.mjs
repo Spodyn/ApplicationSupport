@@ -31,7 +31,9 @@ function objectType(schema) {
     const optional = required.has(name) ? '' : '?'
     return `  ${JSON.stringify(name)}${optional}: ${schemaType(property, required.has(name))}`
   })
-  return lines.length ? `{\n${lines.join('\n')}\n}` : 'Record<string, unknown>'
+  const dictionary = schema.additionalProperties && schema.additionalProperties !== false
+    ? `Record<string, ${schema.additionalProperties === true ? 'unknown' : schemaType(schema.additionalProperties)}>` : null
+  return lines.length ? `{\n${lines.join('\n')}\n}${dictionary ? ` & ${dictionary}` : ''}` : dictionary ?? 'Record<string, unknown>'
 }
 
 function generateTypes(contract) {
@@ -45,7 +47,7 @@ function generateTypes(contract) {
 function successfulResponseSchema(operation) {
   for (const [status, response] of Object.entries(operation.responses ?? {}).sort()) {
     if (/^2\d\d$/.test(status)) {
-      return response?.content?.['application/json']?.schema ?? response?.content?.['application/problem+json']?.schema ?? null
+      return response?.content?.['application/json']?.schema ?? response?.content?.['application/problem+json']?.schema ?? response?.content?.['application/octet-stream']?.schema ?? null
     }
   }
   return null
@@ -67,6 +69,7 @@ function collectRefs(schema, imports) {
     return
   }
   if (schema.items) collectRefs(schema.items, imports)
+  if (schema.additionalProperties && typeof schema.additionalProperties === 'object') collectRefs(schema.additionalProperties, imports)
   for (const item of schema.oneOf ?? []) collectRefs(item, imports)
   for (const property of Object.values(schema.properties ?? {})) collectRefs(property, imports)
 }
@@ -105,7 +108,8 @@ function generateOperationInput(operationId, parameters, body, bodyRequired, imp
 function generatedOperation(route, method, operation, pathItem, imports, inputBlocks) {
   const responseSchema = successfulResponseSchema(operation)
   collectRefs(responseSchema, imports)
-  const responseType = schemaRefName(responseSchema) ?? (responseSchema ? schemaType(responseSchema) : 'void')
+  const binary = Object.entries(operation.responses ?? {}).some(([status, response]) => /^2\d\d$/.test(status) && response.content?.['application/octet-stream'])
+  const responseType = binary ? 'Blob' : schemaRefName(responseSchema) ?? (responseSchema ? schemaType(responseSchema) : 'void')
   const parameters = operationParameters(pathItem, operation)
   const body = requestBody(operation)
   const inputBlock = generateOperationInput(
@@ -122,6 +126,7 @@ function generatedOperation(route, method, operation, pathItem, imports, inputBl
   const queryParameters = parameters.filter((parameter) => parameter.in === 'query')
   const headerParameters = parameters.filter((parameter) => parameter.in === 'header')
   const requestFields = [`method: ${tsString(method)}`]
+  if (binary) requestFields.push('responseType: "blob"')
   if (pathParameters.length) {
     const values = pathParameters.map((parameter) => `${tsString(parameter.name)}: input[${tsString(parameter.name)}]`).join(', ')
     requestFields.push(`path: interpolatePath(${tsString(route)}, { ${values} })`)
@@ -157,7 +162,7 @@ function generateClient(contract) {
   const interpolate = operationLines.some((line) => line.includes('interpolatePath'))
     ? `\nfunction interpolatePath(template: string, parameters: Record<string, unknown>): string {\n  return template.replace(/\\{([^}]+)\\}/g, (_, name: string) => {\n    const value = parameters[name]\n    if (value === undefined || value === null) throw new Error(\`Missing path parameter: \${name}\`)\n    return encodeURIComponent(String(value))\n  })\n}\n`
     : ''
-  return `${HEADER}${importLine}${inputs}export interface ApiTransportRequest {\n  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'\n  path: string\n  query?: Record<string, unknown>\n  headers?: Record<string, unknown>\n  body?: unknown\n}\n\nexport interface ApiTransport {\n  request<TResponse>(request: ApiTransportRequest): Promise<TResponse>\n}\n\nexport function createApiClient(transport: ApiTransport) {\n  return {${body}} as const\n}\n${interpolate}`
+  return `${HEADER}${importLine}${inputs}export interface ApiTransportRequest {\n  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'\n  path: string\n  query?: Record<string, unknown>\n  headers?: Record<string, unknown>\n  body?: unknown\n  responseType?: 'blob'\n}\n\nexport interface ApiTransport {\n  request<TResponse>(request: ApiTransportRequest): Promise<TResponse>\n}\n\nexport function createApiClient(transport: ApiTransport) {\n  return {${body}} as const\n}\n${interpolate}`
 }
 
 function generateIndex() {

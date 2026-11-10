@@ -33,7 +33,7 @@ class IntegrationConnectionTestRunnerTests {
             @Override
             public Result test(Request request) {
                 try {
-                    Thread.sleep(Duration.ofSeconds(30));
+                    new CountDownLatch(1).await();
                     return Result.success();
                 } catch (InterruptedException expected) {
                     interrupted.countDown();

@@ -6,7 +6,7 @@
  *
  * This script runs from the trusted default branch. NEVER checkout PR code.
  */
-export const REQUIRED_JOBS = Object.freeze(["configuration", "backend", "integration", "infrastructure", "openapi", "validate"]);
+export const REQUIRED_JOBS = Object.freeze(["configuration", "backend", "integration", "infrastructure", "openapi", "web", "fullstack", "validate"]);
 export const READY_LABEL = "usi/merge-ready";
 
 export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], ruleset, expectedBaseSha }) {
@@ -44,7 +44,12 @@ export function checkEligibility({ pull, run, jobs, reviews = [], threads = [], 
   if (ruleset?.enforcement !== "active" || !prRule) errors.push("Branch protection not verified");
   if ((prRule?.required_approving_review_count ?? 1) !== 0) errors.push("An effective human approval is still required");
   if (!prRule?.allowed_merge_methods?.includes("squash")) errors.push("Squash is not permitted");
-  if (!ciRule?.required_status_checks?.some(x => x.context === "validate")) errors.push("Required validate check missing");
+  for (const context of REQUIRED_JOBS) {
+    if (!ciRule?.required_status_checks?.some(x => x.context === context && x.integration_id === 15368)) {
+      errors.push("Required check protection missing: " + context);
+    }
+  }
+  if (ciRule?.strict_required_status_checks_policy !== true) errors.push("Strict up-to-date base protection missing");
   return errors;
 }
 

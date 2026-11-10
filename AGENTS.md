@@ -106,6 +106,10 @@ Use fake/sandbox providers for automated testing. Actionable Critical/High secur
 Provider-specific API versions/scopes/SDK details may be updated by the agent from current official vendor documentation as long as product scope and security boundaries are preserved.
 
 ## Validation
+Behavior changes must add or update the feature's regression tests and its mapping in `config/regression-features.json` / `docs/REGRESSION_MATRIX.md`. For a discovered bug, first reproduce it with a failing behavioral test, then verify the fix. Preserve security-audit assertions. Use disposable infrastructure and synthetic provider HTTP; ordinary CI must never read local `.env` files or contact live providers. Do not hide flaky failures with retries, sleeps, removed assertions or shared mutable fixtures.
+
+Follow `docs/TESTING.md` and `docs/REGRESSION_TESTING.md` for exact commands and limitations. The required CI jobs are `configuration`, `backend`, `integration`, `infrastructure`, `openapi`, `web`, `fullstack` and their fail-closed `validate` aggregator. A skipped/cancelled/missing job is not a pass. Keep all gates and the independent integration policy synchronized. Real provider acceptance requires explicit sandbox authorization and remains separate from PR CI.
+
 For every change run the relevant checks. Before completion of a code-bearing ticket, the expected full gate is:
 1. install from committed lockfile/wrappers,
 2. lint/static analysis,

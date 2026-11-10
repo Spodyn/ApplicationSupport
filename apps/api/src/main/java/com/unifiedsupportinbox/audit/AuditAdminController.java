@@ -30,7 +30,7 @@ class AuditAdminController {
             @RequestParam(required = false) UUID caseId,
             @RequestParam(required = false) String correlationId,
             @RequestParam(required = false) String cursor,
-            @RequestParam(required = false) Integer limit) {
+            @RequestParam(required = false) @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(100) Integer limit) {
         return audit.search(new AuditSearchService.Filters(
                 from, to, actorId, normalize(action), normalize(entityType), entityId, caseId, normalize(correlationId)),
                 cursor, limit);

@@ -48,6 +48,245 @@ export type AdminUserPage = {
   "nextCursor": string | null
 }
 
+export type ApiAnalyticsRecordsControllerDashboardFacts = {
+  "records"?: Array<ApiAnalyticsRecordsControllerFact>
+  "users"?: Array<ApiAnalyticsRecordsControllerUserOption>
+  "generatedAt"?: string
+  "global": boolean
+}
+
+export type ApiAnalyticsRecordsControllerFact = {
+  "id"?: string
+  "reference"?: string
+  "createdAt"?: string
+  "createdDate"?: string
+  "claimedDate"?: string
+  "resolvedDate"?: string
+  "createdDayIndex": number
+  "createdHour": number
+  "claimedAt"?: string
+  "firstResponseAt"?: string
+  "resolvedAt"?: string
+  "userId"?: string
+  "userName"?: string
+  "customerId"?: string
+  "customerName"?: string
+  "platform"?: string
+  "sourceChannel"?: string
+  "status"?: string
+  "statusLabel"?: string
+  "priority"?: string
+  "tags"?: Array<string>
+  "resolutionReason"?: string
+  "slaState"?: string
+  "slaDeadlineAt"?: string
+  "excludedFromUserPerformance": boolean
+}
+
+export type ApiAnalyticsRecordsControllerUserOption = {
+  "id"?: string
+  "fullName"?: string
+}
+
+export type ApiAuditSearchServiceAuditEventItem = {
+  "id"?: string
+  "actorType"?: "USER" | "ADMIN" | "SYSTEM" | "PROVIDER"
+  "actorUserId"?: string
+  "action"?: string
+  "entityType"?: string
+  "entityId"?: string
+  "caseId"?: string
+  "correlationId"?: string
+  "occurredAt"?: string
+  "metadataJson"?: string
+}
+
+export type ApiBusinessHoursAdminControllerExceptionRequest = {
+  "date"?: string
+  "type"?: string
+  "start"?: string
+  "end"?: string
+  "note"?: string
+}
+
+export type ApiBusinessHoursAdminControllerIntervalRequest = {
+  "dayOfWeek"?: number
+  "start"?: string
+  "end"?: string
+}
+
+export type ApiBusinessHoursAdminControllerUpdateBusinessHoursRequest = {
+  "timezone"?: string
+  "intervals"?: Array<ApiBusinessHoursAdminControllerIntervalRequest>
+}
+
+export type ApiBusinessHoursScheduleView = {
+  "id"?: string
+  "timezone"?: string
+  "active": boolean
+  "intervals"?: Array<ApiBusinessHoursScheduleViewInterval>
+  "exceptions"?: Array<ApiBusinessHoursScheduleViewScheduleException>
+  "updatedBy"?: string
+  "updatedAt"?: string
+}
+
+export type ApiBusinessHoursScheduleViewInterval = {
+  "dayOfWeek": number
+  "start"?: string
+  "end"?: string
+}
+
+export type ApiBusinessHoursScheduleViewScheduleException = {
+  "date"?: string
+  "type"?: string
+  "start"?: string
+  "end"?: string
+  "note"?: string
+}
+
+export type ApiCursorPage = {
+  "items"?: Array<ApiAuditSearchServiceAuditEventItem>
+  "nextCursor"?: string
+}
+
+export type ApiNotificationAdminControllerDestinationRequest = {
+  "name"?: string
+  "provider"?: "SLACK" | "TEAMS" | "TELEGRAM"
+  "integrationId"?: string
+  "targetRef"?: string
+  "enabled": boolean
+  "secretRef"?: string
+  "configRef"?: string
+}
+
+export type ApiNotificationAdminControllerEnabledRequest = {
+  "version"?: number
+  "enabled"?: boolean
+}
+
+export type ApiNotificationAdminControllerRuleRequest = {
+  "destinationId"?: string
+  "name"?: string
+  "enabled": boolean
+  "eventTypes"?: Array<string>
+  "severityFilters"?: Array<string>
+}
+
+export type ApiNotificationAdminControllerVersionedDestinationRequest = {
+  "version"?: number
+  "destination"?: ApiNotificationAdminControllerDestinationRequest
+}
+
+export type ApiNotificationAdminControllerVersionedRuleRequest = {
+  "version"?: number
+  "rule"?: ApiNotificationAdminControllerRuleRequest
+}
+
+export type ApiNotificationDeliveryView = {
+  "id"?: string
+  "deduplicationKey"?: string
+  "destinationId"?: string
+  "ruleId"?: string
+  "provider"?: "SLACK" | "TEAMS" | "TELEGRAM"
+  "integrationId"?: string
+  "targetRef"?: string
+  "eventType"?: string
+  "severity"?: string
+  "status"?: "PENDING" | "PROCESSING" | "RETRY_SCHEDULED" | "SENT" | "DLQ" | "CANCELLED"
+  "attempts": number
+  "replayCount": number
+  "nextAttemptAt"?: string
+  "lastErrorCategory"?: string
+  "lastErrorCode"?: string
+  "terminalReason"?: string
+  "providerMessageRef"?: string
+  "correlationId"?: string
+  "createdAt"?: string
+  "updatedAt"?: string
+  "sentAt"?: string
+}
+
+export type ApiNotificationDestinationView = {
+  "id"?: string
+  "name"?: string
+  "provider"?: "SLACK" | "TEAMS" | "TELEGRAM"
+  "integrationId"?: string
+  "targetRef"?: string
+  "enabled": boolean
+  "secretConfigured": boolean
+  "configConfigured": boolean
+  "version": number
+  "createdAt"?: string
+  "updatedAt"?: string
+}
+
+export type ApiNotificationRuleView = {
+  "id"?: string
+  "destinationId"?: string
+  "name"?: string
+  "enabled": boolean
+  "eventTypes"?: Array<string>
+  "severityFilters"?: Array<string>
+  "version": number
+  "createdAt"?: string
+  "updatedAt"?: string
+}
+
+export type ApiOrganizationSettingsControllerGeneralInput = {
+  "organizationName"?: string
+  "interfaceLanguage"?: string
+  "compactMode": boolean
+}
+
+export type ApiOrganizationSettingsControllerGeneralView = {
+  "organizationName"?: string
+  "interfaceLanguage"?: string
+  "compactMode": boolean
+}
+
+export type ApiOrganizationSettingsControllerRolePermissionsInput = {
+  "adminPermissions"?: Array<string>
+}
+
+export type ApiOrganizationSettingsControllerRolePermissionsView = {
+  "role"?: string
+  "permissions"?: Array<string>
+}
+
+export type ApiOrganizationSettingsControllerSettingsView = {
+  "general"?: ApiOrganizationSettingsControllerGeneralView
+  "rolePermissions"?: Array<ApiOrganizationSettingsControllerRolePermissionsView>
+  "warningBeforeDeadlineMinutes": number
+  "businessHoursOnly": boolean
+}
+
+export type ApiOrganizationSettingsControllerSlaDisplayInput = {
+  "warningBeforeDeadlineMinutes": number
+  "businessHoursOnly": boolean
+}
+
+export type ApiOutOfOfficePolicyView = {
+  "enabled": boolean
+  "template"?: string
+  "sendOncePerClosure": boolean
+  "version": number
+  "updatedAt"?: string
+  "updatedBy"?: string
+}
+
+export type ApiOutOfOfficePreviewView = {
+  "message"?: string
+  "nextOpening"?: string
+  "timezone"?: string
+}
+
+export type ApiOutOfOfficeServiceUpdateInput = {
+  "enabled": boolean
+  "template"?: string
+  "sendOncePerClosure": boolean
+  "version"?: number
+}
+
 export type ApiProblem = {
   "code": ApiProblemCode
   "title": string
@@ -58,6 +297,141 @@ export type ApiProblem = {
 }
 
 export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTICATION_REQUIRED" | "ACCESS_DENIED" | "RESOURCE_NOT_FOUND" | "CONFLICT" | "CASE_ALREADY_CLAIMED" | "RATE_LIMITED" | "PROVIDER_FAILURE" | "APPLICATION_FAILURE" | "INTERNAL_ERROR"
+
+export type ApiSlaAnalyticsServiceBreakdown = {
+  "type"?: "FIRST_RESPONSE" | "UNCLAIMED"
+  "completed": number
+  "achieved": number
+  "warnings": number
+  "breaches": number
+  "attainmentPercent"?: number
+  "durationSeconds"?: ApiSlaAnalyticsServiceDistribution
+}
+
+export type ApiSlaAnalyticsServiceDistribution = {
+  "average"?: number
+  "p50"?: number
+  "p95"?: number
+}
+
+export type ApiSlaAnalyticsServiceReport = {
+  "from"?: string
+  "to"?: string
+  "timezone"?: string
+  "provider"?: string
+  "customerId"?: string
+  "userId"?: string
+  "breakdowns"?: Array<ApiSlaAnalyticsServiceBreakdown>
+}
+
+export type ApiSlackResyncControllerStartSlackResyncRequest = {
+  "channelId"?: string
+  "lookbackHours"?: number
+  "maxMessages"?: number
+}
+
+export type ApiSlackResyncServiceSlackResyncView = {
+  "id"?: string
+  "integrationId"?: string
+  "channelId"?: string
+  "status"?: string
+  "fetchedMessages": number
+  "scheduledEvents": number
+  "maxMessages": number
+  "nextAttemptAt"?: string
+  "lastErrorCode"?: string
+  "createdAt"?: string
+  "updatedAt"?: string
+  "completedAt"?: string
+}
+
+export type ApiSlaPolicyServiceUpdateInput = {
+  "name"?: string
+  "firstResponseMinutes": number
+  "unclaimedWarningMinutes": number
+  "unclaimedBreachMinutes": number
+  "inProgressWarningMinutes": number
+  "inProgressBreachMinutes": number
+  "pauseWaiting": boolean
+  "version"?: number
+}
+
+export type ApiSlaPolicyView = {
+  "id"?: string
+  "name"?: string
+  "firstResponseMinutes": number
+  "unclaimedWarningMinutes": number
+  "unclaimedBreachMinutes": number
+  "inProgressWarningMinutes": number
+  "inProgressBreachMinutes": number
+  "pauseWaiting": boolean
+  "version": number
+  "updatedAt"?: string
+}
+
+export type ApiStatisticsOverviewServiceDay = {
+  "date"?: string
+  "created": number
+  "claimed": number
+  "firstResponses": number
+  "firstResponseDurationSeconds": number
+  "resolved": number
+  "ignored": number
+  "resolutionDurationSeconds": number
+}
+
+export type ApiStatisticsOverviewServiceOverview = {
+  "from"?: string
+  "to"?: string
+  "timezone"?: string
+  "provider"?: string
+  "customerId"?: string
+  "totals"?: ApiStatisticsOverviewServiceTotals
+  "series"?: Array<ApiStatisticsOverviewServiceDay>
+}
+
+export type ApiStatisticsOverviewServiceTotals = {
+  "created": number
+  "claimed": number
+  "firstResponses": number
+  "resolved": number
+  "ignored": number
+  "averageFirstResponseSeconds"?: number
+  "averageResolutionSeconds"?: number
+}
+
+export type ApiUserAdministrationControllerResetRequest = {
+  "email"?: string
+}
+
+export type ApiUserAdministrationControllerUserRequest = {
+  "fullName"?: string
+  "email"?: string
+  "role"?: "USER" | "ADMIN"
+  "active": boolean
+  "validFrom"?: string
+  "validUntil"?: string
+  "permissions"?: Array<string>
+}
+
+export type ApiUserAdministrationServiceCredentialToken = {
+  "token"?: string
+  "expiresAt"?: string
+}
+
+export type ApiUserAdministrationServiceUserView = {
+  "id"?: string
+  "fullName"?: string
+  "email"?: string
+  "role"?: "USER" | "ADMIN"
+  "active": boolean
+  "validFrom"?: string
+  "validUntil"?: string
+  "lastLoginAt"?: string
+  "presence"?: string
+  "activeAssignedCases": number
+  "permissions"?: Array<string>
+}
 
 export type AskCustomerRequest = {
   "message": string
@@ -216,6 +590,8 @@ export type CaseMessage = {
   "deletedAt": string | null
   "authorName": string | null
   "attachments": Array<MessageAttachment>
+  "retryAllowed"?: boolean
+  "deliveryErrorCode"?: string | null
 }
 
 export type CaseMessagePage = {

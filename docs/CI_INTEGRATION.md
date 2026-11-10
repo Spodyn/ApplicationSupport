@@ -6,7 +6,7 @@ The **integrator**, not the developer worker, owns the final `main` merge and Ji
 
 - Trigger: completed `CI` workflow for a PR, `usi/merge-ready` label application, ready-for-review, or a manual workflow dispatch.
 - Trusted code: `.github/workflows/usi-integration.yml` checks out **main**, not the feature branch, and executes `scripts/ci_merge.mjs`. It never runs PR code with write credentials.
-- GitHub job checks six exact-HEAD CI jobs: `configuration`, `backend`, `integration`, `infrastructure`, `openapi`, `validate`; all must finish successfully. Any extra failing/pending job blocks.
+- GitHub job checks eight exact-HEAD CI jobs: `configuration`, `backend`, `integration`, `infrastructure`, `openapi`, `web`, `fullstack`, `validate`; all must finish successfully. Any extra failing/pending job blocks.
 - The PR must be open, non-draft, mergeable, same-repository, target `main`, with CI bound to its current SHA and current base, and without unresolved review/security findings. GitHub's effective ruleset must permit squash and no approval requirements may remain.
 - An independent trusted orchestrator must set `usi/merge-ready` **only after checking live Jira dependencies, any required external/manual acceptance, DoD, security findings and an exclusive worker lease.** This label is not a reviewer approval. **Do not apply it on the basis of green CI alone.** PR authors should not self-attest. Remove the label when any of these facts changes.
 - The runner never declares Jira `Gotowe` itself. The orchestrator must verify the actual merged SHA in `main` and then update Jira only if all required DoD and verification are complete.
@@ -15,6 +15,8 @@ The **integrator**, not the developer worker, owns the final `main` merge and Ji
 The workflow is initially in **dry-run mode**: missing or non-`true` repository variable `USI_AUTO_MERGE_ENABLED` does not mutate anything, even when all gates pass. This is intentional until a dry run and an authorized non-production merge acceptance prove the complete GitHub/Jira workflow. With a repository administrator's authorization, set repository Actions variable `USI_AUTO_MERGE_ENABLED=true` to activate only after the above conditions are demonstrably met. If permissions or Actions variables are unavailable, keep dry-run mode and continue other independent Jira tickets.
 
 The repository-level GitHub `allow_auto_merge` setting governs GitHub's separate built-in auto-merge feature. This workflow uses the normal protected-branch PR merge endpoint, and does not depend on that setting.
+
+See [REGRESSION_TESTING.md](REGRESSION_TESTING.md) for mandatory regression jobs, exact-base coverage/contract checks and the verified staged ruleset activation. The guard requires all eight Actions-bound contexts and strict current-base protection; incomplete activation blocks autonomous integration.
 
 ## Operational checks
 

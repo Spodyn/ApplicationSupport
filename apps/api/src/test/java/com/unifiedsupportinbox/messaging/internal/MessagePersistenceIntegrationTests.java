@@ -142,7 +142,7 @@ class MessagePersistenceIntegrationTests {
         UUID supportUserId = createUser();
         MessageHistoryService history = context.getBean(MessageHistoryService.class);
 
-        assertThat(history.history(fixture.caseId(), null, 50).items()).isEmpty();
+        assertThat(history.history(fixture.caseId(), null, 50, supportUserId).items()).isEmpty();
 
         MessageEntity customer = repository.saveAndFlush(customerMessage(
                 fixture.caseId(), "history-customer", "history-thread", "Inbound Slack text",
@@ -152,13 +152,13 @@ class MessagePersistenceIntegrationTests {
                 supportUserId, null, "Agent", "Support reply", MessageBodyFormat.PLAIN_TEXT,
                 false, MessageDeliveryStatus.QUEUED, null, null, null, "history-support-correlation"));
 
-        var first = history.history(fixture.caseId(), null, 1);
+        var first = history.history(fixture.caseId(), null, 1, supportUserId);
         assertThat(first.items()).hasSize(1);
         assertThat(first.items().getFirst().id()).isEqualTo(support.id());
         assertThat(first.items().getFirst().kind()).isEqualTo(MessageKind.SUPPORT);
         assertThat(first.nextCursor()).isNotBlank();
 
-        var older = history.history(fixture.caseId(), first.nextCursor(), 1);
+        var older = history.history(fixture.caseId(), first.nextCursor(), 1, supportUserId);
         assertThat(older.items()).hasSize(1);
         assertThat(older.items().getFirst().id()).isEqualTo(customer.id());
         assertThat(older.items().getFirst().kind()).isEqualTo(MessageKind.CUSTOMER);
@@ -358,6 +358,34 @@ class MessagePersistenceIntegrationTests {
                 "uq_messages_case_external_message",
                 "idx_messages_case_provider_order",
                 "idx_messages_case_created_order");
+    }
+
+    @Test
+    void retryProjectionUsesLatestFailureCurrentOwnerAndCurrentWorkflowState() {
+        Fixture fixture = fixture(); UUID owner = createUser(); UUID other = createUser();
+        jdbc.update("UPDATE cases SET status = 'VERIFICATION', owner_user_id = ?, claimed_at = now() WHERE id = ?", owner, fixture.caseId());
+        UUID messageId = jdbc.queryForObject("""
+                INSERT INTO messages (case_id, kind, author_user_id, body, body_format, inbound, delivery_status, correlation_id)
+                VALUES (?, 'SUPPORT', ?, 'Synthetic retry fixture', 'PLAIN_TEXT', FALSE, 'FAILED', 'test-only-retry') RETURNING id
+                """, UUID.class, fixture.caseId(), owner);
+        jdbc.update("""
+                INSERT INTO delivery_attempts (message_id, attempt_no, finished_at, error_category, error_code)
+                VALUES (?, 1, now(), 'TRANSIENT', 'SLACK_RATE_LIMITED')
+                """, messageId);
+        var history = context.getBean(MessageHistoryService.class);
+        assertThat(history.history(fixture.caseId(), null, 50, owner).items().getFirst().retryAllowed()).isTrue();
+        assertThat(history.history(fixture.caseId(), null, 50, other).items().getFirst().retryAllowed()).isFalse();
+        jdbc.update("""
+                INSERT INTO delivery_attempts (message_id, attempt_no, finished_at, error_category, error_code)
+                VALUES (?, 2, now(), 'PERMANENT', 'SLACK_IS_ARCHIVED')
+                """, messageId);
+        var archived = history.history(fixture.caseId(), null, 50, owner).items().getFirst();
+        assertThat(archived.retryAllowed()).isFalse();
+        assertThat(archived.deliveryErrorCode()).isEqualTo("SLACK_IS_ARCHIVED");
+        jdbc.update("UPDATE delivery_attempts SET error_code = 'INTEGRATION_DISABLED' WHERE message_id = ? AND attempt_no = 2", messageId);
+        assertThat(history.history(fixture.caseId(), null, 50, owner).items().getFirst().retryAllowed()).isTrue();
+        jdbc.update("UPDATE cases SET status = 'WAITING_FOR_CUSTOMER', owner_user_id = NULL, claimed_at = NULL, waiting_until = now() + interval '1 hour' WHERE id = ?", fixture.caseId());
+        assertThat(history.history(fixture.caseId(), null, 50, owner).items().getFirst().retryAllowed()).isFalse();
     }
 
     private static MessageEntity customerMessage(

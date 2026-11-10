@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import os
 import subprocess
 import tempfile
 import unittest
@@ -347,7 +348,14 @@ class EnvironmentContractTest(unittest.TestCase):
             core_directory = root / "core"
             integration_directory = root / "integration-alias"
             write_core_secret_files(core_directory, self.contract)
-            integration_directory.symlink_to(core_directory, target_is_directory=True)
+            try:
+                integration_directory.symlink_to(core_directory, target_is_directory=True)
+            except OSError as failure:
+                if os.name != 'nt' or getattr(failure, 'winerror', None) != 1314:
+                    raise
+                # An unprivileged NTFS junction exercises the same real resolved-directory alias.
+                subprocess.run(['cmd', '/c', 'mklink', '/J', str(integration_directory), str(core_directory)],
+                               check=True, capture_output=True)
             environment = valid_staging_environment(
                 core_directory, integration_directory
             )

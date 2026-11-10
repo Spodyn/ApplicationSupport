@@ -1,6 +1,6 @@
 # Testowanie i CI
 
-**Stan:** current frontend gate + frozen v1 testing contract, 24 sierpnia 2026.
+**Stan:** risk-based regression gates, 10 listopada 2026. Szczegółowe komendy, izolacja, coverage i ograniczenia: [REGRESSION_TESTING.md](REGRESSION_TESTING.md). Macierz: [REGRESSION_MATRIX.md](REGRESSION_MATRIX.md).
 
 ## Obecny frontend gate
 
@@ -33,7 +33,7 @@ wartości, odrzucenie wyższych Spring override channels, dokładną allowlistę
 izolację drzew sekretów, segmenty callback paths, redakcję błędów, allowlistę
 `NEXT_PUBLIC_*`, reguły `.gitignore` oraz brak sekretów w drzewie/historii.
 
-Obecne E2E korzystają z lokalnego Next.js/mock data, blokują zewnętrzne HTTP i wyłączają service worker dla deterministyczności.
+Izolowane UI E2E korzystają z lokalnego Next.js/mock data. Osobny obowiązkowy `pnpm test:fullstack` uruchamia produkcyjny Next.js, prawdziwy backend, jednorazowe PostgreSQL/RabbitMQ/MinIO, rzeczywisty WebSocket i syntetyczne HTTP Slack. Service worker działa w teście całego stosu, a test sprawdza brak cache API. Obie grupy mają zero retries i nie używają serwera dewelopera.
 
 ## Zasada nadrzędna
 

@@ -7,6 +7,7 @@ import com.unifiedsupportinbox.IdempotentCommandExecutor;
 import com.unifiedsupportinbox.OutboxEventStore;
 import java.sql.Timestamp;
 import java.time.Duration;
+import java.time.Clock;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
@@ -30,18 +31,26 @@ class CaseSnoozeService {
     private final CaseReadPositionService readPositions;
     private final OutboxEventStore outbox;
     private final ObjectMapper json;
+    private final Clock clock;
 
+    @org.springframework.beans.factory.annotation.Autowired
     CaseSnoozeService(
             JdbcTemplate jdbc,
             IdempotentCommandExecutor idempotency,
             CaseReadPositionService readPositions,
             OutboxEventStore outbox,
             ObjectMapper json) {
+        this(jdbc, idempotency, readPositions, outbox, json, Clock.systemUTC());
+    }
+
+    CaseSnoozeService(JdbcTemplate jdbc, IdempotentCommandExecutor idempotency,
+            CaseReadPositionService readPositions, OutboxEventStore outbox, ObjectMapper json, Clock clock) {
         this.jdbc = jdbc;
         this.idempotency = idempotency;
         this.readPositions = readPositions;
         this.outbox = outbox;
         this.json = json;
+        this.clock = clock;
     }
 
     IdempotencyResult snooze(
@@ -53,11 +62,6 @@ class CaseSnoozeService {
         Objects.requireNonNull(caseId, "caseId");
         Objects.requireNonNull(userId, "userId");
         Objects.requireNonNull(until, "until");
-        Instant now = Instant.now();
-        Duration duration = Duration.between(now, until);
-        if (duration.compareTo(MIN_DURATION) < 0 || duration.compareTo(MAX_DURATION) > 0) {
-            throw ApiProblemException.validationFailed("Snooze must be between 5 minutes and 30 days in the future.");
-        }
         requireCorrelationId(correlationId);
 
         return idempotency.execute(
@@ -65,7 +69,13 @@ class CaseSnoozeService {
                 "case.snooze:" + caseId,
                 idempotencyKey,
                 Map.of("caseId", caseId.toString(), "until", until.toString()),
-                () -> executeSnooze(caseId, userId, until, correlationId));
+                () -> {
+                    Duration duration = Duration.between(clock.instant(), until);
+                    if (duration.compareTo(MIN_DURATION) < 0 || duration.compareTo(MAX_DURATION) > 0) {
+                        throw ApiProblemException.validationFailed("Snooze must be between 5 minutes and 30 days in the future.");
+                    }
+                    return executeSnooze(caseId, userId, until, correlationId);
+                });
     }
 
     IdempotencyResult cancel(

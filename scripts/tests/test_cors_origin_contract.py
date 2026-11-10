@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
 from pathlib import Path
 
 from scripts.validate_environment import (
@@ -36,8 +37,8 @@ class CorsOriginContractTest(unittest.TestCase):
             "USI_OBJECT_STORAGE_REGION": "eu-central-1",
             "USI_ATTACHMENTS_BUCKET": "usi-attachments-staging",
             "USI_EXPORTS_BUCKET": "usi-exports-staging",
-            "USI_CORE_SECRETS_DIRECTORY": "/tmp/usi-staging-core-secrets/",
-            "USI_INTEGRATION_SECRETS_DIRECTORY": "/tmp/usi-staging-integration-secrets/",
+            "USI_CORE_SECRETS_DIRECTORY": (Path(tempfile.gettempdir()) / "usi-staging-core-secrets").as_posix() + "/",
+            "USI_INTEGRATION_SECRETS_DIRECTORY": (Path(tempfile.gettempdir()) / "usi-staging-integration-secrets").as_posix() + "/",
         }
 
     def test_same_origin_default_keeps_cors_disabled(self) -> None:

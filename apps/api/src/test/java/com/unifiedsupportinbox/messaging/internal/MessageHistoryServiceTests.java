@@ -54,9 +54,10 @@ class MessageHistoryServiceTests {
         CursorCodec codec = new CursorCodec(
                 "0123456789abcdef0123456789abcdef".getBytes(StandardCharsets.UTF_8),
                 Clock.fixed(NOW, ZoneOffset.UTC));
-        MessageHistoryService service = new MessageHistoryService(repository, attachments, codec);
+        MessageHistoryService service = new MessageHistoryService(repository, attachments, codec,
+                org.mockito.Mockito.mock(MessageDeliveryRepository.class));
 
-        CursorPage<MessageHistoryService.MessageHistoryItem> page = service.history(caseId, null, 2);
+        CursorPage<MessageHistoryService.MessageHistoryItem> page = service.history(caseId, null, 2, UUID.randomUUID());
 
         assertThat(page.items()).extracting(MessageHistoryService.MessageHistoryItem::id)
                 .containsExactly(newest.id(), middle.id());
