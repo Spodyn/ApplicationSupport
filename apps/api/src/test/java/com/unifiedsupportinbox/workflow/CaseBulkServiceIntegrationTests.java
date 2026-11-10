@@ -142,6 +142,44 @@ class CaseBulkServiceIntegrationTests {
         assertThat(state(UUID.fromString(id))).isEqualTo("VERIFICATION");
     }
 
+    @Test void bulkCannotReplayAnUnrelatedIndividualCommandUsingTheSameKey() {
+        UUID admin = user(true), actor = user(false), id = newCase();
+        jdbc.update("INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'reassign_cases')", admin);
+        String key = UUID.randomUUID().toString();
+        var administration = context.getBean(CaseAdministrationService.class);
+        context.getBean(CaseClaimService.class).claim(id, actor, key, "single-claim");
+        administration.changeOwner(id, admin, null, CaseAdministrationService.Action.UNASSIGN, UUID.randomUUID().toString(), "single-unassign");
+        assertThat(state(id)).isEqualTo("NEW");
+        var result = bulk.execute(actor, key, request(CaseBulkService.Action.CLAIM, null, id), "bulk-same-key");
+        assertThat(statuses(result)).containsExactly("SUCCEEDED");
+        assertThat(state(id)).isEqualTo("VERIFICATION");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE entity_id = ? AND action = 'CASE_CLAIM'", Integer.class, id)).isEqualTo(2);
+        assertThat(bulk.execute(actor, key, request(CaseBulkService.Action.CLAIM, null, id), "bulk-replay")).isEqualTo(result);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE entity_id = ? AND action = 'CASE_CLAIM'", Integer.class, id)).isEqualTo(2);
+
+        UUID assigned = newCase();
+        String assignKey = UUID.randomUUID().toString();
+        administration.changeOwner(assigned, admin, actor, CaseAdministrationService.Action.ASSIGN, assignKey, "single-assign");
+        administration.changeOwner(assigned, admin, null, CaseAdministrationService.Action.UNASSIGN, UUID.randomUUID().toString(), "single-unassign");
+        assertThat(statuses(bulk.execute(admin, assignKey, request(CaseBulkService.Action.ASSIGN, actor, assigned), "bulk-same-assign-key")))
+                .containsExactly("SUCCEEDED");
+        assertThat(state(assigned)).isEqualTo("VERIFICATION");
+    }
+
+    @Test void composedCommandEntryPointsCannotRunOutsideATransaction() {
+        UUID actor = user(false), id = newCase();
+        assertThatThrownBy(() -> context.getBean(CaseClaimService.class).executeClaim(id, actor, "no-transaction"))
+                .isInstanceOf(org.springframework.transaction.IllegalTransactionStateException.class);
+        assertThatThrownBy(() -> context.getBean(CaseResolveService.class).executeResolve(id, actor, null, "no-transaction"))
+                .isInstanceOf(org.springframework.transaction.IllegalTransactionStateException.class);
+        assertThatThrownBy(() -> context.getBean(CaseIgnoreService.class).execute(id, actor, null, "no-transaction"))
+                .isInstanceOf(org.springframework.transaction.IllegalTransactionStateException.class);
+        assertThatThrownBy(() -> context.getBean(CaseAdministrationService.class).executeOwnerChange(id, actor, actor,
+                CaseAdministrationService.Action.ASSIGN, "no-transaction"))
+                .isInstanceOf(org.springframework.transaction.IllegalTransactionStateException.class);
+        assertThat(state(id)).isEqualTo("NEW");
+    }
+
     private static HttpResponse<String> post(HttpClient http, CookieManager cookies, URI origin, String path, String body, boolean csrf) throws Exception {
         var request = HttpRequest.newBuilder(origin.resolve(path)).header("Content-Type", "application/json")
                 .header("Idempotency-Key", UUID.randomUUID().toString());

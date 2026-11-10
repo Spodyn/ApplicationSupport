@@ -1,6 +1,8 @@
-const STATIC_CACHE = "unified-support-static-v1"
+const STATIC_CACHE = "unified-support-static-v2"
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
+  "/pwa/manifest/pl",
+  "/pwa/manifest/en",
   "/pwa/icon-192",
   "/pwa/icon-512",
   "/pwa/icon-maskable",

@@ -117,10 +117,13 @@ test('real session cookies and CSRF reject cross-boundary mutations; service wor
     return entries.flat()
   })
   expect(cachedPaths).toContain('/manifest.webmanifest')
+  expect(cachedPaths).toContain('/pwa/manifest/en')
+  expect(cachedPaths).toContain('/pwa/manifest/pl')
   expect(cachedPaths.filter(path => path.startsWith('/api/'))).toEqual([])
   await context.setOffline(true)
   try {
     expect(await page.evaluate(async () => (await fetch('/manifest.webmanifest')).status)).toBe(200)
+    expect(await page.evaluate(async () => (await (await fetch('/pwa/manifest/en')).json()).lang)).toBe('en')
     expect(await page.evaluate(async () => {
       try { return (await fetch('/api/v1/auth/me', {credentials: 'same-origin', cache: 'no-store'})).status }
       catch { return null }

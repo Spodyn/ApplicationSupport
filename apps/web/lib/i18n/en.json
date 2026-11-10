@@ -308,7 +308,8 @@
     "Pojedynczy plik nie może przekraczać 25 MiB.": "A file cannot exceed 25 MiB.",
     "Łączny rozmiar plików nie może przekraczać 50 MiB.": "The total file size cannot exceed 50 MiB.",
     "Wysłana wiadomość nie pojawiła się w historii case’u.": "The sent message did not appear in the Case history.",
-    "Wynik: wykonano: {{succeeded}}; pominięto: {{skipped}}; błędy: {{failed}}": "Result: succeeded: {{succeeded}}; skipped: {{skipped}}; failed: {{failed}}"
+    "Wynik: wykonano: {{succeeded}}; pominięto: {{skipped}}; błędy: {{failed}}": "Result: succeeded: {{succeeded}}; skipped: {{skipped}}; failed: {{failed}}",
+    "Limit zaznaczenia: 1000 spraw. Usuń zaznaczenie lub zawęź filtry.": "Selection limit: 1000 Cases. Deselect Cases or narrow the filters."
   },
   "settings": {
     "Ogólne": "General",

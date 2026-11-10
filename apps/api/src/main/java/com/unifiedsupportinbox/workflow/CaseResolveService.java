@@ -16,6 +16,8 @@ import java.util.Objects;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -62,7 +64,9 @@ public class CaseResolveService {
                 () -> executeResolve(caseId, userId, category, correlationId));
     }
 
-    private IdempotencyResponse executeResolve(
+    /** Composed commands must share their caller's atomic transaction. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    IdempotencyResponse executeResolve(
             UUID caseId,
             UUID userId,
             CaseResolutionCategory category,

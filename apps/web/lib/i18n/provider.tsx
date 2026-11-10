@@ -10,7 +10,11 @@ export function LanguageProvider({ children, initialLanguage }: { children: Reac
 }
 function LanguageDocument() {
   const { i18n } = useTranslation()
-  useEffect(() => { document.documentElement.lang = language(i18n.language) }, [i18n.language])
+  useEffect(() => {
+    const selected = language(i18n.language)
+    document.documentElement.lang = selected
+    document.querySelector<HTMLLinkElement>('link[rel="manifest"]')?.setAttribute("href", `/pwa/manifest/${selected}`)
+  }, [i18n.language])
   return null
 }
 export function useT() {

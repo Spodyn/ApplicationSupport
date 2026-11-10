@@ -8,22 +8,22 @@ environment file or real customer/provider credential was copied into tests.
 
 ## Local evidence (2026-11-10)
 
-Application code: `96537d74c075a89590398c6a85c22b818ead6940` (backend + frontend commits; documentation follows). All commands below actually ran in the isolated worktree. Whitespace-only EOF cleanup does not change tested behaviour. Final remote CI must pass on the exact final PR HEAD.
+Local validation was rerun after the independent review corrections described below. The exact final PR HEAD, required remote CI and merge evidence are recorded in [PR #149](https://github.com/Spodyn/ApplicationSupport/pull/149). All commands below actually ran in the isolated worktree.
 
 | Command / gate | Result |
 | --- | --- |
 | `pnpm install --frozen-lockfile` | PASS |
-| `pnpm check` with explicit `/api/v1` and `/ws` browser environment | PASS: 9 developer-tool tests, 71 gate tests, 30 required feature mappings, 56 configuration tests, environment/secret/OpenAPI checks, ESLint, TypeScript, 88 web unit tests, production Next build and 30 Chromium E2E |
-| Maven Wrapper `clean verify -Pcoverage` | PASS: 507 tests, 0 failures/errors/skips, production JAR and JaCoCo report |
+| `pnpm check` with explicit `/api/v1` and `/ws` browser environment | PASS: 9 developer-tool tests, 71 gate tests, 30 required feature mappings, 56 configuration tests, environment/secret/OpenAPI checks, ESLint, TypeScript, 91 web unit tests, production Next build and 31 Chromium E2E |
+| Maven Wrapper `clean verify -Pcoverage` | PASS: 509 tests, 0 failures/errors/skips, production JAR and JaCoCo report |
 | `pnpm test:fullstack` | PASS: 5 real-stack Chromium scenarios; synthetic provider, PostgreSQL/RabbitMQ/MinIO, actual audit/realtime and duplicate bulk replay |
-| `pnpm test:coverage` | PASS: 19 suites / 88 tests; existing scoped lines 83.78%, statements 81.25%, functions 78.26%, branches 76.84% |
+| `pnpm test:coverage` | PASS: 20 suites / 91 tests; existing scoped lines 83.78%, statements 81.25%, functions 78.26%, branches 76.84% |
 | `python -X utf8 scripts/testing/changed_coverage.py --base-ref ee1e84ff9e56d106b40a6afa1d902489063cd523` | PASS; scope remains the existing five security/transport modules, not total application coverage |
 | `pnpm openapi:check` and compatibility against exact base | PASS: additive v1 expansion, 85 operations / 119 schemas, deterministic client generation |
 | `pnpm audit --audit-level=high` | PASS: no known vulnerabilities |
 | Maven dependency list + `scripts/security_dependencies.py` | PASS: 247 resolved Maven packages, no OSV findings |
 | Decision-registry YAML / unique IDs | PASS: 26 decisions; source precedence reviewed |
 | Diff whitespace / documentation links | PASS; local relative references reviewed |
-| Remote CI / independent integration | PENDING at this documentation checkpoint; exact-HEAD evidence will be added to the PR |
+| Remote CI / independent integration | Exact-HEAD results and final merge evidence are recorded on PR #149; previous-head green CI is not accepted for a later revision |
 
 Known red runs were corrected rather than treated as passes. The new backend
 fixture initially lacked the PostgreSQL driver override, and its inactive vote
@@ -39,6 +39,16 @@ identifier; the secret scanner and all its tests remain unchanged.
 
 Remote CI and merge evidence are recorded on the PR at its exact HEAD. Missing live Jira search (403) is recorded; no Jira mutation is claimed. Production/provider sandbox/physical-device acceptance remains separate
 from this UX implementation and is not represented as automated PASS.
+
+## Independent review corrections
+
+The independent integrator found that forwarding an external bulk key into a single-Case command could replay that earlier command after a later unassign. Bulk now owns its distinct per-item idempotency transaction and invokes the existing business implementation through package-local `MANDATORY` transaction entry points. Regressions exercise both individual Claim and Assign followed by unassign and a bulk command with the same key, plus rejection of direct nontransactional calls. Existing individual public idempotent entry points remain intact.
+
+Visible selection previously sliced silently at 1000; it now disables with an explicit bound message and guards additional checkbox selection. Overlapping rows are deduplicated before display/count/selection. All-matching enumeration has a finite 21-page budget even for fresh cursors returning only duplicates/empty pages. Unit and 1001-row browser regressions verify these conditions.
+
+PWA install metadata now has static public Polish/English variants, cached separately without request/user data. The legacy Polish manifest URL remains compatible through an explicit GET route. A new browser assertion caught Next's automatic manifest link duplicating the localized link; replacing the auto-discovered manifest file with that legacy route resolved it. Full-stack tests verify both locale variants are precached, the English manifest works offline, and API responses remain absent from cache.
+
+After these corrections: full `pnpm check` PASS (91 web unit, 31 browser tests), full Maven verify PASS (509), scoped coverage PASS, and all 5 real-stack tests PASS. No test was skipped or relaxed to hide an implementation failure.
 
 ## Implementation by requested task
 
@@ -60,14 +70,20 @@ Limits: language preference is browser-specific; Select all matching supports at
 ```text
 apps/api/openapi/v1/openapi.json
 apps/api/src/main/java/com/unifiedsupportinbox/identity/internal/BootstrapSecurityConfiguration.java
+apps/api/src/main/java/com/unifiedsupportinbox/workflow/CaseAdministrationService.java
 apps/api/src/main/java/com/unifiedsupportinbox/workflow/CaseBulkController.java
 apps/api/src/main/java/com/unifiedsupportinbox/workflow/CaseBulkService.java
+apps/api/src/main/java/com/unifiedsupportinbox/workflow/CaseClaimService.java
+apps/api/src/main/java/com/unifiedsupportinbox/workflow/CaseIgnoreService.java
+apps/api/src/main/java/com/unifiedsupportinbox/workflow/CaseResolveService.java
 apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceIntegrationTests.java
 apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceTests.java
 apps/web/app/activate/page.tsx
 apps/web/app/globals.css
 apps/web/app/layout.tsx
 apps/web/app/login/page.tsx
+apps/web/app/manifest.webmanifest/route.ts
+apps/web/app/pwa/manifest/[locale]/route.ts
 apps/web/app/statistics/page.tsx
 apps/web/app/users/page.tsx
 apps/web/components/auth/credential-form.tsx
@@ -103,16 +119,20 @@ apps/web/lib/i18n/en.json
 apps/web/lib/i18n/errors.ts
 apps/web/lib/i18n/pl.json
 apps/web/lib/i18n/provider.tsx
+apps/web/lib/pwa-manifest.ts
 apps/web/lib/services/administration.ts
 apps/web/lib/services/api/administration-settings-adapter.ts
 apps/web/lib/services/api/inbox-adapter.ts
+apps/web/lib/services/bulk-selection.ts
 apps/web/lib/services/current-user.ts
 apps/web/lib/services/inbox.ts
 apps/web/lib/services/queries.ts
 apps/web/package.json
+apps/web/public/sw.js
 apps/web/tests/e2e/application.spec.ts
 apps/web/tests/fullstack/workflows.spec.ts
 apps/web/tests/unit/bulk-inbox-adapter.test.ts
+apps/web/tests/unit/bulk-selection.test.ts
 apps/web/tests/unit/i18n.test.tsx
 config/regression-features.json
 docs/ARCHITECTURE.md

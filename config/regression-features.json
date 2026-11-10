@@ -438,7 +438,8 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceIntegrationTests.java",
         "apps/web/tests/unit/bulk-inbox-adapter.test.ts",
         "apps/web/tests/e2e/application.spec.ts",
-        "apps/web/tests/fullstack/workflows.spec.ts"
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/web/tests/unit/bulk-selection.test.ts"
       ],
       "gap": "Select all matching enumerates at most 1000 explicit IDs; larger result sets require narrower filters"
     }

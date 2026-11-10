@@ -19,6 +19,7 @@ import {
 import type { InboxCase, InboxMessage, InboxStatus } from "@/lib/domain/inbox"
 import { inboxStatusLabels } from "@/lib/domain/inbox"
 import { deliveryStatusLabels } from "@/lib/domain/labels"
+import { MAX_BULK_SELECTION } from "@/lib/services/bulk-selection"
 import type { InboxListQuery } from "@/lib/services/inbox"
 import { useSelectMatchingCases, useCurrentUser, useInboxActivity, useInboxAssignees, useInboxCase, useInboxCases, useInboxFilterOptions, useInboxMessages, useInboxWorkflow, useMarkAllResolvedRead, useMarkInboxCaseRead } from "@/lib/services/queries"
 import { cn } from "@/lib/utils"
@@ -124,7 +125,14 @@ export function CasesPage({
   const markRead = useMarkInboxCaseRead()
   const markResolvedRead = useMarkAllResolvedRead()
 
-  const records = useMemo(() => casesQuery.data?.pages.flatMap((page) => page.items) ?? [], [casesQuery.data])
+  const records = useMemo(() => {
+    const seen = new Set<string>()
+    return (casesQuery.data?.pages.flatMap((page) => page.items) ?? []).filter((item) => {
+      if (seen.has(item.id)) return false
+      seen.add(item.id)
+      return true
+    })
+  }, [casesQuery.data])
   if (selectedCaseId === undefined && records[0]?.id) {
     setSelectedCaseId(records[0].id)
   }
@@ -268,8 +276,9 @@ export function CasesPage({
         </div>
 
         <div className="mx-4 mb-2 flex flex-wrap gap-2 text-xs text-violet-300">
-          <button type="button" disabled={matching.isPending} onClick={() => setSelection({ scope, ids: records.map((item) => item.id).slice(0, 1000) })}>{t("Zaznacz widoczne (")}{records.length})</button>
+          <button type="button" disabled={matching.isPending || records.length > MAX_BULK_SELECTION} aria-describedby="bulk-selection-limit" onClick={() => { if (records.length <= MAX_BULK_SELECTION) setSelection({ scope, ids: records.map((item) => item.id) }) }}>{t("Zaznacz widoczne (")}{records.length})</button>
           <button type="button" disabled={matching.isPending} onClick={() => matching.mutate(listQuery, { onSuccess: (ids) => { if (selectionScope.current === scope) setSelection({ scope, ids }) } })}>{matching.isPending ? t("Wczytywanie…") : t("Zaznacz wszystkie pasujące (do 1000)")}</button>
+          {(records.length > MAX_BULK_SELECTION || selectionIds.length >= MAX_BULK_SELECTION) && <p id="bulk-selection-limit" role="status" className="w-full text-[#b9c2d0]">{t("Limit zaznaczenia: 1000 spraw. Usuń zaznaczenie lub zawęź filtry.")}</p>}
           {matching.isError && <p role="alert">{userError(matching.error)}</p>}
         </div>
         <BulkCaseToolbar selected={selectionIds} clear={() => setSelection({ scope, ids: [] })} />
@@ -281,7 +290,7 @@ export function CasesPage({
           ) : visibleCases.length ? (
             visibleCases.map((item) => (
               <div key={item.id} className="relative pl-7">
-              <input type="checkbox" aria-label={t("Zaznacz {{value0}}", { value0: item.reference })} checked={selectionIds.includes(item.id)} disabled={matching.isPending} onChange={(event) => setSelection({ scope, ids: event.target.checked ? [...new Set([...selectionIds, item.id])].slice(0, 1000) : selectionIds.filter((id) => id !== item.id) })} className="absolute left-1 top-5 size-4 accent-violet-500" />
+              <input type="checkbox" aria-label={t("Zaznacz {{value0}}", { value0: item.reference })} checked={selectionIds.includes(item.id)} disabled={matching.isPending || (!selectionIds.includes(item.id) && selectionIds.length >= MAX_BULK_SELECTION)} aria-describedby="bulk-selection-limit" onChange={(event) => { if (event.target.checked && selectionIds.length >= MAX_BULK_SELECTION) return; setSelection({ scope, ids: event.target.checked ? [...new Set([...selectionIds, item.id])] : selectionIds.filter((id) => id !== item.id) }) }} className="absolute left-1 top-5 size-4 accent-violet-500" />
               <CaseListItem
                 item={item}
                 selected={item.id === selectedId}

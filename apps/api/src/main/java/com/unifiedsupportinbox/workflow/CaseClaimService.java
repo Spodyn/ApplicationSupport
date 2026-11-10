@@ -15,6 +15,8 @@ import java.util.Objects;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -52,7 +54,9 @@ public class CaseClaimService {
                 () -> executeClaim(caseId, userId, correlationId));
     }
 
-    private IdempotencyResponse executeClaim(UUID caseId, UUID userId, String correlationId) {
+    /** Composed commands must share their caller's atomic transaction. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    IdempotencyResponse executeClaim(UUID caseId, UUID userId, String correlationId) {
         Actor actor = loadActor(caseId, userId);
         if (!actor.eligible()) throw ApiProblemException.accessDenied();
         if (actor.lifetimeIgnoreVoter()) {

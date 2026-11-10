@@ -34,7 +34,7 @@ export async function generateMetadata(): Promise<Metadata> {
     title: 'Unified Support Inbox',
     description: t(description),
     applicationName: 'Unified Support Inbox',
-    manifest: '/manifest.webmanifest',
+    manifest: `/pwa/manifest/${selectedLanguage}`,
     appleWebApp: {
       capable: true,
       title: 'Support Inbox',

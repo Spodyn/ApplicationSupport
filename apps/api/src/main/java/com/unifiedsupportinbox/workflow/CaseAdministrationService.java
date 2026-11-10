@@ -16,6 +16,8 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
@@ -107,7 +109,9 @@ class CaseAdministrationService {
                 () -> executeForceResolve(caseId, actorId, category, correlationId));
     }
 
-    private IdempotencyResponse executeOwnerChange(
+    /** Composed commands must share their caller's atomic transaction. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    IdempotencyResponse executeOwnerChange(
             UUID caseId,
             UUID actorId,
             UUID targetUserId,

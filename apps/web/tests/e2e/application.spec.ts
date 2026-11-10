@@ -699,6 +699,10 @@ test("public authentication language is persisted and server renders the chosen 
   await page.goto("/login")
   await page.getByLabel("Język interfejsu").selectOption("en")
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible()
+  await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("href", "/pwa/manifest/en")
+  const manifest = await (await page.request.get("/pwa/manifest/en")).json()
+  expect(manifest.lang).toBe("en")
+  expect(manifest.description).toBe("A unified support inbox for Slack, Microsoft Teams and Telegram.")
   await page.reload()
   await expect(page.getByLabel("Password", { exact: true })).toBeVisible()
   const html = await (await page.request.get("/login")).text()
@@ -803,7 +807,7 @@ test("bulk selection spans pages, distinguishes all matching, confirms and repor
   await page.route("**/api/v1/cases?**", async (route) => {
     const url = new URL(route.request().url())
     if(url.pathname !== "/api/v1/cases") return route.fallback()
-    await route.fulfill({json:{items:url.searchParams.has("cursor")?items.slice(1):items.slice(0,1),nextCursor:url.searchParams.has("cursor")?null:"page-2"}})
+    await route.fulfill({json:{items:url.searchParams.has("cursor")?[items[0],...items.slice(1)]:items.slice(0,1),nextCursor:url.searchParams.has("cursor")?null:"page-2"}})
   })
   const writes: Array<{body:unknown;key:string}> = []
   let release = () => {}
@@ -820,6 +824,7 @@ test("bulk selection spans pages, distinguishes all matching, confirms and repor
   await expect(toolbar.getByRole("button",{name:"Przypisz",exact:true})).toHaveCount(0)
   await page.getByRole("button",{name:"Wczytaj więcej",exact:true}).click()
   await expect(page.getByLabel("Zaznacz CASE-00000004",{exact:true})).toBeVisible()
+  await expect(page.getByLabel("Zaznacz CASE-00000002",{exact:true})).toHaveCount(1)
   await page.getByLabel("Zaznacz CASE-00000003",{exact:true}).focus()
   await page.keyboard.press("Space")
   await expect(toolbar).toContainText("Zaznaczono: 2")
@@ -901,4 +906,34 @@ test("resolved Case indicators use neutral gray without changing the workflow en
   const badge = list.getByText("Rozwiązane",{exact:true})
   await expect(badge).toHaveClass(/text-slate-300/)
   await expect(badge).not.toHaveClass(/text-red/)
+})
+
+test("selection limit is explicit and never silently truncates loaded rows or checkbox additions", async ({page}) => {
+  await preparePage(page)
+  const items=Array.from({length:1001},(_,index)=>({...caseListItem,
+    id:index===0?caseId:`00000000-0000-4000-8000-${index.toString(16).padStart(12,"0")}`,
+    reference:`CASE-${String(index+2).padStart(8,"0")}`,
+  }))
+  await page.route("**/api/v1/cases?**", async route=>{
+    const url=new URL(route.request().url())
+    if(url.pathname!=="/api/v1/cases") return route.fallback()
+    await route.fulfill({json:{items:url.searchParams.has("cursor")?items.slice(1000):items.slice(0,1000),nextCursor:url.searchParams.has("cursor")?null:"last"}})
+  })
+  await page.goto("/cases")
+  const visible=page.getByRole("button",{name:/^Zaznacz widoczne/})
+  await visible.click()
+  const toolbar=page.getByLabel("Operacje zbiorcze",{exact:true})
+  await expect(toolbar).toContainText("Zaznaczono: 1000")
+  await page.getByRole("button",{name:"Wczytaj więcej",exact:true}).click()
+  await expect(visible).toBeDisabled()
+  await expect(visible).toContainText("1001")
+  await expect(page.getByRole("status").filter({hasText:"Limit zaznaczenia:"})).toBeVisible()
+  const extra=page.getByLabel("Zaznacz CASE-00001002",{exact:true})
+  await expect(extra).toBeDisabled()
+  await expect(extra).not.toBeChecked()
+  await page.getByLabel("Zaznacz CASE-00000002",{exact:true}).uncheck()
+  await expect(extra).toBeEnabled()
+  await extra.check()
+  await expect(toolbar).toContainText("Zaznaczono: 1000")
+  await expect(page.locator('input[type="checkbox"]:checked')).toHaveCount(1000)
 })

@@ -52,7 +52,7 @@ class CaseBulkService {
             JsonNode item;
             try {
                 item = commands.execute(actor, scope, key, request,
-                        () -> apply(actor, caseId, key, request, correlationId)).body();
+                        () -> apply(actor, caseId, request, correlationId)).body();
             } catch (RuntimeException error) {
                 // The failed item's transaction (including audit/outbox) has rolled
                 // back. Persist a sanitized outcome in a fresh transaction. A DB
@@ -69,7 +69,7 @@ class CaseBulkService {
         return response;
     }
 
-    private IdempotencyResponse apply(UUID actor, UUID id, String key, Request request, String correlationId) {
+    private IdempotencyResponse apply(UUID actor, UUID id, Request request, String correlationId) {
         requireActor(actor, request.action());
         // Serialize eligibility and command against concurrent workflow changes.
         jdbc.queryForList("SELECT id FROM cases WHERE id = ? FOR UPDATE", id);
@@ -79,12 +79,14 @@ class CaseBulkService {
             action = "REASSIGN";
         }
         if (!actions.contains(action)) return outcome(id, "SKIPPED", "ACTION_UNAVAILABLE");
+        // The bulk item owns idempotency. Reusing an individual command's key
+        // namespace here could replay an unrelated earlier single-Case command.
         switch (request.action()) {
-            case ASSIGN -> administration.changeOwner(id, actor, request.targetUserId(),
-                    CaseAdministrationService.Action.valueOf(action), key, correlationId);
-            case RESOLVE -> resolve.resolve(id, actor, key, null, correlationId);
-            case IGNORE -> ignore.ignore(id, actor, null, key, correlationId);
-            case CLAIM -> claim.claim(id, actor, key, correlationId);
+            case ASSIGN -> administration.executeOwnerChange(id, actor, request.targetUserId(),
+                    CaseAdministrationService.Action.valueOf(action), correlationId);
+            case RESOLVE -> resolve.executeResolve(id, actor, null, correlationId);
+            case IGNORE -> ignore.execute(id, actor, null, correlationId);
+            case CLAIM -> claim.executeClaim(id, actor, correlationId);
         }
         return outcome(id, "SUCCEEDED", "OK");
     }
