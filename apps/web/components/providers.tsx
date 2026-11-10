@@ -9,7 +9,7 @@ import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-regis
 
 const AppThemeProvider = ThemeProvider as ComponentType<PropsWithChildren<ThemeProviderProps>>
 
-export function Providers({ children }: { children: ReactNode }) {
+export function Providers({ children, nonce }: { children: ReactNode; nonce?: string }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
@@ -25,6 +25,7 @@ export function Providers({ children }: { children: ReactNode }) {
 
   return (
     <AppThemeProvider
+      nonce={nonce}
       attribute="class"
       defaultTheme="light"
       enableSystem={false}

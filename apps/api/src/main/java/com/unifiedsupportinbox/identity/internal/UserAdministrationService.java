@@ -97,6 +97,10 @@ class UserAdministrationService {
         validateInput(input);
         lockAdministrators();
         UserAccount target = requireUser(userId);
+        if (actor.userId().equals(userId) && input.permissions() != null
+                && !permissionStore.explicitPermissions(userId).containsAll(input.permissions())) {
+            throw ApiProblemException.accessDenied();
+        }
         users.findByEmailIgnoreCase(input.email())
                 .filter(other -> !other.id().equals(userId))
                 .ifPresent(other -> { throw ApiProblemException.conflict("A user with this email already exists."); });
@@ -187,8 +191,8 @@ class UserAdministrationService {
                     hash(rawToken), expectedType).stream().findFirst()
                     .orElseThrow(() -> ApiProblemException.validationFailed("The action token is invalid or expired."));
             UserAccount user = requireUser(token.userId());
+            if (!user.active()) throw ApiProblemException.validationFailed("The action token is invalid or expired.");
             user.setPasswordHash(encoder.encode(CharBuffer.wrap(password)));
-            user.setActive(true);
             users.saveAndFlush(user);
             jdbc.update("UPDATE account_action_tokens SET used_at = now() WHERE user_id = ? AND used_at IS NULL", user.id());
             invalidateSessions(user.id());

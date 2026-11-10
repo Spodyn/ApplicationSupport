@@ -26,14 +26,16 @@ class AuthController {
     private final SessionAuthenticationService authentication;
     private final SecurityContextRepository securityContexts;
     private final PermissionService permissions;
+    private final AuthenticationAbuseGuard abuse;
 
     AuthController(
             SessionAuthenticationService authentication,
             SecurityContextRepository securityContexts,
-            PermissionService permissions) {
+            PermissionService permissions, AuthenticationAbuseGuard abuse) {
         this.authentication = authentication;
         this.securityContexts = securityContexts;
         this.permissions = permissions;
+        this.abuse = abuse;
     }
 
     @PostMapping("/login")
@@ -41,6 +43,11 @@ class AuthController {
             @Valid @RequestBody LoginRequest input,
             HttpServletRequest request,
             HttpServletResponse response) {
+        long retryAfter = abuse.login(input.email(), request.getRemoteAddr());
+        if (retryAfter > 0) {
+            response.setHeader("Retry-After", Long.toString(retryAfter));
+            throw ApiProblemException.rateLimited("Too many authentication attempts. Try again later.");
+        }
         UsiSessionPrincipal principal = authentication.authenticate(input.email(), input.password());
         List<String> effectivePermissions = permissions.effectivePermissions(principal.userId());
 

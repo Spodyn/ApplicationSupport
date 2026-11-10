@@ -114,8 +114,8 @@ test("production workspace homes are explicit pnpm packages/directories", async 
   expect(rootPackage.dependencies?.next).toBeUndefined()
   expect(rootPackage.devDependencies?.vitest).toBeUndefined()
   expect(webPackage.name).toBe("@usi/web")
-  expect(webPackage.dependencies.next).toBe("16.3.0")
-  expect(webPackage.devDependencies.vitest).toBe("4.1.10")
+  expect(webPackage.dependencies.next).toBe("16.4.1")
+  expect(webPackage.devDependencies.vitest).toBe("4.1.12")
   expect(clientPackage.name).toBe("@usi/api-client")
   expect(clientPackage.private).toBe(true)
 

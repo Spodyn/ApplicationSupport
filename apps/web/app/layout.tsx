@@ -1,4 +1,3 @@
-import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import { headers } from 'next/headers'
@@ -69,18 +68,18 @@ export const viewport: Viewport = {
   ],
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const nonce = (await headers()).get('x-nonce') ?? undefined
   return (
     <html lang="pl" suppressHydrationWarning className="bg-background">
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-        <Providers>
+        <Providers nonce={nonce}>
           <AppShell>{children}</AppShell>
         </Providers>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )

@@ -174,8 +174,8 @@ describe("browser Origin guard", () => {
     )
   })
 
-  test("the Next proxy matcher covers only API and WebSocket ingress", () => {
-    expect(proxyConfig.matcher).toEqual(["/api/:path*", "/ws/:path*"])
+  test("the Next proxy also protects HTML while excluding static assets", () => {
+    expect(proxyConfig.matcher).toEqual(['/((?!_next/static|_next/image|favicon.ico|sw.js|pwa/|manifest.webmanifest).*)'])
     expect(classifyBrowserOrigin("http://localhost:3000/ws", null)).toBe(
       "no-origin",
     )

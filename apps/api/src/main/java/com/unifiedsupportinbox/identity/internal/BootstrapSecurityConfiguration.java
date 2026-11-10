@@ -3,6 +3,8 @@ package com.unifiedsupportinbox.identity.internal;
 import com.unifiedsupportinbox.ApiProblemAccessDeniedHandler;
 import com.unifiedsupportinbox.ApiProblemAuthenticationEntryPoint;
 import com.unifiedsupportinbox.CorrelationIdFilter;
+import com.unifiedsupportinbox.ApiProblemFactory;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -57,7 +59,7 @@ class BootstrapSecurityConfiguration {
             SecurityContextRepository securityContexts,
             SessionUserRefreshFilter sessionUserRefreshFilter,
             CsrfCookieExposureFilter csrfCookieExposureFilter,
-            CorrelationIdFilter correlationIdFilter) throws Exception {
+            CorrelationIdFilter correlationIdFilter, ApiProblemFactory problems, ObjectMapper mapper) throws Exception {
         return http
                 .securityContext(securityContext -> securityContext
                         .securityContextRepository(securityContexts)
@@ -153,6 +155,7 @@ class BootstrapSecurityConfiguration {
                 .addFilterAfter(csrfCookieExposureFilter, CsrfFilter.class)
                 .addFilterAfter(sessionUserRefreshFilter, AnonymousAuthenticationFilter.class)
                 .addFilterBefore(correlationIdFilter, CsrfFilter.class)
+                .addFilterBefore(new RequestBodyLimitFilter(problems, mapper), CsrfFilter.class)
                 .build();
     }
 

@@ -1,0 +1,63 @@
+{
+  "date": "2026-11-09",
+  "baseCommit": "2df2621",
+  "branch": "codex/security-audit-2026-11-09",
+  "productionReadiness": "NOT_APPROVED",
+  "backend": {
+    "command": "apps/api/mvnw --batch-mode clean verify",
+    "suites": 108,
+    "tests": 484,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "frontend": {
+    "command": "pnpm --filter @usi/web check",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "unitTests": 78,
+    "productionBuild": "PASS",
+    "chromiumTests": 18
+  },
+  "pythonLinuxTests": 54,
+  "workflowNodeTests": 21,
+  "openapiCompatibility": "PASS",
+  "yamlFilesParsed": 7,
+  "relativeSourceLinksVerified": 89,
+  "npmAdvisories": 0,
+  "mavenOSV": {
+    "source": "https://api.osv.dev",
+    "packagesScanned": 247,
+    "findings": []
+  },
+  "secrets": "PASS: worktree and available history",
+  "semgrep": {
+    "version": "1.183.0",
+    "rules": 286,
+    "files": 456,
+    "results": [
+      {
+        "rule": "java.lang.security.audit.crypto.unencrypted-socket.unencrypted-socket",
+        "path": "apps/api/src/main/java/com/unifiedsupportinbox/storage/internal/ClamAvAttachmentMalwareScanner.java",
+        "line": 46,
+        "severity": "MEDIUM",
+        "status": "OPEN: protected-local/TLS transport review"
+      }
+    ],
+    "partialParseErrors": 1,
+    "imageDigest": "sha256:2e45517a85e13a9cca14a2a00df6bb48affd66b8ebfae1b0991cd57578362fb0"
+  },
+  "unverifiedReleaseAreas": [
+    "proxy/TLS/client attribution",
+    "real provider sandboxes",
+    "ClamAV transport/signatures",
+    "final-IP pinning and streamed-body deadline",
+    "container/OS vulnerabilities",
+    "production roles/backups/retention",
+    "API coverage/backpressure",
+    "Jira source reconciliation"
+  ],
+  "githubExactHeadCI": "PENDING: inspect final PR HEAD",
+  "actionlint": "PASS",
+  "pullRequest": "https://github.com/Spodyn/ApplicationSupport/pull/147"
+}

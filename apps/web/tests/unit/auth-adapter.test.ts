@@ -73,7 +73,11 @@ describe("auth API adapter", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2)
     const loginInit = fetchMock.mock.calls[1]?.[1] as RequestInit
+    expect(fetchMock.mock.calls[1]?.[0]).toBe("/api/v1/auth/login")
     expect(loginInit.method).toBe("POST")
+    expect(loginInit.body).toBe(JSON.stringify({ email: "agent@example.com", password: "test-only-credential" }))
+    expect(loginInit.cache).toBe("no-store")
+    expect(loginInit.credentials).toBe("same-origin")
     expect(new Headers(loginInit.headers).get("X-XSRF-TOKEN")).toBe("e2e-csrf")
   })
 

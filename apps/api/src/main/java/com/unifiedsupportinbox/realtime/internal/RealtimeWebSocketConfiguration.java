@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.realtime.internal;
 
 import com.unifiedsupportinbox.UsiConfigurationProperties;
+import com.unifiedsupportinbox.identity.BrowserSessionAccess;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
@@ -19,6 +20,7 @@ class RealtimeWebSocketConfiguration implements WebSocketMessageBrokerConfigurer
     private final RealtimeProperties properties;
     private final TaskScheduler taskScheduler;
     private final UsiConfigurationProperties configuration;
+    private final BrowserSessionAccess sessions;
     private final AuthenticatedWebSocketHandshakeInterceptor handshakeInterceptor;
     private final AuthenticatedStompChannelInterceptor stompAuthentication =
             new AuthenticatedStompChannelInterceptor();
@@ -26,9 +28,11 @@ class RealtimeWebSocketConfiguration implements WebSocketMessageBrokerConfigurer
     RealtimeWebSocketConfiguration(
             RealtimeProperties properties,
             UsiConfigurationProperties configuration,
+            BrowserSessionAccess sessions,
             @Lazy @Qualifier("messageBrokerTaskScheduler") TaskScheduler taskScheduler) {
         this.properties = properties;
         this.configuration = configuration;
+        this.sessions = sessions;
         this.taskScheduler = taskScheduler;
         this.handshakeInterceptor = new AuthenticatedWebSocketHandshakeInterceptor(
                 configuration.deployment().profile() == UsiConfigurationProperties.DeploymentProfile.LOCAL
@@ -68,6 +72,7 @@ class RealtimeWebSocketConfiguration implements WebSocketMessageBrokerConfigurer
         registration
                 .setMessageSizeLimit(properties.messageSizeLimit())
                 .setTimeToFirstMessage(properties.timeToFirstMessageMillis())
+                .addDecoratorFactory(handler -> new SessionBoundWebSocketHandlerDecorator(handler, sessions))
                 .addDecoratorFactory(handler -> new FirstMessageTimeoutWebSocketHandlerDecorator(
                         handler,
                         taskScheduler,
