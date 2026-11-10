@@ -41,7 +41,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
   let authenticated = initiallyAuthenticated
   let claimed = false
   let read = false
-  const supportMessages: Array<Omit<typeof inboundMessage, "deliveryStatus"> & { deliveryStatus: string | null }> = []
+  const supportMessages: Array<Omit<typeof inboundMessage, "deliveryStatus"> & { deliveryStatus: string | null; retryAllowed?: boolean }> = []
   const sends: string[] = []
   const uploads: string[] = []
   const retries: string[] = []
@@ -246,7 +246,10 @@ async function preparePage(page: Page, initiallyAuthenticated = true) {
       const messageId = retryMatch[1]
       expect(request.headers()["idempotency-key"]).toMatch(/^[0-9a-f-]{36}$/)
       const message = supportMessages.find((candidate) => candidate.id === messageId)
-      if (message) message.deliveryStatus = "QUEUED"
+      if (message) {
+        message.deliveryStatus = "QUEUED"
+        message.retryAllowed = false
+      }
       retries.push(messageId)
       await route.fulfill({
         status: 202,
@@ -512,7 +515,7 @@ test("failed outbound message can be retried without creating duplicate content"
     inbound: false,
     body: "Retry me",
     authorName: authenticatedSession.displayName,
-    deliveryStatus: "FAILED",
+    deliveryStatus: "FAILED", retryAllowed: true,
     attachments: [],
   })
 

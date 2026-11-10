@@ -117,6 +117,8 @@ export interface InboxMessage {
     content: string
   }
   deliveryStatus?: MessageDeliveryStatus
+  retryAllowed?: boolean
+  deliveryErrorCode?: string
 }
 
 export const inboxStatusLabels: Record<InboxStatus, string> = {

@@ -25,18 +25,20 @@ class MessageHistoryService {
     private final MessageRepository messages;
     private final AttachmentMetadataCatalog attachments;
     private final CursorCodec cursors;
+    private final MessageDeliveryRepository deliveries;
 
     MessageHistoryService(
             MessageRepository messages,
             AttachmentMetadataCatalog attachments,
-            CursorCodec cursors) {
+            CursorCodec cursors, MessageDeliveryRepository deliveries) {
         this.messages = messages;
         this.attachments = attachments;
         this.cursors = cursors;
+        this.deliveries = deliveries;
     }
 
     @Transactional(readOnly = true)
-    CursorPage<MessageHistoryItem> history(UUID caseId, String before, Integer requestedLimit) {
+    CursorPage<MessageHistoryItem> history(UUID caseId, String before, Integer requestedLimit, UUID viewer) {
         int limit = ApiV1Conventions.pageSize(requestedLimit);
         CursorPosition position = before == null ? null : cursors.decode(before, scope(caseId));
         List<MessageEntity> fetched = position == null
@@ -50,10 +52,12 @@ class MessageHistoryService {
                 : null;
         Map<UUID, List<AttachmentMetadata>> attachmentsByMessage = attachments.findByMessageIds(
                 page.stream().map(MessageEntity::id).toList());
+        var failures = deliveries.failureDetails(page.stream()
+                .filter(message -> message.deliveryStatus() == MessageDeliveryStatus.FAILED).map(MessageEntity::id).toList(), viewer);
         return new CursorPage<>(page.stream()
                 .map(message -> MessageHistoryItem.from(
                         message,
-                        attachmentsByMessage.getOrDefault(message.id(), List.of())))
+                        attachmentsByMessage.getOrDefault(message.id(), List.of()), failures.get(message.id())))
                 .toList(), nextCursor);
     }
 
@@ -73,16 +77,19 @@ class MessageHistoryService {
             MessageBodyFormat bodyFormat,
             boolean inbound,
             MessageDeliveryStatus deliveryStatus,
+            boolean retryAllowed,
+            String deliveryErrorCode,
             Instant providerCreatedAt,
             Instant createdAt,
             Instant editedAt,
             Instant deletedAt,
             String authorName,
             List<MessageAttachmentItem> attachments) {
-        static MessageHistoryItem from(MessageEntity message, List<AttachmentMetadata> attachments) {
+        static MessageHistoryItem from(MessageEntity message, List<AttachmentMetadata> attachments, MessageDeliveryRepository.FailureView failure) {
             return new MessageHistoryItem(
                     message.id(), message.kind(), message.body(), message.bodyFormat(), message.inbound(),
-                    message.deliveryStatus(), message.providerCreatedAt(), message.createdAt(), message.editedAt(),
+                    message.deliveryStatus(), failure != null && failure.retryAllowed(), failure == null ? null : failure.errorCode(),
+                    message.providerCreatedAt(), message.createdAt(), message.editedAt(),
                     message.deletedAt(), message.authorName(),
                     attachments.stream().map(MessageAttachmentItem::from).toList());
         }

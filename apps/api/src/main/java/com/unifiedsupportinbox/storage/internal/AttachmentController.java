@@ -52,7 +52,12 @@ class AttachmentController {
             Authentication authentication,
             HttpServletResponse ignoredResponse) {
         authenticatedUserId(authentication);
-        SecureAttachmentService.Download download = attachments.openForDownload(caseId, attachmentId);
+        SecureAttachmentService.Download download;
+        try {
+            download = attachments.openForDownload(caseId, attachmentId);
+        } catch (com.unifiedsupportinbox.storage.AttachmentQuarantinedException quarantined) {
+            throw ApiProblemException.conflict("The attachment is quarantined and cannot be downloaded.");
+        }
         AttachmentMetadata metadata = download.metadata();
         MediaType contentType = mediaType(metadata.detectedContentType(), metadata.contentType());
         InputStream content = download.content();

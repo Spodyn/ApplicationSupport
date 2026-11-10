@@ -269,9 +269,7 @@ class MessageDeliveryService {
     }
 
     private static boolean manualRetryAllowed(DeliveryAttemptRecord attempt) {
-        return TRANSIENT.equals(attempt.errorCategory())
-                || (PERMANENT.equals(attempt.errorCategory())
-                    && "INTEGRATION_DISABLED".equals(attempt.errorCode()));
+        return MessageRetryPolicy.repairable(attempt.errorCategory(), attempt.errorCode());
     }
 
     private static String errorCode(String value) {

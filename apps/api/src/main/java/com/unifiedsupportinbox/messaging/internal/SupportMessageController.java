@@ -40,10 +40,9 @@ class SupportMessageController {
     CursorPage<MessageHistoryService.MessageHistoryItem> history(
             @PathVariable UUID caseId,
             @RequestParam(name = "before", required = false) String before,
-            @RequestParam(name = ApiV1Conventions.LIMIT_QUERY_PARAMETER, required = false) Integer limit,
+            @RequestParam(name = ApiV1Conventions.LIMIT_QUERY_PARAMETER, required = false) @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(100) Integer limit,
             Authentication authentication) {
-        authenticatedUserId(authentication);
-        return history.history(caseId, before, limit);
+        return history.history(caseId, before, limit, authenticatedUserId(authentication));
     }
 
     @PostMapping("/{caseId}/messages")

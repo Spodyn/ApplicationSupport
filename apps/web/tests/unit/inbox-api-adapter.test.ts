@@ -60,6 +60,13 @@ function fixture() {
 }
 
 describe("real inbox API adapter", () => {
+  it("uses server retry availability and fails closed for older responses", () => {
+    const failed = { ...message, kind: "SUPPORT" as const, inbound: false, deliveryStatus: "FAILED" as const }
+    expect(mapCaseMessage(caseId, failed).retryAllowed).toBe(false)
+    expect(mapCaseMessage(caseId, { ...failed, retryAllowed: true }).retryAllowed).toBe(true)
+    expect(mapCaseMessage(caseId, { ...failed, retryAllowed: false, deliveryErrorCode: "SLACK_IS_ARCHIVED" }))
+      .toMatchObject({ retryAllowed: false, deliveryErrorCode: "SLACK_IS_ARCHIVED" })
+  })
   it("shows unassigned Slack intake without inventing a real customer", async () => {
     const repository = createApiInboxRepository({ request: vi.fn(async (input: ApiTransportRequest) => {
       if (input.path === "/api/v1/cases") return { items: [{ ...listItem, customerId: "00000000-0000-0000-0000-000000000000", customerName: "Nie przypisano" }], nextCursor: null }
