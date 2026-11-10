@@ -106,6 +106,7 @@ export const browserApiTransport: ApiTransport = {
     }
 
     if (response.status === 204) return undefined as TResponse
+    if (request.responseType === 'blob') return (await response.blob()) as TResponse
     return (await response.json()) as TResponse
   },
 }

@@ -25,7 +25,7 @@ class AdminUserListController {
             @RequestParam(required = false) UserRole role,
             @RequestParam(required = false) Boolean active,
             @RequestParam(required = false) String cursor,
-            @RequestParam(required = false) Integer limit,
+            @RequestParam(required = false) @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(100) Integer limit,
             Authentication authentication) {
         return users.list(authentication, search, role, active, cursor, limit);
     }

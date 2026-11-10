@@ -159,3 +159,33 @@ test('generated types preserve nullable schema variants', () => {
   const types = generatedFiles(next).get('types.gen.ts')
   assert.match(types, /"note"\?: string \| null/)
 })
+
+test('binary download responses request Blob decoding without putting credentials in URLs', () => {
+  const next = structuredClone(base)
+  next.paths['/api/v1/examples'].get.responses[200].content = {'application/octet-stream': {schema: {type: 'string', format: 'binary'}}}
+  const client = generatedFiles(next).get('client.gen.ts')
+  assert.match(client, /request<Blob>/)
+  assert.match(client, /responseType: "blob"/)
+  assert.deepEqual(lintContract(next), [])
+})
+
+test('explicit dictionary schemas retain their value type and nested component imports', () => {
+  const next = structuredClone(base)
+  next.components.schemas.Dictionary = {type: 'object', additionalProperties: {$ref: '#/components/schemas/Example'}}
+  next.paths['/api/v1/examples'].get.responses[200].content['application/json'].schema = {
+    type: 'object', additionalProperties: {$ref: '#/components/schemas/Example'},
+  }
+  assert.match(generatedFiles(next).get('types.gen.ts'), /Dictionary = Record<string, Example>/)
+  assert.match(generatedFiles(next).get('client.gen.ts'), /import type \{ Example \}/)
+  assert.deepEqual(lintContract(next), [])
+})
+
+test('binary request bodies fail closed until request encoding is supported', () => {
+  const next = structuredClone(base)
+  next.paths['/api/v1/examples'].post = {
+    operationId: 'uploadBinary',
+    requestBody: {content: {'application/octet-stream': {schema: {type: 'string', format: 'binary'}}}},
+    responses: {204: {description: 'No content'}},
+  }
+  assert.match(lintContract(next).join('\n'), /binary request bodies are not supported/)
+})

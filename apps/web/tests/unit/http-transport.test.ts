@@ -2,6 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { browserApiTransport } from "@/lib/services/api/http-transport"
 
 describe("browser API transport", () => {
+  it('decodes protected binary downloads as Blob and retains no-store same-origin transport', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response('synthetic attachment', {headers: {'content-type': 'application/octet-stream'}}))
+    vi.stubGlobal('fetch', fetchMock)
+    const blob = await browserApiTransport.request<Blob>({method: 'GET', path: '/api/v1/cases/example/attachments/example', responseType: 'blob'})
+    expect(await blob.text()).toBe('synthetic attachment')
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({cache: 'no-store', credentials: 'same-origin'})
+  })
   beforeEach(() => {
     vi.restoreAllMocks()
     document.cookie = "XSRF-TOKEN=e2e-csrf; Path=/"

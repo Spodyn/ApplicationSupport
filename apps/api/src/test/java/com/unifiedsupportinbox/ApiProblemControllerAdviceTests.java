@@ -56,6 +56,17 @@ class ApiProblemControllerAdviceTests {
     }
 
     @Test
+    void malformedAndMissingQueryParametersUseSafeValidationProblems() throws Exception {
+        for (String path : new String[]{"/test/parameter?limit=private-rejected-value", "/test/parameter"}) {
+            mockMvc.perform(get(path))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                    .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"))
+                    .andExpect(content().string(not(containsString("private-rejected-value"))));
+        }
+    }
+
+    @Test
     void authenticationUsesStable401Code() throws Exception {
         assertControlled("/test/auth", 401, "AUTHENTICATION_REQUIRED");
     }
@@ -128,6 +139,9 @@ class ApiProblemControllerAdviceTests {
 
     @RestController
     static class TestController {
+
+        @GetMapping("/test/parameter")
+        void parameter(@org.springframework.web.bind.annotation.RequestParam Integer limit) { }
 
         @PostMapping("/test/validation")
         void validation(@Valid @RequestBody ValidationRequest request) {

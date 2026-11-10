@@ -19,7 +19,7 @@ class CaseActivityController {
     CursorPage<CaseActivityService.ActivityItem> activity(
             @PathVariable UUID caseId,
             @RequestParam(required = false) String cursor,
-            @RequestParam(required = false) Integer limit) {
+            @RequestParam(required = false) @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(100) Integer limit) {
         return activity.activity(caseId, cursor, limit);
     }
 }

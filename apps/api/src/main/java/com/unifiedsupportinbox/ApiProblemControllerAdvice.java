@@ -74,6 +74,22 @@ public class ApiProblemControllerAdvice {
         return response(problem);
     }
 
+    @ExceptionHandler({
+            org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class,
+            org.springframework.web.bind.MissingServletRequestParameterException.class
+    })
+    public ResponseEntity<ApiProblem> handleInvalidParameter(HttpServletRequest request) {
+        return response(problemFactory.fromException(
+                ApiProblemException.validationFailed("One or more request parameters are invalid."), request));
+    }
+
+    @ExceptionHandler(org.springframework.web.method.annotation.HandlerMethodValidationException.class)
+    public ResponseEntity<ApiProblem> handleMethodValidation(
+            org.springframework.web.method.annotation.HandlerMethodValidationException exception,
+            HttpServletRequest request) {
+        return exception.isForReturnValue() ? handleUnexpectedFailure(exception, request) : handleInvalidParameter(request);
+    }
+
     @ExceptionHandler(ApiProblemException.class)
     public ResponseEntity<ApiProblem> handleControlledProblem(
             ApiProblemException exception,
