@@ -1,0 +1,68 @@
+{
+  "id": 21055765,
+  "name": "Protect main",
+  "target": "branch",
+  "source_type": "Repository",
+  "source": "Spodyn/ApplicationSupport",
+  "enforcement": "active",
+  "conditions": {
+    "ref_name": {
+      "exclude": [],
+      "include": [
+        "~DEFAULT_BRANCH"
+      ]
+    }
+  },
+  "rules": [
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
+    {
+      "type": "pull_request",
+      "parameters": {
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
+        "required_reviewers": [],
+        "require_code_owner_review": false,
+        "require_last_push_approval": false,
+        "required_review_thread_resolution": false,
+        "require_extra_approval_for_unattributed_changes": true,
+        "allowed_merge_methods": [
+          "squash"
+        ]
+      }
+    },
+    {
+      "type": "required_status_checks",
+      "parameters": {
+        "strict_required_status_checks_policy": false,
+        "do_not_enforce_on_create": false,
+        "required_status_checks": [
+          {
+            "context": "validate",
+            "integration_id": 15368
+          }
+        ]
+      }
+    },
+    {
+      "type": "required_linear_history"
+    }
+  ],
+  "node_id": "RRS_lACqUmVwb3NpdG9yec5Oy5RyzgFBSRU",
+  "created_at": "2026-08-19T21:01:29.815+02:00",
+  "updated_at": "2026-08-19T21:01:29.898+02:00",
+  "bypass_actors": [],
+  "current_user_can_bypass": "never",
+  "_links": {
+    "self": {
+      "href": "https://api.github.com/repos/Spodyn/ApplicationSupport/rulesets/21055765"
+    },
+    "html": {
+      "href": "https://github.com/Spodyn/ApplicationSupport/rules/21055765"
+    }
+  }
+}

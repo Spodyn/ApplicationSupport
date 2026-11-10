@@ -8,7 +8,7 @@ export default defineConfig({
   outputDir: "test-results",
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 1 : 0,
+  retries: 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI
     ? [["github"], ["html", { open: "never" }]]
@@ -29,7 +29,7 @@ export default defineConfig({
   webServer: {
     command: `pnpm exec next start --hostname 127.0.0.1 --port ${port}`,
     url: `${baseURL}/cases`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 120_000,
     stdout: "ignore",
     stderr: "pipe",

@@ -105,7 +105,7 @@ Rules:
 **Target owner-approved mode (USI-247, 2026-10-29):** the integrator may squash-merge a standard development PR without manual reviewer assignment **only after** the authorized policy revision is effective, actual automation is verified and enabled, and all these conditions hold simultaneously:
 
 1. The current PR HEAD SHA is precisely the SHA whose CI and security results were checked. Recheck after any push, change of base, or stale CI.
-2. The complete required workflow is green at that SHA, **including configuration, backend, integration, infrastructure, OpenAPI and validate jobs where configured**; check runs are neither pending, skipped without justification, cancelled nor failed. The GitHub `validate` required status alone is not evidence the other required gates passed.
+2. The complete required workflow is green at that SHA, **including configuration, backend, integration, infrastructure, OpenAPI, web, fullstack and validate jobs**; check runs are neither pending, skipped without justification, cancelled nor failed. The GitHub `validate` required status alone is not evidence the other required gates passed.
 3. Required automated tests are meaningful (including appropriate negative/regression cases); no failing test was weakened or converted to skip to obtain green CI.
 4. PR is mergeable, without conflicts or unresolved review/security findings, and all currently effective GitHub rulesets/branch protections are satisfied.
 5. Required Jira dependencies are still `Gotowe`, and no new higher-precedence Jira/product contract invalidates the work.

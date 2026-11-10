@@ -1,0 +1,51 @@
+name: Extended regression
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 3 * * 1'
+
+permissions:
+  contents: read
+concurrency:
+  group: extended-regression-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  deterministic-resilience:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      NEXT_PUBLIC_API_BASE_URL: /api/v1
+      NEXT_PUBLIC_WS_BASE_URL: /ws
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: apps/api/pom.xml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @usi/web exec playwright install --with-deps chromium
+      - run: bash infra/minio/build-source-images.sh server
+      - run: pnpm build
+      - name: Three independent workflow repetitions without retries
+        run: pnpm test:fullstack --repeat-each=3
+      - name: Selective retry-policy mutation smoke in isolated copies
+        run: python3 scripts/testing/mutation_smoke.py
+      - name: Preserve extended regression evidence
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: extended-regression-evidence
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+            apps/api/target/mutation-smoke.json
+            apps/api/target/fullstack-runtime.log
+          retention-days: 7

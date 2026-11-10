@@ -73,7 +73,7 @@ merge_gate:
   method: squash
   standard_pr_human_review_default_required: false
   required_workflow: CI
-  required_workflow_jobs: [configuration, backend, integration, infrastructure, openapi, validate]
+  required_workflow_jobs: [configuration, backend, integration, infrastructure, openapi, web, fullstack, validate]
   requires:
     - validated_head_sha_equals_current_pr_head
     - full_required_ci_and_security_green

@@ -18,11 +18,17 @@ const data = () => ({
   reviews: [], threads: [], expectedBaseSha: base,
   ruleset: {enforcement: "active", rules: [
     {type: "pull_request", parameters: {required_approving_review_count: 0, allowed_merge_methods: ["squash"]}},
-    {type: "required_status_checks", parameters: {required_status_checks: [{context: "validate"}]}}
+    {type: "required_status_checks", parameters: {strict_required_status_checks_policy: true,
+      required_status_checks: REQUIRED_JOBS.map(context => ({context, integration_id: 15368}))}}
   ]}
 });
 
-test("eligible only with complete six-job exact SHA and readiness attestation", () => {
+test("a ruleset protecting only validate cannot qualify a complete regression gate", () => {
+  const d = data(); d.ruleset.rules[1].parameters = {required_status_checks: [{context: 'validate', integration_id: 15368}]}
+  assert.match(checkEligibility(d).join(" "), /Required.*protection|strict|up.to.date/i);
+});
+
+test("eligible only with complete eight-job exact SHA and readiness attestation", () => {
   assert.deepEqual(checkEligibility(data()), []);
 });
 test("fails closed for a draft, mismatch, and missing eligibility label", () => {

@@ -1,0 +1,419 @@
+{
+  "baseline": "1791527b16418dfc437142585c3000dd790c1699",
+  "features": [
+    {
+      "id": "AUTH",
+      "feature": "Authentication/logout/session/reset",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "POST credentials; Argon2; rotation, CSRF, expiry/deactivation, reset one-time and invalidation",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/AuthSessionIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/CredentialHashConfigurationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/CredentialRehashIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/PasswordPolicyTests.java",
+        "apps/web/tests/e2e/security.spec.ts",
+        "apps/web/tests/unit/auth-adapter.test.ts",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Real proxy HTTPS/Secure-cookie acceptance is external"
+    },
+    {
+      "id": "USERS",
+      "feature": "Users/roles/permissions",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "ADMIN plus permission; no self-grant; last managing admin; user directory",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/AdminUserListIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/PermissionIntegrationTests.java",
+        "apps/web/tests/unit/administration-users-adapter.test.ts",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Per-route body validation and admin CRUD HTTP matrix to extend"
+    },
+    {
+      "id": "CUSTOMERS",
+      "feature": "Customer CRUD and deactivation",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Validated unique external reference; backend admin enforcement",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/customer/internal/CustomerIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/testing/ApiSurfaceIntegrationTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Full-stack customer create/map added; detailed negative update validation remains targeted"
+    },
+    {
+      "id": "INTEGRATIONS",
+      "feature": "Integration configuration and health",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Secret refs only; enabled/status independent of health; sanitized test-connection errors",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/IntegrationConnectionTestRunnerTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/IntegrationHealthCoordinatorTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/IntegrationIntegrationTests.java",
+        "apps/web/tests/unit/administration-channel-settings.test.ts"
+      ],
+      "gap": "Real provider health/scope acceptance requires explicitly authorized sandbox"
+    },
+    {
+      "id": "CHANNELS",
+      "feature": "Slack discovery/mapping",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Complete membership snapshot; inactive disappearance; customer/grouping configuration",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/channel/internal/ChannelIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackChannelDiscoveryServiceTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackIgnoredChannelIntegrationTests.java",
+        "apps/web/tests/unit/api-channel-adapter.test.ts",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Live private/Connect membership acceptance external"
+    },
+    {
+      "id": "SLACK_IN",
+      "feature": "Slack authenticated intake and grouping",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Raw HMAC/time window; workspace identity; dedup; roots/replies/edit/delete; ignored/disabled/bot filtering",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFilteringInboundIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackIgnoredChannelIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundAttachmentServiceTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundDeliveryServiceTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundWorkerIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackNormalizerTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackRootCaseMappingIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackRootUnreadIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackWebhookIntegrationTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Real provider sandbox separate from deterministic PR CI"
+    },
+    {
+      "id": "SLACK_OUT",
+      "feature": "Outbound support delivery",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Same channel/thread; idempotent logical message; rate-limit retry and permanent failure",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/HttpSlackWebApiClientTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDeliveryErrorClassifierTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackMessageDeliveryProviderTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Archived failure and retry refusal covered end to end; live delivery acceptance requires sandbox"
+    },
+    {
+      "id": "CASE",
+      "feature": "Case identity/create/terminal linking",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Canonical six statuses; one linked successor after terminal; immutable reference",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseCreationServiceIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CasePersistenceIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseReferenceGenerationIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseTerminalLinkingIntegrationTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "No runtime tenant model; customer isolation is per deployment"
+    },
+    {
+      "id": "CLAIM",
+      "feature": "Claim and ownership concurrency",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Exactly one concurrent winner; owner/state authoritative",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseClaimServiceIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Existing real PostgreSQL race tests retained"
+    },
+    {
+      "id": "REPLY",
+      "feature": "Reply/Ask Customer",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Owner only; Ask transitions only after provider acceptance; failure retains owner",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/SupportSendMessageServiceIntegrationTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "HTTP envelope and live real-stack reply now added"
+    },
+    {
+      "id": "RESOLVE",
+      "feature": "Resolve/admin reassign/force resolve",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Ownership or ADMIN+exact permission; controlled optional category",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java"
+      ],
+      "gap": "Full browser administration transitions are not all automated"
+    },
+    {
+      "id": "IGNORE",
+      "feature": "Ignore votes",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Threshold two; immutable vote snapshot; reset history; lifetime Claim/Reply ban",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java"
+      ],
+      "gap": "Existing PostgreSQL invariants retained"
+    },
+    {
+      "id": "SNOOZE",
+      "feature": "Personal Snooze",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "No CaseStatus expansion; per-user due/cancel/wakeup cleanup",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseSnoozeIntegrationTests.java"
+      ],
+      "gap": "Controlled-clock duration/replay, personal cancel and due worker covered; live push delivery remains separate"
+    },
+    {
+      "id": "SLA",
+      "feature": "SLA business time and pause",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Business-calendar time; first human provider-accepted response; waiting pause",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/sla/BusinessTimeCalculatorTests.java",
+        "apps/web/tests/unit/sla.test.ts"
+      ],
+      "gap": "Production SLO/load evidence is not a unit-test pass"
+    },
+    {
+      "id": "SCHEDULE",
+      "feature": "Working hours/exceptions/OOO",
+      "status": "PARTIALLY_IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Timezone/DST; next opening; one OOO per closure; no first-human response credit",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/sla/internal/BusinessHoursIntegrationTests.java",
+        "apps/web/tests/unit/api-business-hours-adapter.test.ts"
+      ],
+      "gap": "Some settings UI work remains in separate draft PRs"
+    },
+    {
+      "id": "NOTIFICATIONS",
+      "feature": "Notifications and retry workers",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Rules/destinations rechecked; bounded retries; idempotent delivery/replay",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/notification/internal/NotificationConfigurationIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/notification/internal/NotificationDeliveryWorkerIntegrationTests.java"
+      ],
+      "gap": "Real provider notifications require explicit sandbox; no ordinary CI external calls"
+    },
+    {
+      "id": "READ",
+      "feature": "Read/unread/personal state",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Monotonic cursor and user isolation; inbound wakeup; realtime hints",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseCreatedUnreadListenerTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseCreatedUnreadProjectionIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseCreatedUnreadRabbitConfigurationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseReadStateIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CustomerMessageUnreadDomainServiceIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/ResolvedCaseBatchReadServiceIntegrationTests.java"
+      ],
+      "gap": "Real-stack refresh/reconnect plus existing transaction tests"
+    },
+    {
+      "id": "ANALYTICS",
+      "feature": "Statistics/admin views",
+      "status": "PARTIALLY_IMPLEMENTED",
+      "risk": "MEDIUM",
+      "expected": "Self/admin boundaries; UTC/bounded ranges; status is a projection",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/AnalyticsContractDocumentationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/analytics/StatisticsOverviewServiceTests.java"
+      ],
+      "gap": "Historical per-user features in unmerged PRs are not claimed implemented"
+    },
+    {
+      "id": "HISTORY",
+      "feature": "Message history/filter/search/pagination",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Persisted order; cursor scope/tamper; no overlap duplication; bounded filters",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/CursorCodecTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageHistoryServiceTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
+        "apps/web/tests/unit/inbox-api-adapter.test.ts",
+        "apps/web/tests/unit/search-filter.test.tsx"
+      ],
+      "gap": "Cross-customer Case reads are permitted within one deployment"
+    },
+    {
+      "id": "REALTIME",
+      "feature": "WebSocket/STOMP",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Session/origin required; no client SEND; bounded destinations; revocation blocks outbound",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/RealtimeWebSocketIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/AuthenticatedWebSocketHandshakeInterceptorTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/SessionBoundWebSocketHandlerDecoratorTests.java",
+        "apps/web/tests/unit/realtime-stomp-client.test.ts",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Real-stack CONNECT/MESSAGE/reload plus backend security tests"
+    },
+    {
+      "id": "ATTACHMENTS",
+      "feature": "Uploads/downloads/quarantine/storage",
+      "status": "PARTIALLY_IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Owner uploads; CLEAN-only usage; MIME/extension/size/count; private object keys",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/ProviderAttachmentGatewayContractTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundAttachmentServiceTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackOutboundAttachmentServiceTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackProviderAttachmentGatewayTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentFilePolicyTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentMetadataIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentObjectStorageIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentScanStateIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/ClamAvAttachmentMalwareScannerTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/DefaultAttachmentSecurityServiceTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Archives rejected wholesale; actual ClamAV/TLS/signatures and archive acceptance remain gaps"
+    },
+    {
+      "id": "RETRY",
+      "feature": "Retry/dedup/recovery/outbox/inbox",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Same logical message; atomic claims; expiration fencing; duplicate business effects prevented",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/IdempotentCommandExecutorIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/InboundOutboxFoundationIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/OutboxClaimFencingIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryPolicyTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundWorkerIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackMessageDeliveryProviderTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageRetryPolicyTests.java"
+      ],
+      "gap": "No real customer messages or existing queues are replayed by tests"
+    },
+    {
+      "id": "PERSISTENCE",
+      "feature": "PostgreSQL/RabbitMQ/MinIO/Flyway",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Fresh disposable services; constraints; clean plus immediate-previous upgrade; persistence lifecycle",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/InfrastructureSmokeIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/ParallelInfrastructureIsolationIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/PostgresConcurrencyConventionsIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/AuthenticationBudgetMigrationIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentObjectStorageIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/testing/PersistenceFixturesIntegrationTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Backup/PITR/encryption/least-privilege runtime roles require deployment evidence"
+    },
+    {
+      "id": "AUDIT",
+      "feature": "Audit/security/retention",
+      "status": "PARTIALLY_IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Append-only records; whitelist metadata; stable problems; no credential logging",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/ApiProblemControllerAdviceTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/ApiProblemSecurityHandlersTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/SensitiveDataRedactorTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/StructuredLoggingConfigurationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/audit/AuditEventSchemaIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/audit/AuditMetadataTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/audit/AuditSearchServiceTests.java"
+      ],
+      "gap": "Full retention orchestration/hash-chain/DR contract remains incomplete; not claimed covered"
+    },
+    {
+      "id": "BROWSER",
+      "feature": "Responsive navigation and content safety",
+      "status": "IMPLEMENTED",
+      "risk": "MEDIUM",
+      "expected": "Accepted layout; mobile list/conversation; safe text/links; strict script CSP; API never cached",
+      "tests": [
+        "apps/web/tests/e2e/application.spec.ts",
+        "apps/web/tests/e2e/security.spec.ts",
+        "apps/web/tests/unit/browser-security.test.ts",
+        "apps/web/tests/unit/external-message.test.ts",
+        "apps/web/tests/unit/http-transport.test.ts",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "API-intercepted UI tests remain separate from real-stack E2E"
+    },
+    {
+      "id": "API",
+      "feature": "Every runtime REST mapping and OpenAPI",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Bidirectional runtime mapping reconciliation; authentication/admin denials; generated-client determinism/additive compatibility",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/testing/ApiSurfaceIntegrationTests.java",
+        "apps/web/tests/unit/api-channel-adapter.test.ts",
+        "scripts/openapi/openapi.test.mjs"
+      ],
+      "gap": "Success/invalid-input/owner matrices must be reviewed by route; denial counts alone are not full success coverage"
+    },
+    {
+      "id": "CI",
+      "feature": "CI/merge/deployment policy",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "All exact-HEAD required jobs green; strict base; no skipped/missing/cancelled success; no bypass",
+      "tests": [
+        "scripts/tests/ci_gate.test.mjs",
+        "scripts/tests/ci_merge.test.mjs",
+        "scripts/tests/delete_merged_branch.test.mjs",
+        "scripts/tests/prune_merged_branches.test.mjs",
+        "scripts/tests/test_orchestrator_policy.py",
+        "scripts/tests/ci_workflow.test.mjs",
+        "scripts/tests/test_changed_coverage.py"
+      ],
+      "gap": "Production deployment approval remains protected; no automatic merge activation"
+    },
+    {
+      "id": "PROVIDERS",
+      "feature": "Teams/Telegram supported boundaries",
+      "status": "PARTIALLY_IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Frozen supported types; synthetic webhook/persistence/provider contracts",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/ProviderAttachmentGatewayContractTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackProviderAttachmentGatewayTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramChatCaseMappingIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramTopicCaseMappingIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramWebhookIntegrationTests.java"
+      ],
+      "gap": "Telegram inbound has synthetic tests; Teams adapter and Telegram outbound acceptance are absent on this baseline. Live provider sandbox is NOT RUN."
+    }
+  ]
+}

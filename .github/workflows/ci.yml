@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
@@ -23,10 +24,18 @@ jobs:
           fetch-depth: 0
 
       - name: Test environment and secret-handling contract
-        run: python3 -m unittest discover -s scripts/tests -p 'test_*.py' -v
+        run: python3 scripts/testing/run_config_tests.py
 
       - name: Test fail-closed auto-merge guard
-        run: node --test scripts/tests/ci_merge.test.mjs scripts/tests/delete_merged_branch.test.mjs scripts/tests/prune_merged_branches.test.mjs
+        run: node --test scripts/tests/ci_gate.test.mjs scripts/tests/ci_workflow.test.mjs scripts/tests/ci_merge.test.mjs scripts/tests/delete_merged_branch.test.mjs scripts/tests/prune_merged_branches.test.mjs
+
+      - name: Verify feature traceability and changed-line formatting
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          node scripts/testing/check-inventory.mjs
+          BASE_SHA="$(node scripts/testing/base-ref.mjs)"
+          git diff --check "$BASE_SHA" HEAD
 
       - name: Validate checked-in development examples
         run: |
@@ -70,7 +79,7 @@ jobs:
 
       - name: Verify backend unit, module, and architecture tests
         working-directory: apps/api
-        run: ./mvnw --batch-mode clean verify -DexcludedGroups=integration
+        run: ./mvnw --batch-mode clean verify -Pcoverage -DexcludedGroups=integration
 
       - name: Resolve and scan Maven dependencies (fail closed)
         run: |
@@ -82,7 +91,10 @@ jobs:
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: backend-test-reports
-          path: apps/api/target/surefire-reports/
+          path: |
+            apps/api/target/surefire-reports/
+            apps/api/target/site/jacoco/
+            apps/api/target/api-surface-evidence.json
           if-no-files-found: warn
           retention-days: 7
 
@@ -149,6 +161,8 @@ jobs:
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          elif [[ "${{ github.event_name }}" == "merge_group" ]]; then
+            BASE_SHA="${{ github.event.merge_group.base_sha }}"
           else
             BASE_SHA="$(git rev-parse HEAD^ 2>/dev/null || true)"
           fi
@@ -158,7 +172,7 @@ jobs:
           fi
           pnpm openapi:compat -- --base-ref "$BASE_SHA"
 
-  validate:
+  web:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -190,6 +204,16 @@ jobs:
       - name: Run mandatory pnpm check
         run: pnpm check
 
+      - name: Scoped security and transport coverage baseline
+        run: pnpm test:coverage
+
+      - name: Require coverage of changed executable lines in scoped modules
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
+        run: |
+          BASE_SHA="$(node scripts/testing/base-ref.mjs)"
+          python3 scripts/testing/changed_coverage.py --base-ref "$BASE_SHA"
+
       - name: Block actionable high and critical npm advisories
         run: pnpm audit --audit-level=high
 
@@ -203,3 +227,60 @@ jobs:
             apps/web/test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  fullstack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      NEXT_PUBLIC_API_BASE_URL: /api/v1
+      NEXT_PUBLIC_WS_BASE_URL: /ws
+    steps:
+      - name: Checkout
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Enable pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Set up Java 25
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          cache-dependency-path: apps/api/pom.xml
+      - name: Install committed dependencies and Chromium
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @usi/web exec playwright install --with-deps chromium
+      - name: Build pinned disposable MinIO
+        run: bash infra/minio/build-source-images.sh server
+      - name: Build production frontend
+        run: pnpm build
+      - name: Run real browser, backend, database, broker and object store workflows
+        run: pnpm test:fullstack
+      - name: Upload synthetic full-stack failure evidence
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: fullstack-failure-evidence
+          path: |
+            apps/web/test-results/fullstack/
+            apps/api/target/fullstack-runtime.log
+          retention-days: 7
+
+  validate:
+    if: always()
+    needs: [configuration, backend, integration, infrastructure, openapi, web, fullstack]
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Checkout gate implementation from the tested commit
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Reject failed, cancelled, skipped or missing regression jobs
+        env:
+          USI_JOB_RESULTS: ${{ toJSON(needs) }}
+        run: node scripts/testing/ci-gate.mjs
