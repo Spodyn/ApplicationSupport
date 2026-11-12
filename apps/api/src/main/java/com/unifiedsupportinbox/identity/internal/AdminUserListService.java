@@ -75,12 +75,15 @@ class AdminUserListService {
                        (SELECT count(*) FROM cases c
                         WHERE c.owner_user_id = u.id
                           AND c.status NOT IN ('IGNORED', 'RESOLVED')) AS active_assigned_cases,
-                       EXISTS (
+                       (u.active
+                        AND (u.valid_from IS NULL OR u.valid_from <= CURRENT_TIMESTAMP)
+                        AND (u.valid_until IS NULL OR u.valid_until > CURRENT_TIMESTAMP)
+                        AND EXISTS (
                            SELECT 1 FROM spring_session s
                            WHERE s.principal_name = CAST(u.id AS varchar)
                              AND s.expiry_time > (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000)
                              AND s.last_access_time >= (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) * 1000) - 300000
-                       ) AS recently_online
+                       )) AS recently_online
                 FROM users u
                 WHERE 1 = 1
                 """);
