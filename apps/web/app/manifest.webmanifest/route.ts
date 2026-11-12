@@ -1,10 +1,11 @@
+import { DEFAULT_LANGUAGE } from "@/lib/i18n/catalog"
 import { pwaManifest } from "@/lib/pwa-manifest"
 
 export const dynamic = "force-static"
 
 /** Keep the legacy URL without Next.js injecting a second manifest link. */
 export function GET() {
-  return new Response(JSON.stringify(pwaManifest("pl")), {
+  return new Response(JSON.stringify(pwaManifest(DEFAULT_LANGUAGE)), {
     headers: { "Content-Type": "application/manifest+json", "Cache-Control": "public, max-age=86400" },
   })
 }

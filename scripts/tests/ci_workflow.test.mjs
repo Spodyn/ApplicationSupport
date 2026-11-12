@@ -42,7 +42,7 @@ test('validation base handles a first branch push but refuses an invalid authori
 
 test('traceability rejects erased features, broken test links and out-of-repository paths', () => {
   const inventory = JSON.parse(readFileSync(new URL('../../config/regression-features.json', import.meta.url), 'utf8'))
-  assert.equal(checkInventory(inventory), 30)
+  assert.equal(checkInventory(inventory), 31)
   assert.throws(() => checkInventory({features: []}), /Required feature mappings missing/)
   const missing = structuredClone(inventory)
   missing.features = missing.features.filter(feature => feature.id !== 'AUTH')

@@ -14,7 +14,7 @@ import { API_AUTHENTICATION_REQUIRED_EVENT } from "@/lib/services/api/http-trans
 import { AuthenticationRequiredError } from "@/lib/services/current-user"
 import { useCurrentUser } from "@/lib/services/queries"
 
-import { LanguageSelector } from "@/lib/i18n/provider"
+import { LanguageScope, LanguageSelector } from "@/lib/i18n/provider"
 
 interface AppShellProps {
   children: ReactNode
@@ -24,7 +24,7 @@ export function AppShell({ children }: AppShellProps) {
   const pathname = usePathname()
 
   if (pathname === "/login" || pathname === "/activate") {
-    return <><div className="absolute right-4 top-3 z-10"><LanguageSelector /></div>{children}</>
+    return <LanguageScope accountId={null}><div className="absolute right-4 top-3 z-10"><LanguageSelector /></div>{children}</LanguageScope>
   }
 
   return <AuthenticatedAppShell>{children}</AuthenticatedAppShell>
@@ -69,7 +69,8 @@ function AuthenticatedAppShell({ children }: AppShellProps) {
   }
 
   return (
-    <RealtimeProvider>
+    <LanguageScope accountId={currentUser.data.id}>
+    <RealtimeProvider accountId={currentUser.data.id}>
       <ShellProvider value={{ openMobileNav: () => setMobileNavOpen(true) }}>
         <div className="flex h-svh w-full overflow-hidden bg-background">
           <a href="#main-content" className="sr-only z-[100] rounded-md bg-background px-3 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:ring-2 focus:ring-ring">
@@ -94,5 +95,6 @@ function AuthenticatedAppShell({ children }: AppShellProps) {
         </div>
       </ShellProvider>
     </RealtimeProvider>
+    </LanguageScope>
   )
 }

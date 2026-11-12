@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.unifiedsupportinbox.integration.IntegrationHealthReporter;
@@ -22,6 +23,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class SlackMessageDeliveryProviderTests {
 
@@ -159,19 +162,25 @@ class SlackMessageDeliveryProviderTests {
         verify(health).providerFailure(integrationId, "SLACK_BOT_TOKEN_MISSING", FailureKind.DISCONNECTED);
     }
 
-    @Test
-    void channelNotFoundIsPermanentFailure() {
+    @ParameterizedTest
+    @CsvSource({
+        "channel_not_found,SLACK_CHANNEL_NOT_FOUND",
+        "is_archived,SLACK_IS_ARCHIVED",
+        "no_permission,SLACK_NO_PERMISSION"
+    })
+    void channelFailureDoesNotDisconnectTheIntegration(String slackError, String code) {
         byte[] token = fixtureCredential();
         when(secrets.resolve("slack/workspace-one", SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .thenReturn(Optional.of(token));
         when(slack.postMessage(any(), any(), any(), any(), any(), any()))
                 .thenReturn(new SlackWebApiClient.PostMessageResponse(
-                        200, false, null, "channel_not_found", null));
+                        403, false, null, slackError, null));
 
         MessageDeliveryProvider.DeliveryResult result = provider.deliver(command());
 
         assertThat(result.outcome()).isEqualTo(MessageDeliveryProvider.Outcome.PERMANENT_FAILURE);
-        assertThat(result.errorCode()).isEqualTo("SLACK_CHANNEL_NOT_FOUND");
+        assertThat(result.errorCode()).isEqualTo(code);
+        verifyNoInteractions(health);
     }
 
     private MessageDeliveryProvider.DeliveryCommand command() {

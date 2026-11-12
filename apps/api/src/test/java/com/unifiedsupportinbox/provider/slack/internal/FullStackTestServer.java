@@ -30,6 +30,7 @@ import tools.jackson.databind.ObjectMapper;
 public final class FullStackTestServer {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final List<Map<String, Object>> DELIVERED = new CopyOnWriteArrayList<>();
+    private static final java.util.Set<String> THROTTLED = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static URI providerUri;
     private static JdbcTemplate fixtureDatabase;
     private static PasswordEncoder fixtureEncoder;
@@ -52,20 +53,26 @@ public final class FullStackTestServer {
         provider.createContext("/", exchange -> {
             Map<String, ?> response;
             String path = exchange.getRequestURI().getPath();
-            if (path.equals("/account") && fixtureDatabase != null) {
+            int status = 200;
+            if ((path.equals("/account") || path.equals("/agent")) && fixtureDatabase != null) {
                 String suffix = UUID.randomUUID().toString().replace("-", "");
                 String email = "fixture-" + suffix + "@example.test";
+                String role = path.equals("/agent") ? "USER" : "ADMIN";
+                String name = "Regression " + role + " " + suffix.substring(0, 8);
                 UUID user = fixtureDatabase.queryForObject("""
                         INSERT INTO users (email, display_name, password_hash, role, active)
-                        VALUES (?, 'Regression Admin', ?, 'ADMIN', TRUE) RETURNING id
-                        """, UUID.class, email, fixtureEncoder.encode("test-only-fullstack-credential"));
-                for (String permission : PERMISSIONS) fixtureDatabase.update("INSERT INTO user_permissions (user_id, permission_code) VALUES (?, ?)", user, permission);
+                        VALUES (?, ?, ?, ?, TRUE) RETURNING id
+                        """, UUID.class, email, name, fixtureEncoder.encode("test-only-fullstack-credential"), role);
+                if (role.equals("ADMIN")) {
+                    for (String permission : PERMISSIONS) fixtureDatabase.update(
+                            "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, ?)", user, permission);
+                }
                 String externalChannel = "CTEST" + suffix.toUpperCase();
                 UUID channel = fixtureDatabase.queryForObject("""
                         INSERT INTO channels (integration_id, external_channel_id, name, grouping_strategy)
                         VALUES (?, ?, 'synthetic-support', 'SLACK_ROOT_THREAD') RETURNING id
                         """, UUID.class, fixtureIntegration, externalChannel);
-                response = Map.of("email", email, "userId", user, "channelId", channel,
+                response = Map.of("email", email, "displayName", name, "userId", user, "channelId", channel,
                         "externalChannelId", externalChannel, "workspaceId", "TTESTFULL");
             } else if (path.equals("/observed")) response = Map.of("messages", DELIVERED);
             else if (path.equals("/chat.postMessage")) {
@@ -73,7 +80,13 @@ public final class FullStackTestServer {
                 if (!"Bearer test-only-fullstack-bot".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
                     response = Map.of("ok", false, "error", "invalid_auth");
                 } else if (body.path("text").asText().contains("test-only-archived")) {
+                    status = 403;
                     response = Map.of("ok", false, "error", "is_archived");
+                } else if (body.path("text").asText().contains("test-only-rate-limit")
+                        && THROTTLED.add(body.path("client_msg_id").asText())) {
+                    status = 429;
+                    exchange.getResponseHeaders().add("Retry-After", "4");
+                    response = Map.of("ok", false, "error", "ratelimited");
                 } else {
                     String ts = "1790000000." + String.format("%06d", DELIVERED.size() + 1);
                     DELIVERED.add(Map.of("clientMessageId", body.path("client_msg_id").asText(),
@@ -87,7 +100,7 @@ public final class FullStackTestServer {
             else response = Map.of("ok", false, "error", "test_endpoint_not_implemented");
             byte[] bytes = JSON.writeValueAsBytes(response);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
-            exchange.sendResponseHeaders(200, bytes.length);
+            exchange.sendResponseHeaders(status, bytes.length);
             try (var output = exchange.getResponseBody()) { output.write(bytes); }
             if (path.equals("/shutdown") && exchange.getRequestMethod().equals("POST")) {
                 new Thread(() -> System.exit(0), "test-only-cleanup").start();

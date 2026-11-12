@@ -250,7 +250,7 @@ export function mapApiBusinessHours(
     )
     if (intervals.length > 2) {
       throw new Error(
-        t("{{value0}}: bieżący edytor obsługuje maksymalnie dwa rozłączne przedziały czasu.", { value0: label }),
+        t("{{value0}}: bieżący edytor obsługuje maksymalnie dwa rozłączne przedziały czasu.", { value0: t(label) }),
       )
     }
     if (intervals.length === 0) {

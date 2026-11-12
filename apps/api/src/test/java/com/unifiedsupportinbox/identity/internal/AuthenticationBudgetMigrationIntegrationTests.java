@@ -21,7 +21,7 @@ class AuthenticationBudgetMigrationIntegrationTests {
             jdbc.update("INSERT INTO users (email, display_name, role, active) VALUES (?, ?, 'USER', TRUE)",
                     "migration@example.com", "Migration preservation probe");
             String id = jdbc.queryForObject("SELECT id::text FROM users WHERE email = ?", String.class, "migration@example.com");
-            var current = Flyway.configure().dataSource(source).load();
+            var current = Flyway.configure().dataSource(source).target("41").load();
             assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
             current.validate();
             assertThat(current.info().pending()).isEmpty();

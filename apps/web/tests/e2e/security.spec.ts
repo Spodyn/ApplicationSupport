@@ -21,7 +21,7 @@ test('HTML uses a fresh nonce CSP, hydrates login and blocks injected scripts', 
   expect(headers['x-content-type-options']).toBe('nosniff')
   expect(headers['referrer-policy']).toBe('no-referrer')
   expect(headers['cache-control']).toContain('no-store')
-  await expect(page.getByRole('heading', { name: 'Zaloguj się' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible()
   const nonce = policy.match(/'nonce-([^']+)'/)?.[1]
   expect(nonce).toBeTruthy()
   expect(await page.locator('script').evaluateAll(scripts => scripts.filter(script => script.textContent && !script.textContent.includes('__injectedSecurityProbe')).every(script => Boolean((script as HTMLScriptElement).nonce)))).toBe(true)
@@ -38,10 +38,10 @@ test('login without JavaScript submits credentials only in a POST body', async (
       ? route.fulfill({ status: 200, contentType: 'text/plain', body: 'Test form submission captured' })
       : route.continue())
     await page.goto('/login')
-    await page.getByLabel('E-mail').fill('no-js@example.com')
-    await page.getByLabel('Hasło').fill('test-only-no-js-credential')
+    await page.getByLabel('Email').fill('no-js@example.com')
+    await page.getByLabel('Password').fill('test-only-no-js-credential')
     const submitted = page.waitForRequest(request => request.method() === 'POST')
-    await page.getByRole('button', { name: 'Zaloguj się' }).click()
+    await page.getByRole('button', { name: 'Sign in' }).click()
     const request = await submitted
     expect(new URL(request.url()).search).toBe('')
     const body = new URLSearchParams(request.postData()!)

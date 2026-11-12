@@ -131,7 +131,7 @@ describe("real inbox API adapter", () => {
     expect(requests[0]).toMatchObject({ method: "PUT", body: { messageId } })
     await repository.snooze(caseId, "2026-10-06T00:00:00Z")
     expect(requests[1]).toMatchObject({ method: "POST", body: { until: "2026-10-06T00:00:00Z" } })
-    await expect(repository.sendMessage(caseId, { body: "test", attachments: [{ fileName: "file", size: "1" }] })).rejects.toThrow("Nieobsługiwany format załącznika")
+    await expect(repository.sendMessage(caseId, { body: "test", attachments: [{ fileName: "file", size: "1" }] })).rejects.toThrow("Unsupported attachment format.")
   })
   it("propagates API list errors without falling back to mock cases", async () => {
     const failure = new ApiHttpError(503)

@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from "node:fs"
 import path from "node:path"
 import ts from "typescript"
 import { browserLanguage, createI18n, language, resources, translate } from "@/lib/i18n/catalog"
-import { LanguageProvider, LanguageSelector, useT } from "@/lib/i18n/provider"
+import { LanguageProvider, LanguageScope, LanguageSelector, useT } from "@/lib/i18n/provider"
 import { formatDate, formatDuration, formatNumber, formatRelative } from "@/lib/format"
 import { ApiHttpError } from "@/lib/services/api/http-transport"
 import { userError } from "@/lib/i18n/errors"
@@ -12,26 +12,28 @@ import { Input } from "@/components/ui/input"
 import { inboxStatusLabels } from "@/lib/domain/inbox"
 import { deliveryStatusLabels, slaStateLabels } from "@/lib/domain/labels"
 
-afterEach(() => { document.cookie = "usi-language=; Max-Age=0; Path=/" })
+afterEach(() => { localStorage.clear(); document.documentElement.lang = "en" })
 function Probe() { const t = useT(); return <><p>{t("Czaty")}</p><p>{t("Rozwiązane")}</p><LanguageSelector /></> }
 describe("Polish and English interface catalogs", () => {
-  it("switches existing content immediately and persists the explicit choice", () => {
-    const view = render(<LanguageProvider initialLanguage="pl"><Probe /></LanguageProvider>)
-    expect(screen.getByText("Czaty")).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText("Język interfejsu"), { target: { value: "en" } })
-    expect(screen.getByText("Chats")).toBeInTheDocument()
-    expect(screen.getByText("Resolved")).toBeInTheDocument()
-    expect(document.documentElement.lang).toBe("en")
-    expect(browserLanguage()).toBe("en")
-    view.unmount()
-    render(<LanguageProvider initialLanguage={browserLanguage()}><Probe /></LanguageProvider>)
+  it("switches immediately and remembers the language only for the authenticated account", () => {
+    const probe = (accountId: string) => <LanguageProvider initialLanguage="en"><LanguageScope accountId={accountId}><Probe /></LanguageScope></LanguageProvider>
+    const view = render(probe("account-a"))
     expect(screen.getByText("Chats")).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText("Interface language"), { target: { value: "pl" } })
     expect(screen.getByText("Czaty")).toBeInTheDocument()
+    expect(screen.getByText("Rozwiązane")).toBeInTheDocument()
+    expect(browserLanguage()).toBe("pl")
+    view.rerender(probe("account-b"))
+    expect(screen.getByText("Chats")).toBeInTheDocument()
+    expect(browserLanguage()).toBe("en")
+    view.unmount()
+    render(probe("account-a"))
+    expect(screen.getByText("Czaty")).toBeInTheDocument()
+    expect(document.documentElement.lang).toBe("pl")
   })
-  it("defaults to Polish and uses isolated language instances", () => {
-    expect(language()).toBe("pl")
-    expect(language("de")).toBe("pl")
+  it("defaults to English and uses isolated language instances", () => {
+    expect(language()).toBe("en")
+    expect(language("de")).toBe("en")
     const english = createI18n("en"), polish = createI18n("pl")
     expect(translate("Czaty", undefined, "en")).toBe("Chats")
     expect(english.language).toBe("en")
@@ -90,8 +92,9 @@ describe("Polish and English interface catalogs", () => {
   })
   it("formats dates, durations, numbers and safe problem codes in the selected language", () => {
     const date = "2026-11-10T12:00:00Z"
+    document.documentElement.lang = "pl"
     const plDate = formatDate(date), plDuration = formatDuration(80), plNumber = formatNumber(1234.5)
-    document.cookie = "usi-language=en; Path=/"
+    document.documentElement.lang = "en"
     expect(formatDate(date)).toContain("November")
     expect(formatDate(date)).not.toBe(plDate)
     expect(formatDuration(80)).not.toBe(plDuration)

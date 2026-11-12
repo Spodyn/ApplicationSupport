@@ -19,6 +19,7 @@ import type {
   IntegrationConfigurationInput,
 } from "@/lib/domain/administration"
 import type { AdministrationUserQuery } from "./administration"
+import type { DirectSendInput } from "./direct-messages"
 import type { AnalyticsFilters } from "@/lib/domain/analytics"
 
 export type AdministrationSectionInput = {
@@ -33,6 +34,11 @@ export type AdministrationSectionInput = {
  * unieważniać po podłączeniu prawdziwych mutacji z backendu.
  */
 export const queryKeys = {
+  directMessages: () => ["direct-messages"] as const,
+  directConversations: (accountId: string) => ["direct-messages", accountId, "list"] as const,
+  directConversation: (accountId: string, id: string) => ["direct-messages", accountId, "conversation", id] as const,
+  directHistory: (accountId: string, id: string) => ["direct-messages", accountId, "history", id] as const,
+  directRecipients: (accountId: string, search: string) => ["direct-recipients", accountId, search] as const,
   currentUser: () => ["current-user"] as const,
   inboxCases: (query?: InboxListQuery) => query
     ? ["support-inbox", "cases", query] as const
@@ -54,6 +60,74 @@ export function useCurrentUser() {
     queryKey: queryKeys.currentUser(),
     queryFn: () => serviceRegistry.currentUser.get(),
   })
+}
+
+export function useDirectConversations(accountId: string, search: string) {
+  return useInfiniteQuery({
+    queryKey: [...queryKeys.directConversations(accountId), search],
+    queryFn: ({ pageParam }) => serviceRegistry.directMessages.conversations(search, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor,
+    refetchInterval: 15_000,
+  })
+}
+
+export function useDirectRecipients(accountId: string, search: string, enabled: boolean) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.directRecipients(accountId, search),
+    queryFn: ({ pageParam }) => serviceRegistry.directMessages.recipients(search, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor,
+    enabled,
+  })
+}
+
+export function useDirectConversation(accountId: string, id: string) {
+  return useQuery({
+    queryKey: queryKeys.directConversation(accountId, id),
+    queryFn: () => serviceRegistry.directMessages.conversation(id),
+    enabled: Boolean(id),
+    refetchInterval: 15_000,
+  })
+}
+
+export function useDirectHistory(accountId: string, id: string) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.directHistory(accountId, id),
+    queryFn: ({ pageParam }) => serviceRegistry.directMessages.messages(id, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor,
+    refetchInterval: 15_000,
+  })
+}
+
+export function useDirectMessageActions(accountId: string) {
+  const queryClient = useQueryClient()
+  const service = serviceRegistry.directMessages
+  const refreshSummary = (id: string) => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.directConversations(accountId) })
+    void queryClient.invalidateQueries({ queryKey: queryKeys.directConversation(accountId, id) })
+  }
+  const start = useMutation({
+    mutationFn: (id: string) => service.start(id),
+    onSuccess: (conversation) => {
+      queryClient.setQueryData(queryKeys.directConversation(accountId, conversation.id), conversation)
+      refreshSummary(conversation.id)
+    },
+  })
+  const send = useMutation({
+    mutationFn: (input: DirectSendInput) => service.send(input),
+    onSuccess: (_, input) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.directHistory(accountId, input.conversationId) })
+      refreshSummary(input.conversationId)
+    },
+  })
+  const markRead = useMutation({
+    mutationFn: ({ id, messageId }: { id: string; messageId: string }) => service.markRead(id, messageId),
+    onSuccess: (_, { id }) => refreshSummary(id),
+    retry: 1,
+  })
+  return { start, send, markRead }
 }
 
 export function useInboxCases(query?: InboxListQuery) {

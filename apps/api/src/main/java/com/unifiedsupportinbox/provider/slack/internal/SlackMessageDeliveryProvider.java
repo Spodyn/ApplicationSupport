@@ -9,10 +9,8 @@ import com.unifiedsupportinbox.messaging.MessageDeliveryProvider;
 import com.unifiedsupportinbox.provider.ProviderAttachmentException;
 import com.unifiedsupportinbox.provider.internal.ConfiguredProviderSecretResolver;
 import com.unifiedsupportinbox.storage.AttachmentQuarantinedException;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -25,19 +23,6 @@ import org.springframework.stereotype.Component;
 class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
 
     static final String BOT_TOKEN_CREDENTIAL_FILE = "slack-bot-token";
-
-    private static final Set<String> DISCONNECT_ERROR_CODES = Set.of(
-            "SLACK_ACCOUNT_INACTIVE",
-            "SLACK_BOT_TOKEN_MISSING",
-            "SLACK_CREDENTIAL_REFERENCE_MISSING",
-            "SLACK_HTTP_401",
-            "SLACK_HTTP_403",
-            "SLACK_INVALID_AUTH",
-            "SLACK_MISSING_SCOPE",
-            "SLACK_NO_PERMISSION",
-            "SLACK_NOT_AUTHED",
-            "SLACK_TEAM_ACCESS_NOT_GRANTED",
-            "SLACK_TOKEN_REVOKED");
 
     private final ProviderIntegrationCredentialLookup integrations;
     private final ConfiguredProviderSecretResolver secrets;
@@ -100,7 +85,7 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
                     command.body(),
                     command.bodyFormat(),
                     command.idempotencyKey());
-            DeliveryResult messageResult = map(response);
+            DeliveryResult messageResult = SlackDeliveryErrorClassifier.classifyPost(response);
             if (messageResult.outcome() != MessageDeliveryProvider.Outcome.SENT
                     && messageResult.outcome() != MessageDeliveryProvider.Outcome.DELIVERED) {
                 reportResult(command.integrationId(), messageResult);
@@ -138,7 +123,7 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
             return;
         }
         String code = result.errorCode();
-        if (code != null && DISCONNECT_ERROR_CODES.contains(code)) {
+        if (SlackDeliveryErrorClassifier.isIntegrationFailure(code)) {
             integrationHealth.providerFailure(integrationId, code, FailureKind.DISCONNECTED);
             return;
         }
@@ -166,36 +151,5 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
                 .filter(reference -> command.integrationId().equals(reference.integrationId()))
                 .toList();
         return matches.size() == 1 ? matches.getFirst() : null;
-    }
-
-    private static DeliveryResult map(SlackWebApiClient.PostMessageResponse response) {
-        if (response == null) {
-            return DeliveryResult.transientFailure("SLACK_INVALID_RESPONSE", null);
-        }
-        if (response.statusCode() == 429) {
-            return DeliveryResult.transientFailure("SLACK_RATE_LIMITED", positive(response.retryAfter()));
-        }
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            String code = "SLACK_HTTP_" + response.statusCode();
-            if (SlackDeliveryErrorClassifier.isTransientHttpStatus(response.statusCode())) {
-                return DeliveryResult.transientFailure(code, positive(response.retryAfter()));
-            }
-            return DeliveryResult.permanentFailure(code);
-        }
-        if (!response.ok()) {
-            String code = SlackDeliveryErrorClassifier.normalizedApiError(response.errorCode());
-            if (SlackDeliveryErrorClassifier.isTransientApiError(response.errorCode())) {
-                return DeliveryResult.transientFailure(code, positive(response.retryAfter()));
-            }
-            return DeliveryResult.permanentFailure(code);
-        }
-        if (response.messageTs() == null || response.messageTs().isBlank()) {
-            return DeliveryResult.transientFailure("SLACK_RESPONSE_TS_MISSING", null);
-        }
-        return DeliveryResult.sent(response.messageTs());
-    }
-
-    private static Duration positive(Duration value) {
-        return value != null && !value.isNegative() && !value.isZero() ? value : null;
     }
 }
