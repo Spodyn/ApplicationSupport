@@ -119,6 +119,7 @@ export interface InboxMessage {
   deliveryStatus?: MessageDeliveryStatus
   retryAllowed?: boolean
   deliveryErrorCode?: string
+  nextRetryAt?: string
 }
 
 export const inboxStatusLabels: Record<InboxStatus, string> = {

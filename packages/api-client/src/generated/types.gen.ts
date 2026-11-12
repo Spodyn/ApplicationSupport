@@ -608,6 +608,7 @@ export type CaseMessage = {
   "attachments": Array<MessageAttachment>
   "retryAllowed"?: boolean
   "deliveryErrorCode"?: string | null
+  "nextRetryAt"?: string | null
 }
 
 export type CaseMessagePage = {
@@ -702,6 +703,58 @@ export type Customer = {
   "active": boolean
   "createdAt": string
   "updatedAt": string
+}
+
+export type DirectConversation = {
+  "id": string
+  "recipient": DirectRecipient
+  "recipientActive": boolean
+  "updatedAt": string
+  "unreadCount": number
+}
+
+export type DirectConversationPage = {
+  "items": Array<DirectConversation>
+  "nextCursor": string | null
+}
+
+export type DirectConversationRequest = {
+  "recipientId": string
+}
+
+export type DirectMessage = {
+  "id": string
+  "senderId": string
+  "body": string
+  "createdAt": string
+}
+
+export type DirectMessagePage = {
+  "items": Array<DirectMessage>
+  "nextCursor": string | null
+}
+
+export type DirectMessageRequest = {
+  "body": string
+}
+
+export type DirectMessageSent = {
+  "messageId": string
+  "createdAt": string
+}
+
+export type DirectReadPositionRequest = {
+  "messageId": string
+}
+
+export type DirectRecipient = {
+  "id": string
+  "displayName": string
+}
+
+export type DirectRecipientPage = {
+  "items": Array<DirectRecipient>
+  "nextCursor": string | null
 }
 
 export type EffectivePermission = string

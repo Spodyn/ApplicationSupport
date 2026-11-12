@@ -74,25 +74,28 @@ class HttpSlackWebApiClient implements SlackWebApiClient {
 
             HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
             Duration retryAfter = retryAfter(response);
-            if (response.statusCode() == 429) {
-                return new PostMessageResponse(429, false, null, "rate_limited", retryAfter);
+            int status = response.statusCode();
+            if (status == 429) return new PostMessageResponse(status, false, null, "rate_limited", retryAfter);
+            JsonNode json;
+            try {
+                json = objectMapper.readTree(response.body());
+            } catch (JacksonException malformed) {
+                return new PostMessageResponse(status, false, null, null, retryAfter);
             }
-            if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                return new PostMessageResponse(response.statusCode(), false, null, "http_" + response.statusCode(), retryAfter);
-            }
-
-            JsonNode json = objectMapper.readTree(response.body());
-            boolean ok = json != null && json.path("ok").asBoolean(false);
-            String ts = text(json, "ts");
-            String error = text(json, "error");
-            return new PostMessageResponse(response.statusCode(), ok, ts, error, retryAfter);
+            boolean success = status >= 200 && status < 300 && json != null
+                    && json.path("ok").isBoolean() && json.path("ok").asBoolean();
+            String timestamp = success ? text(json, "ts") : null;
+            String error = SlackDeliveryErrorClassifier.safePostError(text(json, "error"));
+            return new PostMessageResponse(status, success, timestamp, error, retryAfter);
         } catch (JacksonException exception) {
-            throw new IllegalStateException("Slack Web API JSON could not be processed.", exception);
+            throw new IllegalStateException("Slack Web API request could not be encoded.");
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Slack Web API call was interrupted.", exception);
+        } catch (java.net.http.HttpTimeoutException exception) {
+            return new PostMessageResponse(408, false, null, null, null);
         } catch (java.io.IOException exception) {
-            throw new IllegalStateException("Slack Web API call failed.", exception);
+            return new PostMessageResponse(503, false, null, null, null);
         } finally {
             if (authorization != null) Arrays.fill(authorization, (byte) 0);
         }

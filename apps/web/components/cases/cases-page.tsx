@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+import { deliveryPresentation } from "@/lib/i18n/delivery-presentation"
 import { userError } from "@/lib/i18n/errors"
 import { locale } from "@/lib/i18n/catalog"
 import { useT } from "@/lib/i18n/provider"
@@ -9,7 +11,9 @@ import {
   ArrowLeft,
   Check,
   Clock3,
+  ListChecks,
   Paperclip,
+  PanelLeft,
   RotateCcw,
   Search,
   SlidersHorizontal,
@@ -23,6 +27,8 @@ import { MAX_BULK_SELECTION } from "@/lib/services/bulk-selection"
 import type { InboxListQuery } from "@/lib/services/inbox"
 import { useSelectMatchingCases, useCurrentUser, useInboxActivity, useInboxAssignees, useInboxCase, useInboxCases, useInboxFilterOptions, useInboxMessages, useInboxWorkflow, useMarkAllResolvedRead, useMarkInboxCaseRead } from "@/lib/services/queries"
 import { cn } from "@/lib/utils"
+import { useShell } from "@/components/layout/shell-context"
+import { Button } from "@/components/ui/button"
 import { BulkCaseToolbar } from "./bulk-case-toolbar"
 import { SafeExternalMessage } from "./safe-external-message"
 
@@ -88,10 +94,13 @@ export function CasesPage({
   initialCaseId?: string
 }) {
   const t = useT()
+  const shell = useShell()
   const [selectedCaseId, setSelectedCaseId] = useState<string | undefined>(initialCaseId)
   const [mobileConversationOpen, setMobileConversationOpen] = useState(false)
   const [search, setSearch] = useState("")
   const [quickFilter, setQuickFilter] = useState<QuickFilter>(onlyMine ? "mine" : "all")
+  const [bulkMode, setBulkMode] = useState(false)
+  const bulkModeVersion = useRef(0)
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilter[]>([])
   const [serverSearch, setServerSearch] = useState("")
@@ -175,6 +184,22 @@ export function CasesPage({
     }
   }, [selectedId, latestMessageId, markRead])
 
+  const toggleBulkMode = () => {
+    bulkModeVersion.current++
+    matching.reset()
+    setSelection({ scope, ids: [] })
+    setBulkMode(!bulkMode)
+  }
+
+  const selectAllMatching = () => {
+    const version = bulkModeVersion.current
+    matching.mutate(listQuery, {
+      onSuccess: (ids) => {
+        if (selectionScope.current === scope && bulkModeVersion.current === version) setSelection({ scope, ids })
+      },
+    })
+  }
+
   const selectCase = (item: CasePresentation) => {
     setSelectedCaseId(item.id)
     setMobileConversationOpen(true)
@@ -201,10 +226,23 @@ export function CasesPage({
         )}
         aria-label={t("Lista czatów")}
       >
-        <div className="shrink-0 px-[34px] pb-[14px] pt-[23px]">
-          <div className="flex h-8 items-center gap-2.5">
+        <div className="shrink-0 px-4 pb-[14px] sm:px-[34px] pt-[23px]">
+          <div className="flex min-h-8 flex-wrap items-center gap-2.5">
+            <Button variant="ghost" size="icon-sm" className="lg:hidden" onClick={() => shell?.openMobileNav()} aria-label={t("Przełącz panel boczny")}>
+              <PanelLeft />
+            </Button>
             <h1 className="text-[21px] font-bold tracking-[-0.02em]">{t("Czaty")}</h1>
             <span className="rounded-full bg-[#151f2e] px-2 py-0.5 text-[12px] font-semibold text-[#d8dce4]">{records.length}{casesQuery.hasNextPage ? "+" : ""}</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              aria-pressed={bulkMode}
+              onClick={toggleBulkMode}
+              className="ml-auto border-white/10 bg-[#111b29] text-[#d8dce4] aria-pressed:border-violet-500/60 aria-pressed:bg-violet-500/20"
+            >
+              <ListChecks />{t("Operacje zbiorcze")}
+            </Button>
           </div>
 
           <div className="mt-[17px] flex gap-3">
@@ -268,20 +306,25 @@ export function CasesPage({
 
           <div className="mt-[13px] flex gap-2.5" aria-label={t("Szybkie filtry")}>
             <QuickFilterButton active={quickFilter === "all"} onClick={() => setQuickFilter("all")}>{t("Wszystkie")}</QuickFilterButton>
-            <QuickFilterButton active={quickFilter === "sla"} onClick={() => setQuickFilter("sla")}>
+            <QuickFilterButton active={quickFilter === "sla"} onClick={() => setQuickFilter((current) => current === "sla" ? "all" : "sla")}>
               SLA
             </QuickFilterButton>
             <QuickFilterButton active={quickFilter === "mine"} onClick={() => setQuickFilter("mine")}>{t("Moje")}</QuickFilterButton>
           </div>
         </div>
 
-        <div className="mx-4 mb-2 flex flex-wrap gap-2 text-xs text-violet-300">
-          <button type="button" disabled={matching.isPending || records.length > MAX_BULK_SELECTION} aria-describedby="bulk-selection-limit" onClick={() => { if (records.length <= MAX_BULK_SELECTION) setSelection({ scope, ids: records.map((item) => item.id) }) }}>{t("Zaznacz widoczne (")}{records.length})</button>
-          <button type="button" disabled={matching.isPending} onClick={() => matching.mutate(listQuery, { onSuccess: (ids) => { if (selectionScope.current === scope) setSelection({ scope, ids }) } })}>{matching.isPending ? t("Wczytywanie…") : t("Zaznacz wszystkie pasujące (do 1000)")}</button>
-          {(records.length > MAX_BULK_SELECTION || selectionIds.length >= MAX_BULK_SELECTION) && <p id="bulk-selection-limit" role="status" className="w-full text-[#b9c2d0]">{t("Limit zaznaczenia: 1000 spraw. Usuń zaznaczenie lub zawęź filtry.")}</p>}
-          {matching.isError && <p role="alert">{userError(matching.error)}</p>}
-        </div>
-        <BulkCaseToolbar selected={selectionIds} clear={() => setSelection({ scope, ids: [] })} />
+        <BulkCaseToolbar active={bulkMode} selected={selectionIds} references={new Map(records.map((item) => [item.id, item.reference]))} clear={() => setSelection({ scope, ids: [] })}>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-violet-300">
+            <Button type="button" size="sm" variant="ghost" disabled={matching.isPending || records.length > MAX_BULK_SELECTION} aria-describedby="bulk-selection-limit" onClick={() => setSelection({ scope, ids: records.map((item) => item.id) })}>
+              {t("Zaznacz widoczne (")}{records.length})
+            </Button>
+            <Button type="button" size="sm" variant="ghost" disabled={matching.isPending} onClick={selectAllMatching}>
+              {matching.isPending ? t("Wczytywanie…") : t("Zaznacz wszystkie pasujące (do 1000)")}
+            </Button>
+            {(records.length > MAX_BULK_SELECTION || selectionIds.length >= MAX_BULK_SELECTION) && <p id="bulk-selection-limit" role="status" className="w-full text-[#b9c2d0]">{t("Limit zaznaczenia: 1000 spraw. Usuń zaznaczenie lub zawęź filtry.")}</p>}
+            {matching.isError && <p role="alert">{userError(matching.error)}</p>}
+          </div>
+        </BulkCaseToolbar>
         <div className="cases-scrollbar min-h-0 flex-1 overflow-y-auto pb-3 pl-[13px] pr-[2px]" role="group" aria-label={t("Rozmowy")}>
           {casesQuery.isLoading ? (
             <CaseListSkeleton />
@@ -289,8 +332,8 @@ export function CasesPage({
             <div className="mt-10 px-5 text-center text-sm text-[#9aa5b6]">{t("Nie udało się wczytać rozmów.")}</div>
           ) : visibleCases.length ? (
             visibleCases.map((item) => (
-              <div key={item.id} className="relative pl-7">
-              <input type="checkbox" aria-label={t("Zaznacz {{value0}}", { value0: item.reference })} checked={selectionIds.includes(item.id)} disabled={matching.isPending || (!selectionIds.includes(item.id) && selectionIds.length >= MAX_BULK_SELECTION)} aria-describedby="bulk-selection-limit" onChange={(event) => { if (event.target.checked && selectionIds.length >= MAX_BULK_SELECTION) return; setSelection({ scope, ids: event.target.checked ? [...new Set([...selectionIds, item.id])] : selectionIds.filter((id) => id !== item.id) }) }} className="absolute left-1 top-5 size-4 accent-violet-500" />
+              <div key={item.id} className={cn("relative rounded-lg", bulkMode && "pl-7", selectionIds.includes(item.id) && "bg-violet-500/15 ring-1 ring-inset ring-violet-500/50")}>
+              {bulkMode && <input type="checkbox" aria-label={t("Zaznacz {{value0}}", { value0: item.reference })} checked={selectionIds.includes(item.id)} disabled={matching.isPending || (!selectionIds.includes(item.id) && selectionIds.length >= MAX_BULK_SELECTION)} aria-describedby="bulk-selection-limit" onChange={(event) => { if (event.target.checked && selectionIds.length >= MAX_BULK_SELECTION) return; setSelection({ scope, ids: event.target.checked ? [...new Set([...selectionIds, item.id])] : selectionIds.filter((id) => id !== item.id) }) }} className="absolute left-1 top-5 size-4 accent-violet-500" />}
               <CaseListItem
                 item={item}
                 selected={item.id === selectedId}
@@ -328,6 +371,7 @@ function QuickFilterButton({ active, onClick, children }: { active: boolean; onC
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
         "flex h-8 items-center gap-1.5 rounded-[7px] border px-3 text-[12px] font-medium transition",
         active
@@ -464,6 +508,8 @@ function ConversationPanel({
   const canSnooze = Boolean(record?.availableActions?.includes("SNOOZE"))
   const canAdmin = Boolean(record?.availableActions?.some((action) => ["ASSIGN", "REASSIGN", "UNASSIGN", "FORCE_RESOLVE"].includes(action)))
   const assignees = useInboxAssignees(record?.id, actionDialog === "admin")
+  const { data: currentUser } = useCurrentUser()
+  const canManageIntegrations = currentUser?.role === "admin" && currentUser.effectivePermissions.includes("manage_integrations")
   const activity = useInboxActivity(record?.id)
   const activityItems = activity.data?.pages.flatMap((page) => page.items) ?? []
   const actionPending = workflow.askCustomer.isPending
@@ -536,7 +582,7 @@ function ConversationPanel({
 
   return (
     <section className={cn(className, "conversation-panel min-h-0 min-w-0 flex-col bg-[#08111f]")} aria-label={t("Rozmowa {{value0}}", { value0: item.company })}>
-      <header className="h-[148px] shrink-0 border-b border-white/[0.08] bg-[#08111f] px-[23px] py-[19px]">
+      <header data-case-action-region className="h-[148px] shrink-0 border-b border-white/[0.08] bg-[#08111f] px-[23px] py-[19px]">
         <div className="flex min-w-0 items-start gap-3">
           <button type="button" onClick={onBack} className="mt-1 grid size-8 shrink-0 place-items-center rounded-lg text-[#9ba6b8] hover:bg-white/5 lg:hidden" aria-label={t("Wróć do listy")}><ArrowLeft className="size-5" /></button>
           <div className="min-w-0 flex-1">
@@ -544,8 +590,8 @@ function ConversationPanel({
             <div className="mt-[3px] flex items-center gap-2 text-[13px] text-[#d7dbe3]"><span>{item.company}</span><span className="size-1 rounded-full bg-[#697587]" /><span className="font-medium text-[#e0e3e9]">{item.platform === "Slack" && <SlackMark />} {item.platform} · {item.reference}</span></div>
           </div>
           <div className="hidden shrink-0 items-center gap-3 xl:flex">
-            <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:cursor-not-allowed disabled:opacity-50"><UserRound className="size-[17px]" />{workflow.claim.isPending ? t("Przejmowanie…") : t("Przejmij")}</button>
-            <button type="button" onClick={() => record?.snoozedForCurrentUserUntil ? workflow.cancelSnooze.mutate() : setActionDialog("snooze")} disabled={!record?.snoozedForCurrentUserUntil && !canSnooze} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:opacity-50"><AlarmClock className="size-[17px]" />{record?.snoozedForCurrentUserUntil ? t("Anuluj odłożenie") : t("Odłóż")}</button>
+            <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} aria-busy={workflow.claim.isPending} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:cursor-not-allowed disabled:opacity-50"><UserRound className="size-[17px]" />{workflow.claim.isPending ? t("Przejmowanie…") : t("Przejmij")}</button>
+            <button type="button" onClick={() => record?.snoozedForCurrentUserUntil ? workflow.cancelSnooze.mutate() : setActionDialog("snooze")} disabled={workflow.cancelSnooze.isPending || (!record?.snoozedForCurrentUserUntil && !canSnooze)} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:opacity-50"><AlarmClock className="size-[17px]" />{record?.snoozedForCurrentUserUntil ? t("Anuluj odłożenie") : t("Odłóż")}</button>
             <button type="button" onClick={() => setActionDialog("ignore")} disabled={!canIgnore} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:opacity-50"><ThumbsDown className="size-[17px]" /> {t("Ignoruj")} {record ? `${record.ignoreVotes.current}/2` : ""}</button>
             <button type="button" onClick={() => setActionDialog("ask")} disabled={!canAsk} className="flex h-[42px] items-center rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:opacity-50">{t("Dopytaj")}</button>
             <button type="button" onClick={() => setActionDialog("resolve")} disabled={!canResolve} className="flex h-[42px] items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-4 text-[12px] text-[#d8dce4] disabled:opacity-50"><Check className="size-[17px]" /> {t("Rozwiąż")}</button>
@@ -553,10 +599,10 @@ function ConversationPanel({
           </div>
         </div>
         <div className="mt-[15px] flex items-center gap-3 overflow-x-auto">
-          <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] text-[#edf0f4] disabled:cursor-not-allowed disabled:opacity-50 xl:hidden">{t("Przejmij")}</button>
+          <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} aria-busy={workflow.claim.isPending} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] text-[#edf0f4] disabled:cursor-not-allowed disabled:opacity-50 xl:hidden">{workflow.claim.isPending ? t("Przejmowanie…") : t("Przejmij")}</button>
           <button type="button" onClick={() => setActionDialog("ask")} disabled={!canAsk} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] disabled:opacity-50 xl:hidden">{t("Dopytaj")}</button>
           <button type="button" onClick={() => setActionDialog("ignore")} disabled={!canIgnore} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] disabled:opacity-50 xl:hidden">{t("Ignoruj")}</button>
-          <button type="button" onClick={() => record?.snoozedForCurrentUserUntil ? workflow.cancelSnooze.mutate() : setActionDialog("snooze")} disabled={!record?.snoozedForCurrentUserUntil && !canSnooze} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] disabled:opacity-50 xl:hidden">{t("Odłóż")}</button>
+          <button type="button" onClick={() => record?.snoozedForCurrentUserUntil ? workflow.cancelSnooze.mutate() : setActionDialog("snooze")} disabled={workflow.cancelSnooze.isPending || (!record?.snoozedForCurrentUserUntil && !canSnooze)} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] disabled:opacity-50 xl:hidden">{t("Odłóż")}</button>
           <button type="button" onClick={() => setActionDialog("resolve")} disabled={!canResolve} className="h-[45px] rounded-[9px] border border-white/[0.09] bg-[#0d1624] px-3 text-[12px] disabled:opacity-50 xl:hidden">{t("Rozwiąż")}</button>
           {canAdmin && <button type="button" onClick={() => setActionDialog("admin")} className="h-[45px] rounded-[9px] border border-violet-500/20 bg-violet-950/30 px-3 text-[12px] text-violet-200 xl:hidden">{t("Admin")}</button>}
           <div className={cn("flex h-[45px] shrink-0 items-center gap-2 rounded-[9px] border px-3.5 text-[12px] font-medium", item.statusTone === "gray" ? "border-slate-500/20 bg-slate-500/15 text-slate-300" : "border-violet-500/[0.12] bg-violet-950/35 text-violet-300")}>{item.status}</div>
@@ -569,12 +615,12 @@ function ConversationPanel({
         {(workflow.cancelSnooze.isError || workflow.retryMessage.isError) && <p role="alert" className="text-xs text-red-400">{t("Nie udało się odświeżyć stanu sprawy.")}</p>}
       </header>
 
-      <div className="cases-scrollbar min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[radial-gradient(circle_at_72%_34%,rgba(23,48,76,0.12),transparent_42%)] py-[22px] pl-[22px] pr-[12px]">
+      <div className="cases-scrollbar min-h-0 min-w-0 flex-1 overflow-y-auto bg-[radial-gradient(circle_at_72%_34%,rgba(23,48,76,0.12),transparent_42%)] py-[22px] pl-[22px] pr-[12px]">
         {hasOlderMessages && <button type="button" onClick={loadOlderMessages} className="mb-5 text-sm text-violet-300">{t("Wczytaj starsze wiadomości")}</button>}
         {messagesLoading ? <p className="text-sm text-[#9aa5b6]">{t("Wczytywanie wiadomości…")}</p> : messagesError ? <p role="alert" className="text-sm text-red-400">{t("Nie udało się wczytać wiadomości.")}</p> : messages.length === 0 ? <p className="text-sm text-[#9aa5b6]">{t("Brak wiadomości.")}</p> : (
           <div className="flex flex-col gap-6">
             {messages.map((message) => message.kind === "support" ? (
-              <div key={message.id} data-message-kind="support" className="flex min-w-0 justify-end"><div className="min-w-0 max-w-[min(570px,100%)] [overflow-wrap:anywhere] rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-4 py-3 text-sm text-[#ded9eb]"><div className="mb-2 text-xs text-[#cfc4e8]">{message.sender ?? t("Wsparcie")} · {timeLabel(message.createdAt)}{message.edited ? t(" · edytowano") : ""}{message.deliveryStatus ? ` · ${t(deliveryStatusLabels[message.deliveryStatus])}` : ""}</div><p className={cn("whitespace-pre-wrap", message.deleted && "italic text-[#aeb8c8]")}><SafeExternalMessage content={message.deleted ? t("Wiadomość została usunięta w Slack.") : message.body} /></p><MessageAttachments attachments={message.attachments} />{message.deliveryStatus === "failed" && <p className="mt-2 text-xs text-red-200">{message.deliveryErrorCode === "SLACK_IS_ARCHIVED" ? t("Kanał Slack jest zarchiwizowany.") : t("Nie udało się dostarczyć wiadomości.")}</p>}{message.retryAllowed && <button type="button" onClick={() => workflow.retryMessage.mutate(message.id)} disabled={workflow.retryMessage.isPending} className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-300/20 px-2.5 py-1.5 text-xs text-red-200 disabled:opacity-50"><RotateCcw className="size-3.5" /> {t("Ponów wysyłkę")}</button>}</div></div>
+              <div key={message.id} data-message-kind="support" className="flex min-w-0 justify-end"><div className="min-w-0 max-w-[min(570px,100%)] [overflow-wrap:anywhere] rounded-[12px] bg-[linear-gradient(135deg,rgba(52,28,104,0.86),rgba(32,24,73,0.9))] px-4 py-3 text-sm text-[#ded9eb]"><div className="mb-2 text-xs text-[#cfc4e8]">{message.sender ?? t("Wsparcie")} · {timeLabel(message.createdAt)}{message.edited ? t(" · edytowano") : ""}{message.deliveryStatus ? ` · ${t(deliveryStatusLabels[message.deliveryStatus])}` : ""}</div><p className={cn("whitespace-pre-wrap", message.deleted && "italic text-[#aeb8c8]")}><SafeExternalMessage content={message.deleted ? t("Wiadomość została usunięta w Slack.") : message.body} /></p><MessageAttachments attachments={message.attachments} /><DeliveryNotice message={message} canManageIntegrations={canManageIntegrations} />{message.retryAllowed && <button type="button" onClick={() => workflow.retryMessage.mutate(message.id)} disabled={workflow.retryMessage.isPending} className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-300/20 px-2.5 py-1.5 text-xs text-red-200 disabled:opacity-50"><RotateCcw className="size-3.5" /> {t("Ponów wysyłkę")}</button>}</div></div>
             ) : message.kind === "system" ? (
               <div key={message.id} data-message-kind="system" className="min-w-0 whitespace-pre-wrap text-center text-xs text-[#9ba6b6] [overflow-wrap:anywhere]">{timeLabel(message.createdAt)} · <SafeExternalMessage content={message.deleted ? t("Wiadomość została usunięta w Slack.") : message.body} /></div>
             ) : (
@@ -593,8 +639,8 @@ function ConversationPanel({
               if (!event.repeat) void send()
             }
           }} value={draft} onChange={(event) => { setDraft(event.target.value); idempotencyKey.current = null }} disabled={!canReply || workflow.sendMessage.isPending} placeholder={canReply ? t("Napisz odpowiedź...") : t("Przejmij case, aby odpowiedzieć")} aria-label={t("Treść odpowiedzi")} className="block h-[80px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa] disabled:cursor-not-allowed" />
-          {files.length > 0 && <div className="flex flex-wrap gap-2 px-[19px] pb-2">{files.map((file, index) => <button key={`${file.name}-${file.size}-${index}`} type="button" disabled={workflow.sendMessage.isPending} onClick={() => { setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index)); idempotencyKey.current = null }} className="rounded-md bg-white/[0.06] px-2 py-1 text-xs text-[#cbd3df]" title={t("Usuń plik")}>{file.name}</button>)}</div>}
-          <div className="flex h-[51px] items-center justify-between px-[19px]"><label className={cn("inline-flex cursor-pointer items-center gap-2 text-xs text-[#aeb8c8]", !canReply && "pointer-events-none opacity-50")}><Paperclip className="size-4" /> {t("Dodaj pliki")}<input type="file" multiple disabled={!canReply || workflow.sendMessage.isPending} className="hidden" onChange={(event) => { const selected = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...selected].slice(0, 10)); idempotencyKey.current = null; event.target.value = "" }} /></label><button type="button" onClick={send} disabled={!canReply || !draft.trim() || workflow.sendMessage.isPending} className="h-[45px] w-[117px] rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{workflow.sendMessage.isPending ? t("Wysyłanie…") : t("Wyślij")}</button></div>
+          {files.length > 0 && <div className="flex flex-wrap gap-2 px-[19px] pb-2">{files.map((file, index) => <button key={`${file.name}-${file.size}-${index}`} type="button" disabled={workflow.sendMessage.isPending} onClick={() => { setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index)); idempotencyKey.current = null }} className="min-w-0 max-w-full rounded-md bg-white/[0.06] px-2 py-1 text-left text-xs text-[#cbd3df] [overflow-wrap:anywhere]" title={t("Usuń plik")}>{file.name}</button>)}</div>}
+          <div className="flex h-[51px] items-center justify-between px-[19px]"><label className={cn("inline-flex cursor-pointer items-center gap-2 text-xs text-[#aeb8c8]", !canReply && "pointer-events-none opacity-50")}><Paperclip className="size-4" /> {t("Dodaj pliki")}<input type="file" multiple disabled={!canReply || workflow.sendMessage.isPending} className="hidden" onChange={(event) => { const selected = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...selected].slice(0, 10)); idempotencyKey.current = null; event.target.value = "" }} /></label><button type="button" data-case-action aria-busy={workflow.sendMessage.isPending} onClick={send} disabled={!canReply || !draft.trim() || workflow.sendMessage.isPending} className="h-[45px] w-[117px] rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{workflow.sendMessage.isPending ? t("Wysyłanie…") : t("Wyślij")}</button></div>
         </div>
         <p id="composer-help" className="mt-1 text-[11px] text-[#9aa5b6]">{t("Enter wysyła · Shift+Enter dodaje nowy wiersz")}</p>
         {sendError && <p role="alert" className="mt-2 text-sm text-red-400">{userError(sendError)}</p>}
@@ -606,7 +652,7 @@ function ConversationPanel({
         {actionDialog === "snooze" && <><div className="mt-4 flex gap-2">{[["1h", 60], [t("Jutro"), 24 * 60], [t("Tydzień"), 7 * 24 * 60]].map(([label, minutes]) => <button key={String(label)} type="button" onClick={() => setSnoozeUntil(localDateTime(new Date(Date.now() + Number(minutes) * 60_000)))} className="rounded-md border border-white/10 px-3 py-1.5 text-xs">{label}</button>)}</div><input type="datetime-local" value={snoozeUntil} onChange={(event) => setSnoozeUntil(event.target.value)} className="mt-3 w-full rounded-lg border border-white/10 bg-[#08111f] p-2 text-sm" /></>}
         {actionDialog === "admin" && <label className="mt-4 block text-xs text-[#aeb8c8]">{t("Agent")}<select value={assigneeId} onChange={(event) => setAssigneeId(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[#08111f] p-2"><option value="">{t("Wybierz agenta")}</option>{assignees.data?.filter((agent) => agent.eligible).map((agent) => <option key={agent.id} value={agent.id}>{agent.displayName}{agent.ignoreWeight === 2 ? t(" · głos ignorowania ×2") : ""}</option>)}</select></label>}
         {actionError && <p role="alert" className="mt-3 text-sm text-red-400">{userError(actionError)}</p>}
-        <div className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => { setActionDialog(null); setActionError(null); workflowActionKey.current = null }} disabled={actionPending} className="rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-50">{t("Anuluj")}</button>{actionDialog === "admin" ? <>{record?.availableActions?.includes("ASSIGN") && <button type="button" onClick={() => void performAdminAction("assign")} disabled={actionPending || !assigneeId} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz")}</button>}{record?.availableActions?.includes("REASSIGN") && <button type="button" onClick={() => void performAdminAction("reassign")} disabled={actionPending || !assigneeId} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz ponownie")}</button>}{record?.availableActions?.includes("UNASSIGN") && <button type="button" onClick={() => void performAdminAction("unassign")} disabled={actionPending} className="rounded-lg border border-amber-400/30 px-4 py-2 text-sm text-amber-200 disabled:opacity-50">{t("Cofnij przypisanie")}</button>}{record?.availableActions?.includes("FORCE_RESOLVE") && <button type="button" onClick={() => void performAdminAction("forceResolve")} disabled={actionPending} className="rounded-lg bg-red-700 px-4 py-2 text-sm disabled:opacity-50">{t("Wymuś rozwiązanie")}</button>}</> : <button type="button" onClick={() => void performAction()} disabled={actionPending || (actionDialog === "ask" && !actionText.trim())} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{actionPending ? t("Zapisywanie…") : t("Zatwierdź")}</button>}</div>
+        <div data-case-action-region aria-busy={actionPending} className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => { setActionDialog(null); setActionError(null); workflowActionKey.current = null }} disabled={actionPending} className="rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-50">{t("Anuluj")}</button>{actionDialog === "admin" ? <>{record?.availableActions?.includes("ASSIGN") && <button type="button" onClick={() => void performAdminAction("assign")} disabled={actionPending || !assigneeId} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz")}</button>}{record?.availableActions?.includes("REASSIGN") && <button type="button" onClick={() => void performAdminAction("reassign")} disabled={actionPending || !assigneeId} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz ponownie")}</button>}{record?.availableActions?.includes("UNASSIGN") && <button type="button" onClick={() => void performAdminAction("unassign")} disabled={actionPending} className="rounded-lg border border-amber-400/30 px-4 py-2 text-sm text-amber-200 disabled:opacity-50">{t("Cofnij przypisanie")}</button>}{record?.availableActions?.includes("FORCE_RESOLVE") && <button type="button" onClick={() => void performAdminAction("forceResolve")} disabled={actionPending} className="rounded-lg bg-red-700 px-4 py-2 text-sm disabled:opacity-50">{t("Wymuś rozwiązanie")}</button>}</> : <button type="button" onClick={() => void performAction()} disabled={actionPending || (actionDialog === "ask" && !actionText.trim())} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{actionPending ? t("Zapisywanie…") : t("Zatwierdź")}</button>}</div>
       </div></div>}
     </section>
   )
@@ -622,9 +668,31 @@ function localDateTime(value: Date): string {
   return new Date(value.getTime() - offset).toISOString().slice(0, 16)
 }
 
+function DeliveryNotice({ message, canManageIntegrations }: { message: InboxMessage; canManageIntegrations: boolean }) {
+  const t = useT()
+  const presentation = deliveryPresentation(message.deliveryErrorCode)
+  if (message.deliveryStatus === "queued" && message.nextRetryAt) {
+    return (
+      <p className="mt-2 text-xs text-amber-200">
+        {t(presentation.retryMessage ?? "Zaplanowano automatyczne ponowienie.")}{" "}
+        {t("Następna próba: {{time}}", { time: timeLabel(message.nextRetryAt) })}
+      </p>
+    )
+  }
+  if (message.deliveryStatus !== "failed") return null
+  return (
+    <div className="mt-2 text-xs text-red-200">
+      <p>{t(presentation.message)}</p>
+      {presentation.integration && canManageIntegrations && (
+        <Link className="mt-1 inline-block underline" href="/settings?tab=integrations">{t("Otwórz ustawienia integracji")}</Link>
+      )}
+    </div>
+  )
+}
+
 function MessageAttachments({ attachments }: { attachments?: InboxMessage["attachments"] }) {
   if (!attachments?.length) return null
-  return <div className="mt-3 flex flex-wrap gap-2">{attachments.map((attachment) => attachment.downloadUrl ? <a key={attachment.id} href={attachment.downloadUrl} download className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-white/10 bg-black/10 px-2.5 py-1.5 text-xs text-violet-200 hover:bg-white/5"><Paperclip className="size-3.5" /> <span className="min-w-0 [overflow-wrap:anywhere]">{attachment.fileName} · {attachment.size}</span></a> : <span key={attachment.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-[#cbd3df]"><Paperclip className="size-3.5" /> <span className="min-w-0 [overflow-wrap:anywhere]">{attachment.fileName} · {attachment.size}</span></span>)}</div>
+  return <div className="mt-3 flex flex-wrap gap-2">{attachments.map((attachment) => attachment.downloadUrl ? <a key={attachment.id} href={attachment.downloadUrl} download className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-white/10 bg-black/10 px-2.5 py-1.5 text-xs text-violet-200 hover:bg-white/5"><Paperclip className="size-3.5 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{attachment.fileName} · {attachment.size}</span></a> : <span key={attachment.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-[#cbd3df]"><Paperclip className="size-3.5 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{attachment.fileName} · {attachment.size}</span></span>)}</div>
 }
 
 function Avatar({ initials, size = "default", online = false }: { initials: string; size?: "default" | "sm" | "xs"; online?: boolean }) {

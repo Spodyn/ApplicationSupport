@@ -267,6 +267,10 @@ Agents must stop and request a human only for a real contract change, including:
 
 Everything else that is a technically equivalent implementation under this contract is delegated.
 
-## Owner-authorized interface extension (2026-11-10)
+## Owner-authorized interface extension (2026-11-10, updated 2026-11-12)
 
-Polish/English interface preferences, bounded bulk Claim/Assign/Resolve/Ignore using existing individual rules, and the eight UX corrections are specified in [UX_BULK_I18N.md](UX_BULK_I18N.md). Polish remains the default. This explicit owner extension changes no CaseStatus, permission, individual workflow rule, provider scope or production authority.
+Polish/English interface preferences, bounded bulk Claim/Assign/Resolve/Ignore using existing individual rules, and the eight UX corrections are specified in [UX_BULK_I18N.md](UX_BULK_I18N.md). English is the default. Authenticated users can select Polish independently on each browser. This explicit owner extension changes no CaseStatus, permission, individual workflow rule, provider scope or production authority.
+
+## Owner-authorized private messaging extension (2026-11-12)
+
+Active users can exchange private one-to-one text messages with other active users in the same deployment. Only the two participants can read the conversation or receive its realtime hints. Administrators have the same participant-only access. Account deactivation preserves history for the other participant. Direct Messages are internal to USI and use no provider channels or Case workflow. See [DIRECT_MESSAGES.md](DIRECT_MESSAGES.md).

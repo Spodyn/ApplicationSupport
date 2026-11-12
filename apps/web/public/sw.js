@@ -1,4 +1,5 @@
-const STATIC_CACHE = "unified-support-static-v2"
+const STATIC_CACHE_PREFIX = "unified-support-static-"
+const STATIC_CACHE = STATIC_CACHE_PREFIX + "v3"
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
   "/pwa/manifest/pl",
@@ -15,7 +16,7 @@ self.addEventListener("install", (event) => {
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key !== STATIC_CACHE).map((key) => caches.delete(key)))),
+    caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith(STATIC_CACHE_PREFIX) && key !== STATIC_CACHE).map((key) => caches.delete(key)))),
   )
   self.clients.claim()
 })
