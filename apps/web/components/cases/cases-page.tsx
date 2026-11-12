@@ -582,7 +582,7 @@ function ConversationPanel({
 
   return (
     <section className={cn(className, "conversation-panel min-h-0 min-w-0 flex-col bg-[#08111f]")} aria-label={t("Rozmowa {{value0}}", { value0: item.company })}>
-      <header data-case-action-region className="h-[148px] shrink-0 border-b border-white/[0.08] bg-[#08111f] px-[23px] py-[19px]">
+      <header data-case-action-region className="min-h-[148px] shrink-0 border-b border-white/[0.08] bg-[#08111f] px-[23px] py-[19px]">
         <div className="flex min-w-0 items-start gap-3">
           <button type="button" onClick={onBack} className="mt-1 grid size-8 shrink-0 place-items-center rounded-lg text-[#9ba6b8] hover:bg-white/5 lg:hidden" aria-label={t("Wróć do listy")}><ArrowLeft className="size-5" /></button>
           <div className="min-w-0 flex-1">

@@ -784,6 +784,11 @@ for (const width of [1440, 820, 390, 320]) {
     const savedAttachment = panel.getByRole("link", {name: new RegExp(fileName.replace(".", "\\."))})
     await expect(savedAttachment).toHaveCount(1)
     expect(await savedAttachment.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true)
+    const actionFits = await panel.locator("header").evaluate(header => {
+      const lastControl = header.querySelector("button.xl\\:hidden")
+      return !lastControl || lastControl.getBoundingClientRect().bottom <= header.getBoundingClientRect().bottom
+    })
+    expect(actionFits).toBe(true)
     for (const kind of ["customer", "support"]) {
       const text = panel.locator(`[data-message-kind="${kind}"] p`).first()
       await expect(text).toHaveText(long.replace(`[${link}](${link})`, link))
@@ -962,6 +967,8 @@ test("resolved Case indicators use neutral gray without changing the workflow en
   const badge = list.getByText("Rozwiązane",{exact:true})
   await expect(badge).toHaveClass(/text-slate-300/)
   await expect(badge).not.toHaveClass(/text-red/)
+  await expect(page.getByRole("region", { name: /Rozmowa Slack Test Customer/ })
+    .getByText("Rozwiązane", {exact: true})).toHaveClass(/text-slate-300/)
 })
 
 test("selection limit is explicit and never silently truncates loaded rows or checkbox additions", async ({page}) => {
