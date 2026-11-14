@@ -2,6 +2,7 @@ import { translate as t } from "@/lib/i18n/catalog"
 import { createApiClient } from "@usi/api-client/generated"
 import type {
   ApiTransport,
+  AttachmentUploadResponse,
   CaseDetail,
   CaseListItem,
   CaseMessage,
@@ -14,6 +15,7 @@ import {
   type InboxPendingAttachment,
   type InboxRepository,
 } from "@/lib/services/inbox"
+import { attachmentLimitError } from "@/lib/services/attachment-limits"
 import { mapApiChannel } from "./channel-adapter"
 import { ApiHttpError, browserApiTransport } from "./http-transport"
 
@@ -148,6 +150,15 @@ export function mapCaseMessage(first: CaseMessage | string, second?: string | Ca
   }
 }
 
+function mapPendingAttachment(uploaded: AttachmentUploadResponse): InboxPendingAttachment {
+  return {
+    id: uploaded.attachmentId, fileName: uploaded.filename, size: formatBytes(uploaded.sizeBytes),
+    sizeBytes: uploaded.sizeBytes, type: uploaded.contentType?.startsWith("image/") ? "image" : "document",
+    scanStatus: uploaded.scanStatus.toLowerCase() as InboxPendingAttachment["scanStatus"],
+    scanError: uploaded.scanError,
+  }
+}
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -156,6 +167,7 @@ function formatBytes(bytes: number): string {
 
 export function createApiInboxRepository(transport: ApiTransport): InboxRepository {
   const client = createApiClient(transport)
+  const uploadedByDraft = new WeakMap<object, Map<File, InboxPendingAttachment>>()
   const repository: InboxRepository = {
     async bulk(input) {
       if (!input.caseIds.length || input.caseIds.length > 1000) throw new Error(t("Select 1 to 1000 Cases."))
@@ -290,41 +302,63 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     async sendMessage(caseId, input) {
       if (input.simulateFailure) throw new Error(t("Symulowanie błędu jest dostępne wyłącznie w trybie demonstracyjnym."))
       const body = input.body.trim()
-      if (!body) throw new Error(t("Wiadomość nie może być pusta."))
       const attachments = input.attachments ?? []
+      if (!body && attachments.length === 0) throw new Error(t("Wiadomość nie może być pusta."))
       const files = attachments.filter((attachment): attachment is File => attachment instanceof File)
       const pending = attachments.filter((attachment): attachment is InboxPendingAttachment => !(attachment instanceof File) && "id" in attachment && "scanStatus" in attachment)
       if (files.length + pending.length !== attachments.length) throw new Error(t("Nieobsługiwany format załącznika."))
       if (pending.some((attachment) => attachment.scanStatus !== "clean")) throw new Error(t("Wiadomość może zawierać tylko poprawnie zeskanowane załączniki."))
-      if (attachments.length > 10) throw new Error(t("Jedna wiadomość może zawierać maksymalnie 10 plików."))
-      if (files.some((file) => file.size > 25 * 1024 * 1024)) throw new Error(t("Pojedynczy plik nie może przekraczać 25 MiB."))
-      if (files.reduce((sum, file) => sum + file.size, 0) > 50 * 1024 * 1024) throw new Error(t("Łączny rozmiar plików nie może przekraczać 50 MiB."))
-      const uploaded: InboxPendingAttachment[] = []
-      try {
-        for (const file of files) {
-          const result = await repository.uploadAttachment(caseId, file)
-          uploaded.push(result)
-          if (result.scanStatus !== "clean") throw new Error(t("Plik {{value0}} nie przeszedł kontroli bezpieczeństwa.", { value0: file.name }))
+      const limitError = attachmentLimitError(files, pending.map((attachment) => attachment.sizeBytes))
+      if (limitError) throw limitError
+
+      // A lost response may already have committed the message. Keep the same
+      // attachment IDs when the composer retries its unchanged submission.
+      const uploaded = uploadedByDraft.get(input) ?? new Map<File, InboxPendingAttachment>()
+      uploadedByDraft.set(input, uploaded)
+      for (const file of files) {
+        const previous = uploaded.get(file)
+        if (previous?.scanStatus === "clean") continue
+        const result = !previous
+          ? await repository.uploadAttachment(caseId, file)
+          : previous.scanStatus === "infected" || previous.scanError?.startsWith("POLICY_")
+            ? previous
+            : mapPendingAttachment(await client.retryCaseAttachmentScan({ caseId, attachmentId: previous.id }))
+        uploaded.set(file, result)
+        if (result.scanStatus !== "clean") {
+          let key = "Trwa skanowanie pliku {{value0}}. Spróbuj ponownie za chwilę."
+          if (result.scanStatus === "infected") key = "W pliku {{value0}} wykryto zagrożenie."
+          else if (result.scanError?.startsWith("POLICY_")) key = "Typ pliku {{value0}} jest niedozwolony."
+          else if (result.scanStatus === "error") key = "Nie udało się zeskanować pliku {{value0}}. Spróbuj ponownie."
+          throw new Error(t(key, { value0: file.name }))
         }
-        const accepted = await client.sendCaseMessage({
-          caseId,
-          "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
-          body: { body, bodyFormat: "PLAIN_TEXT", attachmentIds: [...pending, ...uploaded].map((item) => item.id) },
-        })
-        const history = await client.getCaseMessages({ caseId, limit: 50 })
-        const persisted = history.items.find((message) => message.id === accepted.messageId)
-        if (!persisted) throw new Error(t("Wysłana wiadomość nie pojawiła się w historii case’u."))
-        return mapCaseMessage(persisted, caseId)
-      } catch (error) {
-        await Promise.all(uploaded.map((item) => repository.removePendingAttachment(caseId, item.id)))
-        throw error
       }
+      const accepted = await client.sendCaseMessage({
+        caseId,
+        "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
+        body: { body, bodyFormat: "PLAIN_TEXT", attachmentIds: [...pending, ...uploaded.values()].map((item) => item.id) },
+      })
+      const history = await client.getCaseMessages({ caseId, limit: 50 })
+      const persisted = history.items.find((message) => message.id === accepted.messageId)
+      if (!persisted) throw new Error(t("Wysłana wiadomość nie pojawiła się w historii case’u."))
+      uploadedByDraft.delete(input)
+      return mapCaseMessage(persisted, caseId)
     },
     async uploadAttachment(caseId, file) {
       const body = new FormData()
       body.append("file", file)
-      const uploaded = await client.uploadCaseAttachment({ caseId, body })
-      return { id: uploaded.attachmentId, fileName: uploaded.filename, size: formatBytes(uploaded.sizeBytes), type: uploaded.contentType?.startsWith("image/") ? "image" : "document", scanStatus: uploaded.scanStatus.toLowerCase() as InboxPendingAttachment["scanStatus"] }
+      try {
+        return mapPendingAttachment(await client.uploadCaseAttachment({ caseId, body }))
+      } catch (error) {
+        if (error instanceof ApiHttpError) {
+          if (error.problem?.code === "ATTACHMENT_TYPE_REJECTED") {
+            throw new Error(t("Typ pliku {{value0}} jest niedozwolony.", { value0: file.name }))
+          }
+          if (error.status === 413 || error.problem?.code === "ATTACHMENT_TOO_LARGE") {
+            throw new Error(t("Pojedynczy plik nie może przekraczać 25 MiB."))
+          }
+        }
+        throw error
+      }
     },
     async removePendingAttachment(caseId, attachmentId) {
       await client.removePendingCaseAttachment({ caseId, attachmentId })

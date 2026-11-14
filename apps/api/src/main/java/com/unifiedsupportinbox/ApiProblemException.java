@@ -33,6 +33,16 @@ public final class ApiProblemException extends RuntimeException {
                 null);
     }
 
+    public static ApiProblemException attachmentTooLarge() {
+        return new ApiProblemException(ApiProblemCode.ATTACHMENT_TOO_LARGE, HttpStatus.CONTENT_TOO_LARGE,
+                "Attachment too large", "Attachment exceeds the 25 MiB file limit.", null);
+    }
+
+    public static ApiProblemException attachmentTypeRejected(String policyCode) {
+        return new ApiProblemException(ApiProblemCode.ATTACHMENT_TYPE_REJECTED, HttpStatus.BAD_REQUEST,
+                "Attachment type rejected", "Attachment was rejected: " + policyCode + ".", null);
+    }
+
     public static ApiProblemException authenticationRequired() {
         return new ApiProblemException(
                 ApiProblemCode.AUTHENTICATION_REQUIRED,

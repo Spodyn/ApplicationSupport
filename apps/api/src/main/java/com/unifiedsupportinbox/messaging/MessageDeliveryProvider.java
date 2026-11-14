@@ -24,7 +24,16 @@ public interface MessageDeliveryProvider {
             String externalThreadKey,
             String body,
             MessageBodyFormat bodyFormat,
-            String correlationId) {
+            String correlationId,
+            String acceptedBodyRef,
+            java.util.function.Consumer<String> recordAcceptedBody) {
+
+        public DeliveryCommand(UUID messageId, String idempotencyKey, UUID caseId, IntegrationProvider provider,
+                UUID integrationId, String externalConversationId, String externalThreadKey, String body,
+                MessageBodyFormat bodyFormat, String correlationId) {
+            this(messageId, idempotencyKey, caseId, provider, integrationId, externalConversationId,
+                    externalThreadKey, body, bodyFormat, correlationId, null, ignored -> { });
+        }
     }
 
     record DeliveryResult(

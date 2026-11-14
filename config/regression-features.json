@@ -99,7 +99,7 @@
       "feature": "Outbound support delivery",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Same channel/thread; idempotent logical message; rate-limit retry and permanent failure",
+      "expected": "Same channel/thread; text and/or CLEAN files; durable per-part retry; rate-limit and permanent failure",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/HttpSlackWebApiClientTests.java",
@@ -107,7 +107,7 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackMessageDeliveryProviderTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Archived failure and retry refusal covered end to end; live delivery acceptance requires sandbox"
+      "gap": "Synthetic Slack covers partial delivery and a lost completion response; live delivery acceptance requires sandbox"
     },
     {
       "id": "CASE",
@@ -284,7 +284,7 @@
       "feature": "Uploads/downloads/quarantine/storage",
       "status": "PARTIALLY_IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Owner uploads; CLEAN-only usage; MIME/extension/size/count; private object keys",
+      "expected": "Clipboard PNG and picker share a queue and limits; owner uploads and rescans; CLEAN-only send/download; localized scan and policy errors",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/ProviderAttachmentGatewayContractTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundAttachmentServiceTests.java",
@@ -296,7 +296,8 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentScanStateIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/ClamAvAttachmentMalwareScannerTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/DefaultAttachmentSecurityServiceTests.java",
-        "apps/web/tests/fullstack/workflows.spec.ts"
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/web/tests/unit/inbox-api-adapter.test.ts"
       ],
       "gap": "Archives rejected wholesale; actual ClamAV/TLS/signatures and archive acceptance remain gaps"
     },

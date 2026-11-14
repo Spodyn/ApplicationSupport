@@ -30,6 +30,9 @@ import tools.jackson.databind.ObjectMapper;
 public final class FullStackTestServer {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final List<Map<String, Object>> DELIVERED = new CopyOnWriteArrayList<>();
+    private static final List<Map<String, Object>> SHARED_FILES = new CopyOnWriteArrayList<>();
+    private static final java.util.Set<String> UPLOADED_FILES = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final java.util.Set<String> FAILED_SCANS = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final java.util.Set<String> THROTTLED = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static URI providerUri;
     private static JdbcTemplate fixtureDatabase;
@@ -74,11 +77,49 @@ public final class FullStackTestServer {
                         """, UUID.class, fixtureIntegration, externalChannel);
                 response = Map.of("email", email, "displayName", name, "userId", user, "channelId", channel,
                         "externalChannelId", externalChannel, "workspaceId", "TTESTFULL");
-            } else if (path.equals("/observed")) response = Map.of("messages", DELIVERED);
-            else if (path.equals("/chat.postMessage")) {
+            } else if (path.equals("/observed")) response = Map.of("messages", DELIVERED, "files", SHARED_FILES);
+            else if (path.equals("/files.getUploadURLExternal")) {
+                String fileId = "F" + UUID.randomUUID().toString().replace("-", "");
+                response = Map.of("ok", true, "file_id", fileId, "upload_url", providerUri.resolve("/bytes/" + fileId).toString());
+            } else if (path.startsWith("/bytes/")) {
+                if (exchange.getRequestBody().readAllBytes().length > 0) UPLOADED_FILES.add(path.substring("/bytes/".length()));
+                response = Map.of("ok", true);
+            } else if (path.equals("/files.info")) {
+                String id = exchange.getRequestURI().getQuery().substring("file=".length());
+                var shared = SHARED_FILES.stream().filter(file -> id.equals(file.get("id"))).findFirst();
+                response = shared.<Map<String, ?>>map(file -> Map.of("ok", true, "file", Map.of(
+                        "id", id, "shares", Map.of("public", Map.of(file.get("channel"),
+                                List.of(Map.of("thread_ts", file.get("thread")))))))).orElseGet(
+                                        () -> Map.of("ok", false, "error", "file_not_found"));
+            } else if (path.equals("/files.completeUploadExternal")) {
+                var body = JSON.readTree(exchange.getRequestBody());
+                var file = body.path("files").get(0);
+                String id = file.path("id").asText();
+                String title = file.path("title").asText();
+                if (!UPLOADED_FILES.contains(id)) {
+                    response = Map.of("ok", false, "error", "file_not_found");
+                } else if (title.startsWith("retry-") && THROTTLED.add(title)) {
+                    status = 429;
+                    exchange.getResponseHeaders().add("Retry-After", "1");
+                    response = Map.of("ok", false, "error", "ratelimited");
+                } else if (SHARED_FILES.stream().anyMatch(shared -> id.equals(shared.get("id")))) {
+                    response = Map.of("ok", false, "error", "file_update_failed");
+                } else {
+                    SHARED_FILES.add(Map.of("id", id, "title", title,
+                            "channel", body.path("channel_id").asText(), "thread", body.path("thread_ts").asText()));
+                    if (title.startsWith("lost-response-")) {
+                        status = 503;
+                        response = Map.of("ok", false, "error", "service_unavailable");
+                    } else {
+                        response = Map.of("ok", true, "files", List.of(Map.of("id", id)));
+                    }
+                }
+            } else if (path.equals("/chat.postMessage")) {
                 var body = JSON.readTree(exchange.getRequestBody());
                 if (!"Bearer test-only-fullstack-bot".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
                     response = Map.of("ok", false, "error", "invalid_auth");
+                } else if (body.path("text").asText().isBlank()) {
+                    response = Map.of("ok", false, "error", "no_text");
                 } else if (body.path("text").asText().contains("test-only-archived")) {
                     status = 403;
                     response = Map.of("ok", false, "error", "is_archived");
@@ -179,6 +220,17 @@ public final class FullStackTestServer {
         @Bean @Primary SlackWebApiClient syntheticSlackHttp(ObjectMapper mapper) {
             return new HttpSlackWebApiClient(HttpClient.newHttpClient(), mapper, providerUri.resolve("/chat.postMessage"));
         }
+        @Bean @Primary SlackAttachmentApiClient syntheticSlackFiles(ObjectMapper mapper) {
+            return new HttpSlackAttachmentApiClient(HttpClient.newHttpClient(), mapper,
+                    providerUri.resolve("/files.info"), providerUri.resolve("/files.getUploadURLExternal"),
+                    providerUri.resolve("/files.completeUploadExternal")) {
+                @Override
+                boolean safeSlackUploadUri(URI uri) {
+                    return uri != null && "http".equals(uri.getScheme()) && "127.0.0.1".equals(uri.getHost())
+                            && uri.getPort() == providerUri.getPort() && uri.getPath().startsWith("/bytes/");
+                }
+            };
+        }
         @Bean @Primary SlackAdministrationApiClient syntheticAdministrationHttp(ObjectMapper mapper) {
             return new HttpSlackAdministrationApiClient(HttpClient.newHttpClient(), mapper,
                     providerUri.resolve("/auth.test"), providerUri.resolve("/conversations.list"));
@@ -186,8 +238,12 @@ public final class FullStackTestServer {
         @Bean @Primary AttachmentMalwareScanner deterministicScanner() {
             return content -> {
                 try {
-                    return new String(content.readNBytes(25 * 1024 * 1024 + 1), StandardCharsets.UTF_8)
-                            .contains("test-only-infected") ? AttachmentMalwareScanner.ScanResult.INFECTED : AttachmentMalwareScanner.ScanResult.CLEAN;
+                    String value = new String(content.readNBytes(25 * 1024 * 1024 + 1), StandardCharsets.UTF_8);
+                    if (value.startsWith("test-only-scanner-offline-") && FAILED_SCANS.add(value)) {
+                        throw new com.unifiedsupportinbox.storage.AttachmentScanException(
+                                com.unifiedsupportinbox.storage.AttachmentScanException.Code.SCANNER_UNAVAILABLE);
+                    }
+                    return value.contains("test-only-infected") ? AttachmentMalwareScanner.ScanResult.INFECTED : AttachmentMalwareScanner.ScanResult.CLEAN;
                 } catch (java.io.IOException failure) {
                     throw new com.unifiedsupportinbox.storage.AttachmentScanException(
                             com.unifiedsupportinbox.storage.AttachmentScanException.Code.SCANNER_IO_ERROR, failure);

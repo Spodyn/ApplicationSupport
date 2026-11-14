@@ -83,6 +83,14 @@ class MessageDeliveryService {
     }
 
     @Transactional
+    void recordAcceptedBody(DeliveryClaim claim, String providerMessageRef) {
+        DeliveryMessageRecord current = lockedClaim(claim);
+        if (!repository.recordAcceptedBody(current.messageId(), normalizeOptional(providerMessageRef, 255))) {
+            throw new IllegalStateException("Message delivery claim was lost before recording the Slack reply.");
+        }
+    }
+
+    @Transactional
     void markSuccess(DeliveryClaim claim, MessageDeliveryStatus status, String providerMessageRef) {
         Objects.requireNonNull(claim, "claim");
         if (status != MessageDeliveryStatus.SENT && status != MessageDeliveryStatus.DELIVERED) {

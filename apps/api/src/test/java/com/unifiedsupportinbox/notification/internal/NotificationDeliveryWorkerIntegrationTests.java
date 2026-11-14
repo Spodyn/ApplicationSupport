@@ -166,7 +166,8 @@ class NotificationDeliveryWorkerIntegrationTests {
         gateway.steps(
                 FakeGateway.Step.transientFailure("RATE_LIMITED", Duration.ofSeconds(2)),
                 FakeGateway.Step.success());
-        Instant before = Instant.now();
+        // The repository schedules against PostgreSQL's clock, which may differ from the JVM clock.
+        Instant before = jdbc.queryForObject("SELECT clock_timestamp()", java.time.OffsetDateTime.class).toInstant();
         assertThat(worker.process(delivery.id()))
                 .isEqualTo(NotificationDeliveryWorker.AttemptResult.RETRY_SCHEDULED);
         DeliveryRecord retry = repository.findById(delivery.id()).orElseThrow();

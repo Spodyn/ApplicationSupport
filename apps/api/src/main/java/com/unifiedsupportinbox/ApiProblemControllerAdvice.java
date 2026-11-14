@@ -90,6 +90,11 @@ public class ApiProblemControllerAdvice {
         return exception.isForReturnValue() ? handleUnexpectedFailure(exception, request) : handleInvalidParameter(request);
     }
 
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiProblem> handleMaximumUploadSize(HttpServletRequest request) {
+        return response(problemFactory.fromException(ApiProblemException.attachmentTooLarge(), request));
+    }
+
     @ExceptionHandler(ApiProblemException.class)
     public ResponseEntity<ApiProblem> handleControlledProblem(
             ApiProblemException exception,

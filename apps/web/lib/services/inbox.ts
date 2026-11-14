@@ -53,6 +53,8 @@ export interface InboxFilterOptions {
 }
 
 export interface InboxPendingAttachment extends InboxAttachment {
+  sizeBytes: number
+  scanError?: string | null
   scanStatus: "pending" | "scanning" | "clean" | "infected" | "error"
 }
 
@@ -412,6 +414,7 @@ export const mockInboxRepository: InboxRepository = {
     if (input.simulateFailure) {
       throw new Error(t("Symulowany błąd dostarczenia wiadomości."))
     }
+    if (!input.body.trim() && !input.attachments?.length) throw new Error(t("Wiadomość nie może być pusta."))
     return appendSupportMessage(caseId, {
       body: input.body,
       attachments: input.attachments,
@@ -419,7 +422,7 @@ export const mockInboxRepository: InboxRepository = {
   },
 
   async uploadAttachment(_caseId, file) {
-    return wait({ id: createId("pending-attachment"), fileName: file.name, size: `${file.size} B`, type: file.type.startsWith("image/") ? "image" as const : "document" as const, scanStatus: "clean" as const }, 100)
+    return wait({ id: createId("pending-attachment"), fileName: file.name, size: `${file.size} B`, sizeBytes: file.size, type: file.type.startsWith("image/") ? "image" as const : "document" as const, scanStatus: "clean" as const }, 100)
   },
   async removePendingAttachment() { await wait(undefined, 50) },
   async retryMessage(messageId) {

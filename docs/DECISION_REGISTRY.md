@@ -35,7 +35,7 @@ This is the human-readable index. `decision-registry.yaml` is the machine-readab
 | DEC-READ-001 | unread | per-user sparse state; customer inbound makes eligible users unread | USI-37 / E10 |
 | DEC-MSG-001 | message body | safe plain text/Markdown; no raw executable HTML | E08 |
 | DEC-MSG-002 | delivery | SENT=provider accepted; retry 8/24h | E08 |
-| DEC-ATT-001 | attachment limits | 25MiB/file, 10 files, 50MiB/message | E08 |
+| DEC-ATT-001 | attachment limits | 25MiB/file, 10 files, 50MiB/message; public reply accepts text and/or CLEAN files; Ask Customer requires text | E08 |
 | DEC-ATT-002 | scan | only CLEAN usable; ClamAV default scanner | E08 / E20 |
 | DEC-SLA-001 | defaults | first12/15m, unclaimed5/15m, in-progress30/60m | E13 |
 | DEC-SLA-002 | snapshot | Case snapshots SLA policy + schedule/timezone | E13 |

@@ -119,6 +119,14 @@ pnpm local:infra:logs -- minio
 | MinIO S3 API | <http://127.0.0.1:9000> |
 | MinIO console | <http://127.0.0.1:9001> |
 
+The local infrastructure starts PostgreSQL, RabbitMQ and MinIO. To send files,
+run a local ClamAV daemon and set `USI_ATTACHMENTS_SCANNER_HOST=127.0.0.1` and
+`USI_ATTACHMENTS_SCANNER_PORT=3310` in the API environment. Keep the scanner on
+a protected local network and set its INSTREAM limit to at least 25 MiB. Verify
+that ClamAV responds to PING and has loaded current signatures before testing.
+An unavailable scanner leaves the upload quarantined with status `ERROR`. The
+Case owner can retry the scan of that upload from the composer.
+
 Ports can be overridden in the ignored `infra/.env`. The API health URL can be
 overridden for local development with `USI_API_HEALTH_URL`.
 

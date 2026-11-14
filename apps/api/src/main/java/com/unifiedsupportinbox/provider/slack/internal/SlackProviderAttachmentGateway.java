@@ -100,6 +100,11 @@ class SlackProviderAttachmentGateway implements ProviderAttachmentGateway {
 
     @Override
     public UploadedAttachment upload(UploadRequest request) {
+        return upload(request, null, java.util.function.UnaryOperator.identity());
+    }
+
+    UploadedAttachment upload(UploadRequest request, String preparedFileId,
+            java.util.function.UnaryOperator<String> recordPreparedFile) {
         if (request == null) throw new IllegalArgumentException("request is required.");
         CredentialReference integration = credentialFor(request.integrationId());
         if (integration == null) {
@@ -111,37 +116,49 @@ class SlackProviderAttachmentGateway implements ProviderAttachmentGateway {
         }
         byte[] bytes = null;
         try {
-            bytes = readBounded(request);
-            SlackAttachmentApiClient.UploadUrlResponse uploadUrl = slack.getUploadUrl(
-                    token, request.metadata().filename(), bytes.length);
-            requireSuccessful(
-                    uploadUrl.statusCode(), uploadUrl.ok(), uploadUrl.errorCode(), uploadUrl.retryAfter());
-            if (uploadUrl.providerFileId() == null || uploadUrl.uploadUri() == null) {
-                throw ProviderAttachmentException.validation("SLACK_UPLOAD_URL_INVALID");
+            String fileId = preparedFileId;
+            if (fileId == null) {
+                bytes = readBounded(request);
+                SlackAttachmentApiClient.UploadUrlResponse uploadUrl = slack.getUploadUrl(
+                        token, request.metadata().filename(), bytes.length);
+                requireSuccessful(
+                        uploadUrl.statusCode(), uploadUrl.ok(), uploadUrl.errorCode(), uploadUrl.retryAfter());
+                if (uploadUrl.providerFileId() == null || uploadUrl.uploadUri() == null) {
+                    throw ProviderAttachmentException.validation("SLACK_UPLOAD_URL_INVALID");
+                }
+
+                SlackAttachmentApiClient.UploadBytesResponse uploaded;
+                try {
+                    uploaded = slack.uploadBytes(uploadUrl.uploadUri(), bytes);
+                } catch (RuntimeException failure) {
+                    throw mapRuntime("SLACK_UPLOAD_BYTES_FAILED", failure);
+                }
+                if (!uploaded.successful()) {
+                    requireSuccessful(uploaded.statusCode(), false, uploaded.errorCode(), uploaded.retryAfter());
+                }
+
+                // Persist the uploaded file ID before the external side effect. Every
+                // retry completes this same Slack ticket instead of creating a duplicate.
+                fileId = recordPreparedFile.apply(uploadUrl.providerFileId());
             }
 
-            SlackAttachmentApiClient.UploadBytesResponse uploaded;
-            try {
-                uploaded = slack.uploadBytes(uploadUrl.uploadUri(), bytes);
-            } catch (RuntimeException failure) {
-                throw mapRuntime("SLACK_UPLOAD_BYTES_FAILED", failure);
-            }
-            if (!uploaded.successful()) {
-                requireSuccessful(uploaded.statusCode(), false, uploaded.errorCode(), uploaded.retryAfter());
+            if (preparedFileId != null && slack.isSharedInThread(
+                    token, fileId, request.externalChannelId(), request.externalThreadKey())) {
+                return new UploadedAttachment(fileId, null);
             }
 
             SlackAttachmentApiClient.CompleteUploadResponse completed = slack.completeUpload(
                     token,
-                    uploadUrl.providerFileId(),
+                    fileId,
                     request.metadata().filename(),
                     request.externalChannelId(),
                     request.externalThreadKey());
             requireSuccessful(
                     completed.statusCode(), completed.ok(), completed.errorCode(), completed.retryAfter());
-            String providerFileId = completed.providerFileId() != null
-                    ? completed.providerFileId()
-                    : uploadUrl.providerFileId();
-            return new UploadedAttachment(providerFileId, null);
+            if (completed.providerFileId() != null && !fileId.equals(completed.providerFileId())) {
+                throw ProviderAttachmentException.validation("SLACK_FILE_ID_MISMATCH");
+            }
+            return new UploadedAttachment(fileId, null);
         } finally {
             Arrays.fill(token, (byte) 0);
             if (bytes != null) Arrays.fill(bytes, (byte) 0);

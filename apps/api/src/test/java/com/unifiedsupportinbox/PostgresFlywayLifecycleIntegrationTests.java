@@ -107,6 +107,19 @@ class PostgresFlywayLifecycleIntegrationTests {
         }
     }
 
+    @Test
+    void upgradesCaseAttachmentDeliveryFromV42() throws SQLException {
+        cleanDatabase();
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .target("42").load().migrate();
+        assertThat(tableExists("slack_outbound_uploads")).isFalse();
+        Flyway current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .load();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
+        current.validate();
+        assertThat(tableExists("slack_outbound_uploads")).isTrue();
+    }
+
     private static ConfigurableApplicationContext startApplication() {
         return new SpringApplicationBuilder(UsiApiApplication.class)
                 .profiles("test")
