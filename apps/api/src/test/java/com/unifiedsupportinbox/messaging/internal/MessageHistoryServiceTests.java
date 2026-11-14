@@ -63,7 +63,7 @@ class MessageHistoryServiceTests {
                 .containsExactly(newest.id(), middle.id());
         assertThat(page.items().getFirst().attachments()).containsExactly(
                 new MessageHistoryService.MessageAttachmentItem(
-                        attachment.id(), "screen.png", 842, "image/png", "image/png", AttachmentScanStatus.CLEAN));
+                        attachment.id(), "screen.png", 842, "image/png", "image/png", AttachmentScanStatus.CLEAN, null));
         assertThat(page.items().getLast().attachments()).isEmpty();
         assertThat(page.nextCursor()).isNotBlank();
         assertThat(codec.decode(page.nextCursor(), "message-history:" + caseId).sortValue())

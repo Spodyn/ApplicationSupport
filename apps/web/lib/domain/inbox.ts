@@ -101,6 +101,8 @@ export interface InboxAttachment {
   size: string
   type: "image" | "document" | "archive"
   downloadUrl?: string
+  scanStatus?: string
+  failureStage?: string
 }
 
 export interface InboxMessage {

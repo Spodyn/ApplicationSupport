@@ -114,10 +114,23 @@ class PostgresFlywayLifecycleIntegrationTests {
                 .target("42").load().migrate();
         assertThat(tableExists("slack_outbound_uploads")).isFalse();
         Flyway current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .load();
+                .target("43").load();
         assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
         current.validate();
         assertThat(tableExists("slack_outbound_uploads")).isTrue();
+    }
+
+    @Test
+    void upgradesAttachmentQueueFromV43() throws SQLException {
+        cleanDatabase();
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .target("43").load().migrate();
+        Flyway current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .load();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
+        current.validate();
+        assertThat(queryInt("SELECT count(*) FROM information_schema.columns WHERE table_name = 'attachments'"
+                + " AND column_name = 'slack_ingest_pending'")).isEqualTo(1);
     }
 
     private static ConfigurableApplicationContext startApplication() {

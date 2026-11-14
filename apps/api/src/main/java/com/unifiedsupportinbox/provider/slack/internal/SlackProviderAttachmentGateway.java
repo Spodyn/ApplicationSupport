@@ -27,25 +27,31 @@ class SlackProviderAttachmentGateway implements ProviderAttachmentGateway {
     private final ProviderIntegrationCredentialLookup integrations;
     private final ConfiguredProviderSecretResolver secrets;
     private final SlackAttachmentApiClient slack;
-    private final SafeProviderFileDownloader downloader;
+    private final SlackFileDownload downloader;
 
     @Autowired
     SlackProviderAttachmentGateway(
             ProviderIntegrationCredentialLookup integrations,
             ConfiguredProviderSecretResolver secrets,
             SlackAttachmentApiClient slack) {
-        this(integrations, secrets, slack, new SafeProviderFileDownloader());
+        this(integrations, secrets, slack,
+                new SafeProviderFileDownloader()::download);
     }
 
     SlackProviderAttachmentGateway(
             ProviderIntegrationCredentialLookup integrations,
             ConfiguredProviderSecretResolver secrets,
             SlackAttachmentApiClient slack,
-            SafeProviderFileDownloader downloader) {
+            SlackFileDownload downloader) {
         this.integrations = java.util.Objects.requireNonNull(integrations, "integrations");
         this.secrets = java.util.Objects.requireNonNull(secrets, "secrets");
         this.slack = java.util.Objects.requireNonNull(slack, "slack");
         this.downloader = java.util.Objects.requireNonNull(downloader, "downloader");
+    }
+
+    @FunctionalInterface
+    interface SlackFileDownload {
+        SafeProviderFileDownloader.DownloadedFile download(SafeProviderFileDownloader.Provider provider, URI uri, byte[] token);
     }
 
     @Override

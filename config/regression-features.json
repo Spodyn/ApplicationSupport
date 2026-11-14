@@ -79,18 +79,19 @@
       "feature": "Slack authenticated intake and grouping",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Raw HMAC/time window; workspace identity; dedup; roots/replies/edit/delete; ignored/disabled/bot filtering",
+      "expected": "Raw HMAC/time window; workspace identity; dedup; roots/replies/edit/delete; ignored/disabled/bot filtering; thread broadcasts and equivalent reply deduplication; public/private file intake and safe emoji rendering",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFilteringInboundIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackIgnoredChannelIntegrationTests.java",
-        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundAttachmentServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundDeliveryServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundWorkerIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackNormalizerTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackRootCaseMappingIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackRootUnreadIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackWebhookIntegrationTests.java",
-        "apps/web/tests/fullstack/workflows.spec.ts"
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/web/tests/unit/external-message.test.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFileReferenceTests.java"
       ],
       "gap": "Real provider sandbox separate from deterministic PR CI"
     },
@@ -284,10 +285,9 @@
       "feature": "Uploads/downloads/quarantine/storage",
       "status": "PARTIALLY_IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Clipboard PNG and picker share a queue and limits; owner uploads and rescans; CLEAN-only send/download; localized scan and policy errors",
+      "expected": "Clipboard PNG and picker share a queue and limits; owner uploads and rescans; CLEAN-only send/download; localized scan and policy errors; independently persisted Slack attachment status",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/ProviderAttachmentGatewayContractTests.java",
-        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundAttachmentServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackOutboundAttachmentServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackProviderAttachmentGatewayTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentFilePolicyTests.java",
@@ -297,7 +297,8 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/ClamAvAttachmentMalwareScannerTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/DefaultAttachmentSecurityServiceTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts",
-        "apps/web/tests/unit/inbox-api-adapter.test.ts"
+        "apps/web/tests/unit/inbox-api-adapter.test.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFileReferenceTests.java"
       ],
       "gap": "Archives rejected wholesale; actual ClamAV/TLS/signatures and archive acceptance remain gaps"
     },

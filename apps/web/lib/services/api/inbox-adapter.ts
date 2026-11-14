@@ -143,7 +143,9 @@ export function mapCaseMessage(first: CaseMessage | string, second?: string | Ca
       fileName: item.fileName,
       size: formatBytes(item.sizeBytes),
       type: item.contentType?.startsWith("image/") ? "image" : /\.(zip|rar|7z|tar|gz)$/i.test(item.fileName) ? "archive" : "document",
-      downloadUrl: caseId
+      scanStatus: item.scanStatus,
+      failureStage: item.failureStage ?? undefined,
+      downloadUrl: caseId && item.scanStatus === "CLEAN"
         ? `/api/v1/cases/${encodeURIComponent(caseId)}/attachments/${encodeURIComponent(item.id)}`
         : undefined,
     })),

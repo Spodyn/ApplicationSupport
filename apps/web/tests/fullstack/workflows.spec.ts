@@ -36,12 +36,14 @@ async function selectLanguage(page: Page, name: "Polski" | "English", from: "en"
   await expect(page.locator("html")).toHaveAttribute("lang", name === "Polski" ? "pl" : "en")
 }
 
-async function inbound(page: Page, text: string, thread?: string) {
+async function inbound(page: Page, text: string | undefined, thread?: string,
+  fields: Record<string, unknown> = {}, authorization?: {user_id: string; is_bot: boolean}) {
   const fixture = fixtures.get(page)!
-  const ts = (Date.now() / 1000).toFixed(6)
+  const ts = fields.ts as string ?? (Date.now() / 1000).toFixed(6)
   const payload = JSON.stringify({type: 'event_callback', team_id: fixture.workspaceId, event_id: `Ev-${randomUUID()}`,
-    event: {type: 'message', channel_type: 'channel', channel: fixture.externalChannelId, user: 'UTESTHUMAN',
-      text, ts, ...(thread ? {thread_ts: thread} : {})}})
+    ...(authorization ? {authorizations: [authorization]} : {}),
+    event: {type: 'message', channel_type: fixture.externalChannelId.startsWith('G') ? 'group' : 'channel',
+      channel: fixture.externalChannelId, user: 'UTESTHUMAN', text, ts, ...(thread ? {thread_ts: thread} : {}), ...fields}})
   const timestamp = String(Math.floor(Date.now() / 1000))
   const signature = 'v0=' + createHmac('sha256', 'test-only-fullstack-signing').update(`v0:${timestamp}:${payload}`).digest('hex')
   const response = await page.request.post('/api/v1/providers/slack/events', {
@@ -103,6 +105,83 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   await page.reload()
   await expect(page).toHaveURL(/\/login$/)
 })
+
+for (const visibility of ['public', 'private'] as const) {
+  test(`Slack ${visibility} inbound keeps broadcast replies and independent attachment states in one Case`, async ({page}) => {
+    const fixture = await (await page.request.post(visibility === 'public' ? '/__test/account' : '/__test/private-account')).json()
+    fixtures.set(page, fixture)
+    await login(page, fixture.email)
+    const marker = randomUUID().slice(0, 8)
+    const channelCases = async () => (await (await page.request.get('/api/v1/cases')).json()).items
+      .filter((item: {externalChannelId: string}) => item.externalChannelId === fixture.externalChannelId)
+    const root = await inbound(page, `Inbox ${marker} :eyes:`)
+    await expect(page.getByRole('button', {name: new RegExp(`Inbox ${marker} 👀`)})).toBeVisible()
+    await expect.poll(async () => (await channelCases()).length).toBe(1)
+    const caseId = (await channelCases())[0].id
+    const panel = page.getByRole('region', {name: /^Rozmowa /})
+    await page.getByRole('button', {name: new RegExp(`Inbox ${marker} 👀`)}).click()
+    const history = async () => (await (await page.request.get(`/api/v1/cases/${caseId}/messages`)).json()).items
+    const fileId = `F-inbound-${marker}`
+    const deniedId = `F-inbound-denied-${marker}`
+    const infectedId = `F-inbound-infected-${marker}`
+    const scanErrorId = `F-inbound-scan-error-${marker}`
+    const cleanOnlyId = `F-inbound-clean-only-${marker}`
+    const missingScopeId = `F-inbound-missing-scope-${marker}`
+    const broadcast = `Broadcast ${marker} :eyes: :unknown_code: 👋`
+    const normal = `Ordinary reply ${marker}`
+
+    await inbound(page, normal, root.ts)
+    await expect(panel.getByText(normal, {exact: true})).toBeVisible()
+    const reply = await inbound(page, broadcast, root.ts, {
+      subtype: 'thread_broadcast', root: {text: 'Root snapshot', files: [{id: 'F-never-import-root'}]},
+    })
+    await expect(panel.getByText(`Broadcast ${marker} 👀 :unknown_code: 👋`, {exact: true})).toBeVisible()
+    await inbound(page, broadcast, root.ts, {ts: reply.ts, files: [{id: fileId, mode: 'file_access', file_access: 'check_file_info'}]})
+    expect((await page.request.post('/api/v1/providers/slack/events', {data: reply.payload, headers: {
+      'Content-Type': 'application/json', 'X-Slack-Request-Timestamp': reply.timestamp, 'X-Slack-Signature': reply.signature,
+      'X-Slack-Retry-Num': '1', 'X-Slack-Retry-Reason': 'http_timeout',
+    }})).status()).toBe(200)
+    await expect(panel.getByRole('link', {name: new RegExp(fileId)})).toBeVisible()
+    const downloaded = await page.request.get((await panel.getByRole('link', {name: new RegExp(fileId)}).getAttribute('href'))!)
+    expect(await downloaded.text()).toBe(`Synthetic inbound ${fileId}`)
+    const echoTs = (Number(reply.ts) + 0.000001).toFixed(6)
+    await inbound(page, 'Bot echo', root.ts, {ts: echoTs, subtype: 'thread_broadcast', user: 'UBOT'}, {user_id: 'UBOT', is_bot: true})
+    await inbound(page, undefined, root.ts, {files: [{id: cleanOnlyId}]})
+    await expect(panel.getByRole('link', {name: new RegExp(cleanOnlyId)})).toBeVisible()
+    await inbound(page, undefined, root.ts, {
+      files: [{id: deniedId, name: 'download-denied.txt'}, {id: infectedId}, {id: scanErrorId}, {id: missingScopeId}],
+    })
+    await expect(panel.getByText('download-denied.txt · Nie udało się pobrać pliku ze Slacka.', {exact: true})).toBeVisible()
+    await expect(panel.getByText(/W pliku wykryto zagrożenie/)).toBeVisible()
+    await expect(panel.getByText(`${missingScopeId} · Nie udało się pobrać pliku ze Slacka.`, {exact: true})).toBeVisible()
+    await expect(panel.getByText(/Nie udało się zeskanować pliku/)).toBeVisible()
+    const caption = `Caption ${marker}`
+    await inbound(page, caption, root.ts, {subtype: 'thread_broadcast', files: [{id: fileId}, {id: fileId}]})
+    await expect(panel.getByText(caption, {exact: true})).toBeVisible()
+    await expect.poll(async () => (await history()).find((item: {body: string}) => item.body === caption)?.attachments[0]?.scanStatus).toBe('CLEAN')
+
+    const messages = await history()
+    expect(messages).toHaveLength(6)
+    expect(messages.filter((item: {body: string}) => item.body === broadcast)).toHaveLength(1)
+    expect(messages.find((item: {body: string}) => item.body === broadcast).attachments).toHaveLength(1)
+    const fileOnly = messages.filter((item: {body: string}) => item.body === '')
+    expect(fileOnly).toHaveLength(2)
+    expect(fileOnly.find((item: {attachments: unknown[]}) => item.attachments.length === 1).attachments)
+      .toEqual([expect.objectContaining({fileName: `${cleanOnlyId}.txt`, scanStatus: 'CLEAN'})])
+    const failedFiles = fileOnly.find((item: {attachments: unknown[]}) => item.attachments.length === 4).attachments
+    expect(failedFiles).toEqual(expect.arrayContaining([
+      expect.objectContaining({fileName: 'download-denied.txt', scanStatus: 'ERROR', failureStage: 'DOWNLOAD'}),
+      expect.objectContaining({scanStatus: 'INFECTED'}),
+      expect.objectContaining({scanStatus: 'ERROR', failureStage: 'SCAN'}),
+    ]))
+    const denied = failedFiles.find((item: {fileName: string}) => item.fileName === 'download-denied.txt')
+    expect((await page.request.get(`/api/v1/cases/${caseId}/attachments/${denied.id}`)).status()).toBe(409)
+    expect(await channelCases()).toHaveLength(1)
+    await page.reload()
+    await expect(panel.getByText(caption, {exact: true})).toBeVisible()
+    await expect(panel.getByText(/download-denied.txt/)).toBeVisible()
+  })
+}
 
 test('real session cookies and CSRF reject cross-boundary mutations; service worker does not cache API', async ({page, context}) => {
   await login(page)
