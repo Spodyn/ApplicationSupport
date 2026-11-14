@@ -74,6 +74,52 @@ class SlackNormalizerTests {
     }
 
     @Test
+    void usesBroadcastReplyIdentityAndIgnoresRootMetadata() throws Exception {
+        SlackInboundEvent inbound = inbound("""
+                {"type":"event_callback","event_id":"Ev-broadcast",
+                 "event":{"type":"message","subtype":"thread_broadcast","channel":"C-support","channel_type":"channel",
+                          "user":"U-customer","text":"actual reply","ts":"1720000002.000000","thread_ts":"1720000000.123456",
+                          "root":{"bot_id":"B-root","text":"root","files":[{"id":"F-root"}]}}}
+                """);
+
+        Command command = ((SlackNormalizer.Accepted) normalizer.normalize(inbound, channelId)).command();
+        assertThat(command.externalMessageId()).isEqualTo("1720000002.000000");
+        assertThat(command.externalThreadKey()).isEqualTo("1720000000.123456");
+        assertThat(command.body()).isEqualTo("actual reply");
+    }
+
+    @Test
+    void acceptsFileOnlyMessageWithoutText() throws Exception {
+        SlackInboundEvent inbound = inbound("""
+                {"type":"event_callback","event_id":"Ev-file-only",
+                 "event":{"type":"message","channel":"G-support","channel_type":"group",
+                          "user":"U-customer","ts":"1720000003.000000","files":[{"id":"F-file"}]}}
+                """);
+
+        Command command = ((SlackNormalizer.Accepted) normalizer.normalize(inbound, channelId)).command();
+        assertThat(command.body()).isEmpty();
+    }
+
+    @Test
+    void rejectsBroadcastWithoutParentAndFiltersOwnBroadcastEcho() throws Exception {
+        SlackInboundEvent invalid = inbound("""
+                {"type":"event_callback","event_id":"Ev-invalid",
+                 "event":{"type":"message","subtype":"thread_broadcast","channel":"C-support","channel_type":"channel",
+                          "user":"U-customer","text":"reply","ts":"1720000002.000000"}}
+                """);
+        assertThatThrownBy(() -> normalizer.normalize(invalid, channelId))
+                .isInstanceOf(SlackInboundProcessingException.class).hasMessageContaining("thread_ts");
+        SlackInboundEvent echo = inbound("""
+                {"type":"event_callback","event_id":"Ev-self",
+                 "authorizations":[{"user_id":"U-bot","is_bot":true}],
+                 "event":{"type":"message","subtype":"thread_broadcast","channel":"C-support","channel_type":"channel",
+                          "user":"U-bot","text":"echo","ts":"1720000002.000000","thread_ts":"1720000000.123456"}}
+                """);
+        assertThat(((SlackNormalizer.Filtered) normalizer.normalize(echo, channelId)).reason())
+                .isEqualTo(SlackNormalizer.FilterReason.BOT_OR_APP_MESSAGE);
+    }
+
+    @Test
     void normalizesFileShareMessageSoAttachmentsReachInboundPipeline() throws Exception {
         SlackInboundEvent inbound = inbound("""
                 {

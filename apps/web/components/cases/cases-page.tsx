@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils"
 import { useShell } from "@/components/layout/shell-context"
 import { Button } from "@/components/ui/button"
 import { BulkCaseToolbar } from "./bulk-case-toolbar"
+import { slackMessagePreview } from "@/lib/security/external-message"
 import { SafeExternalMessage } from "./safe-external-message"
 
 type QuickFilter = "all" | "sla" | "mine"
@@ -73,7 +74,7 @@ function toPresentation(record: InboxCase, currentUserId: string | undefined, t:
     reference: record.reference,
     initials: initials(record.customer.id === "unassigned" ? t("Nie przypisano") : record.customer.name),
     company: record.customer.id === "unassigned" ? t("Nie przypisano") : record.customer.name,
-    subject: record.subject,
+    subject: record.platform === "slack" ? slackMessagePreview(record.subject) : record.subject,
     time: timeLabel(record.updatedAt),
     platform: record.platform === "slack" ? "Slack" : record.platform === "teams" ? "Teams" : "Telegram",
     source: record.sourceChannel,
@@ -638,7 +639,7 @@ function ConversationPanel({
             ) : message.kind === "system" ? (
               <div key={message.id} data-message-kind="system" className="min-w-0 whitespace-pre-wrap text-center text-xs text-[#9ba6b6] [overflow-wrap:anywhere]">{timeLabel(message.createdAt)} · <SafeExternalMessage content={message.deleted ? t("Wiadomość została usunięta w Slack.") : message.body} /></div>
             ) : (
-              <div key={message.id} data-message-kind="customer" className="flex min-w-0 items-start gap-4"><Avatar initials={initials(message.sender ?? item.company)} /><div className="min-w-0 max-w-[570px] flex-1 [overflow-wrap:anywhere]"><div className="text-xs text-[#aeb8c8]">{message.sender ?? item.company} · {timeLabel(message.createdAt)}{message.edited ? t(" · edytowano") : ""}</div><p className={cn("mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]", message.deleted && "italic text-[#aeb8c8]")}><SafeExternalMessage content={message.deleted ? t("Wiadomość została usunięta w Slack.") : message.body} /></p><MessageAttachments attachments={message.attachments} /></div></div>
+              <div key={message.id} data-message-kind="customer" className="flex min-w-0 items-start gap-4"><Avatar initials={initials(message.sender ?? item.company)} /><div className="min-w-0 max-w-[570px] flex-1 [overflow-wrap:anywhere]"><div className="text-xs text-[#aeb8c8]">{message.sender ?? item.company} · {timeLabel(message.createdAt)}{message.edited ? t(" · edytowano") : ""}</div><p className={cn("mt-2 whitespace-pre-wrap text-[14px] leading-6 text-[#edf0f4]", message.deleted && "italic text-[#aeb8c8]")}><SafeExternalMessage slack={item.platform === "Slack"} content={message.deleted ? t("Wiadomość została usunięta w Slack.") : message.body} /></p><MessageAttachments attachments={message.attachments} /></div></div>
             ))}
           </div>
         )}
@@ -735,8 +736,14 @@ function AttachmentPreview({ file }: { file: File }) {
 }
 
 function MessageAttachments({ attachments }: { attachments?: InboxMessage["attachments"] }) {
+  const t = useT()
   if (!attachments?.length) return null
-  return <div className="mt-3 flex flex-wrap gap-2">{attachments.map((attachment) => attachment.downloadUrl ? <a key={attachment.id} href={attachment.downloadUrl} download className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-white/10 bg-black/10 px-2.5 py-1.5 text-xs text-violet-200 hover:bg-white/5"><Paperclip className="size-3.5 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{attachment.fileName} · {attachment.size}</span></a> : <span key={attachment.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-[#cbd3df]"><Paperclip className="size-3.5 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{attachment.fileName} · {attachment.size}</span></span>)}</div>
+  return <div className="mt-3 flex flex-wrap gap-2">{attachments.map((attachment) => attachment.downloadUrl ? <a key={attachment.id} href={attachment.downloadUrl} download className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-white/10 bg-black/10 px-2.5 py-1.5 text-xs text-violet-200 hover:bg-white/5"><Paperclip className="size-3.5 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{attachment.fileName} · {attachment.size}</span></a> : <span key={attachment.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-[#cbd3df]"><Paperclip className="size-3.5 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{attachment.fileName}{attachment.scanStatus && attachment.scanStatus !== "CLEAN"
+    ? ` · ${t(attachment.failureStage === "DOWNLOAD" ? "Nie udało się pobrać pliku ze Slacka."
+      : attachment.scanStatus === "ERROR" ? "Nie udało się zeskanować pliku."
+      : attachment.scanStatus === "INFECTED" ? "W pliku wykryto zagrożenie."
+      : "Plik oczekuje na pobranie lub skanowanie.")}`
+    : ` · ${attachment.size}`}</span></span>)}</div>
 }
 
 function Avatar({ initials, size = "default", online = false }: { initials: string; size?: "default" | "sm" | "xs"; online?: boolean }) {

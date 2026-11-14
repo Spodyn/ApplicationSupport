@@ -249,6 +249,15 @@ If Telegram requires one logical USI Message to be split into multiple provider 
 
 ## 5. Attachments across providers
 
+Slack inbound replies, including `thread_broadcast`, use the event's
+`thread_ts` to select the Case and the integration, channel and message `ts`
+to identify the reply. The broadcast's embedded `root` is presentation metadata.
+Equivalent callbacks may contribute new file IDs to the existing reply.
+The message and its file references commit before Slack file I/O. A separate
+worker uses `files.info`, the authenticated Slack download and the attachment
+scanner. History displays download and scan failures independently of the
+message. Only a clean file has a download link.
+
 All providers inherit the same attachment security pipeline:
 
 1. authenticated access to the provider attachment or upload;

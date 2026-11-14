@@ -858,6 +858,7 @@ export type MessageAttachment = {
   "contentType": string | null
   "detectedContentType": string | null
   "scanStatus": string
+  "failureStage"?: string | null
 }
 
 export type MessageBodyFormat = "PLAIN_TEXT" | "MARKDOWN"

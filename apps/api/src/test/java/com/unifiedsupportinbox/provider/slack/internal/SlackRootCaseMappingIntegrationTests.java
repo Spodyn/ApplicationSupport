@@ -325,6 +325,27 @@ class SlackRootCaseMappingIntegrationTests {
     }
 
     @Test
+    void equivalentBroadcastAfterResolutionDoesNotCreateASecondCase() {
+        Fixture fixture = mappedFixture("C-broadcast");
+        String parent = "1720000800.1";
+        String replyTs = "1720000810.1";
+        InboundEvent root = persist(fixture.integrationId(), "Ev-broadcast-root",
+                rootMessage("Ev-broadcast-root", fixture.externalChannelId(), "U-customer", "root", parent));
+        InboundEvent reply = persist(fixture.integrationId(), "Ev-broadcast-reply",
+                threadReply("Ev-broadcast-reply", fixture.externalChannelId(), "U-customer", "reply", replyTs, parent));
+        assertThat(worker.process(root.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        assertThat(worker.process(reply.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        jdbc.update("UPDATE cases SET status = 'RESOLVED', resolution_category = 'SOLVED', resolved_at = CURRENT_TIMESTAMP");
+        String broadcast = threadReply("Ev-broadcast-echo", fixture.externalChannelId(), "U-customer", "reply",
+                replyTs, parent).replace("\"thread_ts\"", "\"subtype\":\"thread_broadcast\",\"thread_ts\"");
+        InboundEvent equivalent = persist(fixture.integrationId(), "Ev-broadcast-echo", broadcast);
+        assertThat(worker.process(equivalent.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        assertThat(count("cases")).isEqualTo(1);
+        assertThat(count("messages")).isEqualTo(2);
+        assertThat(countOutbox("message.created")).isEqualTo(2);
+    }
+
+    @Test
     void mutationBeforeOriginalRetriesWithoutCreatingAnyCase() {
         Fixture fixture = mappedFixture("C-mutation-race");
         InboundEvent edit = persist(fixture.integrationId(), "Ev-early-edit", mutation("Ev-early-edit", fixture.externalChannelId(), "1720000900.1", "1720000910.1", false));

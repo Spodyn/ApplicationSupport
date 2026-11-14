@@ -167,6 +167,15 @@ describe("real inbox API adapter", () => {
     await expect(repository.getMessages(caseId)).resolves.toEqual({ items: [], nextCursor: undefined })
   })
 
+  it("keeps failed attachments visible without a download link", () => {
+    expect(mapCaseMessage(caseId, { ...message, attachments: [{
+      id: attachmentId, fileName: "denied.txt", sizeBytes: 0, contentType: null,
+      detectedContentType: null, scanStatus: "ERROR", failureStage: "DOWNLOAD",
+    }] }).attachments).toEqual([expect.objectContaining({
+      fileName: "denied.txt", scanStatus: "ERROR", failureStage: "DOWNLOAD", downloadUrl: undefined,
+    })])
+  })
+
   it("marks a rendered message read, snoozes through the API, and rejects invalid attachment objects", async () => {
     const { repository, requests } = fixture()
     await repository.markRead(caseId, messageId)

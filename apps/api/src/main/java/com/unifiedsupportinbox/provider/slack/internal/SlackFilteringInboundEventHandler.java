@@ -87,8 +87,11 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
                     "INBOUND_MESSAGE_HANDLER_UNAVAILABLE",
                     "Provider-neutral inbound message handler is not available.");
         }
-        InboundMessageCommandHandler.Result persisted = downstream.handle(((Accepted) result).command());
-        attachments.ingest(inbound.integrationId(), persisted, event);
+        InboundMessageCommandHandler.Command command = ((Accepted) result).command();
+        InboundMessageCommandHandler.Result persisted = downstream.handle(command);
+        if (command.mutation() == InboundMessageCommandHandler.Mutation.CREATE) {
+            attachments.enqueue(command, persisted, SlackFileReference.from(event));
+        }
     }
 
     private static String requiredChannel(JsonNode event) {

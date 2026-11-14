@@ -57,7 +57,7 @@ public final class FullStackTestServer {
             Map<String, ?> response;
             String path = exchange.getRequestURI().getPath();
             int status = 200;
-            if ((path.equals("/account") || path.equals("/agent")) && fixtureDatabase != null) {
+            if ((path.equals("/account") || path.equals("/agent") || path.equals("/private-account")) && fixtureDatabase != null) {
                 String suffix = UUID.randomUUID().toString().replace("-", "");
                 String email = "fixture-" + suffix + "@example.test";
                 String role = path.equals("/agent") ? "USER" : "ADMIN";
@@ -70,7 +70,7 @@ public final class FullStackTestServer {
                     for (String permission : PERMISSIONS) fixtureDatabase.update(
                             "INSERT INTO user_permissions (user_id, permission_code) VALUES (?, ?)", user, permission);
                 }
-                String externalChannel = "CTEST" + suffix.toUpperCase();
+                String externalChannel = (path.equals("/private-account") ? "GTEST" : "CTEST") + suffix.toUpperCase();
                 UUID channel = fixtureDatabase.queryForObject("""
                         INSERT INTO channels (integration_id, external_channel_id, name, grouping_strategy)
                         VALUES (?, ?, 'synthetic-support', 'SLACK_ROOT_THREAD') RETURNING id
@@ -87,10 +87,28 @@ public final class FullStackTestServer {
             } else if (path.equals("/files.info")) {
                 String id = exchange.getRequestURI().getQuery().substring("file=".length());
                 var shared = SHARED_FILES.stream().filter(file -> id.equals(file.get("id"))).findFirst();
-                response = shared.<Map<String, ?>>map(file -> Map.of("ok", true, "file", Map.of(
+                if (id.startsWith("F-inbound-")) {
+                    if (id.startsWith("F-inbound-missing-scope-")
+                            || !"Bearer test-only-fullstack-bot".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
+                        response = Map.of("ok", false, "error", "missing_scope");
+                    } else {
+                        response = Map.of("ok", true, "file", Map.of("id", id, "name", id + ".txt",
+                                "mimetype", "text/plain", "size", inboundFileBytes(id).length,
+                                "url_private_download", providerUri.resolve("/download/" + id).toString()));
+                    }
+                } else response = shared.<Map<String, ?>>map(file -> Map.of("ok", true, "file", Map.of(
                         "id", id, "shares", Map.of("public", Map.of(file.get("channel"),
                                 List.of(Map.of("thread_ts", file.get("thread")))))))).orElseGet(
                                         () -> Map.of("ok", false, "error", "file_not_found"));
+            } else if (path.startsWith("/download/")) {
+                String id = path.substring("/download/".length());
+                boolean allowed = "Bearer test-only-fullstack-bot".equals(exchange.getRequestHeaders().getFirst("Authorization"))
+                        && !id.startsWith("F-inbound-denied-");
+                byte[] payload = allowed ? inboundFileBytes(id) : new byte[0];
+                exchange.getResponseHeaders().set("Content-Type", "text/plain");
+                exchange.sendResponseHeaders(allowed ? 200 : 403, payload.length);
+                try (var output = exchange.getResponseBody()) { output.write(payload); }
+                return;
             } else if (path.equals("/files.completeUploadExternal")) {
                 var body = JSON.readTree(exchange.getRequestBody());
                 var file = body.path("files").get(0);
@@ -215,6 +233,12 @@ public final class FullStackTestServer {
         }
     }
 
+    private static byte[] inboundFileBytes(String id) {
+        return (id.startsWith("F-inbound-infected-") ? "test-only-infected" :
+                id.startsWith("F-inbound-scan-error-") ? "test-only-scanner-offline-" + id : "Synthetic inbound " + id)
+                .getBytes(StandardCharsets.UTF_8);
+    }
+
     @TestConfiguration(proxyBeanMethods = false)
     static class ProviderBoundary {
         @Bean @Primary SlackWebApiClient syntheticSlackHttp(ObjectMapper mapper) {
@@ -230,6 +254,30 @@ public final class FullStackTestServer {
                             && uri.getPort() == providerUri.getPort() && uri.getPath().startsWith("/bytes/");
                 }
             };
+        }
+        @Bean @Primary SlackProviderAttachmentGateway syntheticSlackFileGateway(
+                com.unifiedsupportinbox.integration.ProviderIntegrationCredentialLookup integrations,
+                com.unifiedsupportinbox.provider.internal.ConfiguredProviderSecretResolver secrets,
+                SlackAttachmentApiClient slack) {
+            return new SlackProviderAttachmentGateway(integrations, secrets, slack, (provider, uri, token) -> {
+                if (!"http".equals(uri.getScheme()) || !"127.0.0.1".equals(uri.getHost())
+                        || providerUri.getPort() != uri.getPort() || !uri.getPath().startsWith("/download/")) {
+                    throw new IllegalArgumentException("Synthetic download must target the loopback provider.");
+                }
+                try {
+                    var request = java.net.http.HttpRequest.newBuilder(uri)
+                            .header("Authorization", "Bearer " + new String(token, StandardCharsets.US_ASCII)).GET().build();
+                    var response = HttpClient.newHttpClient().send(request, java.net.http.HttpResponse.BodyHandlers.ofByteArray());
+                    if (response.statusCode() != 200) throw new IllegalStateException("Synthetic download was denied.");
+                    return new com.unifiedsupportinbox.provider.SafeProviderFileDownloader.DownloadedFile(
+                            response.body(), "text/plain");
+                } catch (java.io.IOException failure) {
+                    throw new IllegalStateException(failure);
+                } catch (InterruptedException failure) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(failure);
+                }
+            });
         }
         @Bean @Primary SlackAdministrationApiClient syntheticAdministrationHttp(ObjectMapper mapper) {
             return new HttpSlackAdministrationApiClient(HttpClient.newHttpClient(), mapper,

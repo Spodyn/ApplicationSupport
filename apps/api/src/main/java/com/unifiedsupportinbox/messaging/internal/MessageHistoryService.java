@@ -104,7 +104,8 @@ class MessageHistoryService {
             long sizeBytes,
             String contentType,
             String detectedContentType,
-            AttachmentScanStatus scanStatus) {
+            AttachmentScanStatus scanStatus,
+            String failureStage) {
         static MessageAttachmentItem from(AttachmentMetadata metadata) {
             return new MessageAttachmentItem(
                     metadata.id(),
@@ -112,7 +113,9 @@ class MessageHistoryService {
                     metadata.sizeBytes(),
                     metadata.contentType(),
                     metadata.detectedContentType(),
-                    metadata.scanStatus());
+                    metadata.scanStatus(),
+                    metadata.scanStatus() != AttachmentScanStatus.ERROR ? null
+                            : metadata.storageKey() == null ? "DOWNLOAD" : "SCAN");
         }
     }
 }

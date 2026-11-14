@@ -3,10 +3,10 @@ import { Fragment } from "react"
 import { parseExternalMessage } from "@/lib/security/external-message"
 
 /** Renders external/provider text without accepting provider HTML. */
-export function SafeExternalMessage({ content }: { content: string }) {
+export function SafeExternalMessage({ content, slack }: { content: string; slack?: boolean }) {
   return (
     <>
-      {parseExternalMessage(content).map((part, index) => {
+      {parseExternalMessage(content, slack).map((part, index) => {
         if (part.type === "code") {
           return <code key={index} className="rounded bg-black/20 px-1 font-mono text-[0.9em]">{part.value}</code>
         }

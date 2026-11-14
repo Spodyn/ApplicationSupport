@@ -14,7 +14,6 @@ import com.unifiedsupportinbox.integration.ProviderIntegrationCredentialLookup.C
 import com.unifiedsupportinbox.provider.ProviderAttachmentException;
 import com.unifiedsupportinbox.provider.ProviderAttachmentGateway;
 import com.unifiedsupportinbox.provider.ProviderAttachmentUploadMetadata;
-import com.unifiedsupportinbox.provider.SafeProviderFileDownloader;
 import com.unifiedsupportinbox.provider.internal.ConfiguredProviderSecretResolver;
 import java.io.ByteArrayInputStream;
 import java.net.URI;
@@ -40,7 +39,7 @@ class SlackProviderAttachmentGatewayTests {
         secrets = mock(ConfiguredProviderSecretResolver.class);
         slack = mock(SlackAttachmentApiClient.class);
         gateway = new SlackProviderAttachmentGateway(
-                integrations, secrets, slack, new SafeProviderFileDownloader());
+                integrations, secrets, slack);
         integrationId = UUID.randomUUID();
         when(integrations.findForProvider(IntegrationProvider.SLACK)).thenReturn(List.of(
                 new CredentialReference(integrationId, "T123", "slack/workspace-one")));

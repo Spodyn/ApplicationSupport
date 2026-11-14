@@ -31,7 +31,7 @@ class SlackNormalizer {
             return normalizeCreate(inbound, channelId, channel, event);
         }
         return switch (subtype) {
-            case "file_share" -> normalizeCreate(inbound, channelId, channel, event);
+            case "file_share", "thread_broadcast", "reply_broadcast" -> normalizeCreate(inbound, channelId, channel, event);
             case "bot_message" -> new Filtered(FilterReason.BOT_OR_APP_MESSAGE);
             case "message_changed" -> normalizeEdit(inbound, channelId, channel, event);
             case "message_deleted" -> normalizeDelete(inbound, channelId, channel, event);
@@ -52,9 +52,10 @@ class SlackNormalizer {
             throw malformed("MALFORMED_SLACK_MESSAGE", "Slack human message user is required.");
         }
         String messageTs = requiredText(message, "ts", "Slack message ts is required.");
-        String body = requiredTextAllowEmpty(message, "text", "Slack message text is required.");
-        String threadKey = optionalText(message, "thread_ts");
-        if (threadKey == null) threadKey = messageTs;
+        String threadKey = threadKey(message, messageTs);
+        JsonNode text = message.get("text");
+        String body = (text == null || text.isNull()) && !SlackFileReference.from(message).isEmpty()
+                ? "" : requiredTextAllowEmpty(message, "text", "Slack message text is required.");
 
         return accepted(inbound, channelId, channel, messageTs, threadKey, author, body,
                 Mutation.CREATE, parseSlackTimestamp(messageTs));
@@ -75,8 +76,7 @@ class SlackNormalizer {
         }
         String messageTs = requiredText(message, "ts", "Slack edited message ts is required.");
         String body = requiredTextAllowEmpty(message, "text", "Slack edited message text is required.");
-        String threadKey = optionalText(message, "thread_ts");
-        if (threadKey == null) threadKey = messageTs;
+        String threadKey = threadKey(message, messageTs);
 
         JsonNode edited = message.get("edited");
         String occurredAt = edited != null && edited.isObject() ? optionalText(edited, "ts") : null;
@@ -104,13 +104,25 @@ class SlackNormalizer {
 
         String deletedTs = optionalText(event, "deleted_ts");
         if (deletedTs == null) deletedTs = requiredText(previous, "ts", "Slack deleted message ts is required.");
-        String threadKey = optionalText(previous, "thread_ts");
-        if (threadKey == null) threadKey = deletedTs;
+        String threadKey = threadKey(previous, deletedTs);
         String occurredAt = optionalText(event, "event_ts");
         if (occurredAt == null) occurredAt = deletedTs;
 
         return accepted(inbound, channelId, channel, deletedTs, threadKey, author, null,
                 Mutation.DELETE, parseSlackTimestamp(occurredAt));
+    }
+
+    private static String threadKey(JsonNode message, String messageTs) {
+        String thread = optionalText(message, "thread_ts");
+        String subtype = optionalText(message, "subtype");
+        if ("thread_broadcast".equals(subtype) || "reply_broadcast".equals(subtype)) {
+            if (thread == null || parseSlackTimestamp(thread).equals(parseSlackTimestamp(messageTs))) {
+                throw malformed("MALFORMED_SLACK_MESSAGE", "Slack broadcast requires a distinct thread_ts.");
+            }
+        }
+        if (thread == null) return messageTs;
+        parseSlackTimestamp(thread);
+        return thread;
     }
 
     private static Accepted accepted(

@@ -67,6 +67,14 @@ a reviewed ticket and update this guide.
 After changing OAuth scopes, reinstall the app to the development workspace so
 the granted bot token reflects the current scope set.
 
+To verify attachment intake in the sandbox, grant the bot `files:read` under
+**OAuth & Permissions → Bot Token Scopes** and reinstall the app to that workspace.
+Use the reinstalled bot credential, join the monitored public channel, and invite
+the bot to the monitored private channel. Keep the `message.channels` and
+`message.groups` subscriptions. Test a root upload, a file-only reply and a
+reply with **Also send to channel**. Slack broadcast pointers may omit file
+metadata, which can arrive in the corresponding thread message.
+
 ## 3. Configure Events API subscriptions
 
 Open **Event Subscriptions**, enable events, and set the Request URL to the

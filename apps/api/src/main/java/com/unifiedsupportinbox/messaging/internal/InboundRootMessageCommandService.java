@@ -56,6 +56,11 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         validateInboundCreate(command);
         if (command.mutation() != Mutation.CREATE) return mutations.apply(command);
 
+        if (command.provider() == IntegrationProvider.SLACK) {
+            Result existing = findSlackMessage(command);
+            if (existing != null) return existing;
+        }
+
         CaseCreationService.Result caseResult = cases.create(new CaseCreationService.Command(
                 command.inboundEventId(),
                 command.integrationId(),
@@ -120,6 +125,22 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         unread.customerMessageCreated(caseResult.caseId(), messageId, command.correlationId());
         outOfOffice.customerMessageReceived(caseResult.caseId(), null, command.correlationId());
         return new Result(messageId, caseResult.caseId(), true);
+    }
+
+    private Result findSlackMessage(Command command) {
+        // Serialize equivalent callbacks even if their Case is resolved between deliveries.
+        String identity = command.integrationId() + ":" + command.channelId() + ":" + command.externalMessageId();
+        jdbc.query("SELECT pg_advisory_xact_lock(hashtextextended(?, 0))", rs -> { }, identity);
+        return jdbc.query("""
+                SELECT m.id, m.case_id
+                FROM cases c JOIN messages m ON m.case_id = c.id
+                WHERE c.integration_id = ? AND c.channel_id = ? AND m.external_message_id = ?
+                  AND m.inbound AND m.kind = 'CUSTOMER'
+                ORDER BY m.created_at, m.id
+                LIMIT 1
+                """, (rs, row) -> new Result(rs.getObject("id", UUID.class),
+                rs.getObject("case_id", UUID.class), false),
+                command.integrationId(), command.channelId(), command.externalMessageId()).stream().findFirst().orElse(null);
     }
 
     private UUID existingMessageId(UUID caseId, String externalMessageId) {
