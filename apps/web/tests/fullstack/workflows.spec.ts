@@ -394,10 +394,15 @@ test('archived Slack failure shows the actual reason and never offers an ineligi
   await option.click()
   await page.getByRole('button', {name: 'Przejmij', exact: true}).click()
   await page.getByLabel('Treść odpowiedzi').fill(`test-only-archived ${marker}`)
+  const accepted = page.waitForResponse(response => response.url().endsWith('/messages') && response.request().method() === 'POST')
   await page.getByRole('button', {name: 'Wyślij', exact: true}).click()
+  const sent = await accepted
+  expect(sent.status()).toBe(202)
+  const caseId = new URL(sent.url()).pathname.split('/').at(-2)
   const archiveNotice = 'Kanał Slack jest zarchiwizowany. Nie można wysyłać do niego wiadomości.'
   await expect(page.locator('[data-message-kind="support"]').getByText(archiveNotice)).toBeVisible()
   await expect(page.locator('[data-sonner-toast]').getByText(archiveNotice)).toHaveCount(1)
+  await page.goto(`/cases?caseId=${caseId}`)
   await page.reload()
   await expect(page.locator('[data-message-kind="support"]').getByText(archiveNotice)).toBeVisible()
   await expect(page.locator('[data-sonner-toast]').getByText(archiveNotice)).toHaveCount(0)
