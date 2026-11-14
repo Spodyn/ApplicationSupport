@@ -31,17 +31,17 @@ class CaseActivityService {
     }
 
     @Transactional(readOnly = true)
-    CursorPage<ActivityItem> activity(UUID caseId, String cursor, Integer requestedLimit) {
+    CursorPage<ActivityItem> activity(UUID caseId, UUID viewer, String cursor, Integer requestedLimit) {
         if (!events.caseExists(caseId)) throw ApiProblemException.notFound("Case was not found.");
         int limit = requestedLimit == null ? DEFAULT_LIMIT : requestedLimit;
         if (limit < 1 || limit > MAX_LIMIT) throw new IllegalArgumentException("limit must be between 1 and 100");
-        CursorPosition position = cursor == null ? null : cursors.decode(cursor, scope(caseId));
-        List<RawActivity> fetched = events.find(caseId,
+        CursorPosition position = cursor == null ? null : cursors.decode(cursor, scope(caseId, viewer));
+        List<RawActivity> fetched = events.find(caseId, viewer,
                 position == null ? null : position.sortValue(), position == null ? null : position.id(), limit + 1);
         boolean hasMore = fetched.size() > limit;
         List<RawActivity> selected = hasMore ? fetched.subList(0, limit) : fetched;
         List<ActivityItem> items = selected.stream().map(this::view).toList();
-        String next = hasMore ? cursors.encode(new CursorPosition(selected.getLast().occurredAt(), selected.getLast().id()), scope(caseId)) : null;
+        String next = hasMore ? cursors.encode(new CursorPosition(selected.getLast().occurredAt(), selected.getLast().id()), scope(caseId, viewer)) : null;
         return new CursorPage<>(items, next);
     }
 
@@ -50,7 +50,8 @@ class CaseActivityService {
         return new ActivityItem(event.id(), event.actorType(), event.actorUserId(), actorLabel(event), event.action(),
                 actionDescription(event.action()), workflowChange(metadata),
                 event.relatedCaseId() == null ? null : new RelatedCase(event.relatedCaseId(), event.relatedCaseReference()),
-                event.occurredAt(), metadata);
+                event.occurredAt(), metadata, metadata.path("snoozedAt").asText(null),
+                metadata.path("snoozedUntil").asText(null));
     }
 
     private JsonNode sanitizedMetadata(String value) {
@@ -62,6 +63,7 @@ class CaseActivityService {
     }
 
     private static String actorLabel(RawActivity event) {
+        if ("CASE_CUSTOMER_REPLY".equals(event.action())) return "Customer";
         if (event.actorDisplayName() != null) return event.actorDisplayName();
         if (event.actorReference() != null) return event.actorReference();
         return switch (event.actorType()) {
@@ -82,6 +84,10 @@ class CaseActivityService {
             case "CASE_ASSIGN", "CASE_REASSIGN" -> "Case assigned";
             case "CASE_UNASSIGN" -> "Case unassigned";
             case "CASE_SNOOZE" -> "Case snoozed";
+            case "CASE_SNOOZE_CANCELLED" -> "Snooze cancelled";
+            case "CASE_SNOOZE_DUE" -> "Snooze expired";
+            case "CASE_SNOOZE_WOKEN" -> "Snooze ended automatically";
+            case "CASE_CUSTOMER_REPLY" -> "Customer replied";
             case "CASE_WAITING_TIMEOUT" -> "Waiting period expired";
             default -> action.replace('_', ' ').toLowerCase(Locale.ROOT);
         };
@@ -98,14 +104,14 @@ class CaseActivityService {
         return legacyCurrent.isTextual() ? new WorkflowChange(metadata.path("previousStatus").asText(null), legacyCurrent.asString()) : null;
     }
 
-    private static String scope(UUID caseId) { return "case-activity:" + caseId; }
+    private static String scope(UUID caseId, UUID viewer) { return "case-activity:" + caseId + ":" + viewer; }
 
     record RawActivity(UUID id, AuditActorType actorType, UUID actorUserId, String actorReference,
                        String actorDisplayName, String action, Instant occurredAt, String metadataJson,
                        UUID relatedCaseId, String relatedCaseReference) {}
     record ActivityItem(UUID id, AuditActorType actorType, UUID actorUserId, String actorLabel, String action,
                         String actionDescription, WorkflowChange workflowChange, RelatedCase relatedCase,
-                        Instant occurredAt, JsonNode metadata) {}
+                        Instant occurredAt, JsonNode metadata, String snoozedAt, String snoozedUntil) {}
     record WorkflowChange(String previousStatus, String currentStatus) {}
     record RelatedCase(UUID id, String reference) {}
 }

@@ -4,6 +4,7 @@ import com.unifiedsupportinbox.OutboxEventStore;
 import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
+import com.unifiedsupportinbox.readstate.CaseSnoozeWakeService;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -23,6 +24,7 @@ class CustomerReplyWaitingService {
     private static final String CASE_UPDATED = "case.updated";
 
     private final JdbcTemplate jdbc;
+    private final CaseSnoozeWakeService snoozes;
     private final AuditEventStore audit;
     private final OutboxEventStore outbox;
     private final ObjectMapper json;
@@ -30,11 +32,13 @@ class CustomerReplyWaitingService {
 
     CustomerReplyWaitingService(
             JdbcTemplate jdbc,
+            CaseSnoozeWakeService snoozes,
             AuditEventStore audit,
             OutboxEventStore outbox,
             ObjectMapper json,
             CaseSlaWaitingRecorder sla) {
         this.jdbc = jdbc;
+        this.snoozes = snoozes;
         this.audit = audit;
         this.outbox = outbox;
         this.json = json;
@@ -63,7 +67,7 @@ class CustomerReplyWaitingService {
                 caseId)
                 .stream().findFirst().orElse(null);
 
-        jdbc.update("DELETE FROM case_snoozes WHERE case_id = ?", caseId);
+        snoozes.wake(caseId);
         if (version == null) {
             Long resetVersion = jdbc.query("""
                     UPDATE cases

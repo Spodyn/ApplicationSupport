@@ -115,11 +115,15 @@ class CaseSnoozeService {
         }
 
         jdbc.update("""
-                INSERT INTO case_snoozes (case_id, user_id, until_at, created_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                ON CONFLICT (case_id, user_id) DO UPDATE
-                SET until_at = EXCLUDED.until_at,
-                    created_at = CURRENT_TIMESTAMP
+                WITH saved AS (
+                    INSERT INTO case_snoozes (case_id, user_id, until_at, created_at)
+                    VALUES (?, ?, ?, statement_timestamp())
+                    ON CONFLICT (case_id, user_id) DO UPDATE
+                    SET until_at = EXCLUDED.until_at, created_at = EXCLUDED.created_at
+                    RETURNING case_id, user_id, created_at, until_at
+                )
+                INSERT INTO case_snooze_history (case_id, user_id, action, occurred_at, snoozed_at, until_at)
+                SELECT case_id, user_id, 'CASE_SNOOZE', created_at, created_at, until_at FROM saved
                 """, caseId, userId, Timestamp.from(until));
 
         outbox.append(
@@ -138,10 +142,14 @@ class CaseSnoozeService {
     private IdempotencyResponse executeCancel(UUID caseId, UUID userId, String correlationId) {
         requireActiveUser(userId);
         requireCaseExists(caseId);
-        int deleted = jdbc.update(
-                "DELETE FROM case_snoozes WHERE case_id = ? AND user_id = ?",
-                caseId,
-                userId);
+        int deleted = jdbc.update("""
+                WITH removed AS (
+                    DELETE FROM case_snoozes WHERE case_id = ? AND user_id = ? AND until_at > statement_timestamp()
+                    RETURNING case_id, user_id, created_at, until_at
+                )
+                INSERT INTO case_snooze_history (case_id, user_id, action, snoozed_at, until_at)
+                SELECT case_id, user_id, 'CASE_SNOOZE_CANCELLED', created_at, until_at FROM removed
+                """, caseId, userId);
         if (deleted == 1) {
             outbox.append(
                     CANCELLED_OUTBOX_TYPE,
@@ -172,7 +180,7 @@ class CaseSnoozeService {
 
     private void requireSnoozableCase(UUID caseId) {
         String status = jdbc.query(
-                "SELECT status FROM cases WHERE id = ?",
+                "SELECT status FROM cases WHERE id = ? FOR UPDATE",
                 (rs, rowNum) -> rs.getString("status"),
                 caseId).stream().findFirst().orElseThrow(() -> ApiProblemException.notFound("Case was not found."));
         if ("RESOLVED".equals(status) || "IGNORED".equals(status)) {

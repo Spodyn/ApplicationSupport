@@ -8,6 +8,7 @@ import com.unifiedsupportinbox.OutboxEventStore;
 import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.identity.UserRole;
+import com.unifiedsupportinbox.readstate.CaseSnoozeWakeService;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -24,6 +25,7 @@ import tools.jackson.databind.node.ObjectNode;
 class CaseIgnoreService {
 
     private final JdbcTemplate jdbc;
+    private final CaseSnoozeWakeService snoozes;
     private final IdempotentCommandExecutor idempotency;
     private final AuditEventStore audit;
     private final OutboxEventStore outbox;
@@ -31,11 +33,13 @@ class CaseIgnoreService {
 
     CaseIgnoreService(
             JdbcTemplate jdbc,
+            CaseSnoozeWakeService snoozes,
             IdempotentCommandExecutor idempotency,
             AuditEventStore audit,
             OutboxEventStore outbox,
             ObjectMapper json) {
         this.jdbc = jdbc;
+        this.snoozes = snoozes;
         this.idempotency = idempotency;
         this.audit = audit;
         this.outbox = outbox;
@@ -104,7 +108,7 @@ class CaseIgnoreService {
                 RETURNING version
                 """, Long.class, status, status, caseId, before.version());
         if (version == null) throw ApiProblemException.conflict("The Case changed before the vote was recorded.");
-        if ("IGNORED".equals(status)) jdbc.update("DELETE FROM case_snoozes WHERE case_id = ?", caseId);
+        if ("IGNORED".equals(status)) snoozes.wake(caseId);
 
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("action", "IGNORE");

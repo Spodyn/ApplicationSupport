@@ -114,6 +114,7 @@ export function mapCaseDetail(detail: CaseDetail): InboxCase {
       snoozedUntil: detail.personalState.snoozedUntil,
       availableActions: detail.availableActions,
     }),
+    snoozedForCurrentUserAt: detail.personalState.snoozedAt ?? undefined,
     relatedCase: detail.relatedCase.reference
       ? { id: detail.relatedCase.id ?? undefined, reference: detail.relatedCase.reference, subject: detail.relatedCase.reference }
       : undefined,
@@ -226,6 +227,9 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
           label: item.actionDescription,
           createdAt: item.occurredAt,
           author: item.actorLabel,
+          action: item.action,
+          snoozedAt: item.snoozedAt ?? undefined,
+          snoozedUntil: item.snoozedUntil ?? undefined,
         })),
         nextCursor: page.nextCursor ?? undefined,
       }

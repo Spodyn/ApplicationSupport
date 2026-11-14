@@ -9,6 +9,7 @@ import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.cases.CaseResolutionCategory;
 import com.unifiedsupportinbox.sla.CaseSlaClaimRecorder;
+import com.unifiedsupportinbox.readstate.CaseSnoozeWakeService;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,6 +29,7 @@ class CaseAdministrationService {
     enum Action { ASSIGN, REASSIGN, UNASSIGN, FORCE_RESOLVE }
 
     private final JdbcTemplate jdbc;
+    private final CaseSnoozeWakeService snoozes;
     private final IdempotentCommandExecutor idempotency;
     private final AuditEventStore audit;
     private final OutboxEventStore outbox;
@@ -36,12 +38,14 @@ class CaseAdministrationService {
 
     CaseAdministrationService(
             JdbcTemplate jdbc,
+            CaseSnoozeWakeService snoozes,
             IdempotentCommandExecutor idempotency,
             AuditEventStore audit,
             OutboxEventStore outbox,
             ObjectMapper json,
             CaseSlaClaimRecorder sla) {
         this.jdbc = jdbc;
+        this.snoozes = snoozes;
         this.idempotency = idempotency;
         this.audit = audit;
         this.outbox = outbox;
@@ -125,6 +129,10 @@ class CaseAdministrationService {
                 || action == Action.UNASSIGN && !"VERIFICATION".equals(before.status())) {
             throw ApiProblemException.conflict("The administrative ownership action is not available for this Case.");
         }
+        if (action == Action.REASSIGN && targetUserId != null && targetUserId.equals(before.ownerId())) {
+            return new IdempotencyResponse(200,
+                    responseBody(caseId, before.status(), before.ownerId(), null, before.version()).put("changed", false));
+        }
         if (action != Action.UNASSIGN) requireEligibleTarget(caseId, targetUserId);
 
         String status = action == Action.UNASSIGN ? "NEW" : "VERIFICATION";
@@ -152,7 +160,7 @@ class CaseAdministrationService {
                     SET active = FALSE, deactivated_at = statement_timestamp()
                     WHERE case_id = ? AND active
                     """, caseId);
-            jdbc.update("DELETE FROM case_snoozes WHERE case_id = ?", caseId);
+            snoozes.wake(caseId);
             if (unclaimed) sla.recordClaim(caseId, java.time.Instant.now());
         } else {
             jdbc.update("""
@@ -195,7 +203,7 @@ class CaseAdministrationService {
                 RETURNING version
                 """, Long.class, category == null ? null : category.name(), caseId, before.version());
         if (version == null) throw ApiProblemException.conflict("The Case changed before it could be force-resolved.");
-        jdbc.update("DELETE FROM case_snoozes WHERE case_id = ?", caseId);
+        snoozes.wake(caseId);
         record(actorId, caseId, Action.FORCE_RESOLVE, before, "RESOLVED", before.ownerId(), category, version, correlationId);
         return response(caseId, "RESOLVED", before.ownerId(), category, version);
     }
@@ -263,17 +271,21 @@ class CaseAdministrationService {
 
     private IdempotencyResponse response(
             UUID caseId, String status, UUID owner, CaseResolutionCategory category, long version) {
+        return new IdempotencyResponse(200, responseBody(caseId, status, owner, category, version));
+    }
+
+    private ObjectNode responseBody(UUID caseId, String status, UUID owner, CaseResolutionCategory category, long version) {
         ObjectNode response = json.createObjectNode();
         response.put("caseId", caseId.toString());
         response.put("status", status);
         if (owner == null) response.putNull("ownerUserId"); else response.put("ownerUserId", owner.toString());
         if (category == null) response.putNull("resolutionCategory"); else response.put("resolutionCategory", category.name());
         response.put("version", version);
-        return new IdempotencyResponse(200, response);
+        return response;
     }
 
     private String payload(UUID caseId, String status, UUID owner, CaseResolutionCategory category, long version) {
-        return response(caseId, status, owner, category, version).body().toString();
+        return responseBody(caseId, status, owner, category, version).toString();
     }
 
     record Assignee(UUID id, String displayName, boolean eligible, int ignoreWeight, java.time.Instant ignoreWeightValidUntil) {}

@@ -9,6 +9,7 @@ import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.cases.CaseResolutionCategory;
 import com.unifiedsupportinbox.identity.UserRole;
+import com.unifiedsupportinbox.readstate.CaseSnoozeWakeService;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -29,6 +30,7 @@ public class CaseResolveService {
     private static final String OUTBOX_TYPE = "case.updated";
 
     private final JdbcTemplate jdbc;
+    private final CaseSnoozeWakeService snoozes;
     private final IdempotentCommandExecutor idempotency;
     private final AuditEventStore audit;
     private final OutboxEventStore outbox;
@@ -36,11 +38,13 @@ public class CaseResolveService {
 
     public CaseResolveService(
             JdbcTemplate jdbc,
+            CaseSnoozeWakeService snoozes,
             IdempotentCommandExecutor idempotency,
             AuditEventStore audit,
             OutboxEventStore outbox,
             ObjectMapper json) {
         this.jdbc = jdbc;
+        this.snoozes = snoozes;
         this.idempotency = idempotency;
         this.audit = audit;
         this.outbox = outbox;
@@ -115,7 +119,7 @@ public class CaseResolveService {
 
         // Terminal Cases have no active personal reminder. SLA schedulers use Case terminal
         // state as the authoritative stop condition; historical SLA deadlines stay intact.
-        jdbc.update("DELETE FROM case_snoozes WHERE case_id = ?", caseId);
+        snoozes.wake(caseId);
 
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("action", "RESOLVE");

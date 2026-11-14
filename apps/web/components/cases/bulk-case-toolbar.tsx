@@ -128,6 +128,7 @@ export function BulkCaseToolbar({ active, selected, references, clear, children 
 
 function bulkReason(code: string) {
   switch (code) {
+    case "ALREADY_ASSIGNED": return "Ten agent jest już właścicielem sprawy."
     case "ACTION_UNAVAILABLE": return "Akcja jest niedostępna dla tej sprawy."
     case "RESOURCE_NOT_FOUND": return "Nie znaleziono zasobu."
     case "ACCESS_DENIED": return "Nie masz uprawnień do wykonania tej akcji."

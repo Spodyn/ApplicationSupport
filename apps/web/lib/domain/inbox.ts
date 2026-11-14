@@ -50,6 +50,9 @@ export interface InboxActivity {
   label: string
   createdAt: string
   author?: string
+  action?: string
+  snoozedAt?: string
+  snoozedUntil?: string
 }
 
 export interface InboxCase {
@@ -65,6 +68,7 @@ export interface InboxCase {
   availableActions?: string[]
   unreadForCurrentUser: boolean
   snoozedForCurrentUserUntil?: string
+  snoozedForCurrentUserAt?: string
   currentUserRestrictedByIgnore: boolean
   lastMessagePreview: string
   createdAt: string

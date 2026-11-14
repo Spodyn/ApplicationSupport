@@ -199,7 +199,7 @@ const canUseUnassignedActions = (caseId: string) => {
 
 export const mockInboxRepository: InboxRepository = {
   async bulk() { throw new Error(t("Bulk operations require the API.")) },
-  async list() {
+  async list(_cursor, query) {
     const cases = mockInboxCaseRecords.map(
       ({ unreadForUserIds, snoozedUntilByUser, restrictedUserIds, ...item }) => {
         const snoozedUntil = snoozedUntilByUser[mockCurrentUser.id]
@@ -214,7 +214,13 @@ export const mockInboxRepository: InboxRepository = {
         }
       },
     )
-    return wait({ items: cases })
+    return wait({ items: cases.filter((item) => {
+      const terminal = item.status === "ignored" || item.status === "resolved"
+      if (query?.view === "snoozed" ? terminal || !item.snoozedForCurrentUserUntil : !terminal && item.snoozedForCurrentUserUntil) return false
+      if (query?.mine && item.owner?.id !== mockCurrentUser.id) return false
+      return !query?.slaAttention || (!terminal && item.status !== "waiting_for_customer"
+        && (item.sla.state === "breached" || item.sla.state === "at_risk"))
+    }) })
   },
 
   async getFilterOptions() {
@@ -227,7 +233,8 @@ export const mockInboxRepository: InboxRepository = {
     return wait({
       ...item,
       unreadForCurrentUser: unreadForUserIds.includes(mockCurrentUser.id),
-      snoozedForCurrentUserUntil: snoozedUntilByUser[mockCurrentUser.id],
+      snoozedForCurrentUserUntil: Date.parse(snoozedUntilByUser[mockCurrentUser.id] ?? "") > Date.now()
+        ? snoozedUntilByUser[mockCurrentUser.id] : undefined,
       currentUserRestrictedByIgnore: restrictedUserIds.includes(mockCurrentUser.id),
     })
   },
@@ -361,16 +368,26 @@ export const mockInboxRepository: InboxRepository = {
   async snooze(caseId, until) {
     await wait(undefined, 180)
     const record = getRecord(caseId)
-    const assignedToCurrentUser = record.owner?.id === mockCurrentUser.id
-    if (!assignedToCurrentUser && !canUseUnassignedActions(caseId)) {
+    if (record.status === "ignored" || record.status === "resolved") {
       throw new Error(t("Nie możesz odłożyć tego case’u."))
     }
+    const createdAt = new Date().toISOString()
     record.snoozedUntilByUser[mockCurrentUser.id] = until
+    record.snoozedForCurrentUserAt = createdAt
+    record.activity.unshift({ id: createId("mock-snooze"), action: "CASE_SNOOZE", label: "Case snoozed",
+      createdAt, snoozedAt: createdAt, snoozedUntil: until, author: mockCurrentUser.fullName })
     markCurrentUserRead(caseId)
   },
 
   async cancelSnooze(caseId) {
-    delete getRecord(caseId).snoozedUntilByUser[mockCurrentUser.id]
+    const record = getRecord(caseId)
+    const until = record.snoozedUntilByUser[mockCurrentUser.id]
+    if (until && Date.parse(until) > Date.now()) {
+      record.activity.unshift({ id: createId("mock-snooze-cancel"), action: "CASE_SNOOZE_CANCELLED",
+        label: "Snooze cancelled", createdAt: new Date().toISOString(), snoozedAt: record.snoozedForCurrentUserAt,
+        snoozedUntil: until, author: mockCurrentUser.fullName })
+    }
+    delete record.snoozedUntilByUser[mockCurrentUser.id]
     await wait(undefined, 80)
   },
 

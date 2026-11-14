@@ -169,6 +169,7 @@ decisions:
       marks_read_for_actor: true
       wake_on_customer_message: true
       clear_on_terminal: true
+      activity_history_viewer_only: true
       clear_on_claim: true
 
   - id: DEC-READ-001

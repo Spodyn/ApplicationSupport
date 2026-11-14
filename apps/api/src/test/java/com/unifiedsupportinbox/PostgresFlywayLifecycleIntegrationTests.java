@@ -126,11 +126,24 @@ class PostgresFlywayLifecycleIntegrationTests {
         Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .target("43").load().migrate();
         Flyway current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .load();
+                .target("44").load();
         assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
         current.validate();
         assertThat(queryInt("SELECT count(*) FROM information_schema.columns WHERE table_name = 'attachments'"
                 + " AND column_name = 'slack_ingest_pending'")).isEqualTo(1);
+    }
+
+    @Test
+    void upgradesFromV44WithPrivateSnoozeHistory() throws SQLException {
+        cleanDatabase();
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .target("44").load().migrate();
+        assertThat(tableExists("case_snooze_history")).isFalse();
+        Flyway current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .load();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
+        current.validate();
+        assertThat(tableExists("case_snooze_history")).isTrue();
     }
 
     private static ConfigurableApplicationContext startApplication() {

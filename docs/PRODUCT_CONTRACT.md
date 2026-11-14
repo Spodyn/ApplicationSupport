@@ -112,7 +112,7 @@ Snooze:
 - Any active USER/ADMIN who can view a nonterminal Case may snooze it; ownership is not required.
 - Range: 5 minutes to 30 days, using presets or a custom future time.
 - Snooze marks the Case read for that user, does not alter owner/status, and does not pause SLA.
-- Due time or manual cancel ends it.
+- Due time or manual cancel ends it. The viewer sees their own Snooze deadlines and recorded end events in Case history.
 - New customer message wakes the user immediately.
 - `RESOLVED`/`IGNORED` clears all snoozes for that Case.
 - Claim by anyone clears existing snoozes to avoid stale reminders.

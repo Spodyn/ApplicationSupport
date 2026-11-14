@@ -237,7 +237,7 @@ export function useInboxWorkflow(caseId?: string) {
   const snooze = useMutation({
     mutationFn: (until: string) =>
       serviceRegistry.inbox.snooze(requireCaseId(), until),
-    onSuccess: invalidateCases,
+    onSuccess: invalidateConversation,
   })
   const cancelSnooze = useMutation({
     mutationFn: () => serviceRegistry.inbox.cancelSnooze(requireCaseId()),

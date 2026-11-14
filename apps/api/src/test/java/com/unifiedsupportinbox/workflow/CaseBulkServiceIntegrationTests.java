@@ -83,6 +83,46 @@ class CaseBulkServiceIntegrationTests {
                 .containsExactly("SKIPPED");
     }
 
+    @Test void sameOwnerReassignIsInertAndBulkStillProcessesOtherCases() {
+        UUID admin = user(true), target = user(false), unchanged = newCase(), changed = newCase();
+        jdbc.update("INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'reassign_cases')", admin);
+        own(unchanged, target);
+        var before = jdbc.queryForMap("SELECT version, claimed_at, updated_at, last_activity_at FROM cases WHERE id = ?", unchanged);
+        var administration = context.getBean(CaseAdministrationService.class);
+        administration.changeOwner(unchanged, admin, target, CaseAdministrationService.Action.REASSIGN,
+                UUID.randomUUID().toString(), "same-owner");
+        assertThat(jdbc.queryForMap("SELECT version, claimed_at, updated_at, last_activity_at FROM cases WHERE id = ?", unchanged)).isEqualTo(before);
+        assertThat(count("audit_events", "entity_id", unchanged)).isZero();
+        assertThat(count("outbox_events", "aggregate_id", unchanged)).isZero();
+
+        var result = bulk.execute(admin, UUID.randomUUID().toString(), request(CaseBulkService.Action.ASSIGN, target, unchanged, changed), "mixed-assignment");
+        assertThat(statuses(result)).containsExactly("SKIPPED", "SUCCEEDED");
+        assertThat(result.path("items").get(0).path("code").asText()).isEqualTo("ALREADY_ASSIGNED");
+        assertThat(count("audit_events", "entity_id", unchanged)).isZero();
+        assertThat(count("outbox_events", "aggregate_id", unchanged)).isZero();
+        assertThat(count("audit_events", "entity_id", changed)).isEqualTo(1);
+    }
+
+    @Test void concurrentReassignmentsToTheSameTargetEmitOneChange() throws Exception {
+        UUID admin = user(true), target = user(false), id = newCase();
+        jdbc.update("INSERT INTO user_permissions (user_id, permission_code) VALUES (?, 'reassign_cases')", admin);
+        own(id, user(false));
+        var administration = context.getBean(CaseAdministrationService.class);
+        var go = new CountDownLatch(1);
+        try (var pool = Executors.newFixedThreadPool(2)) {
+            var first = pool.submit(() -> { go.await(); return administration.changeOwner(id, admin, target,
+                    CaseAdministrationService.Action.REASSIGN, UUID.randomUUID().toString(), "owner-race-a").body(); });
+            var second = pool.submit(() -> { go.await(); return administration.changeOwner(id, admin, target,
+                    CaseAdministrationService.Action.REASSIGN, UUID.randomUUID().toString(), "owner-race-b").body(); });
+            go.countDown();
+            assertThat(List.of(first.get(30, TimeUnit.SECONDS).path("changed").asBoolean(true),
+                    second.get(30, TimeUnit.SECONDS).path("changed").asBoolean(true))).containsExactlyInAnyOrder(true, false);
+        }
+        assertThat(count("audit_events", "entity_id", id)).isEqualTo(1);
+        assertThat(count("outbox_events", "aggregate_id", id)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT version FROM cases WHERE id = ?", Long.class, id)).isEqualTo(1L);
+    }
+
     @Test void concurrentDuplicateIgnoreBatchesCastOneVoteAndRetainAuditAndOutbox() throws Exception {
         UUID actor = user(false), id = newCase();
         var request = request(CaseBulkService.Action.IGNORE, null, id);

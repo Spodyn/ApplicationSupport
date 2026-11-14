@@ -463,6 +463,8 @@ export type CaseActivityItem = {
   "action": string
   "actionDescription": string
   "occurredAt": string
+  "snoozedAt"?: string | null
+  "snoozedUntil"?: string | null
 }
 
 export type CaseActivityPage = {
@@ -511,6 +513,7 @@ export type CaseCommandResponse = {
   "ownerUserId": string | null
   "resolutionCategory": CaseResolutionCategory | null
   "version": number
+  "changed"?: boolean
 }
 
 export type CaseCustomer = {
@@ -625,6 +628,7 @@ export type CasePersonalState = {
   "lastReadMessageId": string | null
   "lastReadAt": string | null
   "snoozedUntil": string | null
+  "snoozedAt"?: string | null
 }
 
 export type CaseRelated = {

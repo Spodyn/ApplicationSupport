@@ -135,6 +135,30 @@ class CaseListServiceIntegrationTests {
         assertThat(http.send(read, HttpResponse.BodyHandlers.ofString()).statusCode()).isEqualTo(404);
     }
 
+    @Test
+    void slaAttentionExcludesResolvedIgnoredAndWaitingEvenWithRecordedBreach() {
+        UUID agent = user(true);
+        String marker = "sla-attention-" + UUID.randomUUID();
+        UUID active = caseId(marker + "-active"), resolved = caseId(marker + "-resolved");
+        UUID ignored = caseId(marker + "-ignored"), waiting = caseId(marker + "-waiting");
+        jdbc.update("UPDATE cases SET status = 'RESOLVED', resolved_at = now() WHERE id = ?", resolved);
+        jdbc.update("UPDATE cases SET status = 'IGNORED', ignored_at = now() WHERE id = ?", ignored);
+        jdbc.update("UPDATE cases SET status = 'WAITING_FOR_CUSTOMER', waiting_until = now() + interval '1 hour' WHERE id = ?", waiting);
+        for (UUID id : java.util.List.of(active, resolved, ignored, waiting)) {
+            jdbc.update("""
+                    INSERT INTO case_sla (case_id, policy_id, first_response_started_at, first_response_due_at,
+                        unclaimed_started_at, unclaimed_warning_at, unclaimed_breach_at, state, paused_at)
+                    SELECT ?, id, now() - interval '2 hours', now() - interval '1 hour',
+                        now() - interval '2 hours', now() - interval '1 hour', now(), 'BREACHED',
+                        CASE WHEN ? THEN now() ELSE NULL END FROM sla_policies LIMIT 1
+                    """, id, id.equals(waiting));
+        }
+        var filter = new CaseListFilter(false, false, false, true, null, null, null, null, null, null, marker);
+        assertThat(cases.list(agent, null, 20, CaseListView.ACTIVE, filter).items())
+                .extracting(CaseListService.CaseListItem::id).containsExactly(active);
+        assertThat(context.getBean(CaseDetailService.class).detail(resolved, agent).sla().state()).isEqualTo("BREACHED");
+    }
+
     private static UUID user(boolean active) {
         return jdbc.queryForObject("""
                 INSERT INTO users (email, display_name, role, active)

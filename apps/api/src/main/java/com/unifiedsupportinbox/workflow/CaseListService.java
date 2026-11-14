@@ -69,7 +69,7 @@ class CaseListService {
                            integration.workspace_external_id, c.external_thread_key,
                            latest.id AS last_message_id, CASE WHEN latest.deleted_at IS NOT NULL THEN 'Wiadomość została usunięta w Slack.' ELSE LEFT(latest.body, 240) END AS last_message_preview,
                            reads.last_read_message_id, snoozes.until_at AS snoozed_until,
-                           sla.state AS sla_state,
+                           CASE WHEN sla.paused_at IS NOT NULL THEN 'PAUSED' ELSE sla.state END AS sla_state,
                            CASE WHEN c.status IN ('NEW', 'PARTIALLY_IGNORED')
                                   THEN LEAST(sla.first_response_due_at, sla.unclaimed_warning_at, sla.unclaimed_breach_at)
                                 WHEN c.status = 'VERIFICATION'
@@ -90,7 +90,7 @@ class CaseListService {
                     JOIN integrations integration ON integration.id = c.integration_id
                     LEFT JOIN users owner ON owner.id = c.owner_user_id
                     LEFT JOIN case_read_states reads ON reads.case_id = c.id AND reads.user_id = ?
-                    LEFT JOIN case_snoozes snoozes ON snoozes.case_id = c.id AND snoozes.user_id = ?
+                    LEFT JOIN case_snoozes snoozes ON snoozes.case_id = c.id AND snoozes.user_id = ? AND snoozes.until_at > CURRENT_TIMESTAMP
                     LEFT JOIN case_sla sla ON sla.case_id = c.id
                     LEFT JOIN LATERAL (
                         SELECT id, body, deleted_at FROM messages
@@ -114,7 +114,8 @@ class CaseListService {
                       AND (?::boolean = FALSE OR owner_user_id = ?::uuid)
                       AND (?::boolean = FALSE OR owner_user_id IS NULL)
                       AND (?::boolean = FALSE OR unread)
-                      AND (?::boolean = FALSE OR sla_state IN ('WARNING', 'BREACHED'))
+                      AND (?::boolean = FALSE OR (status NOT IN ('IGNORED', 'RESOLVED', 'WAITING_FOR_CUSTOMER')
+                          AND sla_state IN ('WARNING', 'BREACHED')))
                       AND (?::varchar IS NULL OR status = ?::varchar)
                       AND (?::varchar = 'ALL'
                            OR (?::varchar = 'ACTIVE' AND status NOT IN ('IGNORED', 'RESOLVED'))
@@ -134,8 +135,8 @@ class CaseListService {
                 ), ranked AS (
                     SELECT filtered.*,
                            CASE WHEN status IN ('IGNORED', 'RESOLVED') THEN 4
-                                WHEN sla_state = 'BREACHED' THEN 0
-                                WHEN sla_state = 'WARNING' THEN 1
+                                WHEN status <> 'WAITING_FOR_CUSTOMER' AND sla_state = 'BREACHED' THEN 0
+                                WHEN status <> 'WAITING_FOR_CUSTOMER' AND sla_state = 'WARNING' THEN 1
                                 WHEN status = 'NEW' AND unread THEN 2
                                 ELSE 3 END AS sort_bucket,
                            COALESCE(sla_due_at, 'infinity'::timestamptz) AS sort_due
