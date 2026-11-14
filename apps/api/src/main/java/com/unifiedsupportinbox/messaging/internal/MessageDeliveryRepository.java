@@ -58,6 +58,7 @@ class MessageDeliveryRepository {
                        c.external_conversation_id,
                        COALESCE(m.external_thread_key, c.external_thread_key) AS external_thread_key,
                        m.body,
+                       m.external_message_id,
                        m.body_format,
                        m.delivery_status,
                        m.ask_waiting_seconds,
@@ -139,6 +140,15 @@ class MessageDeliveryRepository {
                   AND attempt_no = ?
                   AND finished_at IS NULL
                 """, providerResponseRef, messageId, attemptNo) == 1;
+    }
+
+    boolean recordAcceptedBody(UUID messageId, String providerMessageRef) {
+        return jdbc.update("""
+                UPDATE messages
+                SET external_message_id = ?
+                WHERE id = ? AND delivery_status = 'SENDING'
+                  AND (external_message_id IS NULL OR external_message_id = ?)
+                """, providerMessageRef, messageId, providerMessageRef) == 1;
     }
 
     boolean markSuccess(
@@ -293,6 +303,7 @@ class MessageDeliveryRepository {
                 rs.getString("external_conversation_id"),
                 rs.getString("external_thread_key"),
                 rs.getString("body"),
+                rs.getString("external_message_id"),
                 MessageBodyFormat.valueOf(rs.getString("body_format")),
                 MessageDeliveryStatus.valueOf(rs.getString("delivery_status")),
                 (Long) rs.getObject("ask_waiting_seconds"),
@@ -349,6 +360,7 @@ class MessageDeliveryRepository {
             String externalConversationId,
             String externalThreadKey,
             String body,
+            String externalMessageId,
             MessageBodyFormat bodyFormat,
             MessageDeliveryStatus deliveryStatus,
             Long askWaitingSeconds,

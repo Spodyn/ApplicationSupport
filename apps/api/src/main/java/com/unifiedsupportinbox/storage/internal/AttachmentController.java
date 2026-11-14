@@ -45,6 +45,11 @@ class AttachmentController {
         return ResponseEntity.status(201).body(AttachmentView.from(uploaded));
     }
 
+    @PostMapping("/{caseId}/attachments/{attachmentId}/scan")
+    AttachmentView retryScan(@PathVariable UUID caseId, @PathVariable UUID attachmentId, Authentication authentication) {
+        return AttachmentView.from(attachments.retryScan(caseId, authenticatedUserId(authentication), attachmentId));
+    }
+
     @GetMapping("/{caseId}/attachments/{attachmentId}")
     ResponseEntity<InputStreamResource> download(
             @PathVariable UUID caseId,

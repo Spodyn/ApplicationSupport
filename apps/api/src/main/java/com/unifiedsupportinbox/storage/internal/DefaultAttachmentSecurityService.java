@@ -47,11 +47,9 @@ class DefaultAttachmentSecurityService implements AttachmentSecurityService {
         if (claimed == null) {
             AttachmentMetadata current = requireExisting(attachmentId);
             if (current.scanStatus() == AttachmentScanStatus.CLEAN
-                    || current.scanStatus() == AttachmentScanStatus.INFECTED) {
+                    || current.scanStatus() == AttachmentScanStatus.INFECTED
+                    || current.scanStatus() == AttachmentScanStatus.SCANNING) {
                 return current;
-            }
-            if (current.scanStatus() == AttachmentScanStatus.SCANNING) {
-                throw new IllegalStateException("Attachment scan is already in progress.");
             }
             throw new IllegalStateException("Attachment could not be claimed for scanning.");
         }

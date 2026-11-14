@@ -97,6 +97,48 @@ describe("real inbox API adapter", () => {
     expect(send?.body).toEqual({ body: "USI test reply", bodyFormat: "PLAIN_TEXT", attachmentIds: [] })
   })
 
+  it("sends a clean file without text and rejects an empty message", async () => {
+    const { repository, requests } = fixture()
+    await expect(repository.sendMessage(caseId, { body: "   " })).rejects.toThrow("The message cannot be empty.")
+    const file = new File(["test"], "evidence.txt", { type: "text/plain" })
+    await repository.sendMessage(caseId, { body: "", attachments: [file] })
+    expect(requests.find((request) => request.path.endsWith("/messages") && request.method === "POST")?.body)
+      .toEqual({ body: "", bodyFormat: "PLAIN_TEXT", attachmentIds: [attachmentId] })
+  })
+
+  it.each([
+    ["PENDING", "File evidence.txt is being scanned. Try again shortly."],
+    ["SCANNING", "File evidence.txt is being scanned. Try again shortly."],
+    ["ERROR", "Could not scan file evidence.txt. Try again."],
+    ["INFECTED", "A threat was detected in file evidence.txt."],
+  ])("blocks %s attachments with their own message", async (scanStatus, message) => {
+    const request = vi.fn().mockResolvedValue({
+      attachmentId, filename: "evidence.txt", contentType: "text/plain", sizeBytes: 4, scanStatus,
+    })
+    const repository = createApiInboxRepository({ request } as ApiTransport)
+    const file = new File(["test"], "evidence.txt", { type: "text/plain" })
+    await expect(repository.sendMessage(caseId, { body: "", attachments: [file] })).rejects.toThrow(message)
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request.mock.calls[0][0].path).toMatch(/\/attachments$/)
+  })
+
+  it("retries a lost send response using the original key and attachment ids", async () => {
+    const failure = new ApiHttpError(503)
+    const request = vi.fn()
+      .mockResolvedValueOnce({ attachmentId, filename: "evidence.txt", scanStatus: "CLEAN", sizeBytes: 4 })
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce({ messageId })
+      .mockResolvedValueOnce({ items: [message] })
+    const repository = createApiInboxRepository({ request } as ApiTransport)
+    const input = { body: "", attachments: [new File(["test"], "evidence.txt")], idempotencyKey: "same-key" }
+    await expect(repository.sendMessage(caseId, input)).rejects.toBe(failure)
+    await expect(repository.sendMessage(caseId, input)).resolves.toMatchObject({ id: messageId })
+    const calls = request.mock.calls.map(([item]) => item)
+    expect(calls.filter((item) => item.path.endsWith("/attachments"))).toHaveLength(1)
+    const sends = calls.filter((item) => item.path.endsWith("/messages") && item.method === "POST")
+    expect(sends[0]).toEqual(sends[1])
+  })
+
   it("maps persisted support messages as agent messages and accepts an empty real history page", async () => {
     expect(mapCaseMessage(caseId, {
       ...message, kind: "SUPPORT", inbound: false, providerCreatedAt: null,

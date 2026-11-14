@@ -101,9 +101,8 @@ class DefaultAttachmentSecurityServiceTests {
         DefaultAttachmentSecurityService service = new DefaultAttachmentSecurityService(
                 metadata, objects, new AttachmentFilePolicy(), content -> AttachmentMalwareScanner.ScanResult.CLEAN);
 
-        assertThatThrownBy(() -> service.scan(id))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("already in progress");
+        assertThat(service.scan(id).scanStatus()).isEqualTo(AttachmentScanStatus.SCANNING);
+        org.mockito.Mockito.verifyNoInteractions(objects);
     }
 
     private static Fixture fixture(String filename, String contentType, byte[] bytes) {

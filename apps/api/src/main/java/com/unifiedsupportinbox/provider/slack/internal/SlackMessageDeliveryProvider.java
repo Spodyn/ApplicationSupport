@@ -78,22 +78,27 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
         }
 
         try {
-            SlackWebApiClient.PostMessageResponse response = slack.postMessage(
-                    token,
-                    command.externalConversationId(),
-                    command.externalThreadKey(),
-                    command.body(),
-                    command.bodyFormat(),
-                    command.idempotencyKey());
-            DeliveryResult messageResult = SlackDeliveryErrorClassifier.classifyPost(response);
-            if (messageResult.outcome() != MessageDeliveryProvider.Outcome.SENT
-                    && messageResult.outcome() != MessageDeliveryProvider.Outcome.DELIVERED) {
-                reportResult(command.integrationId(), messageResult);
-                return messageResult;
+            DeliveryResult messageResult = DeliveryResult.sent(command.acceptedBodyRef());
+            if (command.acceptedBodyRef() == null && command.body() != null && !command.body().isBlank()) {
+                messageResult = SlackDeliveryErrorClassifier.classifyPost(slack.postMessage(
+                        token,
+                        command.externalConversationId(),
+                        command.externalThreadKey(),
+                        command.body(),
+                        command.bodyFormat(),
+                        command.idempotencyKey()));
+                if (messageResult.outcome() != Outcome.SENT) {
+                    reportResult(command.integrationId(), messageResult);
+                    return messageResult;
+                }
+                command.recordAcceptedBody().accept(messageResult.providerMessageRef());
             }
             if (attachments != null) {
                 try {
-                    attachments.uploadAll(command);
+                    boolean uploaded = attachments.uploadAll(command);
+                    if (!uploaded && messageResult.providerMessageRef() == null) {
+                        return DeliveryResult.permanentFailure("SLACK_INVALID_COMMAND");
+                    }
                 } catch (ProviderAttachmentException attachmentFailure) {
                     DeliveryResult result = attachmentFailure.retryable()
                             ? DeliveryResult.transientFailure(

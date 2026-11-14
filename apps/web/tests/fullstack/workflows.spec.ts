@@ -143,6 +143,118 @@ test('real session cookies and CSRF reject cross-boundary mutations; service wor
   expect(await page.evaluate(() => Object.keys(localStorage).filter(key => /session|token|password/i.test(key)))).toEqual([])
 })
 
+test('Case composer uploads pasted PNG, retries scans and resumes partial Slack delivery', async ({page}) => {
+  await login(page)
+  const marker = randomUUID().slice(0, 8)
+  const label = `Case attachments ${marker}`
+  const root = await inbound(page, label)
+  const option = page.getByRole('button', {name: new RegExp(label)})
+  await option.click()
+  const panel = page.getByRole('region', {name: /^Rozmowa /})
+  await panel.getByRole('button', {name: 'Przejmij', exact: true}).click()
+  const composer = panel.getByLabel('Treść odpowiedzi')
+  const send = panel.getByRole('button', {name: 'Wyślij', exact: true})
+  const picker = panel.getByLabel('Dodaj pliki')
+  const fixture = fixtures.get(page)!
+  await expect.poll(async () => (await (await page.request.get('/api/v1/cases')).json())
+    .items.some((item: {lastMessagePreview: string}) => item.lastMessagePreview === label)).toBe(true)
+  const cases = await (await page.request.get('/api/v1/cases')).json()
+  const caseId = cases.items.find((item: {lastMessagePreview: string}) => item.lastMessagePreview === label).id
+  const messagesPath = `/api/v1/cases/${caseId}/messages`
+  const observed = async () => (await (await page.request.get('/__test/observed')).json()) as {
+    messages: {clientMessageId: string; thread: string}[]
+    files: {title: string; thread: string; channel: string}[]
+  }
+  const sendFromComposer = async () => {
+    const result = page.waitForResponse(response => response.url().endsWith(messagesPath) && response.request().method() === 'POST')
+    await send.click()
+    const response = await result
+    expect(response.status()).toBe(202)
+    const {messageId} = await response.json()
+    await expect.poll(async () => (await (await page.request.get(messagesPath)).json()).items
+      .find((item: {id: string}) => item.id === messageId)?.deliveryStatus).toBe('SENT')
+    return messageId as string
+  }
+
+  await expect(send).toBeDisabled()
+  expect((await command(page, messagesPath, {body: '  ', attachmentIds: []})).status()).toBe(400)
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  await page.evaluate(() => navigator.clipboard.writeText('Plain clipboard text'))
+  await composer.press('ControlOrMeta+v')
+  await expect(composer).toHaveValue('Plain clipboard text')
+  await composer.clear()
+
+  const screenshot = `screenshot-${marker}.png`
+  await composer.evaluate((element, filename) => {
+    const png = atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+j2ioAAAAASUVORK5CYII=')
+    const clipboard = new DataTransfer()
+    clipboard.items.add(new File([Uint8Array.from(png, byte => byte.charCodeAt(0))], filename, {type: 'image/png'}))
+    element.dispatchEvent(new ClipboardEvent('paste', {clipboardData: clipboard, bubbles: true, cancelable: true}))
+  }, screenshot)
+  const preview = panel.getByRole('button', {name: screenshot, exact: true})
+  await expect(preview.locator('img')).toBeVisible()
+  await expect(composer).toHaveValue('')
+  const draftOnly = `remove-${marker}.txt`
+  await picker.setInputFiles({name: draftOnly, mimeType: 'text/plain', buffer: Buffer.from('Discard me')})
+  await panel.getByRole('button', {name: draftOnly, exact: true}).click()
+  await expect(panel.getByRole('button', {name: draftOnly, exact: true})).toHaveCount(0)
+  expect((await observed()).files.filter(file => file.thread === root.ts)).toHaveLength(0)
+  const fileOnly = await sendFromComposer()
+  await expect(panel.getByRole('link', {name: new RegExp(screenshot)})).toBeVisible()
+  expect((await observed()).messages.filter(message => message.clientMessageId === fileOnly)).toHaveLength(0)
+
+  await picker.setInputFiles({name: 'oversized.txt', mimeType: 'text/plain', buffer: Buffer.alloc(25 * 1024 * 1024 + 1)})
+  await expect(panel.getByRole('alert')).toContainText('Pojedynczy plik nie może przekraczać 25 MiB.')
+  await expect(send).toBeDisabled()
+  const tooLarge = await page.request.post(`/api/v1/cases/${caseId}/attachments`, {
+    headers: {'X-XSRF-TOKEN': await csrf(page)},
+    multipart: {file: {name: 'oversized.txt', mimeType: 'text/plain', buffer: Buffer.alloc(25 * 1024 * 1024 + 1)}},
+  })
+  expect(tooLarge.status()).toBe(413)
+  expect(await tooLarge.json()).toMatchObject({code: 'ATTACHMENT_TOO_LARGE'})
+
+  const scanName = `retry-${marker}.txt`
+  const lostName = `lost-response-${marker}.txt`
+  const badName = `blocked-${marker}.exe`
+  await picker.setInputFiles({name: badName, mimeType: 'text/plain', buffer: Buffer.from('synthetic invalid extension')})
+  await send.click()
+  await expect(panel.getByRole('alert')).toContainText(`Typ pliku ${badName} jest niedozwolony.`)
+  await panel.getByRole('button', {name: badName, exact: true}).click()
+  await picker.setInputFiles([
+    {name: scanName, mimeType: 'text/plain', buffer: Buffer.from(`test-only-scanner-offline-${marker}`)},
+    {name: lostName, mimeType: 'text/plain', buffer: Buffer.from('Synthetic file with a lost completion response')},
+  ])
+  await composer.fill(`Text plus files ${marker}`)
+  const initialUpload = page.waitForResponse(response => response.url().endsWith('/attachments') && response.request().method() === 'POST')
+  await send.click()
+  const upload = await initialUpload
+  expect(upload.status()).toBe(201)
+  const quarantined = await upload.json()
+  expect(quarantined).toMatchObject({scanStatus: 'ERROR', scanError: 'SCANNER_UNAVAILABLE'})
+  await expect(panel.getByRole('alert')).toContainText(`Nie udało się zeskanować pliku ${scanName}.`)
+  expect((await page.request.get(`/api/v1/cases/${caseId}/attachments/${quarantined.attachmentId}`)).status()).toBe(409)
+  expect((await command(page, messagesPath, {attachmentIds: [quarantined.attachmentId]})).status()).toBe(400)
+  expect((await page.request.post(`/api/v1/cases/${caseId}/attachments/${quarantined.attachmentId}/scan`)).status()).toBe(403)
+  const rescan = page.waitForResponse(response => response.url().endsWith(`/${quarantined.attachmentId}/scan`)
+    && response.request().method() === 'POST')
+  const combined = await sendFromComposer()
+  expect(await (await rescan).json()).toMatchObject({attachmentId: quarantined.attachmentId, scanStatus: 'CLEAN'})
+  const provider = await observed()
+  expect(provider.messages.filter(message => message.clientMessageId === combined)).toEqual([
+    expect.objectContaining({thread: root.ts}),
+  ])
+  const received = provider.files.filter(file => file.thread === root.ts)
+  expect(received.map(file => file.title).sort()).toEqual([screenshot, scanName, lostName].sort())
+  expect(received.every(file => file.channel === fixture.externalChannelId)).toBe(true)
+  const history = await (await page.request.get(messagesPath)).json()
+  expect(history.items.find((item: {id: string}) => item.id === fileOnly)).toMatchObject({body: '', attachments: [{fileName: screenshot}]})
+  expect(history.items.find((item: {id: string}) => item.id === combined).attachments)
+    .toEqual(expect.arrayContaining([expect.objectContaining({id: quarantined.attachmentId})]))
+  await page.reload()
+  await expect(panel.getByText(`Text plus files ${marker}`, {exact: true})).toBeVisible()
+  await expect(panel.getByRole('link', {name: new RegExp(screenshot)})).toBeVisible()
+})
+
 test('real MinIO uploads enforce owner access, quarantine downloads and session deactivation', async ({page, browser, baseURL}) => {
   await login(page)
   const marker = randomUUID().slice(0, 8)

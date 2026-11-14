@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.provider.slack.internal;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -33,18 +34,18 @@ class SlackOutboundAttachmentServiceTests {
         ObjectProvider<AttachmentObjectStorage> objectProvider = provider(objects);
         ObjectProvider<AttachmentSecurityService> securityProvider = provider(security);
         SlackOutboundAttachmentService service = new SlackOutboundAttachmentService(
-                gateway, metadata, objectProvider, securityProvider);
+                gateway, metadata, objectProvider, securityProvider, mock(org.springframework.jdbc.core.JdbcTemplate.class));
 
         MessageDeliveryProvider.DeliveryCommand command = command();
         AttachmentMetadata attachment = attachment(command.messageId(), null);
         when(metadata.findByMessageId(command.messageId())).thenReturn(List.of(attachment));
         when(security.requireClean(attachment.id())).thenReturn(attachment);
         when(objects.open(attachment.storageKey())).thenReturn(new ByteArrayInputStream(new byte[] {1, 2, 3}));
-        when(gateway.upload(any())).thenReturn(new ProviderAttachmentGateway.UploadedAttachment("F123", null));
+        when(gateway.upload(any(), isNull(), any())).thenReturn(new ProviderAttachmentGateway.UploadedAttachment("F123", null));
 
         service.uploadAll(command);
 
-        verify(gateway).upload(any());
+        verify(gateway).upload(any(), isNull(), any());
         verify(metadata).recordProviderFileId(attachment.id(), "F123");
     }
 
@@ -55,7 +56,7 @@ class SlackOutboundAttachmentServiceTests {
         AttachmentObjectStorage objects = mock(AttachmentObjectStorage.class);
         AttachmentSecurityService security = mock(AttachmentSecurityService.class);
         SlackOutboundAttachmentService service = new SlackOutboundAttachmentService(
-                gateway, metadata, provider(objects), provider(security));
+                gateway, metadata, provider(objects), provider(security), mock(org.springframework.jdbc.core.JdbcTemplate.class));
 
         MessageDeliveryProvider.DeliveryCommand command = command();
         AttachmentMetadata attachment = attachment(command.messageId(), "F-already-sent");
@@ -63,7 +64,7 @@ class SlackOutboundAttachmentServiceTests {
 
         service.uploadAll(command);
 
-        verify(gateway, never()).upload(any());
+        verify(gateway, never()).upload(any(), isNull(), any());
         verify(security, never()).requireClean(any());
     }
 

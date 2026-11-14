@@ -6,8 +6,6 @@ import com.unifiedsupportinbox.CursorPage;
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.messaging.MessageBodyFormat;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
@@ -49,7 +47,7 @@ class SupportMessageController {
     ResponseEntity<JsonNode> send(
             @PathVariable UUID caseId,
             @RequestHeader(ApiV1Conventions.IDEMPOTENCY_KEY_HEADER) String idempotencyKey,
-            @Valid @RequestBody SendMessageRequest request,
+            @RequestBody SendMessageRequest request,
             Authentication authentication,
             HttpServletRequest httpRequest) {
         UUID userId = authenticatedUserId(authentication);
@@ -79,7 +77,7 @@ class SupportMessageController {
     }
 
     record SendMessageRequest(
-            @NotBlank String body,
+            String body,
             MessageBodyFormat bodyFormat,
             List<UUID> attachmentIds) {
     }

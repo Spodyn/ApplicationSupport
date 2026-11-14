@@ -118,6 +118,7 @@ class BootstrapSecurityConfiguration {
                                 "/api/v1/cases/*/ignore",
                                 "/api/v1/cases/*/snooze",
                                 "/api/v1/cases/*/attachments",
+                                "/api/v1/cases/*/attachments/*/scan",
                                 "/api/v1/messages/*/retry",
                                 "/api/v1/cases/read/mark-resolved").authenticated()
                         .requestMatchers(HttpMethod.DELETE,

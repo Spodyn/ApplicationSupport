@@ -123,6 +123,11 @@ Conversation-visible authorship is CUSTOMER, SUPPORT or SYSTEM only when genuine
 
 Body formats are safe PLAIN_TEXT/Markdown; raw executable provider HTML is never canonical.
 
+A public Case reply can contain text, CLEAN attachments, or both. An empty
+reply is rejected. Ask Customer still requires text. Clipboard images and
+selected files share the same draft queue and limits. The owner can retry a
+technical scan failure while the upload is still unassociated.
+
 Attachment limits are 25 MiB/file, 10 files and 50 MiB/message, with lower provider limit winning. Uploads stream through backend/object storage. Common images, PDF, text/CSV, OOXML and ZIP are baseline allowed classes; executables/scripts/active HTML are blocked. Scanning states are PENDING/CLEAN/INFECTED/ERROR; only CLEAN is normally usable. Default self-hosted scanner is ClamAV. There is no "allow anyway" path for infected/error files.
 
 ## 16. SLA

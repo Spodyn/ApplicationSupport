@@ -8,6 +8,8 @@ interface SlackAttachmentApiClient {
 
     FileInfoResponse fileInfo(byte[] botToken, String providerFileId);
 
+    boolean isSharedInThread(byte[] botToken, String fileId, String channel, String thread);
+
     UploadUrlResponse getUploadUrl(byte[] botToken, String filename, long sizeBytes);
 
     UploadBytesResponse uploadBytes(URI uploadUrl, byte[] content);

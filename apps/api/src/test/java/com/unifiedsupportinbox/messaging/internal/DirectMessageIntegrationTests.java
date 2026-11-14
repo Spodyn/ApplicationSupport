@@ -28,7 +28,7 @@ class DirectMessageIntegrationTests {
             UUID alice = user(jdbc, "Alice");
             UUID bob = user(jdbc, "Bob");
             UUID carol = user(jdbc, "Carol");
-            Flyway current = Flyway.configure().dataSource(source).load();
+            Flyway current = Flyway.configure().dataSource(source).target("42").load();
             assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
             current.validate();
             assertThat(current.info().pending()).isEmpty();

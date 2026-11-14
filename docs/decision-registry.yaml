@@ -207,6 +207,8 @@ decisions:
     status: frozen
     source: [E08, E20]
     decision:
+      public_reply_content: nonblank_text_or_clean_attachment
+      ask_customer_requires_text: true
       max_file_mib: 25
       max_files_per_message: 10
       max_total_mib_per_message: 50

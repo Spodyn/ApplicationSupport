@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { deliveryPresentation } from "@/lib/i18n/delivery-presentation"
+import { attachmentLimitError } from "@/lib/services/attachment-limits"
 import { userError } from "@/lib/i18n/errors"
 import { locale } from "@/lib/i18n/catalog"
 import { useT } from "@/lib/i18n/provider"
@@ -26,6 +27,7 @@ import { deliveryStatusLabels } from "@/lib/domain/labels"
 import { MAX_BULK_SELECTION } from "@/lib/services/bulk-selection"
 import type { InboxListQuery } from "@/lib/services/inbox"
 import { useSelectMatchingCases, useCurrentUser, useInboxActivity, useInboxAssignees, useInboxCase, useInboxCases, useInboxFilterOptions, useInboxMessages, useInboxWorkflow, useMarkAllResolvedRead, useMarkInboxCaseRead } from "@/lib/services/queries"
+import type { InboxSendInput } from "@/lib/services/inbox"
 import { cn } from "@/lib/utils"
 import { useShell } from "@/components/layout/shell-context"
 import { Button } from "@/components/ui/button"
@@ -498,7 +500,7 @@ function ConversationPanel({
   const [actionError, setActionError] = useState<Error | null>(null)
   const sending = useRef(false)
   const composing = useRef(false)
-  const idempotencyKey = useRef<string | null>(null)
+  const submission = useRef<InboxSendInput | null>(null)
   const workflowActionKey = useRef<string | null>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
@@ -520,16 +522,28 @@ function ConversationPanel({
     || workflow.unassign.isPending
     || workflow.forceResolve.isPending
 
+  const hasContent = Boolean(draft.trim() || files.length)
+
+  const addFiles = (selected: File[]) => {
+    if (!canReply || sending.current || !selected.length) return
+    const next = [...files, ...selected]
+    const error = attachmentLimitError(next)
+    setSendError(error ?? null)
+    if (error) return
+    setFiles(next)
+    submission.current = null
+  }
+
   const send = async () => {
-    if (!canReply || !draft.trim() || sending.current || workflow.sendMessage.isPending) return
+    if (!canReply || !hasContent || sending.current || workflow.sendMessage.isPending) return
     sending.current = true
-    idempotencyKey.current ??= crypto.randomUUID()
+    submission.current ??= { body: draft, attachments: files, idempotencyKey: crypto.randomUUID() }
     setSendError(null)
     try {
-      await workflow.sendMessage.mutateAsync({ body: draft, attachments: files, idempotencyKey: idempotencyKey.current })
+      await workflow.sendMessage.mutateAsync(submission.current)
       setDraft("")
       setFiles([])
-      idempotencyKey.current = null
+      submission.current = null
     } catch (error) {
       setSendError(error instanceof Error ? error : new Error(t("Nie udało się wysłać odpowiedzi.")))
     } finally {
@@ -638,9 +652,24 @@ function ConversationPanel({
               event.preventDefault()
               if (!event.repeat) void send()
             }
-          }} value={draft} onChange={(event) => { setDraft(event.target.value); idempotencyKey.current = null }} disabled={!canReply || workflow.sendMessage.isPending} placeholder={canReply ? t("Napisz odpowiedź...") : t("Przejmij case, aby odpowiedzieć")} aria-label={t("Treść odpowiedzi")} className="block h-[80px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa] disabled:cursor-not-allowed" />
-          {files.length > 0 && <div className="flex flex-wrap gap-2 px-[19px] pb-2">{files.map((file, index) => <button key={`${file.name}-${file.size}-${index}`} type="button" disabled={workflow.sendMessage.isPending} onClick={() => { setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index)); idempotencyKey.current = null }} className="min-w-0 max-w-full rounded-md bg-white/[0.06] px-2 py-1 text-left text-xs text-[#cbd3df] [overflow-wrap:anywhere]" title={t("Usuń plik")}>{file.name}</button>)}</div>}
-          <div className="flex h-[51px] items-center justify-between px-[19px]"><label className={cn("inline-flex cursor-pointer items-center gap-2 text-xs text-[#aeb8c8]", !canReply && "pointer-events-none opacity-50")}><Paperclip className="size-4" /> {t("Dodaj pliki")}<input type="file" multiple disabled={!canReply || workflow.sendMessage.isPending} className="hidden" onChange={(event) => { const selected = Array.from(event.target.files ?? []); setFiles((current) => [...current, ...selected].slice(0, 10)); idempotencyKey.current = null; event.target.value = "" }} /></label><button type="button" data-case-action aria-busy={workflow.sendMessage.isPending} onClick={send} disabled={!canReply || !draft.trim() || workflow.sendMessage.isPending} className="h-[45px] w-[117px] rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{workflow.sendMessage.isPending ? t("Wysyłanie…") : t("Wyślij")}</button></div>
+          }} onPaste={(event) => {
+            const clipboard = event.clipboardData
+            const pasted = clipboard.files.length > 0 ? Array.from(clipboard.files) : Array.from(clipboard.items)
+              .filter((item) => item.kind === "file")
+              .flatMap((item) => item.getAsFile() ?? [])
+            const images = pasted
+              .filter((file) => file.type.startsWith("image/"))
+              .map((file) => {
+                if (file.name) return file
+                const extension = file.type.split("/")[1] === "jpeg" ? "jpg" : file.type.split("/")[1]
+                return new File([file], `${t("Zrzut ekranu")}.${extension}`, { type: file.type })
+              })
+            if (!images.length) return
+            if (!event.clipboardData.types.includes("text/plain")) event.preventDefault()
+            addFiles(images)
+          }} value={draft} onChange={(event) => { setDraft(event.target.value); submission.current = null }} disabled={!canReply || workflow.sendMessage.isPending} placeholder={canReply ? t("Napisz odpowiedź...") : t("Przejmij case, aby odpowiedzieć")} aria-label={t("Treść odpowiedzi")} className="block h-[80px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa] disabled:cursor-not-allowed" />
+          {files.length > 0 && <div className="flex flex-wrap gap-2 px-[19px] pb-2">{files.map((file, index) => <button key={`${file.name}-${file.size}-${index}`} type="button" disabled={workflow.sendMessage.isPending} onClick={() => { setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index)); submission.current = null; setSendError(null) }} className="flex min-w-0 max-w-full items-center gap-2 rounded-md bg-white/[0.06] px-2 py-1 text-left text-xs text-[#cbd3df] [overflow-wrap:anywhere]" title={t("Usuń plik")}><AttachmentPreview file={file} /><span>{file.name}</span></button>)}</div>}
+          <div className="flex h-[51px] items-center justify-between px-[19px]"><label className={cn("inline-flex cursor-pointer items-center gap-2 text-xs text-[#aeb8c8]", !canReply && "pointer-events-none opacity-50")}><Paperclip className="size-4" /> {t("Dodaj pliki")}<input type="file" multiple disabled={!canReply || workflow.sendMessage.isPending} className="hidden" onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = "" }} /></label><button type="button" data-case-action aria-busy={workflow.sendMessage.isPending} onClick={send} disabled={!canReply || !hasContent || workflow.sendMessage.isPending} className="h-[45px] w-[117px] rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{workflow.sendMessage.isPending ? t("Wysyłanie…") : t("Wyślij")}</button></div>
         </div>
         <p id="composer-help" className="mt-1 text-[11px] text-[#9aa5b6]">{t("Enter wysyła · Shift+Enter dodaje nowy wiersz")}</p>
         {sendError && <p role="alert" className="mt-2 text-sm text-red-400">{userError(sendError)}</p>}
@@ -688,6 +717,21 @@ function DeliveryNotice({ message, canManageIntegrations }: { message: InboxMess
       )}
     </div>
   )
+}
+
+function AttachmentPreview({ file }: { file: File }) {
+  const image = useRef<HTMLImageElement>(null)
+  useEffect(() => {
+    const element = image.current
+    if (!element) return
+    const preview = URL.createObjectURL(file)
+    element.src = preview
+    return () => URL.revokeObjectURL(preview)
+  }, [file])
+  if (!["image/png", "image/jpeg", "image/gif"].includes(file.type)) return null
+  // Local object URLs need no Next.js image optimization.
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img ref={image} alt="" className="size-8 shrink-0 rounded object-cover" />
 }
 
 function MessageAttachments({ attachments }: { attachments?: InboxMessage["attachments"] }) {

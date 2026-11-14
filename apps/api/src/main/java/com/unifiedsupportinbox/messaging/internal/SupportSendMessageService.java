@@ -66,9 +66,12 @@ class SupportSendMessageService {
             String correlationId) {
         Objects.requireNonNull(caseId, "caseId");
         Objects.requireNonNull(userId, "userId");
-        String normalizedBody = requireBody(body);
+        String normalizedBody = body == null || body.isBlank() ? "" : body;
         MessageBodyFormat normalizedFormat = bodyFormat == null ? MessageBodyFormat.PLAIN_TEXT : bodyFormat;
         List<UUID> normalizedAttachments = normalizeAttachmentIds(attachmentIds);
+        if (normalizedBody.isEmpty() && normalizedAttachments.isEmpty()) {
+            throw ApiProblemException.validationFailed("A Message requires text or a CLEAN attachment.");
+        }
         String normalizedCorrelationId = requireText(correlationId, "correlationId", 128);
 
         Map<String, Object> canonicalRequest = Map.of(
@@ -260,13 +263,6 @@ class SupportSendMessageService {
             throw ApiProblemException.validationFailed("attachmentIds must not contain duplicates.");
         }
         return List.copyOf(values);
-    }
-
-    private static String requireBody(String value) {
-        if (value == null || value.isBlank()) {
-            throw ApiProblemException.validationFailed("Message body must not be blank.");
-        }
-        return value;
     }
 
     private static String requireText(String value, String field, int maxLength) {

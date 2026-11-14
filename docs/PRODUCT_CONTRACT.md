@@ -143,6 +143,7 @@ Read/unread:
 
 ## 10. Attachments
 
+- A public Case reply requires nonblank text, at least one `CLEAN` attachment, or both. Ask Customer requires nonblank text.
 - Max 25 MiB per file, 10 files and 50 MiB total per logical message. A stricter provider limit wins.
 - Default allowed classes: common images, PDF, plain text/CSV, Office OOXML (`docx`, `xlsx`, `pptx`) and ZIP.
 - Executables, scripts and active HTML are blocked by default.

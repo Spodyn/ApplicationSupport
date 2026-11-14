@@ -19,21 +19,27 @@ class SlackOutboundAttachmentService {
     private final AttachmentMetadataCatalog metadata;
     private final ObjectProvider<AttachmentObjectStorage> objectStorage;
     private final ObjectProvider<AttachmentSecurityService> security;
+    private final org.springframework.jdbc.core.JdbcTemplate jdbc;
 
     SlackOutboundAttachmentService(
             SlackProviderAttachmentGateway gateway,
             AttachmentMetadataCatalog metadata,
             ObjectProvider<AttachmentObjectStorage> objectStorage,
-            ObjectProvider<AttachmentSecurityService> security) {
+            ObjectProvider<AttachmentSecurityService> security,
+            org.springframework.jdbc.core.JdbcTemplate jdbc) {
         this.gateway = gateway;
         this.metadata = metadata;
         this.objectStorage = objectStorage;
         this.security = security;
+        this.jdbc = jdbc;
     }
 
-    void uploadAll(MessageDeliveryProvider.DeliveryCommand command) {
+    boolean uploadAll(MessageDeliveryProvider.DeliveryCommand command) {
         List<AttachmentMetadata> attachments = metadata.findByMessageId(command.messageId());
-        if (attachments.isEmpty()) return;
+        if (attachments.isEmpty()) return false;
+        if (command.externalThreadKey() == null || command.externalThreadKey().isBlank()) {
+            throw ProviderAttachmentException.validation("SLACK_THREAD_MISSING");
+        }
 
         AttachmentObjectStorage objects = objectStorage.getIfUnique();
         AttachmentSecurityService scanner = security.getIfUnique();
@@ -57,8 +63,24 @@ class SlackOutboundAttachmentService {
                                     contentType,
                                     clean.sizeBytes()),
                             () -> objects.open(clean.storageKey()),
-                            command.idempotencyKey() + ":" + clean.id()));
+                            command.idempotencyKey() + ":" + clean.id()),
+                    preparedFile(clean.id()),
+                    fileId -> recordPreparedFile(clean.id(), fileId));
             metadata.recordProviderFileId(clean.id(), uploaded.providerFileId());
         }
+        return true;
+    }
+
+    private String preparedFile(java.util.UUID attachmentId) {
+        return jdbc.query("SELECT slack_file_id FROM slack_outbound_uploads WHERE attachment_id = ?",
+                (rs, row) -> rs.getString("slack_file_id"), attachmentId).stream().findFirst().orElse(null);
+    }
+
+    private String recordPreparedFile(java.util.UUID attachmentId, String fileId) {
+        return jdbc.queryForObject("""
+                INSERT INTO slack_outbound_uploads (attachment_id, slack_file_id) VALUES (?, ?)
+                ON CONFLICT (attachment_id) DO UPDATE SET slack_file_id = slack_outbound_uploads.slack_file_id
+                RETURNING slack_file_id
+                """, String.class, attachmentId, fileId);
     }
 }

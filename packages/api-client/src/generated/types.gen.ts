@@ -296,7 +296,7 @@ export type ApiProblem = {
   "fieldErrors"?: Array<FieldError>
 }
 
-export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTICATION_REQUIRED" | "ACCESS_DENIED" | "RESOURCE_NOT_FOUND" | "CONFLICT" | "CASE_ALREADY_CLAIMED" | "RATE_LIMITED" | "PROVIDER_FAILURE" | "APPLICATION_FAILURE" | "INTERNAL_ERROR"
+export type ApiProblemCode = "VALIDATION_FAILED" | "INVALID_CURSOR" | "AUTHENTICATION_REQUIRED" | "ACCESS_DENIED" | "RESOURCE_NOT_FOUND" | "CONFLICT" | "CASE_ALREADY_CLAIMED" | "RATE_LIMITED" | "PROVIDER_FAILURE" | "APPLICATION_FAILURE" | "INTERNAL_ERROR" | "ATTACHMENT_TYPE_REJECTED" | "ATTACHMENT_TOO_LARGE"
 
 export type ApiSlaAnalyticsServiceBreakdown = {
   "type"?: "FIRST_RESPONSE" | "UNCLAIMED"
@@ -894,7 +894,7 @@ export type ResolveCaseResponse = {
 }
 
 export type SendMessageRequest = {
-  "body": string
+  "body"?: string
   "bodyFormat"?: MessageBodyFormat
   "attachmentIds"?: Array<string>
 }

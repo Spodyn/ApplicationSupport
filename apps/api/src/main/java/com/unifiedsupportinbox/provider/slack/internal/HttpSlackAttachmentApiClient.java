@@ -62,11 +62,7 @@ class HttpSlackAttachmentApiClient implements SlackAttachmentApiClient {
     @Override
     public FileInfoResponse fileInfo(byte[] botToken, String providerFileId) {
         requireToken(botToken);
-        String encoded = URLEncoder.encode(providerFileId, StandardCharsets.UTF_8);
-        URI endpoint = URI.create(fileInfoEndpoint.toString() + (fileInfoEndpoint.getQuery() == null ? "?" : "&") + "file=" + encoded);
-        ApiResponse response = sendAuthenticated(botToken, HttpRequest.newBuilder(endpoint)
-                .timeout(REQUEST_TIMEOUT)
-                .GET());
+        ApiResponse response = requestFileInfo(botToken, providerFileId);
         if (!response.ok()) {
             return new FileInfoResponse(
                     response.statusCode(), false, null, null, null, -1, null,
@@ -91,6 +87,28 @@ class HttpSlackAttachmentApiClient implements SlackAttachmentApiClient {
                 downloadUri,
                 null,
                 response.retryAfter());
+    }
+
+    @Override
+    public boolean isSharedInThread(byte[] botToken, String fileId, String channel, String thread) {
+        ApiResponse response = requestFileInfo(botToken, fileId);
+        if (!response.ok()) return false;
+        JsonNode file = response.json().path("file");
+        if (!fileId.equals(text(file, "id"))) return false;
+        JsonNode shares = file.path("shares");
+        for (String visibility : List.of("public", "private")) {
+            for (JsonNode share : shares.path(visibility).path(channel)) {
+                if (thread.equals(text(share, "thread_ts"))) return true;
+            }
+        }
+        return false;
+    }
+
+    private ApiResponse requestFileInfo(byte[] botToken, String providerFileId) {
+        requireToken(botToken);
+        String encoded = URLEncoder.encode(providerFileId, StandardCharsets.UTF_8);
+        URI endpoint = URI.create(fileInfoEndpoint.toString() + (fileInfoEndpoint.getQuery() == null ? "?" : "&") + "file=" + encoded);
+        return sendAuthenticated(botToken, HttpRequest.newBuilder(endpoint).timeout(REQUEST_TIMEOUT).GET());
     }
 
     @Override
@@ -245,7 +263,7 @@ class HttpSlackAttachmentApiClient implements SlackAttachmentApiClient {
                 .orElse(null);
     }
 
-    private static boolean safeSlackUploadUri(URI uri) {
+    boolean safeSlackUploadUri(URI uri) {
         if (uri == null || !"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null
                 || uri.getUserInfo() != null || uri.getFragment() != null) {
             return false;

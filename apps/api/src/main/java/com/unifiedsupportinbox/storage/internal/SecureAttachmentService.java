@@ -56,7 +56,7 @@ class SecureAttachmentService {
         }
         long size = file.getSize();
         if (size > AttachmentFilePolicy.MAX_FILE_BYTES) {
-            throw ApiProblemException.validationFailed("Attachment exceeds the 25 MiB file limit.");
+            throw ApiProblemException.attachmentTooLarge();
         }
 
         String filename = policy.normalizeFilename(file.getOriginalFilename());
@@ -92,7 +92,7 @@ class SecureAttachmentService {
             return security.scan(created.id());
         } catch (AttachmentPolicyViolationException violation) {
             if (objectWritten && !metadataCreated) safeDelete(storageKey);
-            throw ApiProblemException.validationFailed("Attachment was rejected: " + violation.code().name() + ".");
+            throw ApiProblemException.attachmentTypeRejected(violation.code().name());
         } catch (IOException io) {
             if (objectWritten && !metadataCreated) safeDelete(storageKey);
             throw new IllegalStateException("Attachment upload could not be read.", io);
@@ -100,6 +100,21 @@ class SecureAttachmentService {
             if (objectWritten && !metadataCreated) safeDelete(storageKey);
             throw failure;
         }
+    }
+
+    AttachmentMetadata retryScan(UUID caseId, UUID userId, UUID attachmentId) {
+        requireCurrentOwner(caseId, userId);
+        if (!metadata.belongsToCase(attachmentId, caseId)) {
+            throw ApiProblemException.notFound("Pending attachment was not found for this Case.");
+        }
+        AttachmentMetadata current = metadata.findById(attachmentId)
+                .filter(item -> item.messageId() == null)
+                .orElseThrow(() -> ApiProblemException.notFound("Pending attachment was not found for this Case."));
+        if (current.scanStatus() == AttachmentScanStatus.ERROR
+                && current.scanError() != null && current.scanError().startsWith("POLICY_")) {
+            return current;
+        }
+        return security.scan(attachmentId);
     }
 
     Download openForDownload(UUID caseId, UUID attachmentId) {
