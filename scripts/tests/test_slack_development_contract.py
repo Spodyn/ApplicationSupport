@@ -34,6 +34,8 @@ class SlackDevelopmentContractTest(unittest.TestCase):
             "groups:read",
             "groups:history",
             "chat:write",
+            "files:read",
+            "files:write",
         )
         required_events = (
             "message.channels",

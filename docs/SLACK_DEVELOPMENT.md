@@ -56,6 +56,8 @@ only the scopes required by the current USI Slack feature set:
 | `groups:read` | Discover/read metadata for private channels the app belongs to. |
 | `groups:history` | Receive/read messages in private channels the app belongs to. |
 | `chat:write` | Send support replies as the Slack app/bot. |
+| `files:write` | Upload and share clean Case attachments in the original thread. |
+| `files:read` | Read attached files and confirm the target share when Slack's completion response is lost. |
 
 Do not add `chat:write.public`: monitored public channels must explicitly contain
 the app. Do not add workspace-admin, user-token, or unrelated scopes "just in
