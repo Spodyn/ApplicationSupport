@@ -27,22 +27,22 @@ class MessageDeliveryRepository {
         if (messageIds.isEmpty()) return java.util.Map.of();
         String placeholders = String.join(",", java.util.Collections.nCopies(messageIds.size(), "?"));
         List<FailureView> results = jdbc.query("""
-                SELECT m.id, m.delivery_status, c.status, c.owner_user_id, a.error_category, a.error_code
+                SELECT m.id, m.delivery_status, c.status, c.owner_user_id, a.error_category, a.error_code, a.next_retry_at
                 FROM messages m JOIN cases c ON c.id = m.case_id
                 LEFT JOIN LATERAL (
-                    SELECT error_category, error_code FROM delivery_attempts
+                    SELECT error_category, error_code, next_retry_at FROM delivery_attempts
                     WHERE message_id = m.id ORDER BY attempt_no DESC LIMIT 1
                 ) a ON TRUE
                 WHERE m.id IN (%s)
                 """.formatted(placeholders), (rs, row) -> new FailureView(rs.getObject("id", UUID.class),
-                        rs.getString("error_code"), "FAILED".equals(rs.getString("delivery_status"))
+                        rs.getString("error_code"), nullableInstant(rs, "next_retry_at"), "FAILED".equals(rs.getString("delivery_status"))
                         && "VERIFICATION".equals(rs.getString("status")) && viewer != null
                         && viewer.equals(rs.getObject("owner_user_id", UUID.class))
                         && MessageRetryPolicy.repairable(rs.getString("error_category"), rs.getString("error_code"))), messageIds.toArray());
         return results.stream().collect(java.util.stream.Collectors.toMap(FailureView::messageId, value -> value));
     }
 
-    record FailureView(UUID messageId, String errorCode, boolean retryAllowed) { }
+    record FailureView(UUID messageId, String errorCode, Instant nextRetryAt, boolean retryAllowed) { }
 
     Optional<DeliveryMessageRecord> lockMessage(UUID messageId) {
         return jdbc.query("""

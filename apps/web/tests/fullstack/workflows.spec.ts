@@ -12,17 +12,28 @@ async function command(page: Page, path: string, data: unknown, method = 'POST',
     headers: {'X-XSRF-TOKEN': await csrf(page), 'Idempotency-Key': key}})
 }
 
-async function login(page: Page, email?: string) {
+async function login(page: Page, email?: string, english = false) {
   if (!email) {
     const fixture = await (await page.request.post('/__test/account')).json()
     fixtures.set(page, fixture)
     email = fixture.email
   }
   await page.goto('/login')
-  await page.getByLabel('E-mail').fill(email!)
-  await page.getByLabel('Hasło').fill('test-only-fullstack-credential')
-  await page.getByRole('button', {name: 'Zaloguj się'}).click()
+  await page.getByLabel('Email').fill(email!)
+  await page.getByLabel('Password').fill('test-only-fullstack-credential')
+  await page.getByRole('button', {name: 'Sign in'}).click()
   await expect(page).toHaveURL(/\/cases$/)
+  if (!english) await selectLanguage(page, "Polski", "en")
+}
+
+async function selectLanguage(page: Page, name: "Polski" | "English", from: "en" | "pl") {
+  const trigger = page.getByRole("button", { name: from === "en" ? /Open profile menu:/ : /Otwórz menu profilu:/ })
+  await trigger.click()
+  const submenu = page.getByRole("menuitem", { name: from === "en" ? /Interface language/ : /Język interfejsu/ })
+  await submenu.focus()
+  await page.keyboard.press("ArrowRight")
+  await page.getByRole("menuitemradio", { name, exact: true }).click()
+  await expect(page.locator("html")).toHaveAttribute("lang", name === "Polski" ? "pl" : "en")
 }
 
 async function inbound(page: Page, text: string, thread?: string) {
@@ -61,7 +72,7 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   await conversation.getByRole('button', {name: 'Przejmij', exact: true}).click()
   await conversation.getByLabel('Treść odpowiedzi').fill(`Synthetic answer ${marker}`)
   const sendResponse = page.waitForResponse(response => response.url().endsWith(`/cases/${caseId}/messages`) && response.request().method() === 'POST')
-  await conversation.getByRole('button', {name: 'Wyślij', exact: true}).click()
+  await conversation.getByLabel('Treść odpowiedzi').press('Enter')
   const sent = await sendResponse
   expect(sent.status()).toBe(202)
   const sentBody = await sent.json()
@@ -191,8 +202,34 @@ test('archived Slack failure shows the actual reason and never offers an ineligi
   await page.getByRole('button', {name: 'Przejmij', exact: true}).click()
   await page.getByLabel('Treść odpowiedzi').fill(`test-only-archived ${marker}`)
   await page.getByRole('button', {name: 'Wyślij', exact: true}).click()
-  await expect(page.getByText('Kanał Slack jest zarchiwizowany.')).toBeVisible()
+  const archiveNotice = 'Kanał Slack jest zarchiwizowany. Nie można wysyłać do niego wiadomości.'
+  await expect(page.locator('[data-message-kind="support"]').getByText(archiveNotice)).toBeVisible()
+  await expect(page.locator('[data-sonner-toast]').getByText(archiveNotice)).toHaveCount(1)
+  await page.reload()
+  await expect(page.locator('[data-message-kind="support"]').getByText(archiveNotice)).toBeVisible()
+  await expect(page.locator('[data-sonner-toast]').getByText(archiveNotice)).toHaveCount(0)
   await expect(page.getByRole('button', {name: 'Ponów wysyłkę'})).toHaveCount(0)
+})
+
+test('Slack rate limiting schedules a retry and only one message is delivered', async ({page}) => {
+  await login(page)
+  const marker = randomUUID().slice(0, 8)
+  await inbound(page, 'Rate limit scenario ' + marker)
+  await page.getByRole('button').filter({hasText: 'Rate limit scenario ' + marker}).click()
+  await page.getByRole('button', {name: 'Przejmij', exact: true}).click()
+  const sent = page.waitForResponse(response => response.url().endsWith('/messages') && response.request().method() === 'POST')
+  await page.getByLabel('Treść odpowiedzi').fill('test-only-rate-limit ' + marker)
+  await page.getByLabel('Treść odpowiedzi').press('Enter')
+  const response = await sent
+  expect(response.status()).toBe(202)
+  const {messageId} = await response.json()
+  const bubble = page.locator('[data-message-kind="support"]').filter({hasText: 'test-only-rate-limit ' + marker})
+  await expect(bubble.getByText(/Osiągnięto limit wysyłki Slack/)).toBeVisible()
+  await expect(bubble.getByText(/Następna próba/)).toBeVisible()
+  await expect(bubble.getByRole('button', {name: 'Ponów wysyłkę'})).toHaveCount(0)
+  await expect(bubble.getByText(/Wysłano/)).toBeVisible()
+  await expect.poll(async () => (await (await page.request.get('/__test/observed')).json()).messages
+    .filter((item: {clientMessageId: string}) => item.clientMessageId === messageId).length).toBe(1)
 })
 
 test('real bulk workflow preserves per-Case rules, audit, realtime and replay', async ({page}) => {
@@ -212,6 +249,18 @@ test('real bulk workflow preserves per-Case rules, audit, realtime and replay', 
   const missing = randomUUID()
   const selection = {caseIds: [...ids, missing], action: 'CLAIM', targetUserId: null}
   const key = randomUUID()
+  const bulkMode = page.getByRole('button', { name: 'Operacje zbiorcze', exact: true })
+  await expect(bulkMode).toBeVisible()
+  await bulkMode.click()
+  const bulkToolbar = page.getByRole('group', { name: 'Operacje zbiorcze', exact: true })
+  await expect(bulkToolbar.getByText('Zaznaczono: 0')).toBeVisible()
+  for (const item of await matching()) {
+    await page.getByRole('checkbox', { name: 'Zaznacz ' + item.reference }).check()
+  }
+  await bulkToolbar.getByRole('button', { name: 'Przejmij', exact: true }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Zatwierdź' }).click()
+  await expect(page.getByText('Wynik: wykonano: 2; pominięto: 0; błędy: 0')).toBeVisible()
+  selection.action = 'RESOLVE'
   const claim = await command(page, '/api/v1/cases/bulk', selection, 'POST', key)
   expect(claim.status()).toBe(200)
   const claimed = await claim.json()
@@ -219,16 +268,167 @@ test('real bulk workflow preserves per-Case rules, audit, realtime and replay', 
   expect(await (await command(page, '/api/v1/cases/bulk', selection, 'POST', key)).json()).toEqual(claimed)
   expect((await command(page, '/api/v1/cases/bulk', {...selection, action:'IGNORE'}, 'POST', key)).status()).toBe(409)
   await expect.poll(() => frames.some(frame => frame.includes('case.claimed'))).toBe(true)
-  const resolutionKey = randomUUID()
-  const resolve = {caseIds: ids, action:'RESOLVE', targetUserId:null}
-  expect((await command(page, '/api/v1/cases/bulk', resolve, 'POST', resolutionKey)).status()).toBe(200)
   for (const id of ids) {
     const detail = await (await page.request.get(`/api/v1/cases/${id}`)).json()
     expect(detail.status).toBe('RESOLVED')
     const history = await (await page.request.get(`/api/v1/cases/${id}/activity`)).json()
     expect(history.items.filter((item: {action: string}) => item.action === 'CASE_RESOLVE')).toHaveLength(1)
-    const replay = await command(page, '/api/v1/cases/bulk', resolve, 'POST', resolutionKey)
+    const replay = await command(page, '/api/v1/cases/bulk', selection, 'POST', key)
     expect(replay.status()).toBe(200)
     expect((await (await page.request.get(`/api/v1/cases/${id}`)).json()).version).toBe(detail.version)
+  }
+})
+
+type TestAccount = { userId: string; email: string; displayName: string }
+
+async function testAccount(page: Page, role: 'agent' | 'account' = 'agent'): Promise<TestAccount> {
+  const response = await page.request.post('/__test/' + role)
+  expect(response.ok()).toBe(true)
+  return response.json()
+}
+
+test('English starts clean and the profile language follows each account in the same browser', async ({page}) => {
+  const a = await testAccount(page)
+  const b = await testAccount(page)
+  const hydrationErrors: string[] = []
+  page.on('pageerror', error => hydrationErrors.push(error.message))
+  await login(page, a.email, true)
+  await expect(page.getByRole('heading', {name: 'Chats'})).toBeVisible()
+  await selectLanguage(page, 'Polski', 'en')
+  await page.reload()
+  await expect(page.getByRole('heading', {name: 'Czaty'})).toBeVisible()
+  await page.getByRole('button', {name: /Otwórz menu profilu:/}).click()
+  await page.getByRole('menuitem', {name: 'Wyloguj się'}).click()
+  await expect(page).toHaveURL(/\/login$/)
+
+  await login(page, b.email, true)
+  await expect(page.getByRole('heading', {name: 'Chats'})).toBeVisible()
+  await selectLanguage(page, 'English', 'en')
+  await page.getByRole('button', {name: /Open profile menu:/}).click()
+  await page.getByRole('menuitem', {name: 'Sign out'}).click()
+  await expect(page).toHaveURL(/\/login$/)
+  await login(page, a.email, true)
+  await expect(page.getByRole('heading', {name: 'Czaty'})).toBeVisible()
+
+  await page.setViewportSize({width: 390, height: 840})
+  await page.getByRole('button', {name: 'Przełącz panel boczny'}).click()
+  await page.getByRole('button', {name: new RegExp(a.displayName)}).click()
+  await page.getByRole('menuitem', {name: /Język interfejsu/}).focus()
+  await page.keyboard.press('ArrowRight')
+  await page.getByRole('menuitemradio', {name: 'English', exact: true}).click()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  expect(hydrationErrors).toEqual([])
+})
+
+test('private messaging persists, reconnects and denies an unrelated administrator', async ({page, browser, baseURL}) => {
+  const userA = await testAccount(page)
+  const userB = await testAccount(page)
+  const userC = await testAccount(page, 'account')
+  const contextB = await browser.newContext({baseURL})
+  const contextC = await browser.newContext({baseURL})
+  const b = await contextB.newPage()
+  const c = await contextC.newPage()
+  const destination = '/api/v1/direct-messages/conversations'
+  const receivedByA: string[] = []
+  const receivedByB: string[] = []
+  const receivedByC: string[] = []
+  page.on('websocket', socket => socket.on('framereceived', frame => receivedByA.push(String(frame.payload))))
+  b.on('websocket', socket => socket.on('framereceived', frame => receivedByB.push(String(frame.payload))))
+  c.on('websocket', socket => socket.on('framereceived', frame => receivedByC.push(String(frame.payload))))
+  await page.addInitScript(() => {
+    const NativeSocket = window.WebSocket
+    window.WebSocket = class extends NativeSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols)
+        if (new URL(url).pathname === '/ws') Object.assign(window, { disconnectTestSocket: () => this.close() })
+      }
+    }
+  })
+  try {
+    await Promise.all([login(page, userA.email, true), login(b, userB.email, true), login(c, userC.email, true)])
+    expect((await page.request.get('/api/v1/admin/users')).status()).toBe(403)
+    await page.getByRole('link', {name: 'Direct Messages', exact: true}).click()
+    await b.getByRole('link', {name: 'Direct Messages', exact: true}).click()
+    await page.getByRole('button', {name: 'New Message'}).click()
+    await page.getByRole('textbox', {name: 'Search people'}).fill(userB.displayName)
+    await page.getByRole('dialog').getByRole('button', {name: userB.displayName}).click()
+    const threadA = page.getByRole('region', {name: 'Conversation ' + userB.displayName})
+    await expect(threadA).toBeVisible()
+    const id = new URL(page.url()).searchParams.get('conversation')!
+    const path = destination + '/' + id + '/messages'
+    const replayStart = await command(b, destination, {recipientId: userA.userId})
+    expect((await replayStart.json()).id).toBe(id)
+
+    const aText = threadA.getByRole('textbox', {name: 'Direct message text'})
+    await aText.fill('Test private message')
+    await aText.press('Enter')
+    await expect(threadA.getByText('Test private message', {exact: true})).toBeVisible()
+    await expect.poll(() => receivedByB.some(frame => frame.includes('direct_message.changed') && frame.includes(id))).toBe(true)
+    expect(receivedByB.every(frame => !frame.includes('Test private message'))).toBe(true)
+    const peer = b.getByRole('button', {name: new RegExp(userA.displayName)})
+    await expect(peer.getByLabel('Unread: 1')).toBeVisible()
+    await peer.click()
+    const threadB = b.getByRole('region', {name: 'Conversation ' + userA.displayName})
+    await expect(threadB.getByText('Test private message', {exact: true})).toBeVisible()
+    await expect(peer.getByLabel('Unread: 1')).toHaveCount(0)
+    const bText = threadB.getByRole('textbox', {name: 'Direct message text'})
+    await bText.fill('Reply from B')
+    await threadB.getByRole('button', {name: 'Send', exact: true}).click()
+    await expect(threadA.getByText('Reply from B', {exact: true})).toBeVisible()
+
+    await Promise.all([page.reload(), b.reload()])
+    await expect(threadA.getByText('Reply from B', {exact: true})).toBeVisible()
+    await expect(threadB.getByText('Test private message', {exact: true})).toBeVisible()
+    expect((await c.request.get(path)).status()).toBe(404)
+    expect((await c.request.get(destination + '/' + id)).status()).toBe(404)
+    expect((await command(c, path, {senderId: userA.userId, body: 'Unauthorized'})).status()).toBe(404)
+    expect((await c.request.post(path, {data: {body: 'No CSRF'}})).status()).toBe(403)
+    expect(receivedByC.every(frame => !frame.includes(id))).toBe(true)
+    const blocked = await c.evaluate(async (target) => new Promise<boolean>((resolve) => {
+      const socket = new WebSocket('ws://' + location.host + '/ws')
+      const deadline = setTimeout(() => { socket.close(); resolve(false) }, 6000)
+      const finish = (value: boolean) => { clearTimeout(deadline); socket.close(); resolve(value) }
+      socket.onopen = () => socket.send('CONNECT\naccept-version:1.2\nheart-beat:0,0\n\n\0')
+      socket.onmessage = (event) => {
+        const frame = String(event.data)
+        if (frame.startsWith('CONNECTED')) {
+          socket.send('SUBSCRIBE\nid:private-denial\ndestination:/user/' + target + '/queue/direct-messages\nreceipt:private-denial\n\n\0')
+        } else if (frame.startsWith('ERROR')) finish(true)
+        else if (frame.startsWith('RECEIPT') || frame.startsWith('MESSAGE')) finish(false)
+      }
+      socket.onclose = (event) => { if (event.code !== 1000) finish(true) }
+    }), userA.userId)
+    expect(blocked).toBe(true)
+
+    const reconnectCount = receivedByA.filter(frame => frame.startsWith('CONNECTED')).length
+    await page.evaluate(() => (window as Window & { disconnectTestSocket?: () => void }).disconnectTestSocket?.())
+    const retryKey = randomUUID()
+    const [first, retry] = await Promise.all([
+      command(b, path, {body: 'Missed while offline'}, 'POST', retryKey),
+      command(b, path, {body: 'Missed while offline'}, 'POST', retryKey),
+    ])
+    expect(first.status()).toBe(201)
+    expect(await retry.json()).toEqual(await first.json())
+    await expect.poll(() => receivedByA.filter(frame => frame.startsWith('CONNECTED')).length).toBeGreaterThan(reconnectCount)
+    await expect(threadA.getByText('Missed while offline', {exact: true})).toHaveCount(1)
+    expect(receivedByC.every(frame => !frame.includes(id))).toBe(true)
+    const history = await page.request.get(path + '?limit=1')
+    expect(history.headers()['cache-control']).toContain('no-store')
+    const newest = await history.json()
+    expect(newest.items[0].body).toBe('Missed while offline')
+    const older = await (await page.request.get(path, {params: {cursor: newest.nextCursor}})).json()
+    expect(older.items.map((item: {body: string}) => item.body)).toEqual(['Reply from B', 'Test private message'])
+    await b.setViewportSize({width: 390, height: 840})
+    await threadB.getByRole('button', {name: 'Back to list'}).click()
+    await expect(peer).toBeVisible()
+    await peer.click()
+    await expect(threadB.getByText('Reply from B', {exact: true})).toBeVisible()
+    expect(await b.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    expect((await command(c, '/api/v1/admin/users/' + userB.userId + '/deactivate', undefined, 'PATCH')).status()).toBe(200)
+    expect((await command(b, path, {body: 'Disabled account'})).status()).toBe(401)
+    expect((await page.request.get(path)).status()).toBe(200)
+  } finally {
+    await contextB.close()
+    await contextC.close()
   }
 })

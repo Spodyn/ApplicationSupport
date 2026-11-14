@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
-import { cookies } from 'next/headers'
-import { language, LANGUAGE_COOKIE, translate } from '@/lib/i18n/catalog'
+import { DEFAULT_LANGUAGE, translate } from '@/lib/i18n/catalog'
 import { headers } from 'next/headers'
 import { Providers } from '@/components/providers'
 import { AppShell } from '@/components/layout/app-shell'
@@ -23,7 +22,7 @@ const description =
   'Ujednolicona skrzynka wsparcia dla zespołów obsługujących zgłoszenia ze Slacka, Microsoft Teams i Telegrama.'
 
 export async function generateMetadata(): Promise<Metadata> {
-  const selectedLanguage = language((await cookies()).get(LANGUAGE_COOKIE)?.value)
+  const selectedLanguage = DEFAULT_LANGUAGE
   const t = (key: string) => translate(key, undefined, selectedLanguage)
   const requestHeaders = await headers()
   const host = requestHeaders.get('x-forwarded-host') ?? requestHeaders.get('host') ?? 'localhost:3000'
@@ -77,7 +76,7 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode
 }>) {
-  const initialLanguage = language((await cookies()).get(LANGUAGE_COOKIE)?.value)
+  const initialLanguage = DEFAULT_LANGUAGE
   const nonce = (await headers()).get('x-nonce') ?? undefined
   return (
     <html lang={initialLanguage} suppressHydrationWarning className="bg-background">

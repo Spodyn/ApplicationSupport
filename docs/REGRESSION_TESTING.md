@@ -59,4 +59,4 @@ Do not add unknown `web`/`fullstack` required contexts to the current main rules
 
 ## Owner UX regression additions (2026-11-10)
 
-The language/bulk/interaction scope and retry contract are in [UX_BULK_I18N.md](UX_BULK_I18N.md); fresh command and CI evidence is maintained in [UX_VALIDATION.md](UX_VALIDATION.md). Run the existing pnpm check, Maven verify, full-stack and coverage/security gates. The added browser cases are part of the same mandatory suite, with no retries/skips or CI gate changes. The feature inventory now requires all 30 entries, including I18N and BULK.
+The language/bulk/interaction scope and retry contract are in [UX_BULK_I18N.md](UX_BULK_I18N.md); fresh command and CI evidence is maintained in [UX_VALIDATION.md](UX_VALIDATION.md). Run the existing pnpm check, Maven verify, full-stack and coverage/security gates. The added browser cases are part of the same mandatory suite, with no retries/skips or CI gate changes. The feature inventory now requires all 31 entries, including I18N, BULK and DIRECT_MESSAGES.

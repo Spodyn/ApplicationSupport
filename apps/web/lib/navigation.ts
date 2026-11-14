@@ -1,5 +1,6 @@
 import {
   ChartColumn,
+  MessagesSquare,
   MessageCircleMore,
   Settings,
   Users,
@@ -22,6 +23,12 @@ export const navItems: NavItem[] = [
     href: "/cases",
     icon: MessageCircleMore,
     description: "Wszystkie rozmowy ze wszystkich kanałów",
+  },
+  {
+    label: "Wiadomości prywatne",
+    href: "/direct-messages",
+    icon: MessagesSquare,
+    description: "Prywatne rozmowy z członkami zespołu",
   },
   {
     label: "Statystyki",

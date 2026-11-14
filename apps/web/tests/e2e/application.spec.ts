@@ -36,8 +36,9 @@ const inboundMessage = {
   }>,
 }
 
-async function preparePage(page: Page, initiallyAuthenticated = true, options: { incomingBody?: string; customerName?: string; sendGate?: Promise<void> } = {}) {
+async function preparePage(page: Page, initiallyAuthenticated = true, options: { incomingBody?: string; customerName?: string; sendGate?: Promise<void>; english?: boolean; fileName?: string; caseActions?: boolean } = {}) {
   const incomingMessage = { ...inboundMessage, body: options.incomingBody ?? inboundMessage.body }
+  const attachmentName = options.fileName ?? "evidence.txt"
   const listItem = { ...caseListItem, customerName: options.customerName ?? caseListItem.customerName }
   const externalRequests: string[] = []
   let authenticated = initiallyAuthenticated
@@ -48,6 +49,12 @@ async function preparePage(page: Page, initiallyAuthenticated = true, options: {
   const uploads: string[] = []
   const retries: string[] = []
   const historyBefore: Array<string | null> = []
+  if (!options.english) {
+    await page.addInitScript((id) => {
+      const key = "usi-language:" + id
+      if (!localStorage.getItem(key)) localStorage.setItem(key, "pl")
+    }, authenticatedSession.id)
+  }
   await page.context().addCookies([{ name: "XSRF-TOKEN", value: "e2e-csrf", url: localOrigin }])
 
   await page.route("**/*", async (route) => {
@@ -149,7 +156,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true, options: {
         channel: { id: "channel", name: "new-channel", externalChannelId: "C0C6N61M4HZ", groupingStrategy: "SLACK_ROOT_THREAD" },
         integration: { id: "integration", provider: "SLACK", displayName: "TestApp", workspaceExternalId: "team", workspaceName: "TestApp" },
         relatedCase: { id: null, reference: null }, personalState: { lastReadMessageId: read ? inboundMessageId : null, lastReadAt: null, snoozedUntil: null },
-        sla: null, ignoreScore: 0, availableActions: claimed ? ["REPLY", "MARK_READ"] : ["CLAIM", "MARK_READ"],
+        sla: null, ignoreScore: 0, availableActions: claimed ? ["REPLY", "MARK_READ", ...(options.caseActions ? ["RESOLVE", "REASSIGN"] : [])] : ["CLAIM", "MARK_READ"],
         claimedAt: null, waitingUntil: null, resolvedAt: null, ignoredAt: null, resolutionCategory: null,
         createdAt: listItem.createdAt, updatedAt: listItem.updatedAt, lastActivityAt: listItem.lastActivityAt, version: claimed ? 2 : 1,
       }) })
@@ -204,7 +211,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true, options: {
         contentType: "application/json",
         body: JSON.stringify({
           attachmentId: "018f0000-0000-7000-8000-000000000205",
-          filename: "evidence.txt",
+          filename: attachmentName,
           contentType: "text/plain",
           sizeBytes: 4,
           scanStatus: "CLEAN",
@@ -234,7 +241,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true, options: {
         deliveryStatus: "QUEUED",
         attachments: body.attachmentIds?.map((attachmentId) => ({
           id: attachmentId,
-          fileName: "evidence.txt",
+          fileName: attachmentName,
           sizeBytes: 4,
           contentType: "text/plain",
           detectedContentType: "text/plain",
@@ -394,11 +401,11 @@ test("niezalogowany użytkownik trafia na login i może utworzyć sesję", async
 
   await page.goto("/cases")
   await expect(page).toHaveURL(/\/login$/)
-  await expect(page.getByRole("heading", { name: "Zaloguj się" })).toBeVisible()
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible()
 
-  await page.getByLabel("E-mail").fill("anna.kowalska@firma.pl")
-  await page.getByLabel("Hasło").fill("test-only-credential")
-  await page.getByRole("button", { name: "Zaloguj się" }).click()
+  await page.getByLabel("Email").fill("anna.kowalska@firma.pl")
+  await page.getByLabel("Password").fill("test-only-credential")
+  await page.getByRole("button", { name: "Sign in" }).click()
 
   await expect(page).toHaveURL(/\/cases$/)
   await expect(page.getByRole("heading", { level: 1, name: "Czaty" })).toBeVisible()
@@ -677,8 +684,10 @@ test("language switches immediately, survives reload and leaves customer and pro
   await prepareSettingsApi(page)
   await page.goto("/cases")
   await page.getByRole("button", { name: /Otwórz menu profilu/ }).click()
-  await page.getByLabel("Język interfejsu").selectOption("en")
-  await page.keyboard.press("Escape")
+  const languageMenu = page.getByRole("menuitem", { name: /Język interfejsu/ })
+  await languageMenu.focus()
+  await page.keyboard.press("ArrowRight")
+  await page.getByRole("menuitemradio", { name: "English", exact: true }).click()
   await expect(page.getByRole("heading", { name: "Chats", exact: true })).toBeVisible()
   await expect(page.getByRole("region", { name: "Conversation Nowe" })).toBeVisible()
   await expect(page.getByText("Rozwiązane — treść klienta", { exact: true })).toBeVisible()
@@ -694,10 +703,12 @@ test("language switches immediately, survives reload and leaves customer and pro
   expect(errors).toEqual([])
 })
 
-test("public authentication language is persisted and server renders the chosen locale", async ({ page }) => {
+test("public authentication defaults to English on the server and does not persist a temporary switch", async ({ page }) => {
   await preparePage(page, false)
   await page.goto("/login")
-  await page.getByLabel("Język interfejsu").selectOption("en")
+  await page.getByLabel("Interface language").selectOption("pl")
+  await expect(page.getByRole("button", { name: "Zaloguj się", exact: true })).toBeVisible()
+  await page.reload()
   await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible()
   await expect(page.locator('link[rel="manifest"]')).toHaveAttribute("href", "/pwa/manifest/en")
   const manifest = await (await page.request.get("/pwa/manifest/en")).json()
@@ -748,16 +759,21 @@ test("composer Enter sends once with attachments, Shift+Enter preserves newlines
   expect(state.sends).toHaveLength(1)
 })
 
-for (const width of [1440, 820, 390]) {
-  test(`long incoming and outgoing messages wrap without page overflow at ${width}px`, async ({ page }) => {
+for (const width of [1440, 820, 390, 320]) {
+  test(`long incoming and outgoing messages wrap without page overflow at ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: 900 })
     const link = `https://example.test/${"identifier".repeat(140)}`
-    const long = `${"A".repeat(5000)}\nhttps://example.test/${"identifier".repeat(400)}\n${"Natural paragraph with spaces. ".repeat(120)}\n[${link}](${link})\nLast line`
-    await preparePage(page, true, { incomingBody: long })
+    const long = `Zażółć 📨 東京\n${"A".repeat(5000)}\nhttps://example.test/${"identifier".repeat(400)}\n${"Natural paragraph with spaces. ".repeat(120)}\n[${link}](${link})\nLast line`
+    const fileName = "filename".repeat(28) + ".txt"
+    await preparePage(page, true, { incomingBody: long, fileName })
     await page.goto("/cases")
     await page.getByRole("button", {name:/Slack Test Customer/}).click()
     const panel = page.getByRole("region", {name:"Rozmowa Slack Test Customer"})
     await panel.getByRole("button", {name:"Przejmij",exact:true}).click()
+    await panel.getByLabel("Dodaj pliki").setInputFiles({ name: fileName, mimeType: "text/plain", buffer: Buffer.from("example") })
+    const file = panel.getByRole("button", {name: fileName, exact: true})
+    await expect(file).toBeVisible()
+    expect(await file.evaluate((node) => node.scrollWidth <= node.clientWidth + 1)).toBe(true)
     await panel.getByLabel("Treść odpowiedzi").fill(long)
     await panel.getByRole("button", {name:"Wyślij",exact:true}).click()
     await expect(panel.locator('[data-message-kind="support"]')).toHaveCount(1)
@@ -765,6 +781,14 @@ for (const width of [1440, 820, 390]) {
     await panel.getByLabel("Treść odpowiedzi").press("Enter")
     await expect(panel.locator('[data-message-kind="support"]')).toHaveCount(2)
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+    const savedAttachment = panel.getByRole("link", {name: new RegExp(fileName.replace(".", "\\."))})
+    await expect(savedAttachment).toHaveCount(1)
+    expect(await savedAttachment.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true)
+    const actionFits = await panel.locator("header").evaluate(header => {
+      const lastControl = header.querySelector("button.xl\\:hidden")
+      return !lastControl || lastControl.getBoundingClientRect().bottom <= header.getBoundingClientRect().bottom
+    })
+    expect(actionFits).toBe(true)
     for (const kind of ["customer", "support"]) {
       const text = panel.locator(`[data-message-kind="${kind}"] p`).first()
       await expect(text).toHaveText(long.replace(`[${link}](${link})`, link))
@@ -772,6 +796,9 @@ for (const width of [1440, 820, 390]) {
       expect(await text.evaluate((node) => getComputedStyle(node).whiteSpace)).toBe("pre-wrap")
       await expect(text.getByRole("link")).toHaveAttribute("href", link)
     }
+    await page.screenshot({ path: testInfo.outputPath("wrapped-incoming.png") })
+    await panel.locator('[data-message-kind="support"]').last().scrollIntoViewIfNeeded()
+    await page.screenshot({ path: testInfo.outputPath("wrapped-outgoing.png") })
     const bubbles = await panel.locator('[data-message-kind="support"]').evaluateAll((nodes) => nodes.map((node) => ({top:node.getBoundingClientRect().top,bottom:node.getBoundingClientRect().bottom})))
     expect(bubbles[1].top).toBeGreaterThanOrEqual(bubbles[0].bottom)
   })
@@ -786,6 +813,9 @@ test("Case filters omit customer/channel, retain SLA filtering and buttons show 
   await expect(sla.locator("svg")).toHaveCount(0)
   await sla.click()
   await expect.poll(() => queries.some((query) => query.includes("slaAttention=true"))).toBe(true)
+  await expect(sla).toHaveAttribute("aria-pressed", "true")
+  await sla.click()
+  await expect(sla).toHaveAttribute("aria-pressed", "false")
   await page.getByRole("button", {name:"Filtry",exact:true}).click()
   await expect(page.getByLabel("Klient", {exact:true})).toHaveCount(0)
   await expect(page.getByLabel("Kanał", {exact:true})).toHaveCount(0)
@@ -799,6 +829,24 @@ test("Case filters omit customer/channel, retain SLA filtering and buttons show 
   await button.focus()
   expect(await button.evaluate((node) => getComputedStyle(node).outlineStyle)).not.toBe("none")
 })
+
+for (const width of [1440, 390]) {
+  test("Case administration and resolution have pointer feedback at " + width + "px", async ({page}) => {
+    await page.setViewportSize({width, height: 850})
+    await preparePage(page, true, {caseActions: true})
+    await page.goto("/cases")
+    await page.getByRole("button", {name: /Slack Test Customer/}).click()
+    const panel = page.getByRole("region", {name: "Rozmowa Slack Test Customer"})
+    await panel.getByRole("button", {name: "Przejmij", exact: true}).click()
+    for (const name of ["Rozwiąż", width >= 1280 ? "Administruj" : "Admin"]) {
+      const button = panel.getByRole("button", {name, exact: true})
+      await expect(button).toBeEnabled()
+      const resting = await button.evaluate(node => getComputedStyle(node).boxShadow)
+      await button.hover()
+      await expect.poll(() => button.evaluate(node => getComputedStyle(node).boxShadow)).not.toBe(resting)
+    }
+  })
+}
 
 test("bulk selection spans pages, distinguishes all matching, confirms and reports each real outcome", async ({ page }) => {
   await preparePage(page)
@@ -818,6 +866,12 @@ test("bulk selection spans pages, distinguishes all matching, confirms and repor
     await route.fulfill({json:{items:ids.map((id,index)=>({caseId:id,status:["SUCCEEDED","SKIPPED","FAILED"][index],code:["OK","ACTION_UNAVAILABLE","APPLICATION_FAILURE"][index]}))}})
   })
   await page.goto("/cases")
+  const bulkMode = page.getByRole("button", { name: "Operacje zbiorcze", exact: true })
+  await expect(bulkMode).toBeVisible()
+  await expect(bulkMode).toHaveAttribute("aria-pressed", "false")
+  await expect(page.getByRole("checkbox", { name: /Zaznacz CASE-/ })).toHaveCount(0)
+  await bulkMode.click()
+  await expect(bulkMode).toHaveAttribute("aria-pressed", "true")
   await page.getByRole("button", {name:/Zaznacz widoczne/}).click()
   const toolbar = page.getByLabel("Operacje zbiorcze",{exact:true})
   await expect(toolbar).toContainText("Zaznaczono: 1")
@@ -846,6 +900,8 @@ test("bulk selection spans pages, distinguishes all matching, confirms and repor
   expect(writes[0].body).toEqual({caseIds:ids,action:"RESOLVE",targetUserId:null})
   await expect(page.getByLabel("Zaznacz CASE-00000002",{exact:true})).not.toBeChecked()
   await expect(page.getByLabel("Zaznacz CASE-00000003",{exact:true})).not.toBeChecked()
+  await bulkMode.click()
+  await expect(page.getByRole("checkbox", { name: /Zaznacz CASE-/ })).toHaveCount(0)
 })
 
 test("bulk retry after a lost response keeps the frozen selection and idempotency key", async ({page}) => {
@@ -857,11 +913,14 @@ test("bulk retry after a lost response keeps the frozen selection and idempotenc
     await route.fulfill({json:{items:[{caseId,status:"SUCCEEDED",code:"OK"}]}})
   })
   await page.goto("/cases")
+  await page.getByRole("button", { name: "Operacje zbiorcze", exact: true }).click()
   await page.getByLabel("Zaznacz CASE-00000002",{exact:true}).check()
   await page.getByLabel("Operacje zbiorcze",{exact:true}).getByRole("button",{name:"Ignoruj",exact:true}).click()
   const dialog=page.getByRole("dialog")
   await dialog.getByRole("button",{name:"Zatwierdź",exact:true}).click()
   await expect(dialog.getByRole("alert")).toContainText("Ponów tę samą operację")
+  await page.reload()
+  await expect(dialog).toBeVisible()
   await dialog.getByRole("button",{name:"Ponów",exact:true}).click()
   await expect(dialog).not.toBeVisible()
   expect(writes).toHaveLength(2)
@@ -871,9 +930,10 @@ test("bulk retry after a lost response keeps the frozen selection and idempotenc
 test("changing Case filters clears a previous explicit selection", async ({page}) => {
   await preparePage(page)
   await page.goto("/cases")
+  await page.getByRole("button", { name: "Operacje zbiorcze", exact: true }).click()
   await page.getByLabel("Zaznacz CASE-00000002",{exact:true}).check()
   await page.getByRole("button",{name:"Moje",exact:true}).click()
-  await expect(page.getByLabel("Operacje zbiorcze",{exact:true})).toHaveCount(0)
+  await expect(page.getByRole("group", {name:"Operacje zbiorcze",exact:true})).toContainText("Zaznaczono: 0")
   await page.getByRole("button",{name:"Wszystkie",exact:true}).click()
   await expect(page.getByLabel("Zaznacz CASE-00000002",{exact:true})).not.toBeChecked()
 })
@@ -889,6 +949,7 @@ test("bulk Assign uses an eligible-user picker and the protected bulk contract",
     await route.fulfill({json:{items:[{caseId,status:"SUCCEEDED",code:"OK"}]}})
   })
   await page.goto("/cases")
+  await page.getByRole("button", { name: "Operacje zbiorcze", exact: true }).click()
   await page.getByLabel("Zaznacz CASE-00000002",{exact:true}).check()
   await page.getByLabel("Operacje zbiorcze",{exact:true}).getByRole("button",{name:"Przypisz",exact:true}).click()
   const dialog = page.getByRole("dialog")
@@ -906,6 +967,8 @@ test("resolved Case indicators use neutral gray without changing the workflow en
   const badge = list.getByText("Rozwiązane",{exact:true})
   await expect(badge).toHaveClass(/text-slate-300/)
   await expect(badge).not.toHaveClass(/text-red/)
+  await expect(page.getByRole("region", { name: /Rozmowa Slack Test Customer/ })
+    .getByText("Rozwiązane", {exact: true})).toHaveClass(/text-slate-300/)
 })
 
 test("selection limit is explicit and never silently truncates loaded rows or checkbox additions", async ({page}) => {
@@ -920,6 +983,7 @@ test("selection limit is explicit and never silently truncates loaded rows or ch
     await route.fulfill({json:{items:url.searchParams.has("cursor")?items.slice(1000):items.slice(0,1000),nextCursor:url.searchParams.has("cursor")?null:"last"}})
   })
   await page.goto("/cases")
+  await page.getByRole("button", { name: "Operacje zbiorcze", exact: true }).click()
   const visible=page.getByRole("button",{name:/^Zaznacz widoczne/})
   await visible.click()
   const toolbar=page.getByLabel("Operacje zbiorcze",{exact:true})

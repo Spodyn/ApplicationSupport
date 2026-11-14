@@ -420,10 +420,11 @@
       "feature": "Polish and English interface",
       "status": "IMPLEMENTED",
       "risk": "MEDIUM",
-      "expected": "Polish default; immediate persisted switch; complete catalogs, locale formatting and unchanged user/provider data",
+      "expected": "English default; account-scoped language across refresh and re-login; immediate switching, complete catalogs and locale formatting",
       "tests": [
         "apps/web/tests/unit/i18n.test.tsx",
-        "apps/web/tests/e2e/application.spec.ts"
+        "apps/web/tests/e2e/application.spec.ts",
+        "apps/web/tests/fullstack/workflows.spec.ts"
       ],
       "gap": "Preference is browser-specific, not synchronized across devices"
     },
@@ -432,7 +433,7 @@
       "feature": "Bulk Case workflow composition",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Explicit selection, bounded sequential batches, per-Case authorization/workflow, durable partial outcomes and replay, audit/realtime",
+      "expected": "Visible Bulk Actions mode, bounded sequential batches, per-Case authorization, partial outcomes, refresh recovery and audit/realtime",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceIntegrationTests.java",
@@ -442,6 +443,18 @@
         "apps/web/tests/unit/bulk-selection.test.ts"
       ],
       "gap": "Select all matching enumerates at most 1000 explicit IDs; larger result sets require narrower filters"
+    },
+    {
+      "id": "DIRECT_MESSAGES",
+      "feature": "Private one-to-one direct messages",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Canonical participant pair; same-deployment recipient search, durable history and idempotency; participant-only REST and realtime; per-user unread and reconnect",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/DirectMessageIntegrationTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Single deployment and text-only scope."
     }
   ]
 }

@@ -38,7 +38,10 @@ final class RequestBodyLimitFilter extends OncePerRequestFilter {
             chain.doFilter(request, response);
             return;
         }
-        int limit = request.getRequestURI().startsWith("/api/v1/auth/") ? 8192 : 2 * 1024 * 1024;
+        String path = request.getRequestURI();
+        int limit = 2 * 1024 * 1024;
+        if (path.startsWith("/api/v1/auth/")) limit = 8192;
+        if (path.startsWith("/api/v1/direct-messages/")) limit = 32 * 1024;
         if (request.getContentLengthLong() > limit) {
             reject(request, response);
             return;

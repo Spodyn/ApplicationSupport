@@ -79,6 +79,6 @@ describe("business-hours administration adapter", () => {
       updatedAt: "2026-08-29T07:00:00Z",
     }
 
-    expect(() => mapApiBusinessHours(apiSchedule)).toThrow(/maksymalnie dwa/)
+    expect(() => mapApiBusinessHours(apiSchedule)).toThrow("Monday: the current editor supports at most two separate time ranges.")
   })
 })

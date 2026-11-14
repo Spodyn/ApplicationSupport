@@ -53,7 +53,8 @@ class MessageHistoryService {
         Map<UUID, List<AttachmentMetadata>> attachmentsByMessage = attachments.findByMessageIds(
                 page.stream().map(MessageEntity::id).toList());
         var failures = deliveries.failureDetails(page.stream()
-                .filter(message -> message.deliveryStatus() == MessageDeliveryStatus.FAILED).map(MessageEntity::id).toList(), viewer);
+                .filter(message -> message.deliveryStatus() == MessageDeliveryStatus.FAILED
+                        || message.deliveryStatus() == MessageDeliveryStatus.QUEUED).map(MessageEntity::id).toList(), viewer);
         return new CursorPage<>(page.stream()
                 .map(message -> MessageHistoryItem.from(
                         message,
@@ -79,6 +80,7 @@ class MessageHistoryService {
             MessageDeliveryStatus deliveryStatus,
             boolean retryAllowed,
             String deliveryErrorCode,
+            Instant nextRetryAt,
             Instant providerCreatedAt,
             Instant createdAt,
             Instant editedAt,
@@ -89,6 +91,7 @@ class MessageHistoryService {
             return new MessageHistoryItem(
                     message.id(), message.kind(), message.body(), message.bodyFormat(), message.inbound(),
                     message.deliveryStatus(), failure != null && failure.retryAllowed(), failure == null ? null : failure.errorCode(),
+                    failure == null ? null : failure.nextRetryAt(),
                     message.providerCreatedAt(), message.createdAt(), message.editedAt(),
                     message.deletedAt(), message.authorName(),
                     attachments.stream().map(MessageAttachmentItem::from).toList());

@@ -110,3 +110,5 @@ budgets use durable PostgreSQL reservations; their IP dimension uses the actual
 transport peer while forwarding headers remain disabled by default. A reviewed
 trusted-proxy/client-attribution configuration and legitimate multi-agent traffic
 verification are required before rollout behind an ingress proxy.
+
+Direct Messages authorize the authenticated participant at the database query boundary. Administrators have no override. The browser subscribes only to its server-resolved private queue, and notices carry no message content. See [DIRECT_MESSAGES.md](DIRECT_MESSAGES.md).

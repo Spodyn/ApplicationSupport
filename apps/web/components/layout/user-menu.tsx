@@ -21,6 +21,11 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
@@ -30,7 +35,8 @@ import { userRoleLabels } from "@/lib/domain/labels"
 import { useLogout } from "@/lib/services/auth-queries"
 import { useCurrentUser } from "@/lib/services/queries"
 
-import { LanguageSelector } from "@/lib/i18n/provider"
+import { useLanguagePreference } from "@/lib/i18n/provider"
+import { language, languages } from "@/lib/i18n/catalog"
 
 const subscribe = () => () => {}
 const getClientSnapshot = () => true
@@ -44,6 +50,7 @@ export function UserMenu({
   onNavigate?: () => void
 }) {
   const t = useT()
+  const { selectedLanguage, setLanguage } = useLanguagePreference()
   const router = useRouter()
   const queryClient = useQueryClient()
   const logout = useLogout()
@@ -51,6 +58,7 @@ export function UserMenu({
   const { data: user } = useCurrentUser()
   const mounted = useSyncExternalStore(subscribe, getClientSnapshot, getServerSnapshot)
   const [refreshing, setRefreshing] = useState(false)
+  const [open, setOpen] = useState(false)
 
   const isDark = mounted && resolvedTheme === "dark"
 
@@ -96,7 +104,7 @@ export function UserMenu({
   }
 
   return (
-    <DropdownMenu>
+    <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger
         render={
           variant === "rail" ? (
@@ -144,7 +152,6 @@ export function UserMenu({
           </DropdownMenuLabel>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <LanguageSelector />
         <DropdownMenuGroup>
           <DropdownMenuItem
             onClick={() => void refreshData()}
@@ -162,16 +169,28 @@ export function UserMenu({
             {isDark ? t("Włącz tryb jasny") : t("Włącz tryb ciemny")}
           </DropdownMenuItem>
         </DropdownMenuGroup>
-        {user.role === "admin" ? (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem onClick={() => goTo("/settings")} className="min-h-9 px-2">
-                <Settings />
-                {t("Ustawienia i preferencje")} </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </>
-        ) : null}
+        <DropdownMenuSeparator />
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger className="min-h-9 px-2">
+            {t("Język interfejsu")}
+            <span className="ml-auto text-muted-foreground">{selectedLanguage === "en" ? "English" : "Polski"}</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuRadioGroup value={selectedLanguage} onValueChange={(value) => setLanguage(language(value))}>
+              {languages.map((value) => (
+                <DropdownMenuRadioItem key={value} value={value} lang={value} onClick={() => setOpen(false)}>
+                  {value === "en" ? "English" : "Polski"}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+        {user.role === "admin" && (
+          <DropdownMenuItem onClick={() => goTo("/settings")} className="min-h-9 px-2">
+            <Settings />
+            {t("Ustawienia i preferencje")}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"

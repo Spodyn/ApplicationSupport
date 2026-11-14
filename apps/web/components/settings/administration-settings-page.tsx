@@ -105,7 +105,7 @@ const tabItems = [
   { value: "permissions", label: "Uprawnienia", icon: ShieldCheck },
 ] as const
 
-export function AdministrationSettingsPage() {
+export function AdministrationSettingsPage({ initialTab = "general" }: { initialTab?: "general" | "integrations" }) {
   const t = useT()
   const settingsQuery = useAdministrationSettings()
   const actions = useAdministrationSettingsActions()
@@ -153,7 +153,7 @@ export function AdministrationSettingsPage() {
           ) : settingsQuery.isError || !settingsQuery.data ? (
             <div className="rounded-lg border bg-card"><ErrorState onRetry={() => void settingsQuery.refetch()} /></div>
           ) : (
-            <Tabs defaultValue="general" className="min-w-0 gap-4">
+            <Tabs defaultValue={initialTab} className="min-w-0 gap-4">
               <div className="overflow-x-auto rounded-lg border bg-card px-2">
                 <TabsList variant="line" className="h-11 min-w-max">
                   {tabItems.map(({ value, label, icon: Icon }) => (

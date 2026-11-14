@@ -31,7 +31,7 @@ const gateway = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json')
     res.end(JSON.stringify(metadata ?? {})); return
   }
-  const provider = req.url === '/__test/observed' || req.url === '/__test/account'
+  const provider = req.url === '/__test/observed' || req.url === '/__test/account' || req.url === '/__test/agent'
   const backend = req.url?.startsWith('/api/') || req.url?.startsWith('/ws')
   const target = provider ? metadata?.provider : backend ? metadata?.backend : `http://127.0.0.1:${port + 1}`
   if (!target) { res.writeHead(503); res.end(); return }

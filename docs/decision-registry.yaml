@@ -398,19 +398,20 @@ decisions:
   - id: DEC-UX-I18N-001
     area: interface_language
     status: owner_approved
-    source: [OWNER_REQUEST_2026_11_10]
+    source: [OWNER_REQUEST_2026_11_10, OWNER_REQUEST_2026_11_12]
     decision:
-      default: pl
-      languages: [pl, en]
-      preference: browser_cookie_one_year
+      default: en
+      languages: [en, pl]
+      preference: authenticated_account_scoped_browser_storage
       translate_user_content_or_enums: false
       details: docs/UX_BULK_I18N.md
 
   - id: DEC-UX-BULK-001
     area: case_workflow_composition
     status: owner_approved
-    source: [OWNER_REQUEST_2026_11_10]
+    source: [OWNER_REQUEST_2026_11_10, OWNER_REQUEST_2026_11_12]
     decision:
+      explicit_selection_mode: true
       actions: [CLAIM, ASSIGN, RESOLVE, IGNORE]
       unchanged_individual_rules_and_permissions: true
       implicit_force_resolve: false
@@ -432,6 +433,21 @@ decisions:
       inbox_customer_channel_filter_controls: false
       wrap_long_conversation_messages: true
       accessible_button_interaction_feedback: true
+
+  - id: DEC-DIRECT-MESSAGES-001
+    area: internal_direct_messages
+    status: owner_approved
+    source: [OWNER_REQUEST_2026_11_12]
+    decision:
+      participants_per_conversation: 2
+      eligible_recipients: active_users_in_same_deployment
+      text_only: true
+      administrator_bypass: false
+      access: conversation_participants_only
+      provider_delivery: false
+      create_cases: false
+      retain_history_on_account_deactivation: true
+      details: docs/DIRECT_MESSAGES.md
 
 technical_resolutions:
   - id: TECH-VIEW-MAPPER-001

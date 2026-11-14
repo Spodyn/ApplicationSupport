@@ -14,6 +14,11 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -95,6 +100,46 @@ class HttpSlackWebApiClientTests {
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(response.ok()).isFalse();
         assertThat(response.errorCode()).isEqualTo("channel_not_found");
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+        "403,is_archived,PERMANENT_FAILURE,SLACK_IS_ARCHIVED",
+        "404,channel_not_found,PERMANENT_FAILURE,SLACK_CHANNEL_NOT_FOUND",
+        "403,not_in_channel,PERMANENT_FAILURE,SLACK_NOT_IN_CHANNEL",
+        "403,no_permission,PERMANENT_FAILURE,SLACK_NO_PERMISSION",
+        "401,invalid_auth,PERMANENT_FAILURE,SLACK_INVALID_AUTH",
+        "401,token_revoked,PERMANENT_FAILURE,SLACK_TOKEN_REVOKED",
+        "401,token_expired,PERMANENT_FAILURE,SLACK_TOKEN_EXPIRED",
+        "403,missing_scope,PERMANENT_FAILURE,SLACK_MISSING_SCOPE",
+        "403,restricted_action_thread_locked,PERMANENT_FAILURE,SLACK_RESTRICTED_ACTION_THREAD_LOCKED",
+        "401,unrecognized_sensitive_fixture,PERMANENT_FAILURE,SLACK_HTTP_401",
+        "500,unexpected_fixture,TRANSIENT_FAILURE,SLACK_HTTP_500",
+        "503,service_unavailable,TRANSIENT_FAILURE,SLACK_HTTP_503"
+    })
+    void classifiesSafeSlackJsonIndependentlyOfHttpStatus(int status, String error, String outcome, String code)
+            throws Exception {
+        String response = objectMapper.writeValueAsString(java.util.Map.of(
+                "ok", false, "error", error, "detail", "synthetic provider diagnostics"));
+        startServer(exchange -> respond(exchange, status, response));
+        var raw = client().postMessage(fixtureCredential(), "C123", null, "Reply", MessageBodyFormat.PLAIN_TEXT, "key");
+        assertThat(raw.statusCode()).isEqualTo(status);
+        if (error.endsWith("fixture")) assertThat(raw.errorCode()).isNull();
+        var result = SlackDeliveryErrorClassifier.classifyPost(raw);
+        assertThat(result.outcome().name()).isEqualTo(outcome);
+        assertThat(result.errorCode()).isEqualTo(code);
+    }
+
+    @Test
+    void malformedSuccessResponseAndTimeoutUseSafeTransientCodes() throws Exception {
+        startServer(exchange -> respond(exchange, 200, "malformed synthetic response"));
+        var raw = client().postMessage(fixtureCredential(), "C123", null, "Reply", MessageBodyFormat.PLAIN_TEXT, "key");
+        assertThat(SlackDeliveryErrorClassifier.classifyPost(raw).errorCode()).isEqualTo("SLACK_INVALID_RESPONSE");
+        HttpClient timeoutClient = mock(HttpClient.class);
+        when(timeoutClient.send(any(), any())).thenThrow(new java.net.http.HttpTimeoutException("synthetic timeout"));
+        var timeout = new HttpSlackWebApiClient(timeoutClient, objectMapper, URI.create("http://127.0.0.1"));
+        raw = timeout.postMessage(fixtureCredential(), "C123", null, "Reply", MessageBodyFormat.PLAIN_TEXT, "key");
+        assertThat(SlackDeliveryErrorClassifier.classifyPost(raw).errorCode()).isEqualTo("SLACK_HTTP_408");
     }
 
     private HttpSlackWebApiClient client() {

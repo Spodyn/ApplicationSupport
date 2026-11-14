@@ -135,6 +135,7 @@ export function mapCaseMessage(first: CaseMessage | string, second?: string | Ca
     deliveryStatus: message.deliveryStatus?.toLowerCase() as InboxMessage["deliveryStatus"],
     retryAllowed: message.retryAllowed ?? false,
     deliveryErrorCode: message.deliveryErrorCode ?? undefined,
+    nextRetryAt: message.nextRetryAt ?? undefined,
     attachments: message.attachments.map((item) => ({
       id: item.id,
       fileName: item.fileName,

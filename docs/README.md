@@ -49,4 +49,5 @@ Human approval is required only for a real contract change such as v1 scope expa
 Development/review/merge automation follows `ORCHESTRATOR_CONTRACT.md`; that automation never grants autonomous production authority.
 
 - [Interface language and bulk Case contract](UX_BULK_I18N.md)
+- [DIRECT_MESSAGES.md](DIRECT_MESSAGES.md) — internal direct messaging, authentication, persistence and realtime.
 - [UX implementation verification](UX_VALIDATION.md)

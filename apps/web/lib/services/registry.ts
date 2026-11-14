@@ -2,6 +2,7 @@ import { apiCurrentUserRepository } from "./api/auth-adapter"
 import { apiAdministrationSettingsRepository } from "./api/administration-settings-adapter"
 import { apiAdministrationUserRepository } from "./api/administration-users-adapter"
 import { apiInboxRepository } from "./api/inbox-adapter"
+import { apiDirectMessagesRepository } from "./api/direct-messages-adapter"
 import { apiAnalyticsRepository } from "./api/analytics-adapter"
 
 /**
@@ -12,6 +13,7 @@ import { apiAnalyticsRepository } from "./api/analytics-adapter"
 export const serviceRegistry = {
   currentUser: apiCurrentUserRepository,
   inbox: apiInboxRepository,
+  directMessages: apiDirectMessagesRepository,
   administrationUsers: apiAdministrationUserRepository,
   administrationSettings: apiAdministrationSettingsRepository,
   analytics: apiAnalyticsRepository,

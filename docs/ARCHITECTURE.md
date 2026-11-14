@@ -222,3 +222,5 @@ Slack Message edits/deletes are applied to the original persisted identity under
 ## Interface and bulk orchestration (owner request, 2026-11-10)
 
 The UI -> query hooks -> registry -> typed repositories -> API adapter boundary also owns bulk commands. OpenAPI defines a bounded explicit-ID request; backend workflow orchestration reuses existing commands and idempotency, with one transaction/Case row lock/result per item and no provider HTTP in transactions. The client enumerates selections and sends bounded batches sequentially. Request-local i18next providers and feature catalogs handle interface language without new routing/authentication boundaries. See [UX_BULK_I18N.md](UX_BULK_I18N.md).
+
+Internal Direct Messages use dedicated Messaging tables and a recipient-scoped STOMP queue. The authenticated REST API is authoritative, and reconnect invalidates private projections. See [DIRECT_MESSAGES.md](DIRECT_MESSAGES.md).

@@ -5,6 +5,9 @@ import { useQueryClient } from "@tanstack/react-query"
 import { RealtimeStompClient, type RealtimeConnectionState } from "@/lib/realtime/stomp-client"
 import { parseRealtimeEventEnvelope, REALTIME_EVENT_VERSION } from "@/lib/realtime/event-envelope"
 import { RealtimeContext } from "@/lib/realtime/realtime-context"
+import { deliveryPresentation } from "@/lib/i18n/delivery-presentation"
+import { translate } from "@/lib/i18n/catalog"
+import { notify } from "@/components/design-system/notify"
 import { queryKeys } from "@/lib/services/queries"
 
 export { useRealtimeConnection } from "@/lib/realtime/realtime-context"
@@ -26,12 +29,13 @@ const PERSONAL_STATE_EVENTS = new Set([
 const CONVERSATION_EVENTS = new Set(["message.created", "message.updated", "message.delivery_updated"])
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-export function RealtimeProvider({ children }: { children: ReactNode }) {
+export function RealtimeProvider({ children, accountId }: { children: ReactNode; accountId: string }) {
   const [state, setState] = useState<RealtimeConnectionState>("connecting")
   const queryClient = useQueryClient()
   const client = useMemo(() => new RealtimeStompClient(), [])
 
   useEffect(() => {
+    const notifiedFailures = new Set<string>()
     let connectedOnce = false
     let resyncAfterReconnect = false
     const unsubscribe = client.subscribe((nextState) => {
@@ -44,6 +48,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
           // Events can be missed while the socket is down. Refetch every active Inbox
           // projection after reconnect instead of attempting to replay client-side state.
           void queryClient.invalidateQueries({ queryKey: ["support-inbox"] })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.directMessages() })
           resyncAfterReconnect = false
         }
         connectedOnce = true
@@ -51,8 +56,18 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     })
     const unsubscribeCases = client.subscribeDestination("/topic/cases")
     const unsubscribePersonal = client.subscribeDestination("/user/queue/personal")
+    const unsubscribeDirectMessages = client.subscribeDestination("/user/queue/direct-messages")
     const unsubscribeFrames = client.subscribeFrames((destination, body) => {
       const event = parseRealtimeEventEnvelope(body)
+      if (destination === "/user/queue/direct-messages") {
+        if (event?.version === REALTIME_EVENT_VERSION && event.eventType === "direct_message.changed"
+            && UUID_PATTERN.test(event.entityId)) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.directConversations(accountId) })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.directConversation(accountId, event.entityId) })
+          void queryClient.invalidateQueries({ queryKey: queryKeys.directHistory(accountId, event.entityId) })
+        }
+        return
+      }
       // Unknown/future/malformed notifications are deliberately a safe refetch, never a local patch.
       if (!event || event.version !== REALTIME_EVENT_VERSION) {
         void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() })
@@ -82,6 +97,13 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
       if (CONVERSATION_EVENTS.has(event.eventType)) {
         const caseId = typeof event.payload.caseId === "string" ? event.payload.caseId : null
         if (caseId && UUID_PATTERN.test(caseId) && destination === `/topic/cases/${caseId}`) {
+          if (event.eventType === "message.delivery_updated" && event.payload.deliveryStatus === "FAILED"
+              && UUID_PATTERN.test(event.entityId) && !notifiedFailures.has(event.entityId)) {
+            notifiedFailures.add(event.entityId)
+            if (notifiedFailures.size > 500) notifiedFailures.delete(notifiedFailures.values().next().value!)
+            const code = typeof event.payload.errorCode === "string" ? event.payload.errorCode : undefined
+            notify.error(translate(deliveryPresentation(code).message))
+          }
           // Query refetch is intentionally idempotent: duplicate/out-of-order realtime hints never
           // append another Message locally and therefore cannot duplicate the conversation.
           void queryClient.invalidateQueries({ queryKey: queryKeys.inboxMessages(caseId) })
@@ -96,12 +118,13 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     client.start()
     return () => {
       unsubscribeFrames()
+      unsubscribeDirectMessages()
       unsubscribePersonal()
       unsubscribeCases()
       unsubscribe()
       client.stop()
     }
-  }, [client, queryClient])
+  }, [accountId, client, queryClient])
 
   const subscribeCase = useCallback(
     (caseId: string) => {

@@ -2,14 +2,13 @@ import { createInstance } from "i18next"
 import pl from "./pl.json"
 import en from "./en.json"
 
-export const languages = ["pl", "en"] as const
+export const languages = ["en", "pl"] as const
 export type Language = (typeof languages)[number]
-export const LANGUAGE_COOKIE = "usi-language"
+export const DEFAULT_LANGUAGE: Language = "en"
 export const resources = { pl, en }
-export function language(value?: string): Language { return value === "en" ? "en" : "pl" }
+export function language(value?: string): Language { return value === "pl" ? "pl" : DEFAULT_LANGUAGE }
 export function browserLanguage(): Language {
-  if (typeof document === "undefined") return "pl"
-  return language(document.cookie.split(";").map((item) => item.trim()).find((item) => item.startsWith(`${LANGUAGE_COOKIE}=`))?.split("=")[1])
+  return typeof document === "undefined" ? DEFAULT_LANGUAGE : language(document.documentElement.lang)
 }
 export function locale(value: Language = browserLanguage()): string { return value === "en" ? "en-GB" : "pl-PL" }
 
@@ -22,7 +21,7 @@ export function translationOptions(key: string, values?: Record<string, unknown>
 }
 export function createI18n(initialLanguage: Language) {
   const instance = createInstance()
-  void instance.init({ resources, lng: initialLanguage, fallbackLng: "pl", supportedLngs: [...languages],
+  void instance.init({ resources, lng: initialLanguage, fallbackLng: DEFAULT_LANGUAGE, supportedLngs: [...languages],
     defaultNS: "common", keySeparator: false, nsSeparator: false, initAsync: false,
     interpolation: { escapeValue: false }, returnNull: false })
   return instance
