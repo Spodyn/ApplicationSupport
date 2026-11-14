@@ -202,14 +202,14 @@ test('Case ownership follows Claim, Assign, Reassign and Unassign across two ses
   // Hold only the WebSocket offline so REST reads by the other session remain independent.
   await b.addInitScript(() => {
     const NativeSocket = window.WebSocket
-    let socket: WebSocket | undefined
+    let disconnect: (() => void) | undefined
     window.WebSocket = class extends NativeSocket {
       constructor(url: string | URL, protocols?: string | string[]) {
         super(url, protocols)
-        if (new URL(url).pathname === '/ws') socket = this
+        if (new URL(url).pathname === '/ws') disconnect = () => this.close()
       }
     }
-    Object.assign(window, {disconnectCaseSocket: () => socket?.close()})
+    Object.assign(window, {disconnectCaseSocket: () => disconnect?.()})
   })
   try {
     await Promise.all([login(page, admin.email), login(b, agent.email)])
