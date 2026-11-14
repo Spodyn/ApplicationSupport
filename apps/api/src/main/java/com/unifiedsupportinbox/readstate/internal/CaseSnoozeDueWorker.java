@@ -53,8 +53,12 @@ class CaseSnoozeDueWorker {
 
         for (DueSnooze snooze : due) {
             int deleted = jdbc.update("""
-                    DELETE FROM case_snoozes
-                    WHERE case_id = ? AND user_id = ? AND until_at = ?
+                    WITH removed AS (
+                        DELETE FROM case_snoozes WHERE case_id = ? AND user_id = ? AND until_at = ?
+                        RETURNING case_id, user_id, created_at, until_at
+                    )
+                    INSERT INTO case_snooze_history (case_id, user_id, action, snoozed_at, until_at)
+                    SELECT case_id, user_id, 'CASE_SNOOZE_DUE', created_at, until_at FROM removed
                     """, snooze.caseId(), snooze.userId(), Timestamp.from(snooze.until()));
             if (deleted == 1) {
                 outbox.append(

@@ -9,6 +9,7 @@ import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.identity.UserRole;
 import com.unifiedsupportinbox.sla.CaseSlaClaimRecorder;
+import com.unifiedsupportinbox.readstate.CaseSnoozeWakeService;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.Objects;
@@ -28,16 +29,19 @@ public class CaseClaimService {
     private static final String OUTBOX_TYPE = "case.claimed";
 
     private final JdbcTemplate jdbc;
+    private final CaseSnoozeWakeService snoozes;
     private final IdempotentCommandExecutor idempotency;
     private final AuditEventStore audit;
     private final OutboxEventStore outbox;
     private final ObjectMapper json;
     private final CaseSlaClaimRecorder sla;
 
-    public CaseClaimService(JdbcTemplate jdbc, IdempotentCommandExecutor idempotency,
+    public CaseClaimService(JdbcTemplate jdbc,
+            CaseSnoozeWakeService snoozes, IdempotentCommandExecutor idempotency,
                             AuditEventStore audit, OutboxEventStore outbox, ObjectMapper json,
                             CaseSlaClaimRecorder sla) {
         this.jdbc = jdbc;
+        this.snoozes = snoozes;
         this.idempotency = idempotency;
         this.audit = audit;
         this.outbox = outbox;
@@ -83,7 +87,7 @@ public class CaseClaimService {
                 UPDATE case_ignore_votes SET active = FALSE, deactivated_at = statement_timestamp()
                 WHERE case_id = ? AND active
                 """, caseId);
-        jdbc.update("DELETE FROM case_snoozes WHERE case_id = ?", caseId);
+        snoozes.wake(caseId);
         sla.recordClaim(caseId, claim.claimedAt());
 
         audit.append(actor.role() == UserRole.ADMIN ? AuditActorType.ADMIN : AuditActorType.USER,

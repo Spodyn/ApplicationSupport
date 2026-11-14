@@ -74,6 +74,27 @@ class CaseSnoozeIntegrationTests {
         assertThat(count("SELECT count(*) FROM outbox_events WHERE aggregate_id = ? AND type = 'case.snooze_cancelled'", fixture.caseId())).isEqualTo(1);
     }
 
+    @Test void privateHistoryRecordsExpiryAndWorkflowWakeWithoutMutatingCase() {
+        var fixture = fixture();
+        var other = new PersistenceFixtures(jdbc).user().id();
+        var snoozes = service(Clock.fixed(now, ZoneOffset.UTC));
+        snoozes.snooze(fixture.caseId(), fixture.userId(), now.plusSeconds(600), UUID.randomUUID().toString(), "test-only-snooze");
+        snoozes.snooze(fixture.caseId(), other, now.plusSeconds(900), UUID.randomUUID().toString(), "test-only-other");
+        jdbc.update("UPDATE case_snoozes SET created_at = now() - interval '2 hour', until_at = now() - interval '1 hour' WHERE user_id = ?", other);
+        var transactions = new TransactionTemplate(context.getBean(PlatformTransactionManager.class));
+        var worker = new CaseSnoozeDueWorker(jdbc, context.getBean(OutboxEventStore.class), context.getBean(ObjectMapper.class));
+        transactions.executeWithoutResult(status -> worker.wakeDue());
+        transactions.executeWithoutResult(status -> context.getBean(com.unifiedsupportinbox.readstate.CaseSnoozeWakeService.class).wake(fixture.caseId()));
+
+        String actions = "SELECT action FROM case_snooze_history WHERE case_id = ? AND user_id = ? ORDER BY occurred_at";
+        assertThat(jdbc.queryForList(actions, String.class, fixture.caseId(), fixture.userId()))
+                .containsExactly("CASE_SNOOZE", "CASE_SNOOZE_WOKEN");
+        assertThat(jdbc.queryForList(actions, String.class, fixture.caseId(), other))
+                .containsExactly("CASE_SNOOZE", "CASE_SNOOZE_DUE");
+        assertThat(count("SELECT count(*) FROM case_snoozes WHERE case_id = ?", fixture.caseId())).isZero();
+        assertThat(jdbc.queryForObject("SELECT version FROM cases WHERE id = ?", Long.class, fixture.caseId())).isZero();
+    }
+
     private static CaseSnoozeService service(Clock clock) {
         return new CaseSnoozeService(jdbc, context.getBean(IdempotentCommandExecutor.class), context.getBean(CaseReadPositionService.class),
                 context.getBean(OutboxEventStore.class), context.getBean(ObjectMapper.class), clock);

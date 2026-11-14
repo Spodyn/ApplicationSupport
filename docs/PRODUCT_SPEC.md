@@ -115,7 +115,7 @@ Read state is independent per user and sparse. New users do not inherit the hist
 
 A new customer Message or customer edit makes the Case unread for all active eligible viewers. Human outgoing, system/audit-only and status-only changes do not.
 
-Opening a Case is not enough to mark it read; the frontend advances the stable server read cursor only after content was actually rendered/seen and acknowledged. Batch resolved-read applies only to the current user. Personal read/Snooze state is private; v1 does not expose "who read this Case".
+Opening a Case is not enough to mark it read; the frontend advances the stable server read cursor only after content was actually rendered/seen and acknowledged. Batch resolved-read applies only to the current user. Personal read/Snooze state is private; v1 does not expose "who read this Case". Only the affected user sees Snooze history, including the original deadline, manual cancellation, expiry and recorded workflow wakeups.
 
 ## 15. Conversation, Activity and attachments
 

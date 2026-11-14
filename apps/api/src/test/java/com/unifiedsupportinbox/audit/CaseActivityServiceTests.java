@@ -18,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import tools.jackson.databind.json.JsonMapper;
 
 class CaseActivityServiceTests {
+    private static final UUID VIEWER = UUID.randomUUID();
     private static final Instant NOW = Instant.parse("2026-01-01T00:00:00Z");
 
     @Test
@@ -30,17 +31,17 @@ class CaseActivityServiceTests {
                 event(AuditActorType.ADMIN, "Admin", "CASE_REASSIGN", NOW, "{\"reason\":\"coverage\"}"),
                 event(AuditActorType.SYSTEM, null, "CASE_WAITING_TIMEOUT", NOW.minusSeconds(1), "{}"),
                 event(AuditActorType.PROVIDER, null, "CASE_PROVIDER_MESSAGE", NOW.minusSeconds(2), "{\"body\":\"remove\"}"));
-        when(repository.find(eq(caseId), any(), any(), eq(3))).thenReturn(events.subList(0, 3));
+        when(repository.find(eq(caseId), eq(VIEWER), any(), any(), eq(3))).thenReturn(events.subList(0, 3));
         CaseActivityService service = service(repository);
 
-        var page = service.activity(caseId, null, 2);
+        var page = service.activity(caseId, VIEWER, null, 2);
 
         assertThat(page.items()).extracting(CaseActivityService.ActivityItem::actorLabel)
                 .containsExactly("Agent", "Admin");
         assertThat(page.items().getFirst().actionDescription()).isEqualTo("Case claimed");
         assertThat(page.items().getFirst().metadata().toString()).doesNotContain("token");
         assertThat(page.nextCursor()).isNotBlank();
-        verify(repository).find(eq(caseId), eq(null), eq(null), eq(3));
+        verify(repository).find(eq(caseId), eq(VIEWER), eq(null), eq(null), eq(3));
     }
 
     @Test
@@ -48,14 +49,15 @@ class CaseActivityServiceTests {
         CaseActivityRepository repository = mock(CaseActivityRepository.class);
         UUID caseId = UUID.randomUUID();
         when(repository.caseExists(caseId)).thenReturn(true);
-        when(repository.find(eq(caseId), any(), any(), eq(101))).thenReturn(List.of(
+        when(repository.find(eq(caseId), eq(VIEWER), any(), any(), eq(101))).thenReturn(List.of(
                 event(AuditActorType.SYSTEM, null, "CASE_WAITING_TIMEOUT", NOW, "{}"),
-                event(AuditActorType.PROVIDER, null, "CASE_PROVIDER_MESSAGE", NOW.minusSeconds(1), "{}")));
+                event(AuditActorType.PROVIDER, null, "CASE_CUSTOMER_REPLY", NOW.minusSeconds(1), "{}")));
 
-        var page = service(repository).activity(caseId, null, 100);
+        var page = service(repository).activity(caseId, VIEWER, null, 100);
 
         assertThat(page.items()).extracting(CaseActivityService.ActivityItem::actorLabel)
-                .containsExactly("System", "Provider");
+                .containsExactly("System", "Customer");
+        assertThat(page.items().getLast().actionDescription()).isEqualTo("Customer replied");
         assertThat(page.nextCursor()).isNull();
     }
 

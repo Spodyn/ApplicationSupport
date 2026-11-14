@@ -39,7 +39,7 @@ class CaseDetailService {
                        integration.id AS integration_id, integration.provider, integration.display_name AS integration_display_name,
                        integration.workspace_external_id, integration.workspace_name,
                        COALESCE(votes.points, 0) AS ignore_score,
-                       reads.last_read_message_id, reads.last_read_at, snoozes.until_at AS snoozed_until,
+                       reads.last_read_message_id, reads.last_read_at, snoozes.until_at AS snoozed_until, snoozes.created_at AS snoozed_at,
                        sla.policy_id, sla.first_response_started_at, sla.first_response_due_at, sla.first_response_completed_at,
                        sla.unclaimed_started_at, sla.unclaimed_warning_at, sla.unclaimed_breach_at,
                        sla.in_progress_started_at, sla.in_progress_warning_at, sla.in_progress_breach_at,
@@ -51,7 +51,7 @@ class CaseDetailService {
                 LEFT JOIN users owner ON owner.id = c.owner_user_id
                 LEFT JOIN cases related ON related.id = c.related_case_id
                 LEFT JOIN case_read_states reads ON reads.case_id = c.id AND reads.user_id = ?
-                LEFT JOIN case_snoozes snoozes ON snoozes.case_id = c.id AND snoozes.user_id = ?
+                LEFT JOIN case_snoozes snoozes ON snoozes.case_id = c.id AND snoozes.user_id = ? AND snoozes.until_at > CURRENT_TIMESTAMP
                 LEFT JOIN case_sla sla ON sla.case_id = c.id
                 LEFT JOIN LATERAL (
                     SELECT SUM(weight)::int AS points FROM case_ignore_votes
@@ -72,7 +72,7 @@ class CaseDetailService {
                     new Integration(rs.getObject("integration_id", UUID.class), rs.getString("provider"),
                             rs.getString("integration_display_name"), rs.getString("workspace_external_id"), rs.getString("workspace_name")),
                     new RelatedCase(rs.getObject("related_case_id", UUID.class), rs.getString("related_case_reference")),
-                    new PersonalState(rs.getObject("last_read_message_id", UUID.class), instant(rs, "last_read_at"), instant(rs, "snoozed_until")),
+                    new PersonalState(rs.getObject("last_read_message_id", UUID.class), instant(rs, "last_read_at"), instant(rs, "snoozed_until"), instant(rs, "snoozed_at")),
                     sla(rs), rs.getInt("ignore_score"), actions.stream().map(Enum::name).sorted().toList(),
                     instant(rs, "claimed_at"), instant(rs, "waiting_until"), instant(rs, "resolved_at"), instant(rs, "ignored_at"),
                     enumValue(rs, "resolution_category"), instant(rs, "created_at"), instant(rs, "updated_at"),
@@ -135,7 +135,7 @@ class CaseDetailService {
     record Channel(UUID id, String name, String externalChannelId, String groupingStrategy) {}
     record Integration(UUID id, String provider, String displayName, String workspaceExternalId, String workspaceName) {}
     record RelatedCase(UUID id, String reference) {}
-    record PersonalState(UUID lastReadMessageId, Instant lastReadAt, Instant snoozedUntil) {}
+    record PersonalState(UUID lastReadMessageId, Instant lastReadAt, Instant snoozedUntil, Instant snoozedAt) {}
     record Sla(UUID policyId, Instant firstResponseStartedAt, Instant firstResponseDueAt, Instant firstResponseCompletedAt,
             Instant unclaimedStartedAt, Instant unclaimedWarningAt, Instant unclaimedBreachAt, Instant inProgressStartedAt,
             Instant inProgressWarningAt, Instant inProgressBreachAt, Instant pausedAt, long totalPausedSeconds, String state,

@@ -44,3 +44,13 @@ The original 28 baseline mappings remain required; I18N/BULK extend the machine 
 | I18N | [i18n.test.tsx](../apps/web/tests/unit/i18n.test.tsx), [application.spec.ts](../apps/web/tests/e2e/application.spec.ts) | Preference persists in the current browser, without account/device synchronization |
 | BULK | [CaseBulkServiceTests.java](../apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceTests.java), [CaseBulkServiceIntegrationTests.java](../apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceIntegrationTests.java), [bulk-inbox-adapter.test.ts](../apps/web/tests/unit/bulk-inbox-adapter.test.ts), [application.spec.ts](../apps/web/tests/e2e/application.spec.ts), [workflows.spec.ts](../apps/web/tests/fullstack/workflows.spec.ts) | 100 items/request, 1000 explicit IDs/UI selection, existing individual workflow rules |
 | Conversation/layout/actions | [application.spec.ts](../apps/web/tests/e2e/application.spec.ts) | Enter/Shift+Enter/IME/attachments/duplicate guard, gray resolved status, filters/SLA control, hover/focus, 1440/820/390 px text overflow |
+
+
+### Case ownership, personal Snooze and SLA attention
+
+[Full-stack workflows](../apps/web/tests/fullstack/workflows.spec.ts) exercise two authenticated
+accounts, a reconnect, same-account Snooze across browser time zones, private history,
+Ask Customer replies in PL/EN, and a breached Case leaving the SLA view after resolution.
+[Bulk integration tests](../apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceIntegrationTests.java)
+verify same-owner no-ops and concurrent Reassign. [Snooze integration tests](../apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseSnoozeIntegrationTests.java)
+verify automatic expiry and wake timestamps.

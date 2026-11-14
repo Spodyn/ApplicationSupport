@@ -53,8 +53,8 @@ class AuditEventSchemaIntegrationTests {
     void activityQueryBindsParametersForInitialAndCursorPages() {
         CaseActivityRepository repository = new CaseActivityRepository(jdbc);
         UUID absentCase = UUID.randomUUID();
-        assertThat(repository.find(absentCase, null, null, 50)).isEmpty();
-        assertThat(repository.find(absentCase, java.time.Instant.now(), UUID.randomUUID(), 50)).isEmpty();
+        assertThat(repository.find(absentCase, UUID.randomUUID(), null, null, 50)).isEmpty();
+        assertThat(repository.find(absentCase, UUID.randomUUID(), java.time.Instant.now(), UUID.randomUUID(), 50)).isEmpty();
     }
 
     @Test

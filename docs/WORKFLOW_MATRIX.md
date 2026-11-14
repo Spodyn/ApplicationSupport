@@ -153,7 +153,7 @@ Read acknowledgement affects only the current user.
 | `WAITING_FOR_CUSTOMER` | if not already completed, policy semantics remain; Ask `SENT` can complete it | active-unowned semantics preserved but waiting is not counted as active unclaimed work | paused; waiting pause policy applies |
 | `RESOLVED` / `IGNORED` | stopped | stopped | stopped |
 
-Timers preserve accumulated business time across pause/resume. Reassign never resets in-progress time.
+Timers preserve accumulated business time across pause/resume. Reassign never resets in-progress time. A Reassign to the current owner has no workflow, audit or notification effect, and bulk assignment reports that item as skipped.
 
 ## 9. Concurrency requirements
 

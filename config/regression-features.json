@@ -156,9 +156,10 @@
       "feature": "Resolve/admin reassign/force resolve",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Ownership or ADMIN+exact permission; controlled optional category",
+      "expected": "Ownership or ADMIN+exact permission; controlled optional category; no-op same-owner Reassign under Case lock",
       "tests": [
-        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java"
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
       ],
       "gap": "Full browser administration transitions are not all automated"
     },
@@ -178,9 +179,10 @@
       "feature": "Personal Snooze",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "No CaseStatus expansion; per-user due/cancel/wakeup cleanup",
+      "expected": "No CaseStatus expansion; per-user due/cancel/wakeup cleanup; viewer-scoped history and due/cancel/wake timestamps",
       "tests": [
-        "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseSnoozeIntegrationTests.java"
+        "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseSnoozeIntegrationTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
       ],
       "gap": "Controlled-clock duration/replay, personal cancel and due worker covered; live push delivery remains separate"
     },
@@ -189,11 +191,13 @@
       "feature": "SLA business time and pause",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Business-calendar time; first human provider-accepted response; waiting pause",
+      "expected": "Business-calendar time; first human provider-accepted response; waiting pause; terminal and paused Cases excluded from active SLA attention",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/sla/BusinessTimeCalculatorTests.java",
-        "apps/web/tests/unit/sla.test.ts"
+        "apps/web/tests/unit/sla.test.ts",
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java"
       ],
       "gap": "Production SLO/load evidence is not a unit-test pass"
     },

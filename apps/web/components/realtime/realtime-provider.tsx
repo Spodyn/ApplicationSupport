@@ -91,6 +91,9 @@ export function RealtimeProvider({ children, accountId }: { children: ReactNode;
         const caseId = typeof event.payload.caseId === "string" ? event.payload.caseId : null
         if (caseId && UUID_PATTERN.test(caseId)) {
           void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCase(caseId) })
+          if (event.eventType.startsWith("case.snooze")) {
+            void queryClient.invalidateQueries({ queryKey: queryKeys.inboxActivity(caseId) })
+          }
         }
         return
       }

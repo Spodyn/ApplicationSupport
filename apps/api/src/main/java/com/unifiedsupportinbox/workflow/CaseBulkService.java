@@ -82,8 +82,11 @@ class CaseBulkService {
         // The bulk item owns idempotency. Reusing an individual command's key
         // namespace here could replay an unrelated earlier single-Case command.
         switch (request.action()) {
-            case ASSIGN -> administration.executeOwnerChange(id, actor, request.targetUserId(),
-                    CaseAdministrationService.Action.valueOf(action), correlationId);
+            case ASSIGN -> {
+                var result = administration.executeOwnerChange(id, actor, request.targetUserId(),
+                        CaseAdministrationService.Action.valueOf(action), correlationId);
+                if (!result.body().path("changed").asBoolean(true)) return outcome(id, "SKIPPED", "ALREADY_ASSIGNED");
+            }
             case RESOLVE -> resolve.executeResolve(id, actor, null, correlationId);
             case IGNORE -> ignore.execute(id, actor, null, correlationId);
             case CLAIM -> claim.executeClaim(id, actor, correlationId);

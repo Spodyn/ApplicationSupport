@@ -1,7 +1,8 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import { expect, test, type Page } from '@playwright/test'
 
-const fixtures = new WeakMap<Page, {channelId: string; externalChannelId: string; workspaceId: string}>()
+type SlackFixture = { channelId: string; externalChannelId: string; workspaceId: string }
+const fixtures = new WeakMap<Page, SlackFixture>()
 
 async function csrf(page: Page) {
   return (await page.context().cookies()).find(cookie => cookie.name === 'XSRF-TOKEN')?.value ?? ''
@@ -183,6 +184,174 @@ for (const visibility of ['public', 'private'] as const) {
     await expect(panel.getByText(/download-denied.txt/)).toBeVisible()
   })
 }
+
+test('Case ownership follows Claim, Assign, Reassign and Unassign across two sessions and reconnect', async ({page, browser, baseURL}) => {
+  const admin = await testAccount(page, 'account')
+  const agent = await testAccount(page)
+  fixtures.set(page, admin)
+  const contextB = await browser.newContext({baseURL})
+  const b = await contextB.newPage()
+  let connected = 0
+  let closed = 0
+  b.on('websocket', socket => {
+    socket.on('framereceived', frame => {
+      if (String(frame.payload).startsWith('CONNECTED')) connected++
+    })
+    socket.on('close', () => closed++)
+  })
+  // Hold only the WebSocket offline so REST reads by the other session remain independent.
+  await b.addInitScript(() => {
+    const NativeSocket = window.WebSocket
+    let socket: WebSocket | undefined
+    window.WebSocket = class extends NativeSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols)
+        if (new URL(url).pathname === '/ws') socket = this
+      }
+    }
+    Object.assign(window, {disconnectCaseSocket: () => socket?.close()})
+  })
+  try {
+    await Promise.all([login(page, admin.email), login(b, agent.email)])
+    await expect.poll(() => connected).toBeGreaterThan(0)
+    const marker = `Owner projection ${randomUUID().slice(0, 8)}`
+    await inbound(page, marker)
+    for (const tab of [page, b]) {
+      const tile = tab.getByRole('button').filter({hasText: marker})
+      await expect(tile).toContainText('#synthetic-support')
+      await expect(tile.locator('[data-case-owner]')).toHaveText('Nieprzypisane')
+      await tile.click()
+    }
+    const list = await (await page.request.get('/api/v1/cases')).json()
+    const caseId = list.items.find((item: {lastMessagePreview: string}) => item.lastMessagePreview === marker).id
+    const ownership = (tab: Page) => tab.getByRole('button').filter({hasText: marker}).locator('[data-case-owner]')
+    const detail = (tab: Page) => tab.getByRole('region', {name: /^Rozmowa /})
+    await b.getByRole('button', {name: 'Przejmij', exact: true}).click()
+    for (const tab of [page, b]) {
+      await expect(ownership(tab)).toHaveText(agent.displayName)
+      await expect(detail(tab).locator('[data-case-detail-owner]')).toHaveText(agent.displayName)
+    }
+    await b.getByRole('button', {name: 'Moje', exact: true}).click()
+    await expect(b.getByLabel('Liczba spraw')).toHaveText('1')
+    const adminPath = `/api/v1/admin/cases/${caseId}`
+    await page.getByRole('button', {name: 'Administruj', exact: true}).click()
+    const dialog = page.getByRole('dialog')
+    const target = dialog.getByLabel('Agent')
+    await expect(target.locator('option').filter({hasText: admin.displayName})).toHaveCount(1)
+    await expect(target.locator('option').filter({hasText: agent.displayName})).toHaveCount(0)
+    await target.selectOption(admin.userId)
+    await dialog.getByRole('button', {name: 'Przypisz ponownie'}).click()
+    await expect(b.getByLabel('Liczba spraw')).toHaveText('0')
+    await expect(detail(b).locator('[data-case-detail-owner]')).toHaveText(admin.displayName)
+    await expect(ownership(page)).toHaveText(admin.displayName)
+    await b.getByRole('button', {name: 'Wszystkie', exact: true}).click()
+    await expect(ownership(b)).toHaveText(admin.displayName)
+
+    expect((await command(page, `${adminPath}/unassign`, undefined)).status()).toBe(200)
+    await expect(ownership(b)).toHaveText('Nieprzypisane')
+    expect((await command(page, `${adminPath}/assign`, {targetUserId: agent.userId})).status()).toBe(200)
+    await expect(ownership(b)).toHaveText(agent.displayName)
+    const before = await (await page.request.get(`/api/v1/cases/${caseId}`)).json()
+    const unchanged = await command(page, `${adminPath}/reassign`, {targetUserId: agent.userId})
+    expect(await unchanged.json()).toMatchObject({changed: false, version: before.version})
+    const priorConnections = connected
+    const beforeClose = closed
+    await b.evaluate(() => (window as Window & {disconnectCaseSocket?: () => void}).disconnectCaseSocket?.())
+    await expect.poll(() => closed).toBeGreaterThan(beforeClose)
+    expect((await command(page, `${adminPath}/unassign`, undefined)).status()).toBe(200)
+    await expect.poll(() => connected).toBeGreaterThan(priorConnections)
+    await expect(ownership(b)).toHaveText('Nieprzypisane')
+  } finally {
+    await contextB.close()
+  }
+})
+
+test('Snooze history is personal and timezone-aware while SLA follows workflow', async ({page, browser, baseURL}) => {
+  const admin = await testAccount(page, 'account')
+  fixtures.set(page, admin)
+  const secondUser = await testAccount(page)
+  const contexts = await Promise.all([
+    browser.newContext({baseURL, timezoneId: 'Europe/Warsaw'}),
+    browser.newContext({baseURL, timezoneId: 'America/New_York'}),
+    browser.newContext({baseURL, timezoneId: 'Europe/Warsaw'}),
+  ])
+  const [a, mirror, other] = await Promise.all(contexts.map(context => context.newPage()))
+  try {
+    await login(a, admin.email)
+    await login(mirror, admin.email, true)
+    await login(other, secondUser.email)
+    const marker = `Personal SLA ${randomUUID().slice(0, 8)}`
+    const root = await inbound(page, marker)
+    await expect(a.getByRole('button').filter({hasText: marker})).toBeVisible()
+    const list = await (await a.request.get('/api/v1/cases')).json()
+    const id = list.items.find((item: {lastMessagePreview: string}) => item.lastMessagePreview === marker).id
+    const path = `/api/v1/cases/${id}`
+    await Promise.all([a, mirror, other].map(tab => tab.goto(`/cases?caseId=${id}`)))
+    const panel = (tab: Page) => tab.getByRole('region', {name: /^(Rozmowa|Conversation) /})
+    const activity = async (tab: Page) => (await (await tab.request.get(`${path}/activity`)).json()).items
+    const slaOf = async () => (await (await a.request.get(path)).json()).sla
+    const slaBefore = await slaOf()
+    await panel(a).getByRole('button', {name: 'Odłóż', exact: true}).click()
+    await a.getByRole('dialog').getByRole('button', {name: '1h', exact: true}).click()
+    await a.getByRole('dialog').getByRole('button', {name: 'Zatwierdź'}).click()
+    const localTime = panel(a).locator('[data-active-snooze] time')
+    const mirrorTime = panel(mirror).locator('[data-active-snooze] time')
+    await expect(localTime).toContainText(/Odłożono do .* · (1 godz|[56][0-9] min)/)
+    const deadline = (await localTime.getAttribute('datetime'))!
+    await expect(mirrorTime).toHaveAttribute('datetime', deadline)
+    const expected = await mirror.evaluate(value => new Intl.DateTimeFormat('en-GB', {
+      dateStyle: 'short', timeStyle: 'short',
+    }).format(new Date(value)), deadline)
+    await expect(mirrorTime).toContainText(`Snoozed until ${expected}`)
+    await expect(panel(other).locator('[data-active-snooze]')).toHaveCount(0)
+    expect(await slaOf()).toEqual(slaBefore)
+    expect(await activity(other)).toEqual([])
+    await panel(a).getByRole('button', {name: 'Anuluj odłożenie'}).click()
+    await expect(mirrorTime).toHaveCount(0)
+    await expect.poll(async () => (await activity(a)).map((item: {action: string}) => item.action))
+      .toEqual(['CASE_SNOOZE_CANCELLED', 'CASE_SNOOZE'])
+    expect(await activity(other)).toEqual([])
+
+    expect((await command(a, `${path}/claim`, undefined)).status()).toBe(200)
+    expect((await command(a, `${path}/ask-customer`, {message: 'Please clarify', waitingMinutes: 60})).status()).toBe(202)
+    await expect.poll(async () => (await (await a.request.get(path)).json()).status).toBe('WAITING_FOR_CUSTOMER')
+    await expect(panel(a).getByText('SLA · Wstrzymane', {exact: true})).toBeVisible()
+    const attention = async () => (await (await a.request.get('/api/v1/cases?slaAttention=true')).json()).items
+    expect((await attention()).some((item: {id: string}) => item.id === id)).toBe(false)
+
+    expect((await command(a, `${path}/snooze`, {until: new Date(Date.now() + 60 * 60_000).toISOString()})).status()).toBe(200)
+    await inbound(page, 'Customer response to Ask', root.ts)
+    await expect.poll(async () => (await activity(a)).map((item: {action: string}) => item.action))
+      .toEqual(expect.arrayContaining(['CASE_CUSTOMER_REPLY', 'CASE_SNOOZE_WOKEN']))
+    for (const [tab, text] of [[a, 'Klient odpowiedział'], [mirror, 'Customer replied']] as const) {
+      await panel(tab).locator('details > summary').click()
+      await expect(panel(tab).getByText(text, {exact: true})).toBeVisible()
+    }
+    expect((await activity(other)).map((item: {action: string}) => item.action)).toContain('CASE_CUSTOMER_REPLY')
+    expect((await activity(other)).some((item: {action: string}) => item.action.startsWith('CASE_SNOOZE'))).toBe(false)
+    expect((await activity(a)).find((item: {action: string}) => item.action === 'CASE_CUSTOMER_REPLY'))
+      .toMatchObject({actorType: 'PROVIDER', actorLabel: 'Customer'})
+
+    expect((await command(a, `${path}/claim`, undefined)).status()).toBe(200)
+    expect(await (await a.request.post('/__test/breach', {data: {caseId: id}})).json()).toEqual({changed: 1})
+    await a.reload()
+    const tile = a.getByRole('button').filter({hasText: 'Customer response to Ask'})
+    await expect(tile).toHaveClass(/border-red-500/)
+    await a.getByRole('button', {name: 'SLA', exact: true}).click()
+    await expect(tile).toBeVisible()
+    const beforeCount = (await attention()).length
+    await expect(a.getByLabel('Liczba spraw')).toHaveText(String(beforeCount))
+    expect((await command(a, `${path}/resolve`, {})).status()).toBe(200)
+    await expect(tile).toHaveCount(0)
+    await expect(a.getByLabel('Liczba spraw')).toHaveText(String(beforeCount - 1))
+    await a.getByRole('button', {name: 'Wszystkie', exact: true}).click()
+    await expect(tile).not.toHaveClass(/border-red-500/)
+    await expect(panel(a).getByText('Historyczne przekroczenie SLA')).toBeVisible()
+    expect((await slaOf()).state).toBe('BREACHED')
+  } finally {
+    await Promise.all(contexts.map(context => context.close()))
+  }
+})
 
 test('real session cookies and CSRF reject cross-boundary mutations; service worker does not cache API', async ({page, context}) => {
   await login(page)
@@ -477,7 +646,7 @@ test('real bulk workflow preserves per-Case rules, audit, realtime and replay', 
   }
 })
 
-type TestAccount = { userId: string; email: string; displayName: string }
+type TestAccount = SlackFixture & { userId: string; email: string; displayName: string }
 
 async function testAccount(page: Page, role: 'agent' | 'account' = 'agent'): Promise<TestAccount> {
   const response = await page.request.post('/__test/' + role)

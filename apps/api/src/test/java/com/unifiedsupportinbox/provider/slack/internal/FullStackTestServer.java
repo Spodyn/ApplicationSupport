@@ -77,6 +77,10 @@ public final class FullStackTestServer {
                         """, UUID.class, fixtureIntegration, externalChannel);
                 response = Map.of("email", email, "displayName", name, "userId", user, "channelId", channel,
                         "externalChannelId", externalChannel, "workspaceId", "TTESTFULL");
+            } else if (path.equals("/breach") && exchange.getRequestMethod().equals("POST")) {
+                UUID caseId = UUID.fromString(JSON.readTree(exchange.getRequestBody()).path("caseId").asText());
+                int changed = fixtureDatabase.update("UPDATE case_sla SET state = 'BREACHED' WHERE case_id = ?", caseId);
+                response = Map.of("changed", changed);
             } else if (path.equals("/observed")) response = Map.of("messages", DELIVERED, "files", SHARED_FILES);
             else if (path.equals("/files.getUploadURLExternal")) {
                 String fileId = "F" + UUID.randomUUID().toString().replace("-", "");
