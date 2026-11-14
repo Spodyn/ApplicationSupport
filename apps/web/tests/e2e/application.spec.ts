@@ -770,6 +770,7 @@ for (const width of [1440, 820, 390, 320]) {
     await page.getByRole("button", {name:/Slack Test Customer/}).click()
     const panel = page.getByRole("region", {name:"Rozmowa Slack Test Customer"})
     await panel.getByRole("button", {name:"Przejmij",exact:true}).click()
+    await expect(panel.getByLabel("Treść odpowiedzi")).toBeEnabled()
     await panel.getByLabel("Dodaj pliki").setInputFiles({ name: fileName, mimeType: "text/plain", buffer: Buffer.from("example") })
     const file = panel.getByRole("button", {name: fileName, exact: true})
     await expect(file).toBeVisible()
