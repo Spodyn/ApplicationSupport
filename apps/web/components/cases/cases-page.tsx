@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { deliveryPresentation } from "@/lib/i18n/delivery-presentation"
+import { MessageAttachments } from "./message-attachments"
 import { attachmentLimitError } from "@/lib/services/attachment-limits"
 import { userError } from "@/lib/i18n/errors"
 import { formatDuration } from "@/lib/format"
@@ -786,7 +787,7 @@ function ConversationPanel({
                     {(message.body || message.deleted) && <p className={cn("mt-1 whitespace-pre-wrap text-sm leading-6 text-[#edf0f4]", message.deleted && "italic text-[#aeb8c8]")}>
                       <SafeExternalMessage slack={message.kind === "customer" && item.platform === "Slack"} content={message.deleted ? t("Wiadomość została usunięta w Slack.") : message.body} />
                     </p>}
-                    <MessageAttachments attachments={message.attachments} />
+                    <MessageAttachments attachments={message.attachments} canManageIntegrations={canManageIntegrations} />
                     <DeliveryNotice message={message} canManageIntegrations={canManageIntegrations} />
                     {message.retryAllowed && <button type="button" onClick={() => workflow.retryMessage.mutate(message.id)} disabled={workflow.retryMessage.isPending} className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-red-300/20 px-2.5 py-1.5 text-xs text-red-200 disabled:opacity-50"><RotateCcw className="size-3.5" /> {t("Ponów wysyłkę")}</button>}
                   </div>
@@ -966,6 +967,9 @@ function DeliveryNotice({ message, canManageIntegrations }: { message: InboxMess
   return (
     <div className="mt-2 text-xs text-red-200">
       <p>{t(presentation.message)}</p>
+      {presentation.requiredScope && canManageIntegrations && (
+        <p>{t("Brakujące uprawnienie Slacka: {{scope}}", { scope: presentation.requiredScope })}</p>
+      )}
       {presentation.integration && canManageIntegrations && (
         <Link className="mt-1 inline-block underline" href="/settings?tab=integrations">{t("Otwórz ustawienia integracji")}</Link>
       )}
@@ -982,21 +986,10 @@ function AttachmentPreview({ file }: { file: File }) {
     element.src = preview
     return () => URL.revokeObjectURL(preview)
   }, [file])
-  if (!["image/png", "image/jpeg", "image/gif"].includes(file.type)) return null
+  if (!["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp"].includes(file.type)) return null
   // Local object URLs need no Next.js image optimization.
   // eslint-disable-next-line @next/next/no-img-element
   return <img ref={image} alt="" className="size-8 shrink-0 rounded object-cover" />
-}
-
-function MessageAttachments({ attachments }: { attachments?: InboxMessage["attachments"] }) {
-  const t = useT()
-  if (!attachments?.length) return null
-  return <div className="mt-3 flex flex-wrap gap-2">{attachments.map((attachment) => attachment.downloadUrl ? <a key={attachment.id} href={attachment.downloadUrl} download className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-white/10 bg-black/10 px-2.5 py-1.5 text-xs text-violet-200 hover:bg-white/5"><Paperclip className="size-3.5 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{attachment.fileName} · {attachment.size}</span></a> : <span key={attachment.id} className="inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border border-white/10 px-2.5 py-1.5 text-xs text-[#cbd3df]"><Paperclip className="size-3.5 shrink-0" /> <span className="min-w-0 [overflow-wrap:anywhere]">{attachment.fileName}{attachment.scanStatus && attachment.scanStatus !== "CLEAN"
-    ? ` · ${t(attachment.failureStage === "DOWNLOAD" ? "Nie udało się pobrać pliku ze Slacka."
-      : attachment.scanStatus === "ERROR" ? "Nie udało się zeskanować pliku."
-      : attachment.scanStatus === "INFECTED" ? "W pliku wykryto zagrożenie."
-      : "Plik oczekuje na pobranie lub skanowanie.")}`
-    : ` · ${attachment.size}`}</span></span>)}</div>
 }
 
 function Avatar({ initials, size }: { initials: string; size: "sm" | "xs" }) {

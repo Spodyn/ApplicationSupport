@@ -66,7 +66,7 @@ class MessageHistoryServiceTests {
                 .containsExactly(newest.id(), middle.id());
         assertThat(page.items().getFirst().attachments()).containsExactly(
                 new MessageHistoryService.MessageAttachmentItem(
-                        attachment.id(), "screen.png", 842, "image/png", "image/png", AttachmentScanStatus.CLEAN, null));
+                        attachment.id(), "screen.png", 842, "image/png", "image/png", AttachmentScanStatus.CLEAN, null, null, null));
         assertThat(page.items().getLast().attachments()).isEmpty();
         assertThat(page.items().getLast().authorName()).isEqualTo("Customer");
         assertThat(page.nextCursor()).isNotBlank();

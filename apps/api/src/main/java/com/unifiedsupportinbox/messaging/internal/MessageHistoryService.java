@@ -140,7 +140,9 @@ class MessageHistoryService {
             String contentType,
             String detectedContentType,
             AttachmentScanStatus scanStatus,
-            String failureStage) {
+            String failureStage,
+            String processingStage,
+            String requiredSlackScope) {
         static MessageAttachmentItem from(AttachmentMetadata metadata) {
             return new MessageAttachmentItem(
                     metadata.id(),
@@ -150,7 +152,14 @@ class MessageHistoryService {
                     metadata.detectedContentType(),
                     metadata.scanStatus(),
                     metadata.scanStatus() != AttachmentScanStatus.ERROR ? null
-                            : metadata.storageKey() == null ? "DOWNLOAD" : "SCAN");
+                            : metadata.storageKey() == null ? "DOWNLOAD" : "SCAN",
+                    metadata.scanStatus() != AttachmentScanStatus.PENDING && metadata.scanStatus() != AttachmentScanStatus.SCANNING
+                            ? null : metadata.storageKey() == null ? "DOWNLOAD" : "SCAN",
+                    switch (java.util.Objects.toString(metadata.scanError(), "")) {
+                        case "SLACK_DOWNLOAD_SLACK_MISSING_SCOPE_FILES_READ" -> "files:read";
+                        case "SLACK_DOWNLOAD_SLACK_MISSING_SCOPE_FILES_WRITE" -> "files:write";
+                        default -> null;
+                    });
         }
     }
 }

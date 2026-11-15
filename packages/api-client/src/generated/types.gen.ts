@@ -928,6 +928,8 @@ export type MessageAttachment = {
   "detectedContentType": string | null
   "scanStatus": string
   "failureStage"?: string | null
+  "processingStage"?: string | null
+  "requiredSlackScope"?: "files:read" | "files:write" | null
 }
 
 export type MessageBodyFormat = "PLAIN_TEXT" | "MARKDOWN"

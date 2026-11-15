@@ -23,12 +23,28 @@ class AttachmentFilePolicy {
             "hta", "img", "iso", "jar", "js", "jse", "lnk", "mjs", "msi", "ps1",
             "scr", "sh", "vbe", "vbs", "wsf", "wsh");
 
-    private static final Map<String, Set<String>> SAFE_EXTENSIONS = Map.of(
-            "application/pdf", Set.of("pdf"),
-            "image/png", Set.of("png"),
-            "image/jpeg", Set.of("jpg", "jpeg"),
-            "image/gif", Set.of("gif"),
-            "text/plain", Set.of("txt", "csv", "json", "md", "log"));
+    private static final Map<String, Set<String>> SAFE_EXTENSIONS = Map.ofEntries(
+            Map.entry("application/pdf", Set.of("pdf")),
+            Map.entry("image/png", Set.of("png")),
+            Map.entry("image/jpeg", Set.of("jpg", "jpeg")),
+            Map.entry("image/gif", Set.of("gif")),
+            Map.entry("image/webp", Set.of("webp")),
+            Map.entry("image/avif", Set.of("avif")),
+            Map.entry("image/bmp", Set.of("bmp")),
+            Map.entry("image/tiff", Set.of("tif", "tiff")),
+            Map.entry("image/heic", Set.of("heic", "heif", "hif")),
+            Map.entry("image/heif", Set.of("heif", "hif")),
+            Map.entry(OfficeAttachmentPackage.WORD.mime(), Set.of("docx")),
+            Map.entry(OfficeAttachmentPackage.EXCEL.mime(), Set.of("xlsx")),
+            Map.entry(OfficeAttachmentPackage.POWERPOINT.mime(), Set.of("pptx")),
+            Map.entry("text/plain", Set.of("txt", "csv", "json", "md", "log")));
+
+    private static final Set<String> INLINE_IMAGES = Set.of(
+            "image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp");
+
+    static boolean supportsInlineImage(String type) {
+        return type != null && INLINE_IMAGES.contains(type);
+    }
 
     String normalizeFilename(String value) {
         String source = value == null ? "" : Normalizer.normalize(value, Normalizer.Form.NFKC).strip();
@@ -57,6 +73,20 @@ class AttachmentFilePolicy {
         if (startsWith(sample, new int[] {0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a})) return "image/png";
         if (startsWith(sample, new int[] {0xff, 0xd8, 0xff})) return "image/jpeg";
         if (startsWithAscii(sample, "GIF87a") || startsWithAscii(sample, "GIF89a")) return "image/gif";
+        if (sample.length >= 16 && startsWithAscii(sample, "RIFF") && asciiAt(sample, 8, "WEBP")
+                && (asciiAt(sample, 12, "VP8 ") || asciiAt(sample, 12, "VP8L") || asciiAt(sample, 12, "VP8X"))) {
+            return "image/webp";
+        }
+        if (startsWith(sample, new int[] {0x49, 0x49, 0x2a, 0})
+                || startsWith(sample, new int[] {0x4d, 0x4d, 0, 0x2a})
+                || startsWith(sample, new int[] {0x49, 0x49, 0x2b, 0})
+                || startsWith(sample, new int[] {0x4d, 0x4d, 0, 0x2b})) return "image/tiff";
+        if (sample.length >= 26 && startsWithAscii(sample, "BM")
+                && ByteBuffer.wrap(sample, 10, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt() >= 26) {
+            return "image/bmp";
+        }
+        String imageBrand = imageContainerType(sample);
+        if (imageBrand != null) return imageBrand;
         if (startsWith(sample, new int[] {0x50, 0x4b, 0x03, 0x04})
                 || startsWith(sample, new int[] {0x50, 0x4b, 0x05, 0x06})
                 || startsWith(sample, new int[] {0x50, 0x4b, 0x07, 0x08})) return "application/zip";
@@ -74,6 +104,14 @@ class AttachmentFilePolicy {
             throw new AttachmentPolicyViolationException(AttachmentPolicyViolationException.Code.TOO_LARGE);
         }
         validateExtension(filename);
+        if ("application/zip".equals(detectedContentType)) {
+            var office = OfficeAttachmentPackage.forExtension(finalExtension(filename));
+            if (office != null) {
+                String declared = normalizeContentType(declaredContentType);
+                if (declaredCompatible(declared, office.mime()) || "application/zip".equals(declared)) return;
+                throw new AttachmentPolicyViolationException(AttachmentPolicyViolationException.Code.MIME_MISMATCH);
+            }
+        }
         if ("application/zip".equals(detectedContentType) || "application/gzip".equals(detectedContentType)) {
             throw new AttachmentPolicyViolationException(AttachmentPolicyViolationException.Code.BLOCKED_ARCHIVE);
         }
@@ -118,12 +156,16 @@ class AttachmentFilePolicy {
         if (value == null || value.isBlank()) return "application/octet-stream";
         String result = value.split(";", 2)[0].strip().toLowerCase(Locale.ROOT);
         if ("image/jpg".equals(result) || "image/pjpeg".equals(result)) return "image/jpeg";
+        if ("image/x-ms-bmp".equals(result) || "image/x-bmp".equals(result)) return "image/bmp";
+        if ("image/x-tiff".equals(result)) return "image/tiff";
         return result;
     }
 
     private static boolean declaredCompatible(String declared, String detected) {
         if ("application/octet-stream".equals(declared)) return true;
         if (declared.equals(detected)) return true;
+        if ("application/zip".equals(declared) && OfficeAttachmentPackage.isOfficeMime(detected)) return true;
+        if ("image/heif".equals(declared) && "image/heic".equals(detected)) return true;
         return "text/plain".equals(detected)
                 && Set.of("text/csv", "application/json", "text/markdown").contains(declared);
     }
@@ -143,6 +185,35 @@ class AttachmentFilePolicy {
             if (value[index] != bytes[index]) return false;
         }
         return true;
+    }
+
+    String verifyOfficePackage(String filename, InputStream content) throws IOException, AttachmentPolicyViolationException {
+        var office = OfficeAttachmentPackage.forExtension(finalExtension(filename));
+        if (office == null) {
+            throw new AttachmentPolicyViolationException(AttachmentPolicyViolationException.Code.BLOCKED_ARCHIVE);
+        }
+        office.validate(content);
+        return office.mime();
+    }
+
+    private static String imageContainerType(byte[] sample) {
+        if (sample.length < 16 || !asciiAt(sample, 4, "ftyp")) return null;
+        int boxLength = ByteBuffer.wrap(sample).getInt();
+        if (boxLength < 16 || boxLength > sample.length || boxLength % 4 != 0) return null;
+        boolean heic = false;
+        boolean heif = false;
+        for (int offset = 8; offset + 4 <= boxLength; offset += offset == 8 ? 8 : 4) {
+            String brand = new String(sample, offset, 4, StandardCharsets.US_ASCII);
+            if (Set.of("avif", "avis").contains(brand)) return "image/avif";
+            heic |= Set.of("heic", "heix", "hevc", "hevx").contains(brand);
+            heif |= Set.of("mif1", "msf1").contains(brand);
+        }
+        if (heic) return "image/heic";
+        return heif ? "image/heif" : null;
+    }
+
+    private static boolean asciiAt(byte[] value, int offset, String expected) {
+        return new String(value, offset, expected.length(), StandardCharsets.US_ASCII).equals(expected);
     }
 
     private static boolean looksLikeUtf8Text(byte[] value) {

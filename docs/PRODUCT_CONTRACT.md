@@ -150,13 +150,14 @@ Read/unread:
 
 - A public Case reply requires nonblank text, at least one `CLEAN` attachment, or both. Ask Customer requires nonblank text.
 - Max 25 MiB per file, 10 files and 50 MiB total per logical message. A stricter provider limit wins.
-- Default allowed classes: common images, PDF, plain text/CSV, Office OOXML (`docx`, `xlsx`, `pptx`) and ZIP.
+- Case attachments support PNG, JPEG, GIF, WebP, AVIF, BMP, TIFF, HEIC/HEIF, PDF, plain text/CSV and validated Office OOXML (`docx`, `xlsx`, `pptx`). General archives, active markup and executable formats are blocked.
+- The Case feed can display verified PNG, JPEG, GIF, WebP, AVIF and BMP raster images inline. TIFF and HEIC/HEIF use a download card. The preview and download endpoints require the same Case access and a `CLEAN` scan. Unsent drafts require current Case ownership.
 - Executables, scripts and active HTML are blocked by default.
 - Both declared and detected MIME are validated.
 - Uploads are backend-managed streaming/two-phase uploads; the full file must not be buffered in application memory.
 - Pending/orphan uploads are cleaned after 24 hours.
 - Normal downloads go through an authorized backend endpoint. A signed URL may be used only as a later optimization after Case authorization and with maximum 5-minute TTL.
-- Scan states: `PENDING`, `CLEAN`, `INFECTED`, `ERROR`. Only `CLEAN` may be normally sent/downloaded. There is no "allow anyway" path for `ERROR` or `INFECTED`.
+- Scan states include `PENDING`, `SCANNING`, `CLEAN`, `INFECTED` and `ERROR`. Only `CLEAN` may be sent, previewed or downloaded. There is no "allow anyway" path for `ERROR` or `INFECTED`.
 - Filename is display metadata, max 255 characters; object storage keys are internal/random and never derived directly from filename.
 
 ## 11. Case visibility, search and ordering

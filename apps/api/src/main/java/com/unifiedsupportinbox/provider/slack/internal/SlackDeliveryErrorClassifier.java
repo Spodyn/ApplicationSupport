@@ -26,6 +26,19 @@ final class SlackDeliveryErrorClassifier {
             "posting_to_channel_denied", "ekm_access_denied", "msg_too_long", "no_text",
             "invalid_blocks", "invalid_arguments", "slack_connect_file_link_sharing_blocked");
 
+    static String attachmentError(String error, String needed) {
+        if (!"missing_scope".equals(error) || needed == null) return error;
+        return switch (needed.strip()) {
+            case "files:read" -> "missing_scope_files_read";
+            case "files:write" -> "missing_scope_files_write";
+            default -> error;
+        };
+    }
+
+    static boolean isAttachmentScopeFailure(String error) {
+        return "missing_scope_files_read".equals(error) || "missing_scope_files_write".equals(error);
+    }
+
     static String safePostError(String error) {
         return error != null && (TRANSIENT_API_ERRORS.contains(error) || AUTH_ERRORS.contains(error)
                 || RESTRICTIONS.contains(error)) ? error : null;
@@ -33,6 +46,7 @@ final class SlackDeliveryErrorClassifier {
 
     static boolean isIntegrationFailure(String code) {
         return code != null && (code.equals("SLACK_HTTP_401")
+                || code.equals("SLACK_MISSING_SCOPE_FILES_READ") || code.equals("SLACK_MISSING_SCOPE_FILES_WRITE")
                 || code.equals("SLACK_BOT_TOKEN_MISSING") || code.equals("SLACK_CREDENTIAL_REFERENCE_MISSING")
                 || AUTH_ERRORS.stream().anyMatch(error -> normalizedApiError(error).equals(code)));
     }
