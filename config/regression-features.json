@@ -115,7 +115,7 @@
       "feature": "Case identity/create/terminal linking",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Canonical six statuses; one linked successor after terminal; immutable reference",
+      "expected": "Canonical six statuses; immutable reference; authorization, audit and single linked successor after terminal",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseCreationServiceIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CasePersistenceIntegrationTests.java",
@@ -193,6 +193,7 @@
       "risk": "HIGH",
       "expected": "Business-calendar time; first human provider-accepted response; waiting pause; terminal and paused Cases excluded from active SLA attention",
       "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/sla/BusinessTimeCalculatorTests.java",
         "apps/web/tests/unit/sla.test.ts",

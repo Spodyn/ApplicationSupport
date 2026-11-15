@@ -83,6 +83,9 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
     const history = await (await page.request.get(`/api/v1/cases/${caseId}/messages`)).json()
     return history.items.find((item: {id: string}) => item.id === sentBody.messageId)?.deliveryStatus
   }).toBe('SENT')
+  const profile = await (await page.request.get('/api/v1/auth/me')).json()
+  expect(await (await page.request.get('/api/v1/cases/' + caseId)).json())
+    .toMatchObject({status: 'VERIFICATION', owner: {id: profile.id}, waitingUntil: null})
   const replay = await command(page, `/api/v1/cases/${caseId}/messages`, sent.request().postDataJSON(), 'POST', sent.request().headers()['idempotency-key'])
   expect(replay.status()).toBe(202)
   expect((await replay.json()).messageId).toBe(sentBody.messageId)
@@ -105,6 +108,68 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   expect((await page.request.get('/api/v1/auth/me')).status()).toBe(401)
   await page.reload()
   await expect(page).toHaveURL(/\/login$/)
+})
+
+test('force resolve requires administrator authority and concurrent replies share a linked successor', async ({page, browser, baseURL}) => {
+  const admin = await testAccount(page, 'account')
+  const agent = await testAccount(page)
+  fixtures.set(page, admin)
+  const agentContext = await browser.newContext({baseURL})
+  const other = await agentContext.newPage()
+  try {
+    await Promise.all([login(page, admin.email), login(other, agent.email, true)])
+    const marker = randomUUID().slice(0, 8)
+    const originalText = 'Original thread ' + marker
+    const root = await inbound(page, originalText)
+    const queue = async () => (await (await page.request.get('/api/v1/cases', {
+      params: {search: admin.externalChannelId},
+    })).json()).items
+    await expect.poll(async () => (await queue()).length).toBe(1)
+    const caseId = (await queue())[0].id
+    const path = '/api/v1/cases/' + caseId
+    const endpoint = '/api/v1/admin/cases/' + caseId + '/force-resolve'
+    const detail = async () => await (await page.request.get(path)).json()
+    const activity = async () => (await (await page.request.get(path + '/activity')).json()).items
+    await other.goto('/cases?caseId=' + caseId)
+    await expect(other.getByText(originalText, {exact: true})).toBeVisible()
+    const before = await detail()
+    expect((await command(other, endpoint, {resolutionCategory: 'OTHER'})).status()).toBe(403)
+    expect(await detail()).toMatchObject({status: 'NEW', version: before.version})
+    expect((await activity()).filter((event: {action: string}) => event.action === 'CASE_FORCE_RESOLVE')).toHaveLength(0)
+
+    const key = randomUUID()
+    const request = {resolutionCategory: 'OTHER'}
+    const resolved = await command(page, endpoint, request, 'POST', key)
+    expect(resolved.status()).toBe(200)
+    const replay = await command(page, endpoint, request, 'POST', key)
+    expect(replay.status()).toBe(200)
+    expect(await replay.json()).toEqual(await resolved.json())
+    await expect(other.getByRole('region', {name: /^Conversation /}).getByText('Resolved', {exact: true})).toBeVisible()
+    const closed = await detail()
+    expect(closed).toMatchObject({status: 'RESOLVED', owner: {id: null}, resolutionCategory: 'OTHER'})
+    expect((await command(page, endpoint, request)).status()).toBe(409)
+    expect((await activity()).filter((event: {action: string}) => event.action === 'CASE_FORCE_RESOLVE'))
+      .toEqual([expect.objectContaining({actorType: 'ADMIN', actorUserId: admin.userId})])
+
+    const replies = ['Post-resolution one ' + marker, 'Post-resolution two ' + marker]
+    await Promise.all(replies.map((body, index) => inbound(page, body, root.ts, {
+      ts: (Number(root.ts) + (index + 1) / 1000).toFixed(6),
+    })))
+    await expect.poll(async () => (await queue()).length).toBe(2)
+    const next = (await queue()).find((item: {id: string}) => item.id !== caseId)
+    expect(next.status).toBe('NEW')
+    const nextPath = '/api/v1/cases/' + next.id
+    expect(await (await page.request.get(nextPath)).json()).toMatchObject({relatedCase: {id: caseId}})
+    const messages = async (casePath: string) => (await (await page.request.get(casePath + '/messages')).json())
+      .items.map((item: {body: string}) => item.body).sort()
+    await expect.poll(() => messages(nextPath)).toEqual([...replies].sort())
+    expect(await messages(path)).toEqual([originalText])
+    expect(await detail()).toMatchObject({status: 'RESOLVED', version: closed.version, resolvedAt: closed.resolvedAt})
+    await other.reload()
+    await expect(other.getByRole('region', {name: /^Conversation /}).getByText('Resolved', {exact: true})).toBeVisible()
+  } finally {
+    await agentContext.close()
+  }
 })
 
 for (const visibility of ['public', 'private'] as const) {
@@ -802,6 +867,9 @@ test('archived Slack failure shows the actual reason and never offers an ineligi
   const archiveNotice = 'Kanał Slack jest zarchiwizowany. Nie można wysyłać do niego wiadomości.'
   await expect(page.locator('[data-message-kind="support"]').getByText(archiveNotice)).toBeVisible()
   await expect(page.locator('[data-sonner-toast]').getByText(archiveNotice)).toHaveCount(1)
+  const profile = await (await page.request.get('/api/v1/auth/me')).json()
+  expect(await (await page.request.get('/api/v1/cases/' + caseId)).json())
+    .toMatchObject({status: 'VERIFICATION', owner: {id: profile.id}, waitingUntil: null})
   await page.goto(`/cases?caseId=${caseId}`)
   await page.reload()
   await expect(page.locator('[data-message-kind="support"]').getByText(archiveNotice)).toBeVisible()

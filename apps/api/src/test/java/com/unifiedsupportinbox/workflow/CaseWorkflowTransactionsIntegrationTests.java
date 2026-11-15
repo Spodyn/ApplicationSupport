@@ -7,8 +7,11 @@ import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.UsiApiApplication;
 import com.unifiedsupportinbox.cases.CaseStatus;
 import com.unifiedsupportinbox.identity.UserRole;
+import com.unifiedsupportinbox.sla.CaseSlaInitializer;
+import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
 import com.unifiedsupportinbox.workflow.CaseTransitionPolicy.*;
+import java.time.Instant;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -40,7 +43,8 @@ class CaseWorkflowTransactionsIntegrationTests {
                 "--spring.datasource.password=" + POSTGRES.getPassword(),
                 "--spring.datasource.driver-class-name=" + POSTGRES.getDriverClassName(),
                 "--spring.flyway.enabled=true", "--spring.jpa.hibernate.ddl-auto=validate",
-                "--spring.session.jdbc.initialize-schema=never", "--usi.bootstrap-admin.enabled=false");
+                "--spring.session.jdbc.initialize-schema=never", "--usi.bootstrap-admin.enabled=false",
+                "--usi.cases.waiting-timeout.scheduler-enabled=false");
         jdbc = context.getBean(JdbcTemplate.class);
         workflow = context.getBean(CaseWorkflowTransactions.class);
     }
@@ -83,6 +87,34 @@ class CaseWorkflowTransactionsIntegrationTests {
         var result = execute(newCase(), 0, newActor(), Action.IGNORE);
         assertThat(result.state().status()).isEqualTo(CaseStatus.PARTIALLY_IGNORED);
         assertThat(result.availableActions()).doesNotContain(Action.CLAIM, Action.REPLY);
+    }
+
+    @Test
+    void expiredWaitingResumesSlaOnceWithoutSendingFollowUp() {
+        UUID due = newCase();
+        UUID future = newCase();
+        Instant pausedAt = Instant.now().minusSeconds(120);
+        context.getBean(CaseSlaInitializer.class).initialize(due, pausedAt.minusSeconds(60));
+        context.getBean(CaseSlaWaitingRecorder.class).pauseForWaiting(due, pausedAt);
+        jdbc.update("UPDATE cases SET status = 'WAITING_FOR_CUSTOMER', waiting_until = now() - interval '1 minute' WHERE id = ?", due);
+        jdbc.update("UPDATE cases SET status = 'WAITING_FOR_CUSTOMER', waiting_until = now() + interval '1 hour' WHERE id = ?", future);
+        assertThat(jdbc.queryForObject("SELECT paused_at IS NOT NULL FROM case_sla WHERE case_id = ?", Boolean.class, due)).isTrue();
+
+        WaitingTimeoutService timeouts = context.getBean(WaitingTimeoutService.class);
+        assertThat(timeouts.processDue(10)).isOne();
+        assertThat(timeouts.processDue(10)).isZero();
+        assertThat(jdbc.queryForObject("""
+                SELECT status = 'NEW' AND waiting_until IS NULL AND owner_user_id IS NULL AND version = 1
+                FROM cases WHERE id = ?
+                """, Boolean.class, due)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT status FROM cases WHERE id = ?", String.class, future))
+                .isEqualTo("WAITING_FOR_CUSTOMER");
+        assertThat(jdbc.queryForObject("SELECT paused_at IS NULL FROM case_sla WHERE case_id = ?", Boolean.class, due)).isTrue();
+        assertThat(jdbc.queryForList("SELECT action FROM audit_events WHERE case_id = ?", String.class, due))
+                .containsExactly("CASE_WAITING_TIMEOUT");
+        assertThat(jdbc.queryForList("SELECT type FROM outbox_events WHERE aggregate_id = ?", String.class, due))
+                .containsExactly("case.updated");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages WHERE case_id = ?", Integer.class, due)).isZero();
     }
 
     @Test
