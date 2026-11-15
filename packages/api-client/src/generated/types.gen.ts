@@ -82,6 +82,10 @@ export type ApiAnalyticsRecordsControllerFact = {
   "slaDeadlineAt"?: string
   "excludedFromUserPerformance": boolean
   "workflowStatus"?: CaseWorkflowStatus
+  "resolutionWallSeconds"?: number | null
+  "resolutionWorkingSeconds"?: number | null
+  "firstResponseStartedAt"?: string | null
+  "firstResponseStoppedAt"?: string | null
 }
 
 export type ApiAnalyticsRecordsControllerUserOption = {
@@ -355,6 +359,7 @@ export type ApiSlaPolicyServiceUpdateInput = {
   "inProgressBreachMinutes": number
   "pauseWaiting": boolean
   "version"?: number
+  "nextResponseMinutes"?: number
 }
 
 export type ApiSlaPolicyView = {
@@ -368,6 +373,7 @@ export type ApiSlaPolicyView = {
   "pauseWaiting": boolean
   "version": number
   "updatedAt"?: string
+  "nextResponseMinutes"?: number
 }
 
 export type ApiStatisticsOverviewServiceDay = {
@@ -548,6 +554,11 @@ export type CaseDetail = {
   "version": number
   "workflowStatus"?: CaseWorkflowStatus
   "closureReason"?: "IGNORED" | null
+  "responseSla"?: CaseResponseSla
+  "responsePolicyVersion"?: number | null
+  "responseCycles"?: Array<CaseResponseCycle>
+  "resolutionWallSeconds"?: number | null
+  "resolutionWorkingSeconds"?: number | null
 }
 
 export type CaseFilterOption = {
@@ -607,6 +618,7 @@ export type CaseListItem = {
   "lastMessageFile"?: string | null
   "workflowStatus"?: CaseWorkflowStatus
   "closureReason"?: "IGNORED" | null
+  "responseSla"?: CaseResponseSla
 }
 
 export type CaseListPage = {
@@ -668,6 +680,26 @@ export type CaseReopenResult = {
 }
 
 export type CaseResolutionCategory = "SOLVED" | "NO_ACTION_REQUIRED" | "DUPLICATE" | "OTHER"
+
+export type CaseResponseCycle = {
+  "id": string
+  "startedAt": string
+  "warningAt": string
+  "dueAt": string
+  "endedAt": string | null
+  "outcome": "RESPONDED" | "RESOLVED" | "IGNORED" | null
+  "breached": boolean
+}
+
+export type CaseResponseSla = {
+  "state": "NEUTRAL" | "ON_TRACK" | "WARNING" | "BREACHED" | "PAUSED"
+  "kind": "FRT" | "NRT" | null
+  "warningAt": string | null
+  "dueAt": string | null
+  "historicallyBreached": boolean
+  "lastSender": "CUSTOMER" | "SUPPORT" | "SYSTEM" | null
+  "remainingBusinessSeconds"?: number | null
+}
 
 export type CaseSla = {
   "policyId": string

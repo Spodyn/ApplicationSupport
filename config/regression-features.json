@@ -188,17 +188,20 @@
     },
     {
       "id": "SLA",
-      "feature": "SLA business time and pause",
+      "feature": "FRT, NRT, TTR and SLA queue",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Business-calendar time; first human provider-accepted response; waiting pause; terminal and paused Cases excluded from active SLA attention",
+      "expected": "Provider timestamp FRT, first durable follow-up NRT, per-case calendar snapshots, business warning thresholds, waiting pause and TTR, history after resolution and reopen, consistent queue ranking/filter/counts",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/sla/BusinessTimeCalculatorTests.java",
         "apps/web/tests/unit/sla.test.ts",
+        "apps/web/tests/unit/analytics-workflow.test.ts",
         "apps/web/tests/fullstack/workflows.spec.ts",
-        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java"
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java"
       ],
       "gap": "Production SLO/load evidence is not a unit-test pass"
     },

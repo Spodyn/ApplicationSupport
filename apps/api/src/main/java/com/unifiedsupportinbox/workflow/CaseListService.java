@@ -15,16 +15,19 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 /** Shared Case inbox projection; ownership affects actions, never visibility. */
 @Service
 class CaseListService {
     private final JdbcTemplate jdbc;
     private final CursorCodec cursors;
+    private final ObjectMapper json;
 
-    CaseListService(JdbcTemplate jdbc, CursorCodec cursors) {
+    CaseListService(JdbcTemplate jdbc, CursorCodec cursors, ObjectMapper json) {
         this.jdbc = jdbc;
         this.cursors = cursors;
+        this.json = json;
     }
 
     @Transactional(readOnly = true)
@@ -77,12 +80,10 @@ class CaseListService {
                            latest.sent_at AS last_message_at, latest.author AS last_message_author,
                            latest.kind AS last_message_kind, latest_file.original_filename AS last_message_file,
                            reads.last_read_message_id, snoozes.until_at AS snoozed_until,
-                           CASE WHEN sla.paused_at IS NOT NULL THEN 'PAUSED' ELSE sla.state END AS sla_state,
-                           CASE WHEN c.status IN ('NEW', 'PARTIALLY_IGNORED')
-                                  THEN LEAST(sla.first_response_due_at, sla.unclaimed_warning_at, sla.unclaimed_breach_at)
-                                WHEN c.status = 'VERIFICATION'
-                                  THEN LEAST(sla.first_response_due_at, sla.in_progress_warning_at, sla.in_progress_breach_at)
-                                ELSE NULL END AS sla_due_at,
+                           response.state AS sla_state, response.due_at AS sla_due_at,
+                           response.state AS response_state, response.kind AS response_kind,
+                           response.warning_at AS response_warning_at, response.due_at AS response_due_at,
+                           response.historically_breached, response.last_response_sender,
                            COALESCE(votes.points, 0) AS ignore_score,
                            EXISTS (
                                SELECT 1 FROM messages inbound
@@ -99,7 +100,7 @@ class CaseListService {
                     LEFT JOIN users owner ON owner.id = c.owner_user_id
                     LEFT JOIN case_read_states reads ON reads.case_id = c.id AND reads.user_id = ?
                     LEFT JOIN case_snoozes snoozes ON snoozes.case_id = c.id AND snoozes.user_id = ? AND snoozes.until_at > CURRENT_TIMESTAMP
-                    LEFT JOIN case_sla sla ON sla.case_id = c.id
+                    JOIN case_response_sla_projection response ON response.case_id = c.id
                     LEFT JOIN LATERAL (
                         SELECT m.id, m.body, m.deleted_at, m.kind,
                                COALESCE(m.provider_created_at, m.created_at) AS sent_at,
@@ -166,11 +167,11 @@ class CaseListService {
                     FROM views
                 ), ranked AS (
                     SELECT views.*,
-                           CASE WHEN status IN ('IGNORED', 'RESOLVED') THEN 4
-                                WHEN status <> 'WAITING_FOR_CUSTOMER' AND sla_state = 'BREACHED' THEN 0
-                                WHEN status <> 'WAITING_FOR_CUSTOMER' AND sla_state = 'WARNING' THEN 1
-                                WHEN status = 'NEW' AND unread THEN 2
-                                ELSE 3 END AS sort_bucket,
+                           CASE WHEN workflow_status = 'RESOLVED' THEN 4
+                                WHEN workflow_status = 'WAITING_ON_CUSTOMER' THEN 3
+                                WHEN sla_state = 'BREACHED' THEN 0
+                                WHEN sla_state = 'WARNING' THEN 1
+                                ELSE 2 END AS sort_bucket,
                            COALESCE(sla_due_at, 'infinity'::timestamptz) AS sort_due
                     FROM views
                     WHERE CASE ?::varchar
@@ -195,7 +196,9 @@ class CaseListService {
                 ORDER BY r.sort_bucket, r.sort_due, r.last_activity_at DESC, r.id DESC
                 LIMIT ?
                 )
-                SELECT page.*, totals.* FROM totals LEFT JOIN page ON TRUE
+                SELECT page.*, totals.*, s.response_schedule::text, statement_timestamp() AS response_observed_at
+                FROM totals LEFT JOIN page ON TRUE
+                LEFT JOIN case_sla s ON s.case_id = page.id
                 ORDER BY page.sort_bucket, page.sort_due, page.last_activity_at DESC, page.id DESC
                 """, (rs, ignored) -> new PageRow(
                         rs.getObject("id") == null ? null : item(rs),
@@ -267,7 +270,7 @@ class CaseListService {
         return count != null && count == 1;
     }
 
-    private static CaseListItem item(ResultSet rs) throws SQLException {
+    private CaseListItem item(ResultSet rs) throws SQLException {
         return new CaseListItem(
                 rs.getObject("id", UUID.class), rs.getString("reference"), CaseStatus.valueOf(rs.getString("status")),
                 CaseWorkflowStatus.valueOf(rs.getString("workflow_status")),
@@ -281,7 +284,7 @@ class CaseListService {
                 rs.getString("last_message_kind"), rs.getString("last_message_file"),
                 rs.getBoolean("unread"), instant(rs, "snoozed_until"), rs.getString("sla_state"),
                 instant(rs, "sla_due_at"), rs.getInt("ignore_score"), instant(rs, "waiting_until"),
-                instant(rs, "created_at"), instant(rs, "updated_at"), instant(rs, "last_activity_at"));
+                instant(rs, "created_at"), instant(rs, "updated_at"), instant(rs, "last_activity_at"), CaseResponseSla.read(rs, json));
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {
@@ -311,5 +314,5 @@ class CaseListService {
             Instant lastMessageAt, String lastMessageAuthor, String lastMessageKind, String lastMessageFile,
             boolean unreadForCurrentUser,
             Instant snoozedUntil, String slaState, Instant slaDueAt, int ignoreScore,
-            Instant waitingUntil, Instant createdAt, Instant updatedAt, Instant lastActivityAt) {}
+            Instant waitingUntil, Instant createdAt, Instant updatedAt, Instant lastActivityAt, CaseResponseSla responseSla) {}
 }

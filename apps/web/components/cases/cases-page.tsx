@@ -69,6 +69,7 @@ type CasePresentation = {
   status: string
   statusTone: "red" | "blue" | "purple" | "green" | "gray"
   sla: string
+  slaTitle?: string
   slaTone: "red" | "amber" | "green" | "gray"
   unread: boolean
   breached: boolean
@@ -89,6 +90,11 @@ function toPresentation(record: InboxCase, t: ReturnType<typeof useT>): CasePres
   const paused = record.sla.state === "paused"
   const slaTone = terminal || paused || record.sla.state === "unknown" ? "gray" : record.sla.state === "breached" ? "red" : record.sla.state === "at_risk" ? "amber" : "green"
   const dueAt = record.sla.dueAt
+  const remaining = record.sla.remainingBusinessSeconds ?? (dueAt ? (Date.parse(dueAt) - Date.now()) / 1000 : 0)
+  const overdue = record.sla.state === "breached"
+  const clock = record.sla.kind ?? "SLA"
+  const countdown = new Intl.NumberFormat(locale(), { style: "unit", unit: "minute", unitDisplay: "short" })
+    .format(Math.ceil(Math.max(0, overdue ? -remaining : remaining) / 60))
   const company = record.customer.id === "unassigned" ? record.sourceChannel : record.customer.name
   const bodyPreview = record.lastMessagePreview.trim()
   const preview = bodyPreview
@@ -108,7 +114,10 @@ function toPresentation(record: InboxCase, t: ReturnType<typeof useT>): CasePres
     source: record.sourceChannel,
     status: t(record.workflowStatus ? inboxWorkflowStatusLabels[record.workflowStatus] : inboxStatusLabels[record.status]),
     statusTone,
-    sla: paused && !terminal ? `SLA · ${t("Wstrzymane")}` : dueAt && !terminal ? `SLA ${timeLabel(dueAt)}` : t("SLA —"),
+    sla: paused && !terminal ? `SLA · ${t("Wstrzymane")}` : dueAt && !terminal
+      ? `${clock} · ${overdue ? t("Po terminie o {{duration}}", { duration: countdown }) : countdown}`
+      : t("SLA —"),
+    slaTitle: dueAt && !terminal ? timeLabel(dueAt) : undefined,
     slaTone,
     unread: record.unreadForCurrentUser,
     breached: slaTone === "red",
@@ -495,6 +504,7 @@ function CaseListItem({
     <button
       type="button"
       aria-pressed={selected}
+      data-case-id={item.id}
       onClick={(event) => onSelect(event.currentTarget)}
       className={cn(
         "group relative mb-[6px] flex w-full overflow-hidden rounded-[9px] border px-3 py-2.5 text-left transition-colors",
@@ -527,7 +537,7 @@ function CaseListItem({
             {!item.unassigned && <Avatar initials={initials(item.owner)} size="xs" />}
             <span data-case-owner className={cn("truncate text-[11px] text-[#cbd3df]", item.unassigned && "rounded bg-white/[0.06] px-1.5 py-0.5")}>{item.owner}</span>
           </span>
-          <SlaBadge tone={item.slaTone}>{item.sla}</SlaBadge>
+          <SlaBadge tone={item.slaTone} title={item.slaTitle}>{item.sla}</SlaBadge>
         </span>
       </span>
     </button>
@@ -545,14 +555,14 @@ function StatusBadge({ tone, children }: { tone: CasePresentation["statusTone"];
   return <span className={cn("rounded-[6px] px-2.5 py-[5px] text-[11px] font-medium leading-none", colors[tone])}>{children}</span>
 }
 
-function SlaBadge({ tone, children }: { tone: CasePresentation["slaTone"]; children: React.ReactNode }) {
+function SlaBadge({ tone, children, title }: { tone: CasePresentation["slaTone"]; children: React.ReactNode; title?: string }) {
   const colors = {
     red: "bg-red-500/[0.10] text-red-400",
     amber: "bg-amber-500/[0.10] text-amber-400",
     green: "bg-emerald-500/[0.09] text-emerald-400",
     gray: "bg-slate-500/10 text-slate-300",
   }
-  return <span className={cn("shrink-0 rounded-[6px] px-2 py-[5px] text-[11px] font-medium leading-none", colors[tone])}>{children}</span>
+  return <span title={title} className={cn("shrink-0 rounded-[6px] px-2 py-[5px] text-[11px] font-medium leading-none", colors[tone])}>{children}</span>
 }
 
 function ConversationPanel({
@@ -874,8 +884,8 @@ function CaseDetails({ item, record, activity, items }: {
         </div>
         <div>
           <dt className="sr-only">SLA</dt>
-          <dd><SlaBadge tone={item.slaTone}>{item.sla}</SlaBadge>
-            {item.terminal && record?.sla.state === "breached" && <p className="mt-2 text-xs text-[#cbd3df]">{t("Historyczne przekroczenie SLA")}</p>}
+          <dd><SlaBadge tone={item.slaTone} title={item.slaTitle}>{item.sla}</SlaBadge>
+            {record && (record.sla.previouslyBreached || (item.terminal && record.sla.state === "breached")) && <p className="mt-2 text-xs text-[#cbd3df]">{t("Historyczne przekroczenie SLA")}</p>}
           </dd>
         </div>
         {record?.closureReason === "IGNORED" && <div>

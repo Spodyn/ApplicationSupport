@@ -49,7 +49,7 @@ class CustomerReplyWaitingService {
     boolean customerReplied(
             UUID caseId,
             UUID messageId,
-            Instant providerOccurredAt,
+            Instant acceptedAt,
             String correlationId) {
         Resumed resumed = jdbc.query("""
                 UPDATE cases
@@ -102,7 +102,7 @@ class CustomerReplyWaitingService {
             return true;
         }
 
-        sla.resumeAfterWaiting(caseId, providerOccurredAt);
+        sla.resumeAfterWaiting(caseId, acceptedAt);
         audit.append(
                 AuditActorType.PROVIDER,
                 null,

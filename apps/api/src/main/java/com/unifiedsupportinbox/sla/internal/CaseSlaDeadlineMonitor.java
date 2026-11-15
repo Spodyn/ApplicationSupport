@@ -54,7 +54,8 @@ class CaseSlaDeadlineMonitor {
                   AND c.status NOT IN ('RESOLVED', 'IGNORED', 'WAITING_FOR_CUSTOMER')
                   AND s.paused_at IS NULL AND s.state = 'ON_TRACK'
                   AND (
-                    (s.first_response_completed_at IS NULL AND now() >= s.first_response_due_at - (os.sla_warning_before_minutes * INTERVAL '1 minute'))
+                    (s.first_response_completed_at IS NULL AND now() >= COALESCE(s.first_response_warning_at,
+                         s.first_response_due_at - (os.sla_warning_before_minutes * INTERVAL '1 minute')))
                     OR (c.status IN ('NEW', 'PARTIALLY_IGNORED') AND now() >= s.unclaimed_warning_at)
                     OR (c.status = 'VERIFICATION' AND s.in_progress_warning_at IS NOT NULL AND now() >= s.in_progress_warning_at)
                   )

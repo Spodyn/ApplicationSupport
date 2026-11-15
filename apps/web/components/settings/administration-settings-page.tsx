@@ -206,11 +206,12 @@ function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActio
   const [form, setForm] = useState(data)
   const example = calculateSlaExample(form)
 
-  const numberFields: { key: keyof Pick<SlaSettings, "firstResponseMinutes" | "unclaimedReminderMinutes" | "inProgressReminderMinutes" | "warningBeforeDeadlineMinutes" | "repeatedBreachMinutes">; label: string; hint: string }[] = [
-    { key: "firstResponseMinutes", label: t("SLA pierwszej odpowiedzi"), hint: t("Czas od otrzymania do pierwszej odpowiedzi.") },
+  const numberFields: { key: keyof Pick<SlaSettings, "firstResponseMinutes" | "nextResponseMinutes" | "unclaimedReminderMinutes" | "inProgressReminderMinutes" | "warningBeforeDeadlineMinutes" | "repeatedBreachMinutes">; label: string; hint: string }[] = [
+    { key: "firstResponseMinutes", label: t("SLA pierwszej odpowiedzi"), hint: t("Od czasu wiadomości u dostawcy do potwierdzonej odpowiedzi.") },
+    { key: "nextResponseMinutes", label: t("SLA kolejnej odpowiedzi"), hint: t("Od pierwszej nowej wiadomości klienta do potwierdzonej odpowiedzi.") },
     { key: "unclaimedReminderMinutes", label: t("Przypomnienie o nieprzejętym case’ie"), hint: t("Pierwszy alert, gdy case nadal nie ma właściciela.") },
     { key: "inProgressReminderMinutes", label: t("Przypomnienie w trakcie"), hint: t("Alert o zbyt długiej pracy bez aktualizacji.") },
-    { key: "warningBeforeDeadlineMinutes", label: t("Ostrzeżenie przed terminem"), hint: t("Kiedy case otrzymuje stan ostrzegawczy.") },
+    { key: "warningBeforeDeadlineMinutes", label: t("Próg ostrzeżenia dla starszych spraw"), hint: t("Nowe sprawy mają próg przy 25% pozostałego czasu.") },
     { key: "repeatedBreachMinutes", label: t("Interwał ponawiania przekroczenia"), hint: t("Jak często ponawiać alert po przekroczeniu.") },
   ]
 
@@ -792,7 +793,7 @@ function calculateSlaExample(settings: SlaSettings) {
   const add = (minutes: number) => settings.businessHoursOnly ? addBusinessMinutes(start, minutes) : new Date(start.getTime() + minutes * 60_000)
   const format = (date: Date) => new Intl.DateTimeFormat(locale(), { weekday: "short", hour: "2-digit", minute: "2-digit" }).format(date)
   return {
-    warning: format(add(Math.max(0, settings.firstResponseMinutes - settings.warningBeforeDeadlineMinutes))),
+    warning: format(add(settings.firstResponseMinutes * 0.75)),
     deadline: format(add(settings.firstResponseMinutes)),
   }
 }

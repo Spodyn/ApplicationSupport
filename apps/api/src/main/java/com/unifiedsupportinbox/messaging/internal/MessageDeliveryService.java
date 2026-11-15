@@ -10,7 +10,7 @@ import com.unifiedsupportinbox.messaging.MessageDeliveryStatus;
 import com.unifiedsupportinbox.messaging.internal.MessageDeliveryRepository.DeliveryAttemptRecord;
 import com.unifiedsupportinbox.messaging.internal.MessageDeliveryRepository.DeliveryMessageRecord;
 import com.unifiedsupportinbox.messaging.internal.MessageDeliveryRepository.DueDeliveryRecord;
-import com.unifiedsupportinbox.sla.CaseSlaResponseRecorder;
+import com.unifiedsupportinbox.sla.CaseResponseCycles;
 import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import java.time.Duration;
 import java.time.Instant;
@@ -38,7 +38,7 @@ class MessageDeliveryService {
     private final ObjectMapper json;
     private final ApplicationEventPublisher events;
     private final WaitingDeliveryFinalizer waitingFinalizer;
-    private final CaseSlaResponseRecorder slaResponses;
+    private final CaseResponseCycles slaResponses;
     private final CaseSlaWaitingRecorder slaWaiting;
 
     MessageDeliveryService(
@@ -49,7 +49,7 @@ class MessageDeliveryService {
             ObjectMapper json,
             ApplicationEventPublisher events,
             WaitingDeliveryFinalizer waitingFinalizer,
-            CaseSlaResponseRecorder slaResponses, CaseSlaWaitingRecorder slaWaiting) {
+            CaseResponseCycles slaResponses, CaseSlaWaitingRecorder slaWaiting) {
         this.repository = repository;
         this.properties = properties;
         this.outbox = outbox;
@@ -101,15 +101,17 @@ class MessageDeliveryService {
         }
         DeliveryMessageRecord current = lockedClaim(claim);
         String normalizedRef = normalizeOptional(providerMessageRef, 512);
-        if (!repository.finishAttemptSuccess(current.messageId(), claim.attempt().attemptNo(), normalizedRef)
+        Instant sentAt = slaResponses.lockForDelivery(current.caseId());
+        if (!repository.finishAttemptSuccess(current.messageId(), claim.attempt().attemptNo(), normalizedRef, sentAt)
                 || !repository.markSuccess(current.messageId(), status, normalizedRef)) {
             throw new IllegalStateException("Message delivery claim was lost before success checkpoint: " + current.messageId());
         }
-        Instant sentAt = Instant.now();
         boolean enteredWaiting = waitingFinalizer.finalizeWaiting(current, sentAt);
         // System deliveries (including OOO) are never the first human response.
         if (current.authorUserId() != null) {
-            slaResponses.recordProviderAcceptedResponse(current.caseId(), sentAt);
+            slaResponses.humanResponse(current.caseId(), current.messageId(), sentAt);
+        } else {
+            slaResponses.systemResponse(current.caseId());
         }
         if (enteredWaiting) slaWaiting.pauseForWaiting(current.caseId(), sentAt);
         publish(current, status, null, null, null);

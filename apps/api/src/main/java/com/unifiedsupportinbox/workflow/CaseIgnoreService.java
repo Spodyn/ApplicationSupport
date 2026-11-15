@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.workflow;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.sla.CaseResponseCycles;
 import com.unifiedsupportinbox.IdempotencyResponse;
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.IdempotentCommandExecutor;
@@ -25,6 +26,7 @@ import tools.jackson.databind.node.ObjectNode;
 class CaseIgnoreService {
 
     private final JdbcTemplate jdbc;
+    private final CaseResponseCycles responseCycles;
     private final CaseSnoozeWakeService snoozes;
     private final IdempotentCommandExecutor idempotency;
     private final AuditEventStore audit;
@@ -32,13 +34,14 @@ class CaseIgnoreService {
     private final ObjectMapper json;
 
     CaseIgnoreService(
-            JdbcTemplate jdbc,
+            JdbcTemplate jdbc, CaseResponseCycles responseCycles,
             CaseSnoozeWakeService snoozes,
             IdempotentCommandExecutor idempotency,
             AuditEventStore audit,
             OutboxEventStore outbox,
             ObjectMapper json) {
         this.jdbc = jdbc;
+        this.responseCycles = responseCycles;
         this.snoozes = snoozes;
         this.idempotency = idempotency;
         this.audit = audit;
@@ -108,7 +111,10 @@ class CaseIgnoreService {
                 RETURNING version
                 """, Long.class, status, status, caseId, before.version());
         if (version == null) throw ApiProblemException.conflict("The Case changed before the vote was recorded.");
-        if ("IGNORED".equals(status)) snoozes.wake(caseId);
+        if ("IGNORED".equals(status)) {
+            responseCycles.close(caseId);
+            snoozes.wake(caseId);
+        }
 
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("action", "IGNORE");

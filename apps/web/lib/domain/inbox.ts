@@ -93,6 +93,9 @@ export interface InboxCase {
   sla: {
     state: SlaState | "unknown"
     dueAt?: string
+    kind?: "FRT" | "NRT"
+    previouslyBreached?: boolean
+    remainingBusinessSeconds?: number
   }
   ignoreVotes: {
     current: number

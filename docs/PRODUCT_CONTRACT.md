@@ -170,7 +170,9 @@ Read/unread:
 
 Defaults, in business time:
 
-- First human response: target/breach 15 minutes, warning at 12 minutes.
+- First human response (FRT): 15 business minutes by default.
+- Next human response (NRT): 30 business minutes by default.
+- Each response clock warns when 25% of its business target remains (11m 15s into the default FRT and 22m 30s into the default NRT).
 - Unclaimed: warning 5 minutes, breach 15 minutes.
 - In-progress: warning 30 minutes, breach 60 minutes.
 - `pause_waiting=true` by default.
@@ -179,13 +181,15 @@ Rules:
 
 - One active SLA policy per deployment, configured by `ADMIN + manage_sla`.
 - A Case snapshots the SLA policy and business-hours schedule/timezone version at creation. Later configuration changes apply prospectively and do not rewrite historic Case deadlines.
-- First-response clock starts when USI durably accepts the first customer message, not from an earlier provider timestamp.
-- First response completes only when a human SUPPORT/Ask message becomes provider-success `SENT`. OOO/SYSTEM does not complete it.
+- FRT starts once at the provider timestamp of the first accepted customer message. Both response clocks end on provider-confirmed human public Reply or Ask. Pending or failed delivery, OOO and internal notes leave the response clock open.
+- A new NRT starts with the first durable new customer message after a confirmed human reply, using USI's serialized acceptance order. Additional messages in the series, retries and edits preserve that deadline. A confirmed reply ends the cycle. Resolution or Ignore ends any active cycle and preserves its result.
+- The queue, SLA filter, count and Case panel use active FRT or NRT. Priority is breached, warning, other active by deadline, waiting and then terminal. A pending response is breached at the deadline; a response confirmed by that instant meets it.
+- TTR reports elapsed time from Case creation to resolution and business working time minus accepted waiting pauses and closed periods between resolution and reopening. Historical records without a verifiable calendar preserve wall time and return an unknown working time.
 - Unclaimed accumulates business time while active and unowned in `NEW`/`PARTIALLY_IGNORED`; Claim pauses it; later unassign/return from waiting resumes the accumulated time.
 - In-progress accumulates business time in `VERIFICATION`; reassign does not reset it; unassign/WAITING pauses; later Claim resumes accumulated time.
-- Warning/breach is monotonic per Case/SLA type and is not emitted twice after pause/resume/reassign.
+- Completed response cycles and historical breaches are preserved; a new NRT starts with a new deadline. Legacy aging metrics keep their existing reporting and notifications.
 - Terminal states end active SLA timers.
-- Overall Case SLA severity is the maximum of `BREACH > WARNING > OK`.
+- Waiting has a paused presentation and terminal Cases have neutral presentation. Prior breaches remain visible in historical details and reports.
 
 ## 13. Business hours and Out of Office
 

@@ -65,7 +65,8 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   expect(customer.status()).toBe(201)
   const customerId = (await customer.json()).id
   expect((await command(page, `/api/v1/admin/channels/${fixture.channelId}`, {customerId, groupingStrategy: 'SLACK_ROOT_THREAD'}, 'PATCH')).status()).toBe(200)
-  const first = await inbound(page, `Synthetic request ${marker}`)
+  const sourceSentAt = ((Date.now() - 120_000) / 1000).toFixed(6)
+  const first = await inbound(page, `Synthetic request ${marker}`, undefined, {ts: sourceSentAt})
   const option = page.getByRole('button', {name: new RegExp(`Regression ${marker}`)})
   await expect(option).toContainText(`Synthetic request ${marker}`)
   const list = await (await page.request.get('/api/v1/cases')).json()
@@ -96,10 +97,37 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   expect((await page.request.post('/api/v1/providers/slack/events', {data: first.payload, headers: {
     'Content-Type': 'application/json', 'X-Slack-Request-Timestamp': first.timestamp, 'X-Slack-Signature': first.signature,
   }})).status()).toBe(200)
-  await inbound(page, `Synthetic follow-up ${marker}`, first.ts)
+  const followup = await inbound(page, `Synthetic follow-up ${marker}`, first.ts)
   await expect(conversation.getByText(`Synthetic follow-up ${marker}`, {exact: true})).toBeVisible()
-  expect(await (await page.request.get(casePath)).json())
-    .toMatchObject({workflowStatus: 'OPEN', owner: {id: profile.id}, waitingUntil: null})
+  const readSla = async () => (await (await page.request.get(casePath)).json())
+  const opened = await readSla()
+  expect(opened).toMatchObject({workflowStatus: 'OPEN', owner: {id: profile.id}, waitingUntil: null,
+    responseSla: {kind: 'NRT', lastSender: 'CUSTOMER'},
+    sla: {firstResponseCompletedAt: expect.any(String)},
+    responseCycles: [expect.objectContaining({endedAt: null})]})
+  expect(Date.parse(opened.sla.firstResponseStartedAt)).toBe(Math.floor(Number(sourceSentAt) * 1000))
+  const round = opened.responseCycles[0]
+  const failure = await command(page, casePath + '/messages', {body: 'test-only-archived'})
+  expect(failure.status()).toBe(202)
+  const failureId = (await failure.json()).messageId
+  await expect.poll(async () => (await (await page.request.get(casePath + '/messages')).json()).items
+    .find((item: {id: string}) => item.id === failureId)?.deliveryStatus).toBe('FAILED')
+  expect((await readSla()).responseCycles).toEqual([round])
+
+  expect((await page.request.post('/api/v1/providers/slack/events', {data: followup.payload, headers: {
+    'Content-Type': 'application/json', 'X-Slack-Request-Timestamp': followup.timestamp, 'X-Slack-Signature': followup.signature,
+  }})).status()).toBe(200)
+  await inbound(page, 'Second message in the same NRT series', first.ts)
+  await expect(conversation.getByText('Second message in the same NRT series', {exact: true})).toBeVisible()
+  expect((await readSla()).responseCycles).toEqual([round])
+
+  expect((await command(page, casePath + '/messages', {body: 'Successful NRT reply'})).status()).toBe(202)
+  await expect.poll(async () => (await readSla()).responseSla.state).toBe('PAUSED')
+  expect((await readSla()).responseCycles).toEqual([expect.objectContaining({id: round.id, outcome: 'RESPONDED'})])
+  await inbound(page, 'First message in the next NRT series', first.ts)
+  await expect.poll(async () => (await readSla()).responseCycles.length).toBe(2)
+  expect((await readSla()).responseCycles[0].endedAt).toBeNull()
+  await expect(option).toContainText('NRT')
   expect(frames.some(frame => frame.includes('MESSAGE') && frame.includes(caseId))).toBe(true)
   await page.reload()
   await expect(page.getByText(`Synthetic answer ${marker}`, {exact: true})).toBeVisible()
@@ -413,7 +441,7 @@ test('internal Case notes stay in USI with independent drafts, realtime and publ
     expect(pageTwo.items).toEqual([expect.objectContaining({id: latestBefore, kind: 'CUSTOMER'})])
     expect((await (await page.request.get(path + '/messages')).json()).items.map((item: {id: string}) => item.id)).toEqual([latestBefore])
     expect((await list())[0].lastMessageId).toBe(latestBefore)
-    expect(await detail()).toMatchObject({status: before.status, version: before.version, waitingUntil: before.waitingUntil, sla: before.sla})
+    expect(await detail()).toMatchObject({status: before.status, version: before.version, waitingUntil: before.waitingUntil, sla: before.sla, responseCycles: before.responseCycles})
     expect(await observed()).toHaveLength(0)
 
     await publicMode.click()
@@ -513,6 +541,7 @@ test('responsive inbox shares quick-view predicates and preserves the actual rep
   await expect(reply.locator('[data-message-author]')).toHaveText(admin.displayName)
 
   expect(await (await page.request.post('/__test/breach', {data: {caseId}})).json()).toEqual({changed: 1})
+  await expect(count('sla')).toHaveText('1', {timeout: 20_000})
   await page.reload()
   await search.fill(admin.externalChannelId)
   await expect(count('all')).toHaveText('1')
@@ -724,7 +753,7 @@ test('Snooze history is personal and timezone-aware while SLA follows workflow',
     expect((await command(a, `${path}/claim`, undefined)).status()).toBe(200)
     expect(await (await a.request.post('/__test/breach', {data: {caseId: id}})).json()).toEqual({changed: 1})
     await a.reload()
-    const tile = a.getByRole('button').filter({hasText: 'Customer response to Ask'})
+    const tile = a.locator('button[data-case-id="' + id + '"]')
     await expect(tile).toHaveClass(/border-red-500/)
     await a.getByRole('button', {name: 'SLA', exact: true}).click()
     await expect(tile).toBeVisible()

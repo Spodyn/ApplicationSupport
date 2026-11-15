@@ -331,7 +331,8 @@ function AnalyticsDashboard({ data, preset }: { data: AnalyticsResult; preset: D
     { metricKey: "warningSla", label: t("Ostrzeżenia SLA"), value: formatNumber(data.kpis.warningSla), icon: AlertTriangle, tone: "warning", definition: t(metricDefinitions.breached), lowerIsBetter: true },
     { metricKey: "averageClaimMinutes", label: t("Śr. czas przejęcia"), value: formatMaybeDuration(data.kpis.averageClaimMinutes), icon: Clock3, tone: "warning", definition: t(metricDefinitions.claim), lowerIsBetter: true },
     { metricKey: "averageFirstResponseMinutes", label: t("Śr. pierwsza odpowiedź"), value: formatMaybeDuration(data.kpis.averageFirstResponseMinutes), icon: TimerReset, tone: "teams", definition: t(metricDefinitions.response), lowerIsBetter: true },
-    { metricKey: "averageResolutionMinutes", label: t("Śr. czas rozwiązania"), value: formatMaybeDuration(data.kpis.averageResolutionMinutes), icon: CheckCircle2, tone: "neutral", definition: t(metricDefinitions.resolution), lowerIsBetter: true },
+    { metricKey: "averageResolutionMinutes", label: t("Śr. całkowity czas rozwiązania"), value: formatMaybeDuration(data.kpis.averageResolutionMinutes), icon: CheckCircle2, tone: "neutral", definition: t(metricDefinitions.resolution), lowerIsBetter: true },
+    { metricKey: "averageWorkingResolutionMinutes", label: t("Śr. czas pracy do rozwiązania"), value: formatMaybeDuration(data.kpis.averageWorkingResolutionMinutes), icon: Clock3, tone: "neutral", definition: t("Czas w godzinach pracy, z wyłączeniem odnotowanych okresów oczekiwania."), lowerIsBetter: true },
   ]
 
   return (

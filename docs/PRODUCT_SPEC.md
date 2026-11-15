@@ -140,7 +140,7 @@ Three core measurements use business time:
 
 `pause_waiting=true` by default. A Case snapshots SLA policy plus business-hours schedule/timezone version at creation, so later configuration changes do not retroactively move its deadlines.
 
-First response starts at durable USI customer intake and completes on first human SUPPORT/Ask `SENT`. Unclaimed accumulates in NEW/PARTIALLY_IGNORED; in-progress accumulates in VERIFICATION. Pause/resume preserves accumulated business time. Reassign never resets in-progress time. Warning/breach is monotonic per SLA type; terminal states stop timers.
+FRT starts once at the provider timestamp of the first accepted customer message. Provider-confirmed human Reply or Ask ends the applicable response clock. The first durable customer message after a confirmed response starts NRT. The Case snapshots the policy and business calendar, with default targets 15/30 minutes and a warning at 25% remaining. Resolution ends active cycles, and reopening preserves their history and restarts unclaimed work. Reports retain unclaimed and in-progress data and provide elapsed and working TTR where the calendar is known.
 
 ## 17. Business hours and OOO
 

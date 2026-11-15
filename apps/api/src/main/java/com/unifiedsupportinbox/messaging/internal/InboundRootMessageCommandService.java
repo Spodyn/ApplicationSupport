@@ -5,6 +5,7 @@ import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.messaging.InboundMessageCommandHandler;
 import com.unifiedsupportinbox.readstate.CustomerMessageUnreadService;
 import com.unifiedsupportinbox.ooo.OutOfOfficeResponder;
+import com.unifiedsupportinbox.sla.CaseResponseCycles;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -31,6 +32,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
     private final CustomerReplyWaitingService waitingReplies;
     private final JdbcTemplate jdbc;
     private final MessageCreatedOutboxPublisher messageCreated;
+    private final CaseResponseCycles responseCycles;
 
     InboundRootMessageCommandService(
             CaseCreationService cases,
@@ -39,7 +41,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
             OutOfOfficeResponder outOfOffice,
             CustomerReplyWaitingService waitingReplies,
             JdbcTemplate jdbc,
-            MessageCreatedOutboxPublisher messageCreated) {
+            MessageCreatedOutboxPublisher messageCreated, CaseResponseCycles responseCycles) {
         this.cases = cases;
         this.mutations = mutations;
         this.unread = unread;
@@ -47,6 +49,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         this.waitingReplies = waitingReplies;
         this.jdbc = jdbc;
         this.messageCreated = messageCreated;
+        this.responseCycles = responseCycles;
     }
 
     @Override
@@ -68,9 +71,9 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                 command.provider(),
                 command.externalChannelId(),
                 command.externalThreadKey(),
-                command.correlationId()));
+                command.correlationId(), command.providerOccurredAt()));
 
-        List<UUID> insertedMessageIds = jdbc.query("""
+        List<PersistedMessage> insertedMessages = jdbc.query("""
                 INSERT INTO messages (
                     case_id,
                     external_message_id,
@@ -91,7 +94,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                 ON CONFLICT (case_id, external_message_id)
                     WHERE external_message_id IS NOT NULL
                 DO NOTHING
-                RETURNING id
+                RETURNING id, created_at
                 """,
                 preparedStatement -> {
                     preparedStatement.setObject(1, caseResult.caseId());
@@ -103,9 +106,10 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                     preparedStatement.setObject(7, utc(command.providerOccurredAt()));
                     preparedStatement.setString(8, command.correlationId());
                 },
-                (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class));
+                (resultSet, rowNumber) -> new PersistedMessage(resultSet.getObject("id", UUID.class),
+                        resultSet.getObject("created_at", OffsetDateTime.class).toInstant()));
 
-        if (insertedMessageIds.isEmpty()) {
+        if (insertedMessages.isEmpty()) {
             UUID existingMessageId = existingMessageId(caseResult.caseId(), command.externalMessageId());
             if (existingMessageId == null) {
                 throw new IllegalStateException("Inbound Message insert conflicted but no persisted Message exists.");
@@ -113,16 +117,18 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
             return new Result(existingMessageId, caseResult.caseId(), false);
         }
 
-        if (insertedMessageIds.size() != 1) {
+        if (insertedMessages.size() != 1) {
             throw new IllegalStateException("Inbound Message insert returned an unexpected number of rows.");
         }
 
-        UUID messageId = insertedMessageIds.getFirst();
+        PersistedMessage message = insertedMessages.getFirst();
+        UUID messageId = message.id();
         waitingReplies.customerReplied(
                 caseResult.caseId(),
                 messageId,
-                command.providerOccurredAt(),
+                message.receivedAt(),
                 command.correlationId());
+        responseCycles.customerMessage(caseResult.caseId(), messageId, message.receivedAt());
         messageCreated.publish(messageId, caseResult.caseId(), command.correlationId());
         unread.customerMessageCreated(caseResult.caseId(), messageId, command.correlationId());
         outOfOffice.customerMessageReceived(caseResult.caseId(), null, command.correlationId());
@@ -192,6 +198,8 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         }
         return normalized;
     }
+
+    private record PersistedMessage(UUID id, Instant receivedAt) {}
 
     private static OffsetDateTime utc(Instant instant) {
         return OffsetDateTime.ofInstant(instant, ZoneOffset.UTC);

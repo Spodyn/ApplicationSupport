@@ -819,6 +819,15 @@
     "Authentication required": "Wymagane logowanie",
     "Nie wybrano case’u.": "Nie wybrano case’u.",
     "Zbyt wiele spraw. Zawęź filtry do 1000 spraw.": "Zbyt wiele spraw. Zawęź filtry do 1000 spraw.",
-    "Nie udało się wczytać zaznaczenia.": "Nie udało się wczytać zaznaczenia."
+    "Nie udało się wczytać zaznaczenia.": "Nie udało się wczytać zaznaczenia.",
+    "Po terminie o {{duration}}": "Po terminie o {{duration}}",
+    "Czas w godzinach pracy, z wyłączeniem odnotowanych okresów oczekiwania.": "Czas w godzinach pracy, z wyłączeniem odnotowanych okresów oczekiwania.",
+    "Śr. całkowity czas rozwiązania": "Śr. całkowity czas rozwiązania",
+    "Śr. czas pracy do rozwiązania": "Śr. czas pracy do rozwiązania",
+    "Od czasu wiadomości u dostawcy do potwierdzonej odpowiedzi.": "Od czasu wiadomości u dostawcy do potwierdzonej odpowiedzi.",
+    "SLA kolejnej odpowiedzi": "SLA kolejnej odpowiedzi",
+    "Od pierwszej nowej wiadomości klienta do potwierdzonej odpowiedzi.": "Od pierwszej nowej wiadomości klienta do potwierdzonej odpowiedzi.",
+    "Próg ostrzeżenia dla starszych spraw": "Próg ostrzeżenia dla starszych spraw",
+    "Nowe sprawy mają próg przy 25% pozostałego czasu.": "Nowe sprawy mają próg przy 25% pozostałego czasu."
   }
 }

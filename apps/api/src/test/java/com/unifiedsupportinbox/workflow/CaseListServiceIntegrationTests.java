@@ -6,6 +6,13 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.UsiApiApplication;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
+import com.unifiedsupportinbox.sla.CaseResponseCycles;
+import com.unifiedsupportinbox.sla.CaseSlaInitializer;
+import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
+import com.unifiedsupportinbox.sla.CaseSlaReopenRecorder;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 import java.net.CookieManager;
 import java.net.CookiePolicy;
@@ -214,6 +221,130 @@ class CaseListServiceIntegrationTests {
         var details = context.getBean(CaseDetailService.class);
         assertThat(details.detail(owned, agent).workflowStatus()).isEqualTo(CaseWorkflowStatus.OPEN);
         assertThat(details.detail(waiting, agent).workflowStatus()).isEqualTo(CaseWorkflowStatus.WAITING_ON_CUSTOMER);
+    }
+
+    @Test
+    void keepsFirstReplyAndTwoNextReplyCyclesOnTheOriginalBusinessSchedule() {
+        UUID agent = user(true);
+        UUID id = caseId("response-cycles-" + UUID.randomUUID());
+        var init = context.getBean(CaseSlaInitializer.class);
+        var cycles = context.getBean(CaseResponseCycles.class);
+        var waiting = context.getBean(CaseSlaWaitingRecorder.class);
+        var reopen = context.getBean(CaseSlaReopenRecorder.class);
+        var detail = context.getBean(CaseDetailService.class);
+        Instant friday = Instant.parse("2026-03-27T15:53:00Z");
+        Instant created = friday.plusSeconds(60);
+        Instant monday = Instant.parse("2026-03-30T07:00:00Z");
+        jdbc.update("UPDATE cases SET created_at = ? WHERE id = ?", utc(created), id);
+        String originalTimezone = jdbc.queryForObject("SELECT timezone_id FROM business_hours WHERE active", String.class);
+        try {
+            jdbc.update("UPDATE business_hours SET timezone_id = 'Europe/Warsaw' WHERE active");
+            init.initialize(id, created, friday);
+            init.initialize(id, created.plusSeconds(60), friday.plusSeconds(60));
+            assertThat(detail.detail(id, agent).sla().firstResponseStartedAt()).isEqualTo(friday);
+            assertThat(detail.detail(id, agent).sla().firstResponseDueAt()).isEqualTo(monday.plusSeconds(8 * 60));
+            assertThat(detail.detail(id, agent).responseSla().warningAt()).isEqualTo(monday.plusSeconds(4 * 60 + 15));
+            cycles.systemResponse(id);
+            assertThat(detail.detail(id, agent).sla().firstResponseCompletedAt()).isNull();
+
+            Instant firstDelivery = monday.plusSeconds(7 * 60);
+            cycles.humanResponse(id, UUID.randomUUID(), firstDelivery);
+            waiting.pauseForWaiting(id, firstDelivery);
+            Instant firstInbound = monday.plusSeconds(12 * 60);
+            waiting.resumeAfterWaiting(id, firstInbound);
+
+            // A later settings edit cannot change an existing Case's response targets.
+            jdbc.update("UPDATE business_hours SET timezone_id = 'UTC' WHERE active");
+            UUID opening = UUID.randomUUID();
+            cycles.customerMessage(id, opening, firstInbound);
+            cycles.customerMessage(id, opening, firstInbound.plusSeconds(120));
+            cycles.customerMessage(id, UUID.randomUUID(), firstInbound.plusSeconds(300));
+            var firstRound = detail.detail(id, agent).responseCycles().getFirst();
+            assertThat(firstRound.startedAt()).isEqualTo(firstInbound);
+            assertThat(firstRound.warningAt()).isEqualTo(firstInbound.plusSeconds(22 * 60 + 30));
+            assertThat(firstRound.dueAt()).isEqualTo(firstInbound.plusSeconds(30 * 60));
+
+            Instant secondDelivery = firstInbound.plusSeconds(31 * 60);
+            cycles.humanResponse(id, UUID.randomUUID(), secondDelivery);
+            cycles.customerMessage(id, UUID.randomUUID(), secondDelivery.plusSeconds(60));
+            var twoRounds = detail.detail(id, agent).responseCycles();
+            assertThat(twoRounds).hasSize(2);
+            assertThat(twoRounds.get(1).outcome()).isEqualTo("RESPONDED");
+            assertThat(twoRounds.get(1).breached()).isTrue();
+            assertThat(twoRounds.getFirst().endedAt()).isNull();
+
+            Instant resolved = monday.plusSeconds(52 * 60);
+            jdbc.update("UPDATE cases SET status = 'RESOLVED', resolved_at = ? WHERE id = ?", utc(resolved), id);
+            cycles.close(id);
+            cycles.close(id);
+            var closed = detail.detail(id, agent);
+            assertThat(closed.responseSla().state()).isEqualTo("NEUTRAL");
+            assertThat(closed.responseSla().historicallyBreached()).isTrue();
+            assertThat(closed.responseCycles().getFirst().outcome()).isEqualTo("RESOLVED");
+            assertThat(closed.resolutionWallSeconds()).isEqualTo(java.time.Duration.between(created, resolved).getSeconds());
+            assertThat(closed.resolutionWorkingSeconds()).isEqualTo(53 * 60L);
+
+            Instant reopened = resolved.plusSeconds(300);
+            jdbc.update("UPDATE cases SET status = 'NEW', resolved_at = NULL WHERE id = ?", id);
+            reopen.restartUnclaimed(id, reopened);
+            var restored = detail.detail(id, agent);
+            assertThat(restored.sla().firstResponseCompletedAt()).isEqualTo(firstDelivery);
+            assertThat(restored.sla().unclaimedStartedAt()).isEqualTo(reopened);
+            assertThat(restored.responseSla().historicallyBreached()).isTrue();
+            assertThat(restored.responseSla().dueAt()).isNull();
+        } finally {
+            jdbc.update("UPDATE business_hours SET timezone_id = ? WHERE active", originalTimezone);
+        }
+    }
+
+    @Test
+    void changesAttentionAtExactBusinessWarningAndDueInstantsAndSortsByActiveTarget() {
+        Instant due = Instant.parse("2026-03-30T08:00:00Z");
+        Instant warning = due.minusSeconds(225);
+        assertThat(responseState("OPEN", warning, due, warning.minusMillis(1))).isEqualTo("ON_TRACK");
+        assertThat(responseState("OPEN", warning, due, warning)).isEqualTo("WARNING");
+        assertThat(responseState("OPEN", warning, due, due)).isEqualTo("BREACHED");
+        assertThat(responseState("WAITING_ON_CUSTOMER", warning, due, due)).isEqualTo("PAUSED");
+        assertThat(responseState("RESOLVED", warning, due, due)).isEqualTo("NEUTRAL");
+
+        UUID agent = user(true);
+        String marker = "priority-" + UUID.randomUUID();
+        UUID late = rankedCase(marker + "-late", -10, -5);
+        UUID warned = rankedCase(marker + "-warned", -2, 5);
+        UUID healthyEarly = rankedCase(marker + "-healthy-early", 5, 10);
+        UUID healthyLate = rankedCase(marker + "-healthy-late", 10, 20);
+        UUID waiting = rankedCase(marker + "-waiting", -10, -5);
+        UUID resolved = rankedCase(marker + "-resolved", -10, -5);
+        jdbc.update("UPDATE cases SET status='WAITING_FOR_CUSTOMER', waiting_until=now()+interval '1 hour' WHERE id=?", waiting);
+        jdbc.update("UPDATE cases SET status='RESOLVED', resolved_at=now() WHERE id=?", resolved);
+        var filter = new CaseListFilter(false, false, false, false, null, null, null, null, null, null, marker);
+        var first = cases.list(agent, null, 2, CaseListView.ACTIVE, filter);
+        assertThat(first.items()).extracting(CaseListService.CaseListItem::id).containsExactly(late, warned);
+        assertThat(first.quickViewCounts().sla()).isEqualTo(2);
+        var second = cases.list(agent, first.nextCursor(), 2, CaseListView.ACTIVE, filter);
+        assertThat(second.items()).extracting(CaseListService.CaseListItem::id).containsExactly(healthyEarly, healthyLate);
+        var third = cases.list(agent, second.nextCursor(), 2, CaseListView.ACTIVE, filter);
+        assertThat(third.items()).extracting(CaseListService.CaseListItem::id).containsExactly(waiting, resolved);
+    }
+
+    private static UUID rankedCase(String marker, int warning, int deadline) {
+        UUID id = caseId(marker);
+        jdbc.update("""
+                INSERT INTO case_sla (case_id, policy_id, first_response_started_at, first_response_due_at,
+                    first_response_warning_at, unclaimed_started_at, unclaimed_warning_at, unclaimed_breach_at)
+                SELECT ?, id, now() - interval '1 hour', now() + ? * interval '1 minute',
+                    now() + ? * interval '1 minute', now(), now(), now() FROM sla_policies WHERE active
+                """, id, deadline, warning);
+        return id;
+    }
+
+    private static String responseState(String workflow, Instant warning, Instant due, Instant at) {
+        return jdbc.queryForObject("SELECT response_sla_state(?, ?, ?, ?)", String.class,
+                workflow, utc(warning), utc(due), utc(at));
+    }
+
+    private static OffsetDateTime utc(Instant at) {
+        return OffsetDateTime.ofInstant(at, ZoneOffset.UTC);
     }
 
     private static UUID user(boolean active) {

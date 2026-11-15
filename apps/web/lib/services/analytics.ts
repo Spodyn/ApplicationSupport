@@ -98,11 +98,12 @@ function calculateKpis(
     return value === undefined ? [] : [value]
   })
   const responseTimes = createdRecords.flatMap((record) => {
-    const value = minutesBetween(record.createdAt, record.firstResponseAt)
+    const value = minutesBetween(record.firstResponseStartedAt ?? record.createdAt, record.firstResponseAt)
     return value === undefined ? [] : [value]
   })
   const resolutionTimes = resolvedRecords.flatMap((record) => {
-    const value = minutesBetween(record.createdAt, record.resolvedAt)
+    const value = record.resolutionWallSeconds == null
+      ? minutesBetween(record.createdAt, record.resolvedAt) : record.resolutionWallSeconds / 60
     return value === undefined ? [] : [value]
   })
   const firstResponseMet = (record: AnalyticsRecord) => Boolean(
@@ -114,7 +115,9 @@ function calculateKpis(
     record.slaDeadlineAt
       && (record.firstResponseAt
         ? new Date(record.firstResponseAt).getTime() > new Date(record.slaDeadlineAt).getTime()
-        : Date.now() > new Date(record.slaDeadlineAt).getTime()),
+        : record.firstResponseStoppedAt
+          ? Date.parse(record.firstResponseStoppedAt) >= Date.parse(record.slaDeadlineAt)
+          : Date.now() >= Date.parse(record.slaDeadlineAt)),
   )
   const slaEligible = createdRecords.filter((record) => firstResponseMet(record) || firstResponseBreached(record))
 
@@ -132,6 +135,9 @@ function calculateKpis(
     averageClaimMinutes: average(claimTimes),
     averageFirstResponseMinutes: average(responseTimes),
     averageResolutionMinutes: average(resolutionTimes),
+    averageWorkingResolutionMinutes: average(resolvedRecords.flatMap((record) =>
+      record.resolutionWorkingSeconds == null ? [] : [record.resolutionWorkingSeconds / 60],
+    )),
     notApplicable: resolvedRecords.filter((record) => record.resolutionReason === "not_applicable").length,
     spam: resolvedRecords.filter((record) => record.resolutionReason === "spam").length,
   }
@@ -154,7 +160,7 @@ function calculateUserPerformance(
         return value === undefined ? [] : [value]
       })
       const responseTimes = items.flatMap((item) => {
-        const value = minutesBetween(item.createdAt, item.firstResponseAt)
+        const value = minutesBetween(item.firstResponseStartedAt ?? item.createdAt, item.firstResponseAt)
         return value === undefined ? [] : [value]
       })
       const resolutionTimes = items.flatMap((item) => {
@@ -205,7 +211,7 @@ function calculateClientPerformance(records: AnalyticsRecord[]): ClientPerforman
   return [...grouped.entries()]
     .map(([customerId, items]) => {
       const responseTimes = items.flatMap((item) => {
-        const value = minutesBetween(item.createdAt, item.firstResponseAt)
+        const value = minutesBetween(item.firstResponseStartedAt ?? item.createdAt, item.firstResponseAt)
         return value === undefined ? [] : [value]
       })
       const resolutionTimes = items.flatMap((item) => {
@@ -249,7 +255,7 @@ function calculateResponseTimeSeries(records: AnalyticsRecord[], dates: string[]
     const values = records
       .filter((record) => (record.createdDate ?? toDateKey(record.createdAt)) === date)
       .flatMap((record) => {
-        const value = minutesBetween(record.createdAt, record.firstResponseAt)
+        const value = minutesBetween(record.firstResponseStartedAt ?? record.createdAt, record.firstResponseAt)
         return value === undefined ? [] : [value]
       })
     return {

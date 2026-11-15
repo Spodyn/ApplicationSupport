@@ -227,16 +227,21 @@ decisions:
 
   - id: DEC-SLA-001
     area: sla
-    status: frozen
-    source: [E13]
+    status: owner_approved
+    source: [E13, OWNER_REQUEST_2026_11_15_RESPONSE_SLA_APPROVAL]
     decision:
-      first_response: {warning_business_minutes: 12, breach_business_minutes: 15, starts_at: durable_usi_customer_intake, completes_at: human_support_or_ask_SENT}
+      first_response: {default_business_minutes: 15, starts_at: first_customer_provider_timestamp, completes_at: human_support_or_ask_provider_confirmed}
+      next_response: {default_business_minutes: 30, starts_at: first_durable_new_customer_message_after_human_response, completes_at: human_support_or_ask_provider_confirmed}
+      response_warning_remaining_percent: 25
+      resolution_time: [wall_elapsed, business_work_excluding_wait_and_closed_intervals]
+      preserve_legacy_aging_metrics: true
+      inbox_priority: [BREACHED, WARNING, ACTIVE_BY_DEADLINE, WAITING_ON_CUSTOMER, RESOLVED]
       unclaimed: {warning_business_minutes: 5, breach_business_minutes: 15, accumulates_in: [NEW, PARTIALLY_IGNORED]}
       in_progress: {warning_business_minutes: 30, breach_business_minutes: 60, accumulates_in: [VERIFICATION]}
       pause_waiting_default: true
       snapshot_policy_schedule_timezone_on_case_creation: true
       config_changes_retroactive: false
-      warning_and_breach_monotonic: true
+      warning_and_breach_preserved_in_history: true
 
   - id: DEC-SCHEDULE-001
     area: business_hours
