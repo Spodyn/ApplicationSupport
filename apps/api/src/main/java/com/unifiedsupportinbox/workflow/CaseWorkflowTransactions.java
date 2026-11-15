@@ -4,6 +4,7 @@ import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.cases.CaseStatus;
+import com.unifiedsupportinbox.sla.CaseResponseCycles;
 import com.unifiedsupportinbox.workflow.CaseTransitionPolicy.Action;
 import com.unifiedsupportinbox.workflow.CaseTransitionPolicy.Actor;
 import com.unifiedsupportinbox.workflow.CaseTransitionPolicy.Decision;
@@ -34,11 +35,13 @@ public class CaseWorkflowTransactions {
     private final JdbcTemplate jdbc;
     private final CaseTransitionPolicy policy;
     private final AuditEventStore auditEvents;
+    private final CaseResponseCycles responseCycles;
 
-    public CaseWorkflowTransactions(JdbcTemplate jdbc, CaseTransitionPolicy policy, AuditEventStore auditEvents) {
+    public CaseWorkflowTransactions(JdbcTemplate jdbc, CaseTransitionPolicy policy, AuditEventStore auditEvents, CaseResponseCycles responseCycles) {
         this.jdbc = jdbc;
         this.policy = policy;
         this.auditEvents = auditEvents;
+        this.responseCycles = responseCycles;
     }
 
     public record Command(Actor actor, Action action, Input input) {}
@@ -82,6 +85,9 @@ public class CaseWorkflowTransactions {
                     after.status().name(), after.status().name(), caseId, before.version());
             if (changed != 1) throw ApiProblemException.conflict("The Case has changed. Refresh before retrying.");
             version++;
+            if (after.status() == CaseStatus.RESOLVED || after.status() == CaseStatus.IGNORED) {
+                responseCycles.close(caseId);
+            }
         }
         persistEffects.accept(decision);
         if (!before.state().equals(after) || !decision.effects().isEmpty()) {

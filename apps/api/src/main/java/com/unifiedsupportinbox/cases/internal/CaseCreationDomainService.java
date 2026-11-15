@@ -126,7 +126,8 @@ class CaseCreationDomainService implements CaseCreationService {
         }
 
         PersistedCase created = inserted.getFirst();
-        sla.initialize(created.id(), created.createdAt());
+        sla.initialize(created.id(), created.createdAt(),
+                command.providerOccurredAt() == null ? created.createdAt() : command.providerOccurredAt());
         outbox.append(
                 OUTBOX_TYPE,
                 AGGREGATE_TYPE,

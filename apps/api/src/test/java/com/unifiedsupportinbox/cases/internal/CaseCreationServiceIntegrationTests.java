@@ -124,13 +124,13 @@ class CaseCreationServiceIntegrationTests {
     }
 
     @Test
-    void initializesSlaDeadlinesUsingTheActiveBusinessHoursSchedule() {
+    void initializesProviderTimeFRTAndCreationTimeUnclaimedAcrossBusinessHours() {
         Fixture fixture = fixture(true, false, true);
         jdbc.execute("""
                 CREATE OR REPLACE FUNCTION set_case_created_at_for_sla_test()
                 RETURNS trigger LANGUAGE plpgsql AS $$
                 BEGIN
-                    NEW.created_at := TIMESTAMPTZ '2026-03-06 16:30:00+00';
+                    NEW.created_at := TIMESTAMPTZ '2026-03-06 16:55:00+00';
                     RETURN NEW;
                 END;
                 $$
@@ -142,16 +142,21 @@ class CaseCreationServiceIntegrationTests {
                 """);
 
         try {
-            Result created = service.create(command(fixture, "business-hours", "friday-afternoon"));
+            Instant providerTime = Instant.parse("2026-03-06T16:48:00Z");
+            Result created = service.create(command(fixture, "business-hours", "friday-afternoon", providerTime));
 
             assertThat(jdbc.queryForObject(
+                    "SELECT first_response_started_at FROM case_sla WHERE case_id = ?",
+                    OffsetDateTime.class, created.caseId()).toInstant()).isEqualTo(providerTime);
+            assertThat(jdbc.queryForObject(
+                    "SELECT first_response_warning_at FROM case_sla WHERE case_id = ?",
+                    OffsetDateTime.class, created.caseId()).toInstant()).isEqualTo(Instant.parse("2026-03-06T16:59:15Z"));
+            assertThat(jdbc.queryForObject(
                     "SELECT first_response_due_at FROM case_sla WHERE case_id = ?",
-                    OffsetDateTime.class,
-                    created.caseId()).toInstant()).isEqualTo(Instant.parse("2026-03-09T09:30:00Z"));
+                    OffsetDateTime.class, created.caseId()).toInstant()).isEqualTo(Instant.parse("2026-03-09T09:03:00Z"));
             assertThat(jdbc.queryForObject(
                     "SELECT unclaimed_warning_at FROM case_sla WHERE case_id = ?",
-                    OffsetDateTime.class,
-                    created.caseId()).toInstant()).isEqualTo(Instant.parse("2026-03-06T16:45:00Z"));
+                    OffsetDateTime.class, created.caseId()).toInstant()).isEqualTo(Instant.parse("2026-03-09T09:10:00Z"));
         } finally {
             jdbc.execute("DROP TRIGGER IF EXISTS set_case_created_at_for_sla_test_trigger ON cases");
             jdbc.execute("DROP FUNCTION IF EXISTS set_case_created_at_for_sla_test()");
@@ -289,6 +294,10 @@ class CaseCreationServiceIntegrationTests {
     }
 
     private static Command command(Fixture fixture, String conversation, String thread) {
+        return command(fixture, conversation, thread, null);
+    }
+
+    private static Command command(Fixture fixture, String conversation, String thread, Instant providerTime) {
         return new Command(
                 UUID.randomUUID(),
                 fixture.integrationId(),
@@ -296,7 +305,8 @@ class CaseCreationServiceIntegrationTests {
                 IntegrationProvider.SLACK,
                 conversation,
                 thread,
-                "corr-" + UUID.randomUUID());
+                "corr-" + UUID.randomUUID(),
+                providerTime);
     }
 
     private static Fixture fixture(boolean mapped, boolean ignored, boolean active) {

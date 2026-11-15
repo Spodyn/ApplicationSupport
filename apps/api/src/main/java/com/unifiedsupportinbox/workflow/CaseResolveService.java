@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.workflow;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.sla.CaseResponseCycles;
 import com.unifiedsupportinbox.IdempotencyResponse;
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.IdempotentCommandExecutor;
@@ -30,6 +31,7 @@ public class CaseResolveService {
     private static final String OUTBOX_TYPE = "case.updated";
 
     private final JdbcTemplate jdbc;
+    private final CaseResponseCycles responseCycles;
     private final CaseSnoozeWakeService snoozes;
     private final IdempotentCommandExecutor idempotency;
     private final AuditEventStore audit;
@@ -37,13 +39,14 @@ public class CaseResolveService {
     private final ObjectMapper json;
 
     public CaseResolveService(
-            JdbcTemplate jdbc,
+            JdbcTemplate jdbc, CaseResponseCycles responseCycles,
             CaseSnoozeWakeService snoozes,
             IdempotentCommandExecutor idempotency,
             AuditEventStore audit,
             OutboxEventStore outbox,
             ObjectMapper json) {
         this.jdbc = jdbc;
+        this.responseCycles = responseCycles;
         this.snoozes = snoozes;
         this.idempotency = idempotency;
         this.audit = audit;
@@ -117,8 +120,7 @@ public class CaseResolveService {
                 userId).stream().findFirst()
                 .orElseThrow(() -> ApiProblemException.conflict("The Case changed before it could be resolved."));
 
-        // Terminal Cases have no active personal reminder. SLA schedulers use Case terminal
-        // state as the authoritative stop condition; historical SLA deadlines stay intact.
+        responseCycles.close(caseId);
         snoozes.wake(caseId);
 
         Map<String, Object> metadata = new LinkedHashMap<>();

@@ -3,6 +3,9 @@ package com.unifiedsupportinbox.messaging.internal;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.unifiedsupportinbox.IdempotencyResult;
+import com.unifiedsupportinbox.InboundEventStore;
+import com.unifiedsupportinbox.messaging.InboundMessageCommandHandler;
+import com.unifiedsupportinbox.sla.CaseSlaInitializer;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.DeliveryCommand;
@@ -43,6 +46,9 @@ class MessageDeliveryWorkerIntegrationTests {
     @Autowired private MessageDeliveryService deliveries;
     @Autowired private MessageDeliveryWorker worker;
     @Autowired private FakeProvider provider;
+    @Autowired private InboundEventStore inboundEvents;
+    @Autowired private InboundMessageCommandHandler inboundMessages;
+    @Autowired private CaseSlaInitializer sla;
 
     @DynamicPropertySource
     static void infrastructureProperties(DynamicPropertyRegistry registry) {
@@ -215,6 +221,47 @@ class MessageDeliveryWorkerIntegrationTests {
         assertThat(status(messageId)).isEqualTo("SENT");
     }
 
+    @Test
+    void intakeDuringProviderCallPreventsStaleWaitingAndTheNextIntakeOpensNrt() {
+        Fixture fixture = createFixture("ENABLED");
+        sla.initialize(fixture.caseId(), Instant.now().minusSeconds(120));
+        UUID reply = createMessage(fixture, "concurrent-reply");
+        provider.steps(DeliveryResult.sent("confirmed-race-reply"));
+        provider.beforeResult(() -> deliverInbound(fixture, "during-send"));
+
+        assertThat(worker.process(reply)).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+        assertThat(jdbc.queryForObject("SELECT status FROM cases WHERE id = ?", String.class, fixture.caseId()))
+                .isEqualTo("VERIFICATION");
+        assertThat(jdbc.queryForObject("""
+                SELECT first_response_completed_at = (
+                    SELECT finished_at FROM delivery_attempts WHERE message_id = ?
+                ) FROM case_sla WHERE case_id = ?
+                """, Boolean.class, reply, fixture.caseId())).isTrue();
+        assertThat(cycles(fixture)).isZero();
+
+        UUID opening = deliverInbound(fixture, "after-confirmation");
+        assertThat(cycles(fixture)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("""
+                SELECT opening_message_id FROM case_next_response_cycles WHERE case_id = ? AND ended_at IS NULL
+                """, UUID.class, fixture.caseId())).isEqualTo(opening);
+        assertThat(deliverInbound(fixture, "after-confirmation")).isEqualTo(opening);
+        assertThat(cycles(fixture)).isEqualTo(1);
+    }
+
+    private int cycles(Fixture fixture) {
+        return jdbc.queryForObject("SELECT count(*) FROM case_next_response_cycles WHERE case_id = ?",
+                Integer.class, fixture.caseId());
+    }
+
+    private UUID deliverInbound(Fixture fixture, String externalMessageId) {
+        UUID channel = jdbc.queryForObject("SELECT channel_id FROM cases WHERE id = ?", UUID.class, fixture.caseId());
+        var event = inboundEvents.persistAuthenticated("SLACK", fixture.integrationId(), "event-" + externalMessageId, "{}", "sla-race");
+        return inboundMessages.handle(new InboundMessageCommandHandler.Command(
+                event.id(), fixture.integrationId(), channel, IntegrationProvider.SLACK, "event-" + externalMessageId,
+                "C-delivery", externalMessageId, "thread-delivery", "customer", externalMessageId,
+                InboundMessageCommandHandler.Mutation.CREATE, Instant.now(), "sla-race")).messageId();
+    }
+
     private UUID createMessage(Fixture fixture, String key) {
         IdempotencyResult result = send.send(
                 fixture.caseId(),
@@ -315,6 +362,7 @@ class MessageDeliveryWorkerIntegrationTests {
         private final AtomicInteger calls = new AtomicInteger();
         private final AtomicBoolean transactionSeen = new AtomicBoolean();
         private volatile String idempotencyKey;
+        private Runnable beforeResult = () -> {};
 
         @Override
         public boolean supports(IntegrationProvider provider) {
@@ -328,6 +376,7 @@ class MessageDeliveryWorkerIntegrationTests {
                     false,
                     TransactionSynchronizationManager.isActualTransactionActive());
             idempotencyKey = command.idempotencyKey();
+            beforeResult.run();
             DeliveryResult next = steps.pollFirst();
             if (next == null) throw new IllegalStateException("Fake provider has no configured result.");
             return next;
@@ -338,8 +387,11 @@ class MessageDeliveryWorkerIntegrationTests {
             for (DeliveryResult result : configured) steps.addLast(result);
         }
 
+        void beforeResult(Runnable action) { beforeResult = action; }
+
         void reset() {
             steps.clear();
+            beforeResult = () -> {};
             calls.set(0);
             transactionSeen.set(false);
             idempotencyKey = null;

@@ -36,6 +36,10 @@ export interface AnalyticsRecord {
   createdHour?: number
   claimedAt?: string
   firstResponseAt?: string
+  firstResponseStartedAt?: string | null
+  firstResponseStoppedAt?: string | null
+  resolutionWallSeconds?: number | null
+  resolutionWorkingSeconds?: number | null
   resolvedAt?: string
   userId?: string
   userName?: string
@@ -67,6 +71,7 @@ export interface AnalyticsKpis {
   averageClaimMinutes: number | null
   averageFirstResponseMinutes: number | null
   averageResolutionMinutes: number | null
+  averageWorkingResolutionMinutes: number | null
   notApplicable: number
   spam: number
 }

@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.workflow;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.sla.CaseResponseCycles;
 import com.unifiedsupportinbox.IdempotencyResponse;
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.IdempotentCommandExecutor;
@@ -29,6 +30,7 @@ class CaseAdministrationService {
     enum Action { ASSIGN, REASSIGN, UNASSIGN, FORCE_RESOLVE }
 
     private final JdbcTemplate jdbc;
+    private final CaseResponseCycles responseCycles;
     private final CaseSnoozeWakeService snoozes;
     private final IdempotentCommandExecutor idempotency;
     private final AuditEventStore audit;
@@ -37,7 +39,7 @@ class CaseAdministrationService {
     private final CaseSlaClaimRecorder sla;
 
     CaseAdministrationService(
-            JdbcTemplate jdbc,
+            JdbcTemplate jdbc, CaseResponseCycles responseCycles,
             CaseSnoozeWakeService snoozes,
             IdempotentCommandExecutor idempotency,
             AuditEventStore audit,
@@ -45,6 +47,7 @@ class CaseAdministrationService {
             ObjectMapper json,
             CaseSlaClaimRecorder sla) {
         this.jdbc = jdbc;
+        this.responseCycles = responseCycles;
         this.snoozes = snoozes;
         this.idempotency = idempotency;
         this.audit = audit;
@@ -203,6 +206,7 @@ class CaseAdministrationService {
                 RETURNING version
                 """, Long.class, category == null ? null : category.name(), caseId, before.version());
         if (version == null) throw ApiProblemException.conflict("The Case changed before it could be force-resolved.");
+        responseCycles.close(caseId);
         snoozes.wake(caseId);
         record(actorId, caseId, Action.FORCE_RESOLVE, before, "RESOLVED", before.ownerId(), category, version, correlationId);
         return response(caseId, "RESOLVED", before.ownerId(), category, version);

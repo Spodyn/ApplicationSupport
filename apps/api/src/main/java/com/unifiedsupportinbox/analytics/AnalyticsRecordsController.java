@@ -44,7 +44,9 @@ class AnalyticsRecordsController {
                        c.owner_user_id, u.display_name AS user_name,
                        COALESCE(c.customer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS customer_id, COALESCE(customer.name, 'Nie przypisano') AS customer_name, c.provider,
                        channel.name AS channel_name, c.status, c.workflow_status, c.resolution_category,
-                       sla.first_response_completed_at, sla.first_response_due_at, sla.state AS sla_state,
+                       sla.first_response_completed_at, sla.first_response_due_at, sla.first_response_started_at, sla.first_response_stopped_at,
+                       CASE WHEN response.historically_breached THEN 'BREACHED' ELSE sla.state END AS sla_state,
+                       resolution.wall_seconds, resolution.working_seconds,
                        COALESCE(c.status = 'RESOLVED' AND (
                            SELECT a.action = 'CASE_FORCE_RESOLVE' FROM audit_events a
                            WHERE a.case_id = c.id AND a.action IN ('CASE_RESOLVE', 'CASE_FORCE_RESOLVE')
@@ -55,6 +57,8 @@ class AnalyticsRecordsController {
                 JOIN channels channel ON channel.id = c.channel_id
                 LEFT JOIN users u ON u.id = c.owner_user_id
                 LEFT JOIN case_sla sla ON sla.case_id = c.id
+                JOIN case_response_sla_projection response ON response.case_id = c.id
+                LEFT JOIN case_resolution_times resolution ON resolution.case_id = c.id AND resolution.ended_at = c.resolved_at
                 CROSS JOIN business_hours business
                 WHERE (? OR c.owner_user_id = ?)
                   AND business.active = TRUE
@@ -85,7 +89,9 @@ class AnalyticsRecordsController {
                 rs.getObject("customer_id", UUID.class), rs.getString("customer_name"),
                 rs.getString("provider").toLowerCase(), rs.getString("channel_name"), status.toLowerCase(),
                 statusLabel(status), rs.getString("workflow_status"), "medium", List.of(), resolution, slaState,
-                instant(rs, "first_response_due_at"), rs.getBoolean("force_resolved"));
+                instant(rs, "first_response_due_at"), rs.getBoolean("force_resolved"),
+                rs.getObject("wall_seconds", Long.class), rs.getObject("working_seconds", Long.class),
+                instant(rs, "first_response_started_at"), instant(rs, "first_response_stopped_at"));
     }
 
     private static String resolution(String status, String category) {
@@ -118,5 +124,5 @@ class AnalyticsRecordsController {
                 UUID userId, String userName, UUID customerId, String customerName, String platform,
                 String sourceChannel, String status, String statusLabel, String workflowStatus, String priority, List<String> tags,
                 String resolutionReason, String slaState, Instant slaDeadlineAt,
-                boolean excludedFromUserPerformance) { }
+                boolean excludedFromUserPerformance, Long resolutionWallSeconds, Long resolutionWorkingSeconds, Instant firstResponseStartedAt, Instant firstResponseStoppedAt) { }
 }

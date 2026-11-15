@@ -11,6 +11,8 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Read model for the Case header.  This deliberately has no join to messages:
@@ -21,10 +23,13 @@ class CaseDetailService {
 
     private final JdbcTemplate jdbc;
     private final CaseTransitionPolicy policy;
+    private final ObjectMapper json;
+    private static final TypeReference<List<ResponseCycle>> RESPONSE_HISTORY = new TypeReference<>() {};
 
-    CaseDetailService(JdbcTemplate jdbc, CaseTransitionPolicy policy) {
+    CaseDetailService(JdbcTemplate jdbc, CaseTransitionPolicy policy, ObjectMapper json) {
         this.jdbc = jdbc;
         this.policy = policy;
+        this.json = json;
     }
 
     CaseDetail detail(UUID caseId, UUID userId) {
@@ -43,7 +48,11 @@ class CaseDetailService {
                        sla.policy_id, sla.first_response_started_at, sla.first_response_due_at, sla.first_response_completed_at,
                        sla.unclaimed_started_at, sla.unclaimed_warning_at, sla.unclaimed_breach_at,
                        sla.in_progress_started_at, sla.in_progress_warning_at, sla.in_progress_breach_at,
-                       sla.paused_at, sla.total_paused_seconds, sla.state AS sla_state, sla.unclaimed_completed_at, sla.unclaimed_outcome
+                       sla.paused_at, sla.total_paused_seconds, sla.state AS sla_state, sla.unclaimed_completed_at, sla.unclaimed_outcome,
+                       response.state AS response_state, response.kind AS response_kind, response.warning_at AS response_warning_at,
+                       response.due_at AS response_due_at, response.historically_breached, response.last_response_sender,
+                       sla.response_schedule::text, statement_timestamp() AS response_observed_at,
+                       sla.response_policy_version, resolution.wall_seconds, resolution.working_seconds, history.cycles::text AS response_history
                 FROM cases c
                 LEFT JOIN customers customer ON customer.id = c.customer_id
                 JOIN channels channel ON channel.id = c.channel_id
@@ -53,6 +62,16 @@ class CaseDetailService {
                 LEFT JOIN case_read_states reads ON reads.case_id = c.id AND reads.user_id = ?
                 LEFT JOIN case_snoozes snoozes ON snoozes.case_id = c.id AND snoozes.user_id = ? AND snoozes.until_at > CURRENT_TIMESTAMP
                 LEFT JOIN case_sla sla ON sla.case_id = c.id
+                JOIN case_response_sla_projection response ON response.case_id = c.id
+                LEFT JOIN case_resolution_times resolution ON resolution.case_id = c.id AND resolution.ended_at = c.resolved_at
+                LEFT JOIN LATERAL (
+                    SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                        'id', id, 'startedAt', started_at, 'warningAt', warning_at,
+                        'dueAt', due_at, 'endedAt', ended_at, 'outcome', outcome,
+                        'breached', COALESCE(ended_at > due_at OR (ended_at = due_at AND outcome <> 'RESPONDED'), FALSE)
+                    ) ORDER BY started_at DESC, id DESC), '[]'::jsonb) AS cycles
+                    FROM case_next_response_cycles WHERE case_id = c.id
+                ) history ON TRUE
                 LEFT JOIN LATERAL (
                     SELECT SUM(weight)::int AS points FROM case_ignore_votes
                     WHERE case_id = c.id AND active
@@ -77,7 +96,9 @@ class CaseDetailService {
                     sla(rs), rs.getInt("ignore_score"), availableActions(status, actor, actions),
                     instant(rs, "claimed_at"), instant(rs, "waiting_until"), instant(rs, "resolved_at"), instant(rs, "ignored_at"),
                     enumValue(rs, "resolution_category"), instant(rs, "created_at"), instant(rs, "updated_at"),
-                    instant(rs, "last_activity_at"), rs.getLong("version"));
+                    instant(rs, "last_activity_at"), rs.getLong("version"), CaseResponseSla.read(rs, json),
+                    rs.getObject("response_policy_version", Long.class), json.readValue(rs.getString("response_history"), RESPONSE_HISTORY),
+                    rs.getObject("wall_seconds", Long.class), rs.getObject("working_seconds", Long.class));
         }, userId, userId, caseId).stream().findFirst().orElseThrow(() -> ApiProblemException.notFound("Case was not found."));
     }
 
@@ -138,7 +159,10 @@ class CaseDetailService {
     record CaseDetail(UUID id, String reference, CaseStatus status, CaseWorkflowStatus workflowStatus, String closureReason, Customer customer, Owner owner, Channel channel,
             Integration integration, RelatedCase relatedCase, PersonalState personalState, Sla sla, int ignoreScore,
             List<String> availableActions, Instant claimedAt, Instant waitingUntil, Instant resolvedAt, Instant ignoredAt,
-            CaseResolutionCategory resolutionCategory, Instant createdAt, Instant updatedAt, Instant lastActivityAt, long version) {}
+            CaseResolutionCategory resolutionCategory, Instant createdAt, Instant updatedAt, Instant lastActivityAt, long version, CaseResponseSla responseSla,
+            Long responsePolicyVersion, List<ResponseCycle> responseCycles, Long resolutionWallSeconds, Long resolutionWorkingSeconds) {}
+    record ResponseCycle(UUID id, Instant startedAt, Instant warningAt, Instant dueAt, Instant endedAt,
+                         String outcome, boolean breached) {}
     record Customer(UUID id, String name, String externalRef) {}
     record Owner(UUID id, String displayName) {}
     record Channel(UUID id, String name, String externalChannelId, String groupingStrategy) {}

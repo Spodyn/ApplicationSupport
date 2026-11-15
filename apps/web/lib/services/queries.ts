@@ -135,6 +135,7 @@ export function useInboxCases(query?: InboxListQuery) {
   return useInfiniteQuery({
     queryKey: queryKeys.inboxCases(query),
     queryFn: ({ pageParam }) => serviceRegistry.inbox.list(pageParam, query),
+    refetchInterval: 15_000,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor,
   })
@@ -170,6 +171,7 @@ export function useInboxCase(caseId?: string) {
   return useQuery({
     queryKey: queryKeys.inboxCase(caseId ?? ""),
     queryFn: () => serviceRegistry.inbox.getCase(caseId ?? ""),
+    refetchInterval: (query) => query.state.data?.sla.dueAt ? 15_000 : false,
     enabled: Boolean(caseId),
   })
 }

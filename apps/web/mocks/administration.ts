@@ -98,7 +98,8 @@ export const mockAdministrationSettings: AdministrationSettings = {
     compactMode: true,
   },
   sla: {
-    firstResponseMinutes: 60,
+    firstResponseMinutes: 15,
+    nextResponseMinutes: 30,
     unclaimedReminderMinutes: 15,
     inProgressReminderMinutes: 120,
     warningBeforeDeadlineMinutes: 15,

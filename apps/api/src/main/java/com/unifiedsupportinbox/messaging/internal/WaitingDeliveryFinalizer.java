@@ -50,9 +50,7 @@ class WaitingDeliveryFinalizer {
         Instant waitingUntil = sentAt.plusSeconds(ask ? waitingSeconds : REPLY_WAIT_SECONDS);
         UUID retainedOwner = ask ? null : message.authorUserId();
         String action = ask ? "ASK_CUSTOMER" : "REPLY_WAITING";
-        // Intake takes this row lock before inserting a customer message. Checking in
-        // a separate statement observes the committed inbound message after a lock wait.
-        jdbc.query("SELECT id FROM cases WHERE id = ? FOR UPDATE", rs -> { }, message.caseId());
+        // MessageDeliveryService holds the shared Case row lock with intake.
         Transition transition = jdbc.query("""
                 UPDATE cases
                 SET status = 'WAITING_FOR_CUSTOMER',
@@ -64,11 +62,12 @@ class WaitingDeliveryFinalizer {
                 WHERE id = ?
                   AND status = 'VERIFICATION'
                   AND owner_user_id = ?
-                  AND (?::bigint IS NULL OR (version = ?::bigint AND NOT EXISTS (
+                  AND (?::bigint IS NULL OR version = ?::bigint)
+                  AND NOT EXISTS (
                       SELECT 1 FROM messages inbound
                       WHERE inbound.case_id = cases.id AND inbound.inbound
                         AND inbound.created_at >= ?::timestamptz
-                  )))
+                  )
                 RETURNING version
                 """, (rs, rowNum) -> new Transition(rs.getLong("version")),
                 retainedOwner, OffsetDateTime.ofInstant(waitingUntil, ZoneOffset.UTC),

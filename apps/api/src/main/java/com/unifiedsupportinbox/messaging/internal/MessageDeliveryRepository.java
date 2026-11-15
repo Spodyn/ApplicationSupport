@@ -129,10 +129,11 @@ class MessageDeliveryRepository {
     boolean finishAttemptSuccess(
             UUID messageId,
             int attemptNo,
-            String providerResponseRef) {
+            String providerResponseRef,
+            Instant acceptedAt) {
         return jdbc.update("""
                 UPDATE delivery_attempts
-                SET finished_at = CURRENT_TIMESTAMP,
+                SET finished_at = ?,
                     error_category = NULL,
                     error_code = NULL,
                     next_retry_at = NULL,
@@ -140,7 +141,8 @@ class MessageDeliveryRepository {
                 WHERE message_id = ?
                   AND attempt_no = ?
                   AND finished_at IS NULL
-                """, providerResponseRef, messageId, attemptNo) == 1;
+                """, java.time.OffsetDateTime.ofInstant(acceptedAt, java.time.ZoneOffset.UTC),
+                providerResponseRef, messageId, attemptNo) == 1;
     }
 
     boolean recordAcceptedBody(UUID messageId, String providerMessageRef) {

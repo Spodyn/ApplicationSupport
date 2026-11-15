@@ -18,7 +18,12 @@ public interface CaseCreationService {
             IntegrationProvider provider,
             String externalConversationId,
             String externalThreadKey,
-            String correlationId) {
+            String correlationId,
+            Instant providerOccurredAt) {
+        public Command(UUID eventId, UUID integrationId, UUID channelId, IntegrationProvider provider,
+                String conversationId, String threadKey, String correlationId) {
+            this(eventId, integrationId, channelId, provider, conversationId, threadKey, correlationId, null);
+        }
     }
 
     record Result(

@@ -154,7 +154,7 @@ Read acknowledgement affects only the current user.
 | `WAITING_FOR_CUSTOMER` | if not already completed, policy semantics remain; Ask `SENT` can complete it | active-unowned semantics preserved but waiting is not counted as active unclaimed work | paused; waiting pause policy applies |
 | `RESOLVED` / `IGNORED` | stopped | stopped | stopped |
 
-Timers preserve accumulated business time across pause/resume. Reassign never resets in-progress time. A Reassign to the current owner has no workflow, audit or notification effect, and bulk assignment reports that item as skipped.
+The table above describes legacy aging metrics. The inbox uses FRT once, followed by one NRT for each new series after a confirmed human response. While waiting, the queue has no active response deadline. Terminal cases remain neutral and historical breaches remain visible. Timers preserve accumulated business time across pause/resume. Reassign never resets in-progress time. A Reassign to the current owner has no workflow, audit or notification effect, and bulk assignment reports that item as skipped.
 
 ## 9. Concurrency requirements
 

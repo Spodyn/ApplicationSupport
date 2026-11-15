@@ -37,7 +37,7 @@ This is the human-readable index. `decision-registry.yaml` is the machine-readab
 | DEC-MSG-002 | delivery | SENT=provider accepted; retry 8/24h | E08 |
 | DEC-ATT-001 | attachment limits | 25MiB/file, 10 files, 50MiB/message; public reply accepts text and/or CLEAN files; Ask Customer requires text | E08 |
 | DEC-ATT-002 | scan | only CLEAN usable; ClamAV default scanner | E08 / E20 |
-| DEC-SLA-001 | defaults | first12/15m, unclaimed5/15m, in-progress30/60m | E13 |
+| DEC-SLA-001 | response clocks and resolution time | FRT 15m from provider time, NRT 30m from first durable follow-up, business warning at 25% remaining, two TTR results, legacy aging retained | E13 + owner approval for response SLA |
 | DEC-SLA-002 | snapshot | Case snapshots SLA policy + schedule/timezone | E13 |
 | DEC-SCHED-001 | business hours | default Mon-Fri09-17; OOO off; DST aware | E14 |
 | DEC-SCHED-002 | invalid schedule | weekly opening required; NO_FUTURE_OPENING fallback | final freeze |

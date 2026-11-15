@@ -43,6 +43,7 @@ function commonCase(input: {
   ownerDisplayName: string | null
   slaState: string | null
   slaDueAt: string | null
+  responseSla?: CaseListItem["responseSla"]
   ignoreScore: number
   waitingUntil: string | null
   createdAt: string
@@ -75,7 +76,13 @@ function commonCase(input: {
     lastMessagePreview: input.preview,
     createdAt: input.createdAt,
     updatedAt: input.updatedAt,
-    sla: { state: mapSlaState(input.slaState), dueAt: input.slaDueAt ?? undefined },
+    sla: {
+      state: mapSlaState(input.responseSla?.state ?? input.slaState),
+      dueAt: (input.responseSla ? input.responseSla.dueAt : input.slaDueAt) ?? undefined,
+      kind: input.responseSla?.kind ?? undefined,
+      previouslyBreached: input.responseSla?.historicallyBreached,
+      remainingBusinessSeconds: input.responseSla?.remainingBusinessSeconds ?? undefined,
+    },
     ignoreVotes: { current: input.ignoreScore, required: 2, voters: [] },
     metadata: { priority: "Nieustalony", category: "", product: "", environment: "", tags: [] },
     waitingUntil: input.waitingUntil ?? undefined,
@@ -114,6 +121,7 @@ export function mapCaseDetail(detail: CaseDetail): InboxCase {
       provider: detail.integration.provider,
       ownerUserId: detail.owner.id,
       ownerDisplayName: detail.owner.displayName,
+      responseSla: detail.responseSla,
       slaState: detail.sla?.state ?? null,
       slaDueAt: detail.sla?.firstResponseDueAt ?? null,
       ignoreScore: detail.ignoreScore,
