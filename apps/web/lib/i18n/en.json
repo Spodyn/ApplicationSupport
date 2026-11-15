@@ -828,6 +828,8 @@
     "SLA kolejnej odpowiedzi": "Next reply SLA",
     "Od pierwszej nowej wiadomości klienta do potwierdzonej odpowiedzi.": "From the first new customer message to a confirmed reply.",
     "Próg ostrzeżenia dla starszych spraw": "Warning for legacy Cases",
-    "Nowe sprawy mają próg przy 25% pozostałego czasu.": "New Cases warn when 25% of the business time remains."
+    "Nowe sprawy mają próg przy 25% pozostałego czasu.": "New Cases warn when 25% of the business time remains.",
+    "Poniedziałek, 16:30. Przykładowy kalendarz: dni robocze 08:00–17:00.": "Monday, 16:30. Example calendar: weekdays, 08:00–17:00.",
+    "FRT i NRT korzystają z kalendarza zapisanego przy sprawie.": "FRT and NRT use the calendar saved with the Case."
   }
 }

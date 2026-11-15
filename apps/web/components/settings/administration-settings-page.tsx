@@ -226,20 +226,19 @@ function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActio
           ))}
         </div>
         <div className="grid gap-2 border-t pt-4 sm:grid-cols-2">
-          <SettingSwitch label={t("Tylko w godzinach pracy")} description={t("Odliczanie pomija zamknięte godziny i wyjątki.")} checked={form.businessHoursOnly} onChange={(checked) => setForm({ ...form, businessHoursOnly: checked })} />
           <SettingSwitch label={t("Wstrzymaj przy oczekiwaniu")} description={t("SLA nie biegnie podczas oczekiwania na klienta.")} checked={form.pauseWhileWaiting} onChange={(checked) => setForm({ ...form, pauseWhileWaiting: checked })} />
         </div>
         <SaveButton pending={actions.saveSection.isPending} onClick={() => saveSection(actions, "sla", form, t("Zapisano politykę SLA"))} />
       </SettingsCard>
 
       <Card className="h-fit border-primary/20 bg-primary/[0.03]">
-        <CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="size-4 text-primary" /> {t("Przykład na żywo")}</CardTitle><CardDescription>{t("Case otrzymany w poniedziałek o 16:30.")}</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="size-4 text-primary" /> {t("Przykład na żywo")}</CardTitle><CardDescription>{t("Poniedziałek, 16:30. Przykładowy kalendarz: dni robocze 08:00–17:00.")}</CardDescription></CardHeader>
         <CardContent className="grid gap-4">
           <TimelineItem label={t("Otrzymano")} value="pon., 16:30" />
           <TimelineItem label={t("Ostrzeżenie")} value={example.warning} accent="warning" />
           <TimelineItem label={t("Termin SLA")} value={example.deadline} accent="destructive" />
           <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
-            {form.businessHoursOnly ? t("Po 17:00 licznik zatrzymuje się i rusza ponownie o 08:00 następnego dnia roboczego.") : t("SLA liczone jest w sposób ciągły, również poza godzinami pracy.")}
+            {t("FRT i NRT korzystają z kalendarza zapisanego przy sprawie.")}
           </p>
         </CardContent>
       </Card>
@@ -790,8 +789,8 @@ async function saveSection<K extends keyof AdministrationSettings>(actions: Sett
 
 function calculateSlaExample(settings: SlaSettings) {
   const start = new Date(2026, 7, 3, 16, 30)
-  const add = (minutes: number) => settings.businessHoursOnly ? addBusinessMinutes(start, minutes) : new Date(start.getTime() + minutes * 60_000)
-  const format = (date: Date) => new Intl.DateTimeFormat(locale(), { weekday: "short", hour: "2-digit", minute: "2-digit" }).format(date)
+  const add = (minutes: number) => addBusinessMinutes(start, minutes)
+  const format = (date: Date) => new Intl.DateTimeFormat(locale(), { weekday: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(date)
   return {
     warning: format(add(settings.firstResponseMinutes * 0.75)),
     deadline: format(add(settings.firstResponseMinutes)),
@@ -815,9 +814,9 @@ function addBusinessMinutes(start: Date, amount: number) {
     }
     const closing = new Date(date)
     closing.setHours(17, 0, 0, 0)
-    const available = Math.max(0, Math.round((closing.getTime() - date.getTime()) / 60_000))
+    const available = Math.max(0, (closing.getTime() - date.getTime()) / 60_000)
     const consumed = Math.min(available, remaining)
-    date.setMinutes(date.getMinutes() + consumed)
+    date.setTime(date.getTime() + consumed * 60_000)
     remaining -= consumed
     if (remaining > 0) {
       date.setDate(date.getDate() + 1)
