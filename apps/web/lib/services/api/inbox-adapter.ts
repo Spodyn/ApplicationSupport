@@ -81,13 +81,19 @@ function commonCase(input: {
 
 export function mapCaseListItem(item: CaseListItem): InboxCase {
   const preview = item.lastMessagePreview ?? ""
-  return commonCase({
-    ...item,
-    subject: preview || item.reference,
-    preview,
-    unread: item.unreadForCurrentUser,
-    lastMessageId: item.lastMessageId,
-  })
+  return {
+    ...commonCase({
+      ...item,
+      subject: preview || item.reference,
+      preview,
+      unread: item.unreadForCurrentUser,
+      lastMessageId: item.lastMessageId,
+    }),
+    lastMessageAt: item.lastMessageAt ?? undefined,
+    lastMessageAuthor: item.lastMessageAuthor ?? undefined,
+    lastMessageKind: item.lastMessageKind?.toLowerCase() as InboxCase["lastMessageKind"],
+    lastMessageFile: item.lastMessageFile ?? undefined,
+  }
 }
 
 export function mapCaseDetail(detail: CaseDetail): InboxCase {
@@ -119,6 +125,11 @@ export function mapCaseDetail(detail: CaseDetail): InboxCase {
       ? { id: detail.relatedCase.id ?? undefined, reference: detail.relatedCase.reference, subject: detail.relatedCase.reference }
       : undefined,
     resolutionCategory: detail.resolutionCategory ?? undefined,
+    integration: {
+      name: detail.integration.displayName,
+      workspace: detail.integration.workspaceName ?? detail.integration.workspaceExternalId ?? undefined,
+      externalChannelId: detail.channel.externalChannelId,
+    },
   }
 }
 
@@ -189,6 +200,7 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
         cursor,
         limit: 50,
         view: query.view?.toUpperCase() as "ACTIVE" | "SNOOZED" | undefined,
+        quickView: query.quickView?.toUpperCase() as "UNASSIGNED" | "MINE" | "SLA" | "ALL" | undefined,
         mine: query.mine,
         unassigned: query.unassigned,
         unread: query.unread,
@@ -201,7 +213,7 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
         ownerId: query.ownerId,
         search: query.search,
       })
-      return { items: page.items.map(mapCaseListItem), nextCursor: page.nextCursor ?? undefined }
+      return { items: page.items.map(mapCaseListItem), nextCursor: page.nextCursor ?? undefined, quickViewCounts: page.quickViewCounts }
     },
     async getFilterOptions() {
       const options = await client.getCaseFilterOptions()

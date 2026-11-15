@@ -22,7 +22,10 @@ export interface InboxResolveInput {
   idempotencyKey?: string
 }
 
+export type InboxQuickView = "unassigned" | "mine" | "sla" | "all"
+
 export interface InboxListQuery {
+  quickView?: InboxQuickView
   view?: "active" | "snoozed"
   mine?: boolean
   unassigned?: boolean
@@ -68,6 +71,7 @@ export interface InboxSendInput {
 export interface InboxPage<T> {
   items: T[]
   nextCursor?: string
+  quickViewCounts?: Record<InboxQuickView, number>
 }
 
 export interface InboxBulkInput {
@@ -197,6 +201,13 @@ const canUseUnassignedActions = (caseId: string) => {
   )
 }
 
+function matchesQuickView(item: InboxCase, view: Exclude<InboxQuickView, "all">) {
+  if (item.status === "ignored" || item.status === "resolved") return false
+  if (view === "unassigned") return !item.owner
+  if (view === "mine") return item.owner?.id === mockCurrentUser.id
+  return item.status !== "waiting_for_customer" && (item.sla.state === "breached" || item.sla.state === "at_risk")
+}
+
 export const mockInboxRepository: InboxRepository = {
   async bulk() { throw new Error(t("Bulk operations require the API.")) },
   async list(_cursor, query) {
@@ -214,13 +225,25 @@ export const mockInboxRepository: InboxRepository = {
         }
       },
     )
-    return wait({ items: cases.filter((item) => {
+    const matches = cases.filter((item) => {
       const terminal = item.status === "ignored" || item.status === "resolved"
       if (query?.view === "snoozed" ? terminal || !item.snoozedForCurrentUserUntil : !terminal && item.snoozedForCurrentUserUntil) return false
-      if (query?.mine && item.owner?.id !== mockCurrentUser.id) return false
-      return !query?.slaAttention || (!terminal && item.status !== "waiting_for_customer"
-        && (item.sla.state === "breached" || item.sla.state === "at_risk"))
-    }) })
+      if (query?.statusScope === "active" && terminal || query?.statusScope === "terminal" && !terminal) return false
+      if (query?.mine && item.owner?.id !== mockCurrentUser.id || query?.unassigned && item.owner || query?.unread && !item.unreadForCurrentUser) return false
+      if (query?.status && query.status !== item.status || query?.provider && query.provider !== item.platform) return false
+      if (query?.customerId && query.customerId !== item.customer.id || query?.ownerId && query.ownerId !== item.owner?.id) return false
+      if (query?.search && ![item.reference, item.customer.name, item.sourceChannel, item.platform].some((value) => value.toLowerCase().includes(query.search!.toLowerCase()))) return false
+      return !query?.slaAttention || matchesQuickView(item, "sla")
+    })
+    const views = {
+      unassigned: matches.filter((item) => matchesQuickView(item, "unassigned")),
+      mine: matches.filter((item) => matchesQuickView(item, "mine")),
+      sla: matches.filter((item) => matchesQuickView(item, "sla")),
+      all: matches,
+    }
+    return wait({ items: views[query?.quickView ?? "all"], quickViewCounts: {
+      unassigned: views.unassigned.length, mine: views.mine.length, sla: views.sla.length, all: views.all.length,
+    } })
   },
 
   async getFilterOptions() {

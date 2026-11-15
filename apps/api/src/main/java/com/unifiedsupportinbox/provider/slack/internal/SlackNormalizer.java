@@ -58,7 +58,7 @@ class SlackNormalizer {
                 ? "" : requiredTextAllowEmpty(message, "text", "Slack message text is required.");
 
         return accepted(inbound, channelId, channel, messageTs, threadKey, author, body,
-                Mutation.CREATE, parseSlackTimestamp(messageTs));
+                Mutation.CREATE, parseSlackTimestamp(messageTs), profileName(message));
     }
 
     private Result normalizeEdit(
@@ -84,7 +84,7 @@ class SlackNormalizer {
         if (occurredAt == null) occurredAt = messageTs;
 
         return accepted(inbound, channelId, channel, messageTs, threadKey, author, body,
-                Mutation.EDIT, parseSlackTimestamp(occurredAt));
+                Mutation.EDIT, parseSlackTimestamp(occurredAt), null);
     }
 
     private Result normalizeDelete(
@@ -109,7 +109,7 @@ class SlackNormalizer {
         if (occurredAt == null) occurredAt = deletedTs;
 
         return accepted(inbound, channelId, channel, deletedTs, threadKey, author, null,
-                Mutation.DELETE, parseSlackTimestamp(occurredAt));
+                Mutation.DELETE, parseSlackTimestamp(occurredAt), null);
     }
 
     private static String threadKey(JsonNode message, String messageTs) {
@@ -134,7 +134,8 @@ class SlackNormalizer {
             String author,
             String body,
             Mutation mutation,
-            Instant occurredAt) {
+            Instant occurredAt,
+            String authorName) {
         return new Accepted(new Command(
                 inbound.inboundEventId(),
                 inbound.integrationId(),
@@ -148,7 +149,14 @@ class SlackNormalizer {
                 body,
                 mutation,
                 occurredAt,
-                inbound.correlationId()));
+                inbound.correlationId(), authorName));
+    }
+
+    private static String profileName(JsonNode message) {
+        JsonNode profile = message.path("user_profile");
+        String name = optionalText(profile, "display_name");
+        if (name == null) name = optionalText(profile, "real_name");
+        return name != null && name.length() <= 200 ? name : null;
     }
 
     private static boolean isBotLike(SlackInboundEvent inbound, JsonNode message, String author) {

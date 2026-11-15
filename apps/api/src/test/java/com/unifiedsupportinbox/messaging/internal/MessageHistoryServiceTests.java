@@ -22,6 +22,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 class MessageHistoryServiceTests {
 
@@ -55,7 +56,8 @@ class MessageHistoryServiceTests {
                 "0123456789abcdef0123456789abcdef".getBytes(StandardCharsets.UTF_8),
                 Clock.fixed(NOW, ZoneOffset.UTC));
         MessageHistoryService service = new MessageHistoryService(repository, attachments, codec,
-                org.mockito.Mockito.mock(MessageDeliveryRepository.class));
+                org.mockito.Mockito.mock(MessageDeliveryRepository.class),
+                org.mockito.Mockito.mock(NamedParameterJdbcTemplate.class));
 
         CursorPage<MessageHistoryService.MessageHistoryItem> page = service.history(caseId, null, 2, UUID.randomUUID());
 
@@ -65,6 +67,7 @@ class MessageHistoryServiceTests {
                 new MessageHistoryService.MessageAttachmentItem(
                         attachment.id(), "screen.png", 842, "image/png", "image/png", AttachmentScanStatus.CLEAN, null));
         assertThat(page.items().getLast().attachments()).isEmpty();
+        assertThat(page.items().getLast().authorName()).isEqualTo("Customer");
         assertThat(page.nextCursor()).isNotBlank();
         assertThat(codec.decode(page.nextCursor(), "message-history:" + caseId).sortValue())
                 .isEqualTo(middle.providerCreatedAt());

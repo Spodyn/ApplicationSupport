@@ -40,6 +40,14 @@ public interface InboundMessageCommandHandler {
             String body,
             Mutation mutation,
             Instant providerOccurredAt,
-            String correlationId) {
+            String correlationId,
+            String authorName) {
+        public Command(UUID inboundEventId, UUID integrationId, UUID channelId, IntegrationProvider provider,
+                String externalEventId, String externalChannelId, String externalMessageId, String externalThreadKey,
+                String authorExternalId, String body, Mutation mutation, Instant providerOccurredAt, String correlationId) {
+            this(inboundEventId, integrationId, channelId, provider, externalEventId, externalChannelId,
+                    externalMessageId, externalThreadKey, authorExternalId, body, mutation, providerOccurredAt,
+                    correlationId, null);
+        }
     }
 }

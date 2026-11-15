@@ -2,7 +2,6 @@ package com.unifiedsupportinbox.workflow;
 
 import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.ApiV1Conventions;
-import com.unifiedsupportinbox.CursorPage;
 import com.unifiedsupportinbox.cases.CaseStatus;
 import java.util.UUID;
 import org.springframework.security.core.Authentication;
@@ -21,7 +20,7 @@ class CaseListController {
     }
 
     @GetMapping
-    CursorPage<CaseListService.CaseListItem> list(
+    CaseListService.CaseListPage list(
             @RequestParam(name = ApiV1Conventions.CURSOR_QUERY_PARAMETER, required = false) String cursor,
             @RequestParam(name = ApiV1Conventions.LIMIT_QUERY_PARAMETER, required = false) @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(100) Integer limit,
             @RequestParam(name = "view", required = false) CaseListView view,
@@ -36,6 +35,7 @@ class CaseListController {
             @RequestParam(name = "provider", required = false) String provider,
             @RequestParam(name = "ownerId", required = false) UUID ownerId,
             @RequestParam(name = "search", required = false) String search,
+            @RequestParam(name = "quickView", required = false) CaseListService.QuickView quickView,
             Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
             throw ApiProblemException.authenticationRequired();
@@ -48,6 +48,6 @@ class CaseListController {
         }
         return cases.list(userId, cursor, limit, view,
                 new CaseListFilter(mine, unassigned, unread, slaAttention, status, statusScope,
-                        customerId, channelId, provider, ownerId, search));
+                        customerId, channelId, provider, ownerId, search), quickView);
     }
 }
