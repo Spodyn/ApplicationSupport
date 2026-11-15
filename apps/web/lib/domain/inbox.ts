@@ -116,7 +116,7 @@ export interface InboxAttachment {
 
 export interface InboxMessage {
   id: string
-  kind: "customer" | "support" | "system"
+  kind: "customer" | "support" | "system" | "internal_note"
   sender?: string
   body: string
   createdAt: string

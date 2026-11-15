@@ -57,7 +57,8 @@ class MessageHistoryServiceTests {
                 Clock.fixed(NOW, ZoneOffset.UTC));
         MessageHistoryService service = new MessageHistoryService(repository, attachments, codec,
                 org.mockito.Mockito.mock(MessageDeliveryRepository.class),
-                org.mockito.Mockito.mock(NamedParameterJdbcTemplate.class));
+                org.mockito.Mockito.mock(NamedParameterJdbcTemplate.class),
+                org.mockito.Mockito.mock(CaseInternalNoteService.class));
 
         CursorPage<MessageHistoryService.MessageHistoryItem> page = service.history(caseId, null, 2, UUID.randomUUID());
 

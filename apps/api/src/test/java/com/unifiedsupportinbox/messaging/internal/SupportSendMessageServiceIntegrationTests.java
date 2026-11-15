@@ -34,6 +34,12 @@ class SupportSendMessageServiceIntegrationTests {
     private SupportSendMessageService service;
 
     @Autowired
+    private CaseInternalNoteService notes;
+
+    @Autowired
+    private MessageHistoryService history;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @DynamicPropertySource
@@ -91,6 +97,57 @@ class SupportSendMessageServiceIntegrationTests {
                 "SELECT count(*) FROM outbox_events WHERE type = 'message.send_requested' AND aggregate_id = ?",
                 Integer.class,
                 messageId)).isEqualTo(1);
+    }
+
+    @Test
+    void internalNoteIsIdempotentVisibleToEligibleViewersAndIsolatedFromPublicMessages() {
+        UUID owner = createUser("note-owner");
+        UUID viewer = createUser("note-viewer");
+        UUID caseId = createCase(owner, "VERIFICATION");
+        var before = jdbc.queryForMap("SELECT status, version, last_activity_at FROM cases WHERE id = ?", caseId);
+
+        var created = notes.add(caseId, owner, "note-key", "Internal diagnostics", "corr-note");
+        assertThat(created.status()).isEqualTo(201);
+        UUID noteId = UUID.fromString(created.body().get("noteId").asText());
+        var replay = notes.add(caseId, owner, "note-key", "Internal diagnostics", "corr-replay");
+        assertThat(replay.replayed()).isTrue();
+        assertThat(replay.body()).isEqualTo(created.body());
+        assertThatThrownBy(() -> notes.add(caseId, owner, "note-key", "Different text", "corr-conflict"))
+                .isInstanceOf(ApiProblemException.class);
+        assertThat(jdbc.queryForMap("SELECT status, version, last_activity_at FROM cases WHERE id = ?", caseId))
+                .isEqualTo(before);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages WHERE case_id = ?", Integer.class, caseId))
+                .isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM case_internal_notes WHERE case_id = ?", Integer.class, caseId))
+                .isOne();
+        assertThat(jdbc.queryForList("SELECT type FROM outbox_events", String.class))
+                .containsExactly("case.internal_note_added");
+        assertThat(jdbc.queryForObject("SELECT payload_json::text FROM outbox_events WHERE aggregate_id = ?", String.class, noteId))
+                .contains(caseId.toString(), noteId.toString()).doesNotContain("Internal diagnostics");
+
+        assertThat(history.history(caseId, null, 10, viewer).items()).isEmpty();
+        var note = history.history(caseId, null, 10, viewer, true).items().getFirst();
+        assertThat(note.id()).isEqualTo(noteId);
+        assertThat(note.kind()).isEqualTo("INTERNAL_NOTE");
+        assertThat(note.body()).isEqualTo("Internal diagnostics");
+        assertThat(note.authorName()).isEqualTo(jdbc.queryForObject("SELECT display_name FROM users WHERE id = ?", String.class, owner));
+        assertThat(note.createdAt()).isNotNull();
+        assertThat(note.deliveryStatus()).isNull();
+        assertThat(note.attachments()).isEmpty();
+
+        assertThatThrownBy(() -> notes.add(caseId, viewer, "unowned", "Denied", "corr-denied"))
+                .isInstanceOf(ApiProblemException.class);
+        jdbc.update("UPDATE users SET role = 'ADMIN' WHERE id = ?", viewer);
+        assertThatThrownBy(() -> notes.add(caseId, viewer, "admin-not-owner", "Denied", "corr-admin"))
+                .isInstanceOf(ApiProblemException.class);
+        assertThat(history.history(caseId, null, 10, viewer, true).items()).hasSize(1);
+        jdbc.update("UPDATE users SET active = FALSE WHERE id = ?", viewer);
+        assertThatThrownBy(() -> history.history(caseId, null, 10, viewer, true))
+                .isInstanceOf(ApiProblemException.class);
+        jdbc.update("UPDATE cases SET status = 'RESOLVED', resolved_at = now() WHERE id = ?", caseId);
+        assertThatThrownBy(() -> notes.add(caseId, owner, "terminal", "Denied", "corr-terminal"))
+                .isInstanceOf(ApiProblemException.class);
+        assertThat(history.history(caseId, null, 10, owner, true).items()).hasSize(1);
     }
 
     @Test

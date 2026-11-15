@@ -566,6 +566,14 @@ export type CaseIntegration = {
   "workspaceName": string | null
 }
 
+export type CaseInternalNoteCreated = {
+  "noteId": string
+}
+
+export type CaseInternalNoteRequest = {
+  "body": string
+}
+
 export type CaseListItem = {
   "id": string
   "reference": string
@@ -603,7 +611,7 @@ export type CaseListPage = {
 
 export type CaseMessage = {
   "id": string
-  "kind": "CUSTOMER" | "SUPPORT" | "SYSTEM"
+  "kind": "CUSTOMER" | "SUPPORT" | "SYSTEM" | "INTERNAL_NOTE"
   "body": string
   "bodyFormat": MessageBodyFormat
   "inbound": boolean

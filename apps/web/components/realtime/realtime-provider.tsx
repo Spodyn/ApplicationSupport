@@ -97,6 +97,13 @@ export function RealtimeProvider({ children, accountId }: { children: ReactNode;
         }
         return
       }
+      if (event.eventType === "case.internal_note_added") {
+        const caseId = event.payload.caseId
+        if (typeof caseId === "string" && UUID_PATTERN.test(caseId) && destination === "/topic/cases/" + caseId) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.inboxMessages(caseId) })
+        }
+        return
+      }
       if (CONVERSATION_EVENTS.has(event.eventType)) {
         const caseId = typeof event.payload.caseId === "string" ? event.payload.caseId : null
         if (caseId && UUID_PATTERN.test(caseId) && destination === `/topic/cases/${caseId}`) {

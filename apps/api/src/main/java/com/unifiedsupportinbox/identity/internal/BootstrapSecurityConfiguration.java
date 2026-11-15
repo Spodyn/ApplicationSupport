@@ -112,6 +112,7 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/cases/bulk",
                                 "/api/v1/cases/*/claim",
+                                "/api/v1/cases/*/internal-notes",
                                 "/api/v1/cases/*/messages",
                                 "/api/v1/cases/*/ask-customer",
                                 "/api/v1/cases/*/resolve",

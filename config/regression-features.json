@@ -271,6 +271,19 @@
       "gap": "Cross-customer Case reads are permitted within one deployment"
     },
     {
+      "id": "CASE_NOTES",
+      "feature": "Case-scoped internal notes",
+      "status": "IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Owner-only idempotent writes in verification; authorized Case history and realtime; drafts isolated; no provider delivery, public preview or SLA effects",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/SupportSendMessageServiceIntegrationTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Text-only notes use existing Case permissions"
+    },
+    {
       "id": "REALTIME",
       "feature": "WebSocket/STOMP",
       "status": "IMPLEMENTED",

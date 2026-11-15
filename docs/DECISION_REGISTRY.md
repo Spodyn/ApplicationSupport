@@ -81,3 +81,7 @@ Slack intake override (user request, 2026-11-09): discover authorized bot channe
 - DEC-UX-PRESENTATION-001: gray resolved indicators, accessible button feedback, Enter/Shift+Enter composer, SLA shortcut without arrow, no Customer/Channel inbox filter choices, wrapping long conversation messages.
 
 The grouped owner requests of 2026-11-10 and 2026-11-12 define the interface and bulk decisions. The detailed contract is [UX_BULK_I18N.md](UX_BULK_I18N.md).
+
+## Owner Case conversation extension, 2026-11-15
+
+- DEC-CASE-INTERNAL-NOTES-001: Case-scoped internal text notes use existing Reply eligibility for authorship and Case read access for visibility. Notes have a separate persistence and realtime path from customer delivery. See [Product Contract](PRODUCT_CONTRACT.md#9-messages-and-delivery).

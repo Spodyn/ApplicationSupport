@@ -61,6 +61,11 @@ export interface InboxPendingAttachment extends InboxAttachment {
   scanStatus: "pending" | "scanning" | "clean" | "infected" | "error"
 }
 
+export interface InboxInternalNoteInput {
+  body: string
+  idempotencyKey: string
+}
+
 export interface InboxSendInput {
   body: string
   attachments?: Array<File | InboxPendingAttachment | { fileName: string; size: string }>
@@ -105,6 +110,7 @@ export interface InboxRepository {
   assign(caseId: string, userId: string, reassign: boolean): Promise<void>
   unassign(caseId: string): Promise<void>
   forceResolve(caseId: string, input: InboxResolveInput): Promise<void>
+  addInternalNote(caseId: string, input: InboxInternalNoteInput): Promise<void>
   sendMessage(caseId: string, input: InboxSendInput): Promise<InboxMessage>
   uploadAttachment(caseId: string, file: File): Promise<InboxPendingAttachment>
   removePendingAttachment(caseId: string, attachmentId: string): Promise<void>
@@ -438,6 +444,8 @@ export const mockInboxRepository: InboxRepository = {
     record.resolutionCategory = input.category
     await wait(undefined, 80)
   },
+
+  async addInternalNote() { throw new Error(t("Notatki wewnętrzne wymagają połączenia z API.")) },
 
   async sendMessage(caseId, input) {
     await wait(undefined, 650)
