@@ -231,7 +231,7 @@ test('responsive inbox shares quick-view predicates and preserves the actual rep
   expect((await conversation.boundingBox())!.width).toBeGreaterThan(widths[1])
   await toggle.press('Enter')
 
-  const fileId = 'F-inbox-layout-' + marker
+  const fileId = 'F-inbound-inbox-layout-' + marker
   await inbound(page, undefined, root.ts, {files: [{id: fileId, name: 'diagnostics.txt'}], user_profile: {display_name: 'Kasia Nowak'}})
   await expect(conversation.getByRole('link', {name: new RegExp(fileId)})).toBeVisible()
   await expect(card).toContainText(/Plik: .*\.txt/)
