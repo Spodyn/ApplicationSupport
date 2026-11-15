@@ -589,11 +589,16 @@ export type CaseListItem = {
   "createdAt": string
   "updatedAt": string
   "lastActivityAt": string
+  "lastMessageAt"?: string | null
+  "lastMessageAuthor"?: string | null
+  "lastMessageKind"?: "CUSTOMER" | "SUPPORT" | "SYSTEM" | null
+  "lastMessageFile"?: string | null
 }
 
 export type CaseListPage = {
   "items": Array<CaseListItem>
   "nextCursor": string | null
+  "quickViewCounts"?: CaseQuickViewCounts
 }
 
 export type CaseMessage = {
@@ -629,6 +634,13 @@ export type CasePersonalState = {
   "lastReadAt": string | null
   "snoozedUntil": string | null
   "snoozedAt"?: string | null
+}
+
+export type CaseQuickViewCounts = {
+  "unassigned": number
+  "mine": number
+  "sla": number
+  "all": number
 }
 
 export type CaseRelated = {

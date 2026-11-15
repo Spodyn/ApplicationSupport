@@ -86,7 +86,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                     provider_created_at,
                     correlation_id
                 )
-                VALUES (?, ?, ?, 'CUSTOMER', NULL, ?, NULL, ?, 'PLAIN_TEXT', TRUE, NULL, ?, ?)
+                VALUES (?, ?, ?, 'CUSTOMER', NULL, ?, ?, ?, 'PLAIN_TEXT', TRUE, NULL, ?, ?)
                 ON CONFLICT (case_id, external_message_id)
                     WHERE external_message_id IS NOT NULL
                 DO NOTHING
@@ -97,9 +97,10 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                     preparedStatement.setString(2, command.externalMessageId());
                     preparedStatement.setString(3, command.externalThreadKey());
                     preparedStatement.setString(4, command.authorExternalId());
-                    preparedStatement.setString(5, command.body());
-                    preparedStatement.setObject(6, utc(command.providerOccurredAt()));
-                    preparedStatement.setString(7, command.correlationId());
+                    preparedStatement.setString(5, command.authorName());
+                    preparedStatement.setString(6, command.body());
+                    preparedStatement.setObject(7, utc(command.providerOccurredAt()));
+                    preparedStatement.setString(8, command.correlationId());
                 },
                 (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class));
 

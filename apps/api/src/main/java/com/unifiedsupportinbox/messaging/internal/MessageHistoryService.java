@@ -11,10 +11,12 @@ import com.unifiedsupportinbox.storage.AttachmentMetadata;
 import com.unifiedsupportinbox.storage.AttachmentMetadataCatalog;
 import com.unifiedsupportinbox.storage.AttachmentScanStatus;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,15 +28,17 @@ class MessageHistoryService {
     private final AttachmentMetadataCatalog attachments;
     private final CursorCodec cursors;
     private final MessageDeliveryRepository deliveries;
+    private final NamedParameterJdbcTemplate jdbc;
 
     MessageHistoryService(
             MessageRepository messages,
             AttachmentMetadataCatalog attachments,
-            CursorCodec cursors, MessageDeliveryRepository deliveries) {
+            CursorCodec cursors, MessageDeliveryRepository deliveries, NamedParameterJdbcTemplate jdbc) {
         this.messages = messages;
         this.attachments = attachments;
         this.cursors = cursors;
         this.deliveries = deliveries;
+        this.jdbc = jdbc;
     }
 
     @Transactional(readOnly = true)
@@ -55,10 +59,19 @@ class MessageHistoryService {
         var failures = deliveries.failureDetails(page.stream()
                 .filter(message -> message.deliveryStatus() == MessageDeliveryStatus.FAILED
                         || message.deliveryStatus() == MessageDeliveryStatus.QUEUED).map(MessageEntity::id).toList(), viewer);
+        var authorIds = page.stream().filter(message -> message.authorName() == null)
+                .map(MessageEntity::authorUserId).filter(java.util.Objects::nonNull).distinct().toList();
+        Map<UUID, String> historicalAuthors = new HashMap<>();
+        if (!authorIds.isEmpty()) {
+            jdbc.query("SELECT id, display_name FROM users WHERE id IN (:ids)", Map.of("ids", authorIds), rs -> {
+                historicalAuthors.put(rs.getObject("id", UUID.class), rs.getString("display_name"));
+            });
+        }
         return new CursorPage<>(page.stream()
                 .map(message -> MessageHistoryItem.from(
                         message,
-                        attachmentsByMessage.getOrDefault(message.id(), List.of()), failures.get(message.id())))
+                        attachmentsByMessage.getOrDefault(message.id(), List.of()), failures.get(message.id()),
+                        historicalAuthors.get(message.authorUserId())))
                 .toList(), nextCursor);
     }
 
@@ -87,13 +100,15 @@ class MessageHistoryService {
             Instant deletedAt,
             String authorName,
             List<MessageAttachmentItem> attachments) {
-        static MessageHistoryItem from(MessageEntity message, List<AttachmentMetadata> attachments, MessageDeliveryRepository.FailureView failure) {
+        static MessageHistoryItem from(MessageEntity message, List<AttachmentMetadata> attachments, MessageDeliveryRepository.FailureView failure, String historicalAuthor) {
+            String author = message.authorName();
+            if (author == null) author = historicalAuthor == null ? message.authorExternalId() : historicalAuthor;
             return new MessageHistoryItem(
                     message.id(), message.kind(), message.body(), message.bodyFormat(), message.inbound(),
                     message.deliveryStatus(), failure != null && failure.retryAllowed(), failure == null ? null : failure.errorCode(),
                     failure == null ? null : failure.nextRetryAt(),
                     message.providerCreatedAt(), message.createdAt(), message.editedAt(),
-                    message.deletedAt(), message.authorName(),
+                    message.deletedAt(), author,
                     attachments.stream().map(MessageAttachmentItem::from).toList());
         }
     }

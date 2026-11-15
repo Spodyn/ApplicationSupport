@@ -115,12 +115,13 @@ class AskCustomerService {
                     deleted_at,
                     correlation_id,
                     ask_waiting_seconds
-                ) VALUES (?, NULL, ?, 'SUPPORT', ?, NULL, NULL, ?, ?, FALSE, 'QUEUED',
+                ) VALUES (?, NULL, ?, 'SUPPORT', ?, NULL, (SELECT display_name FROM users WHERE id = ?), ?, ?, FALSE, 'QUEUED',
                           NULL, NULL, NULL, ?, ?)
                 RETURNING id
                 """, UUID.class,
                 caseId,
                 context.externalThreadKey(),
+                userId,
                 userId,
                 body,
                 bodyFormat.name(),

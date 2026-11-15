@@ -65,6 +65,11 @@ export interface InboxCase {
   status: InboxStatus
   owner?: Pick<User, "id" | "fullName">
   lastMessageId?: string
+  lastMessageAt?: string
+  lastMessageAuthor?: string
+  lastMessageKind?: InboxMessage["kind"]
+  lastMessageFile?: string
+  integration?: { name: string; workspace?: string; externalChannelId: string }
   availableActions?: string[]
   unreadForCurrentUser: boolean
   snoozedForCurrentUserUntil?: string

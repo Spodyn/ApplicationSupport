@@ -141,11 +141,12 @@ class SupportSendMessageService {
                     edited_at,
                     deleted_at,
                     correlation_id
-                ) VALUES (?, NULL, ?, 'SUPPORT', ?, NULL, NULL, ?, ?, FALSE, 'QUEUED', NULL, NULL, NULL, ?)
+                ) VALUES (?, NULL, ?, 'SUPPORT', ?, NULL, (SELECT display_name FROM users WHERE id = ?), ?, ?, FALSE, 'QUEUED', NULL, NULL, NULL, ?)
                 RETURNING id
                 """, UUID.class,
                 caseId,
                 context.externalThreadKey(),
+                userId,
                 userId,
                 body,
                 bodyFormat.name(),

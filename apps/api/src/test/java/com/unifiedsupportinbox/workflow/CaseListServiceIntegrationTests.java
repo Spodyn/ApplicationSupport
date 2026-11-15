@@ -57,33 +57,39 @@ class CaseListServiceIntegrationTests {
     void listsSharedPersistedCasesWithUnreadPreviewAndSignedPagination() {
         UUID agent = user(true);
         UUID secondAgent = user(true);
-        UUID first = caseId("first-" + UUID.randomUUID());
-        UUID second = caseId("second-" + UUID.randomUUID());
+        String key = "pagination-" + UUID.randomUUID();
+        UUID first = caseId(key + "-first");
+        UUID second = caseId(key + "-second");
+        var filter = new CaseListFilter(false, false, false, false, null, null, null, null, null, null, key);
         message(first, "first real message");
         message(second, "second real message");
         jdbc.update("UPDATE cases SET last_activity_at = CURRENT_TIMESTAMP - INTERVAL '1 minute' WHERE id = ?", first);
         jdbc.update("UPDATE cases SET last_activity_at = CURRENT_TIMESTAMP WHERE id = ?", second);
 
-        var firstPage = cases.list(agent, null, 1);
+        var firstPage = cases.list(agent, null, 1, CaseListView.ACTIVE, filter);
         assertThat(firstPage.items()).hasSize(1);
         assertThat(firstPage.items().getFirst().id()).isEqualTo(second);
         assertThat(firstPage.items().getFirst().lastMessagePreview()).isEqualTo("second real message");
         assertThat(firstPage.items().getFirst().unreadForCurrentUser()).isTrue();
+        assertThat(firstPage.items().getFirst().lastMessageAuthor()).isEqualTo("Customer");
+        assertThat(firstPage.items().getFirst().lastMessageAt()).isNotNull();
+        assertThat(firstPage.quickViewCounts()).isEqualTo(new CaseListService.QuickViewCounts(2, 0, 0, 2));
         assertThat(firstPage.nextCursor()).isNotBlank();
 
-        var secondPage = cases.list(agent, firstPage.nextCursor(), 1);
+        var secondPage = cases.list(agent, firstPage.nextCursor(), 1, CaseListView.ACTIVE, filter);
         assertThat(secondPage.items()).hasSize(1);
         assertThat(secondPage.items().getFirst().id()).isEqualTo(first);
         assertThat(secondPage.nextCursor()).isNull();
-        assertThat(cases.list(secondAgent, null, 2).items()).extracting(CaseListService.CaseListItem::id)
+        assertThat(secondPage.quickViewCounts()).isEqualTo(firstPage.quickViewCounts());
+        assertThat(cases.list(secondAgent, null, 2, CaseListView.ACTIVE, filter).items()).extracting(CaseListService.CaseListItem::id)
                 .containsExactly(second, first);
-        assertThatThrownBy(() -> cases.list(secondAgent, firstPage.nextCursor(), 1))
+        assertThatThrownBy(() -> cases.list(secondAgent, firstPage.nextCursor(), 1, CaseListView.ACTIVE, filter))
                 .hasMessageContaining("cursor");
 
         UUID readMessage = firstPage.items().getFirst().lastMessageId();
         jdbc.update("INSERT INTO case_read_states (user_id, case_id, last_read_message_id, last_read_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
                 agent, second, readMessage);
-        assertThat(cases.list(agent, null, 2).items().stream()
+        assertThat(cases.list(agent, null, 2, CaseListView.ACTIVE, filter).items().stream()
                 .filter(item -> item.id().equals(second)).findFirst().orElseThrow().unreadForCurrentUser()).isFalse();
     }
 
@@ -157,6 +163,19 @@ class CaseListServiceIntegrationTests {
         assertThat(cases.list(agent, null, 20, CaseListView.ACTIVE, filter).items())
                 .extracting(CaseListService.CaseListItem::id).containsExactly(active);
         assertThat(context.getBean(CaseDetailService.class).detail(resolved, agent).sla().state()).isEqualTo("BREACHED");
+        var shared = new CaseListFilter(false, false, false, false, null, null, null, null, null, null, marker);
+        var expected = new CaseListService.QuickViewCounts(2, 0, 1, 4);
+        var sla = cases.list(agent, null, 1, CaseListView.ACTIVE, shared, CaseListService.QuickView.SLA);
+        assertThat(sla.items()).extracting(CaseListService.CaseListItem::id).containsExactly(active);
+        assertThat(sla.quickViewCounts()).isEqualTo(expected);
+        var all = cases.list(agent, null, 1, CaseListView.ACTIVE, shared, CaseListService.QuickView.ALL);
+        assertThat(all.nextCursor()).isNotBlank();
+        assertThat(all.quickViewCounts()).isEqualTo(expected);
+        var mine = cases.list(agent, null, 1, CaseListView.ACTIVE, shared, CaseListService.QuickView.MINE);
+        assertThat(mine.items()).isEmpty();
+        assertThat(mine.quickViewCounts()).isEqualTo(expected);
+        assertThatThrownBy(() -> cases.list(agent, all.nextCursor(), 1, CaseListView.ACTIVE, shared,
+                CaseListService.QuickView.UNASSIGNED)).hasMessageContaining("cursor");
     }
 
     private static UUID user(boolean active) {

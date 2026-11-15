@@ -259,13 +259,14 @@
       "feature": "Message history/filter/search/pagination",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Persisted order; cursor scope/tamper; no overlap duplication; bounded filters",
+      "expected": "Persisted sender and message order; scoped cursors; Quick View counts across matching pages after shared filters",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/CursorCodecTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageHistoryServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
         "apps/web/tests/unit/inbox-api-adapter.test.ts",
-        "apps/web/tests/unit/search-filter.test.tsx"
+        "apps/web/tests/unit/search-filter.test.tsx",
+        "apps/web/tests/fullstack/workflows.spec.ts"
       ],
       "gap": "Cross-customer Case reads are permitted within one deployment"
     },
@@ -365,7 +366,7 @@
       "feature": "Responsive navigation and content safety",
       "status": "IMPLEMENTED",
       "risk": "MEDIUM",
-      "expected": "Accepted layout; mobile list/conversation; safe text/links; strict script CSP; API never cached",
+      "expected": "Responsive inbox at 1440/820/390 px; keyboard queue, conversation and details; safe text/links; strict CSP; API never cached",
       "tests": [
         "apps/web/tests/e2e/application.spec.ts",
         "apps/web/tests/e2e/security.spec.ts",

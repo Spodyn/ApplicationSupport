@@ -3,7 +3,6 @@ package com.unifiedsupportinbox.workflow;
 import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.ApiV1Conventions;
 import com.unifiedsupportinbox.CursorCodec;
-import com.unifiedsupportinbox.CursorPage;
 import com.unifiedsupportinbox.CursorPosition;
 import com.unifiedsupportinbox.InvalidCursorException;
 import com.unifiedsupportinbox.cases.CaseStatus;
@@ -29,12 +28,12 @@ class CaseListService {
     }
 
     @Transactional(readOnly = true)
-    CursorPage<CaseListItem> list(UUID userId, String cursor, Integer requestedLimit) {
+    CaseListPage list(UUID userId, String cursor, Integer requestedLimit) {
         return list(userId, cursor, requestedLimit, CaseListView.ACTIVE, CaseListFilter.empty());
     }
 
     @Transactional(readOnly = true)
-    CursorPage<CaseListItem> list(
+    CaseListPage list(
             UUID userId,
             String cursor,
             Integer requestedLimit,
@@ -43,22 +42,29 @@ class CaseListService {
     }
 
     @Transactional(readOnly = true)
-    CursorPage<CaseListItem> list(
+    CaseListPage list(
             UUID userId,
             String cursor,
             Integer requestedLimit,
             CaseListView requestedView,
             CaseListFilter filter) {
+        return list(userId, cursor, requestedLimit, requestedView, filter, QuickView.ALL);
+    }
+
+    @Transactional(readOnly = true)
+    CaseListPage list(UUID userId, String cursor, Integer requestedLimit,
+            CaseListView requestedView, CaseListFilter filter, QuickView requestedQuickView) {
         requireEligibleUser(userId);
+        QuickView quickView = requestedQuickView == null ? QuickView.ALL : requestedQuickView;
         CaseListView view = requestedView == null ? CaseListView.ACTIVE : requestedView;
         CaseListFilter applied = filter == null ? CaseListFilter.empty() : filter;
         int limit = ApiV1Conventions.pageSize(requestedLimit);
-        CursorPosition position = cursor == null ? null : cursors.decode(cursor, scope(userId, view, applied));
+        CursorPosition position = cursor == null ? null : cursors.decode(cursor, scope(userId, view, applied, quickView));
         if (position != null && !anchorStillVisible(userId, view, position)) {
             throw new InvalidCursorException(InvalidCursorException.Reason.SCOPE_MISMATCH);
         }
 
-        List<CaseListItem> fetched = jdbc.query("""
+        List<PageRow> rows = jdbc.query("""
                 WITH base AS (
                     SELECT c.id, c.reference, c.status, c.owner_user_id,
                            owner.display_name AS owner_display_name,
@@ -68,6 +74,8 @@ class CaseListService {
                            channel.external_channel_id, integration.provider,
                            integration.workspace_external_id, c.external_thread_key,
                            latest.id AS last_message_id, CASE WHEN latest.deleted_at IS NOT NULL THEN 'Wiadomość została usunięta w Slack.' ELSE LEFT(latest.body, 240) END AS last_message_preview,
+                           latest.sent_at AS last_message_at, latest.author AS last_message_author,
+                           latest.kind AS last_message_kind, latest_file.original_filename AS last_message_file,
                            reads.last_read_message_id, snoozes.until_at AS snoozed_until,
                            CASE WHEN sla.paused_at IS NOT NULL THEN 'PAUSED' ELSE sla.state END AS sla_state,
                            CASE WHEN c.status IN ('NEW', 'PARTIALLY_IGNORED')
@@ -93,10 +101,19 @@ class CaseListService {
                     LEFT JOIN case_snoozes snoozes ON snoozes.case_id = c.id AND snoozes.user_id = ? AND snoozes.until_at > CURRENT_TIMESTAMP
                     LEFT JOIN case_sla sla ON sla.case_id = c.id
                     LEFT JOIN LATERAL (
-                        SELECT id, body, deleted_at FROM messages
-                        WHERE case_id = c.id
-                        ORDER BY COALESCE(provider_created_at, created_at) DESC, id DESC LIMIT 1
+                        SELECT m.id, m.body, m.deleted_at, m.kind,
+                               COALESCE(m.provider_created_at, m.created_at) AS sent_at,
+                               COALESCE(NULLIF(m.author_name, ''), sender.display_name, m.author_external_id) AS author
+                        FROM messages m
+                        LEFT JOIN users sender ON sender.id = m.author_user_id
+                        WHERE m.case_id = c.id
+                        ORDER BY COALESCE(m.provider_created_at, m.created_at) DESC, m.id DESC LIMIT 1
                     ) latest ON TRUE
+                    LEFT JOIN LATERAL (
+                        SELECT original_filename FROM attachments
+                        WHERE message_id = latest.id AND latest.deleted_at IS NULL
+                        ORDER BY created_at, id LIMIT 1
+                    ) latest_file ON TRUE
                     LEFT JOIN LATERAL (
                         SELECT SUM(weight)::int AS points FROM case_ignore_votes
                         WHERE case_id = c.id AND active
@@ -132,19 +149,36 @@ class CaseListService {
                            OR lower(COALESCE(external_thread_key, '')) LIKE ?::varchar ESCAPE '\\'
                            OR lower(COALESCE(workspace_external_id, '')) LIKE ?::varchar ESCAPE '\\'
                            OR lower(provider) LIKE ?::varchar ESCAPE '\\')
-                ), ranked AS (
+                ), views AS (
                     SELECT filtered.*,
+                           status NOT IN ('IGNORED', 'RESOLVED') AND owner_user_id IS NULL AS quick_unassigned,
+                           status NOT IN ('IGNORED', 'RESOLVED') AND owner_user_id = ?::uuid AS quick_mine,
+                           status NOT IN ('IGNORED', 'RESOLVED', 'WAITING_FOR_CUSTOMER')
+                               AND sla_state IN ('WARNING', 'BREACHED') AS quick_sla
+                    FROM filtered
+                ), totals AS (
+                    SELECT count(*) AS all_count, count(*) FILTER (WHERE quick_unassigned) AS unassigned_count,
+                           count(*) FILTER (WHERE quick_mine) AS mine_count,
+                           count(*) FILTER (WHERE quick_sla) AS sla_count
+                    FROM views
+                ), ranked AS (
+                    SELECT views.*,
                            CASE WHEN status IN ('IGNORED', 'RESOLVED') THEN 4
                                 WHEN status <> 'WAITING_FOR_CUSTOMER' AND sla_state = 'BREACHED' THEN 0
                                 WHEN status <> 'WAITING_FOR_CUSTOMER' AND sla_state = 'WARNING' THEN 1
                                 WHEN status = 'NEW' AND unread THEN 2
                                 ELSE 3 END AS sort_bucket,
                            COALESCE(sla_due_at, 'infinity'::timestamptz) AS sort_due
-                    FROM filtered
+                    FROM views
+                    WHERE CASE ?::varchar
+                        WHEN 'UNASSIGNED' THEN quick_unassigned
+                        WHEN 'MINE' THEN quick_mine
+                        WHEN 'SLA' THEN quick_sla
+                        ELSE TRUE END
                 ), anchor AS (
                     SELECT sort_bucket, sort_due, last_activity_at, id
                     FROM ranked WHERE id = ? AND last_activity_at = ?
-                )
+                ), page AS (
                 SELECT r.* FROM ranked r
                 WHERE ?::uuid IS NULL OR EXISTS (
                     SELECT 1 FROM anchor a
@@ -157,7 +191,13 @@ class CaseListService {
                 )
                 ORDER BY r.sort_bucket, r.sort_due, r.last_activity_at DESC, r.id DESC
                 LIMIT ?
-                """, (rs, ignored) -> item(rs), userId, userId,
+                )
+                SELECT page.*, totals.* FROM totals LEFT JOIN page ON TRUE
+                ORDER BY page.sort_bucket, page.sort_due, page.last_activity_at DESC, page.id DESC
+                """, (rs, ignored) -> new PageRow(
+                        rs.getObject("id") == null ? null : item(rs),
+                        new QuickViewCounts(rs.getLong("unassigned_count"), rs.getLong("mine_count"),
+                                rs.getLong("sla_count"), rs.getLong("all_count"))), userId, userId,
                 view == CaseListView.SNOOZED,
                 applied.mine(), userId,
                 applied.unassigned(),
@@ -173,18 +213,20 @@ class CaseListService {
                 applied.search(), searchPattern(applied.search()), searchPattern(applied.search()),
                 searchPattern(applied.search()), searchPattern(applied.search()), searchPattern(applied.search()),
                 searchPattern(applied.search()), searchPattern(applied.search()),
+                userId, quickView.name(),
                 position == null ? null : position.id(),
                 position == null ? null : OffsetDateTime.ofInstant(position.sortValue(), java.time.ZoneOffset.UTC),
                 position == null ? null : position.id(), limit + 1);
 
+        List<CaseListItem> fetched = rows.stream().map(PageRow::item).filter(java.util.Objects::nonNull).toList();
         boolean hasMore = fetched.size() > limit;
         List<CaseListItem> page = hasMore ? fetched.subList(0, limit) : fetched;
         String next = hasMore
                 ? cursors.encode(
                         new CursorPosition(page.getLast().lastActivityAt(), page.getLast().id()),
-                        scope(userId, view, applied))
+                        scope(userId, view, applied, quickView))
                 : null;
-        return new CursorPage<>(page, next);
+        return new CaseListPage(page, next, rows.getFirst().counts());
     }
 
     private void requireEligibleUser(UUID userId) {
@@ -228,6 +270,8 @@ class CaseListService {
                 rs.getString("external_channel_id"), rs.getString("provider"),
                 rs.getObject("owner_user_id", UUID.class), rs.getString("owner_display_name"),
                 rs.getObject("last_message_id", UUID.class), rs.getString("last_message_preview"),
+                instant(rs, "last_message_at"), rs.getString("last_message_author"),
+                rs.getString("last_message_kind"), rs.getString("last_message_file"),
                 rs.getBoolean("unread"), instant(rs, "snoozed_until"), rs.getString("sla_state"),
                 instant(rs, "sla_due_at"), rs.getInt("ignore_score"), instant(rs, "waiting_until"),
                 instant(rs, "created_at"), instant(rs, "updated_at"), instant(rs, "last_activity_at"));
@@ -242,14 +286,23 @@ class CaseListService {
         return search == null ? null : "%" + search + "%";
     }
 
-    private static String scope(UUID userId, CaseListView view, CaseListFilter filter) {
-        return "case-list:" + userId + ":" + view.name() + ":" + filter.scopeToken();
+    private static String scope(UUID userId, CaseListView view, CaseListFilter filter, QuickView quickView) {
+        String scope = "case-list:" + userId + ":" + view.name() + ":" + filter.scopeToken();
+        return quickView == QuickView.ALL ? scope : scope + ":" + quickView.name();
     }
+
+    enum QuickView { UNASSIGNED, MINE, SLA, ALL }
+
+    record QuickViewCounts(long unassigned, long mine, long sla, long all) {}
+    record CaseListPage(List<CaseListItem> items, String nextCursor, QuickViewCounts quickViewCounts) {}
+    private record PageRow(CaseListItem item, QuickViewCounts counts) {}
 
     record CaseListItem(UUID id, String reference, CaseStatus status,
             UUID customerId, String customerName, UUID channelId, String channelName,
             String externalChannelId, String provider, UUID ownerUserId, String ownerDisplayName,
-            UUID lastMessageId, String lastMessagePreview, boolean unreadForCurrentUser,
+            UUID lastMessageId, String lastMessagePreview,
+            Instant lastMessageAt, String lastMessageAuthor, String lastMessageKind, String lastMessageFile,
+            boolean unreadForCurrentUser,
             Instant snoozedUntil, String slaState, Instant slaDueAt, int ignoreScore,
             Instant waitingUntil, Instant createdAt, Instant updatedAt, Instant lastActivityAt) {}
 }

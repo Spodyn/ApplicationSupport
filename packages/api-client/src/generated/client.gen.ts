@@ -238,6 +238,7 @@ export interface ListCasesInput {
   "provider"?: Channel
   "ownerId"?: string
   "search"?: string
+  "quickView"?: "UNASSIGNED" | "MINE" | "SLA" | "ALL"
 }
 
 export interface GetCaseDetailInput {
@@ -478,7 +479,7 @@ export function createApiClient(transport: ApiTransport) {
   getCurrentSession: () => transport.request<CurrentSession>({ method: "GET", path: "/api/v1/auth/me" }),
   completePasswordReset: (input: CompletePasswordResetInput) => transport.request<void>({ method: "POST", path: "/api/v1/auth/password-reset/complete", body: input.body }),
   apiUserAdministrationControllerRequestReset: (input: ApiUserAdministrationControllerRequestResetInput) => transport.request<void>({ method: "POST", path: "/api/v1/auth/password-reset/request", body: input.body }),
-  listCases: (input: ListCasesInput) => transport.request<CaseListPage>({ method: "GET", path: "/api/v1/cases", query: { "cursor": input["cursor"], "limit": input["limit"], "view": input["view"], "mine": input["mine"], "unassigned": input["unassigned"], "unread": input["unread"], "slaAttention": input["slaAttention"], "status": input["status"], "statusScope": input["statusScope"], "customerId": input["customerId"], "channelId": input["channelId"], "provider": input["provider"], "ownerId": input["ownerId"], "search": input["search"] } }),
+  listCases: (input: ListCasesInput) => transport.request<CaseListPage>({ method: "GET", path: "/api/v1/cases", query: { "cursor": input["cursor"], "limit": input["limit"], "view": input["view"], "mine": input["mine"], "unassigned": input["unassigned"], "unread": input["unread"], "slaAttention": input["slaAttention"], "status": input["status"], "statusScope": input["statusScope"], "customerId": input["customerId"], "channelId": input["channelId"], "provider": input["provider"], "ownerId": input["ownerId"], "search": input["search"], "quickView": input["quickView"] } }),
   getCaseDetail: (input: GetCaseDetailInput) => transport.request<CaseDetail>({ method: "GET", path: interpolatePath("/api/v1/cases/{caseId}", { "caseId": input["caseId"] }) }),
   getCaseActivity: (input: GetCaseActivityInput) => transport.request<CaseActivityPage>({ method: "GET", path: interpolatePath("/api/v1/cases/{caseId}/activity", { "caseId": input["caseId"] }), query: { "cursor": input["cursor"], "limit": input["limit"] } }),
   askCustomer: (input: AskCustomerInput) => transport.request<SendMessageResponse>({ method: "POST", path: interpolatePath("/api/v1/cases/{caseId}/ask-customer", { "caseId": input["caseId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] }, body: input.body }),
