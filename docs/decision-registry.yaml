@@ -205,8 +205,8 @@ decisions:
 
   - id: DEC-ATTACHMENT-001
     area: attachments
-    status: frozen
-    source: [E08, E20]
+    status: owner_approved
+    source: [E08, E20, OWNER_REQUEST_CASE_ATTACHMENT_PREVIEWS]
     decision:
       public_reply_content: nonblank_text_or_clean_attachment
       ask_customer_requires_text: true
@@ -214,14 +214,19 @@ decisions:
       max_files_per_message: 10
       max_total_mib_per_message: 50
       lower_provider_limit_wins: true
-      scan_states: [PENDING, CLEAN, INFECTED, ERROR]
-      only_clean_normal_send_or_download: true
+      scan_states: [PENDING, SCANNING, CLEAN, INFECTED, ERROR]
+      only_clean_send_preview_or_download: true
       default_scanner: ClamAV
       orphan_cleanup_hours: 24
       authorized_backend_download_default: true
       signed_url_max_ttl_minutes_if_used: 5
       encrypted_archives_allowed: false
-      archive_max_nesting: 3
+      general_archives_allowed: false
+      validated_office_packages: [DOCX, XLSX, PPTX]
+      archive_max_nesting: 0
+      authorized_clean_image_previews: [PNG, JPEG, GIF, WEBP, AVIF, BMP]
+      image_download_only: [TIFF, HEIC, HEIF]
+      svg_allowed: false
       archive_max_entries: 1000
       archive_max_expanded_mib: 250
 

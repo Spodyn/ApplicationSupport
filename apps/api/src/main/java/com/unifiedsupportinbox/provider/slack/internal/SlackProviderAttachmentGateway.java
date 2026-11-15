@@ -208,6 +208,9 @@ class SlackProviderAttachmentGateway implements ProviderAttachmentGateway {
             throw ProviderAttachmentException.rateLimited(
                     SlackDeliveryErrorClassifier.normalizedApiError(errorCode), retryAfter);
         }
+        if (!ok && SlackDeliveryErrorClassifier.isAttachmentScopeFailure(errorCode)) {
+            throw ProviderAttachmentException.authentication(SlackDeliveryErrorClassifier.normalizedApiError(errorCode));
+        }
         if (statusCode < 200 || statusCode >= 300) {
             String code = "SLACK_HTTP_" + statusCode;
             if (SlackDeliveryErrorClassifier.isTransientHttpStatus(statusCode)) {

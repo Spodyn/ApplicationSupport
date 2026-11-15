@@ -2,8 +2,8 @@ package com.unifiedsupportinbox.storage.internal;
 
 import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.storage.AttachmentMetadata;
-import jakarta.servlet.http.HttpServletResponse;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.InputStreamResource;
@@ -52,25 +52,34 @@ class AttachmentController {
 
     @GetMapping("/{caseId}/attachments/{attachmentId}")
     ResponseEntity<InputStreamResource> download(
-            @PathVariable UUID caseId,
-            @PathVariable UUID attachmentId,
-            Authentication authentication,
-            HttpServletResponse ignoredResponse) {
-        authenticatedUserId(authentication);
+            @PathVariable UUID caseId, @PathVariable UUID attachmentId, Authentication authentication) {
+        return serve(caseId, attachmentId, authenticatedUserId(authentication), false);
+    }
+
+    @GetMapping("/{caseId}/attachments/{attachmentId}/preview")
+    ResponseEntity<InputStreamResource> preview(
+            @PathVariable UUID caseId, @PathVariable UUID attachmentId, Authentication authentication) {
+        return serve(caseId, attachmentId, authenticatedUserId(authentication), true);
+    }
+
+    private ResponseEntity<InputStreamResource> serve(UUID caseId, UUID attachmentId, UUID viewer, boolean inline) {
         SecureAttachmentService.Download download;
         try {
-            download = attachments.openForDownload(caseId, attachmentId);
+            download = attachments.openForRead(caseId, attachmentId, viewer, inline);
         } catch (com.unifiedsupportinbox.storage.AttachmentQuarantinedException quarantined) {
-            throw ApiProblemException.conflict("The attachment is quarantined and cannot be downloaded.");
+            throw ApiProblemException.conflict("The attachment is quarantined and cannot be opened.");
         }
         AttachmentMetadata metadata = download.metadata();
-        MediaType contentType = mediaType(metadata.detectedContentType(), metadata.contentType());
+        MediaType type = mediaType(metadata.detectedContentType());
+        ContentDisposition.Builder disposition = inline ? ContentDisposition.inline() : ContentDisposition.attachment();
         InputStream content = download.content();
         return ResponseEntity.ok()
-                .contentType(contentType)
+                .contentType(type)
                 .contentLength(metadata.sizeBytes())
+                .header(HttpHeaders.CACHE_CONTROL, "private, no-store")
+                .header("Cross-Origin-Resource-Policy", "same-origin")
                 .header(HttpHeaders.CONTENT_DISPOSITION,
-                        ContentDisposition.attachment().filename(metadata.originalFilename()).build().toString())
+                        disposition.filename(metadata.originalFilename(), StandardCharsets.UTF_8).build().toString())
                 .body(new InputStreamResource(content));
     }
 
@@ -94,16 +103,8 @@ class AttachmentController {
         }
     }
 
-    private static MediaType mediaType(String detected, String declared) {
-        for (String candidate : new String[] {detected, declared}) {
-            if (candidate == null || candidate.isBlank()) continue;
-            try {
-                return MediaType.parseMediaType(candidate);
-            } catch (IllegalArgumentException ignored) {
-                // Fall back to the next candidate, then application/octet-stream.
-            }
-        }
-        return MediaType.APPLICATION_OCTET_STREAM;
+    private static MediaType mediaType(String detected) {
+        return detected == null ? MediaType.APPLICATION_OCTET_STREAM : MediaType.parseMediaType(detected);
     }
 
     record AttachmentView(

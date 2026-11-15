@@ -279,6 +279,11 @@ export interface ApiAttachmentControllerDownloadInput {
   "attachmentId": string
 }
 
+export interface PreviewCaseAttachmentInput {
+  "caseId": string
+  "attachmentId": string
+}
+
 export interface RetryCaseAttachmentScanInput {
   "caseId": string
   "attachmentId": string
@@ -501,6 +506,7 @@ export function createApiClient(transport: ApiTransport) {
   uploadCaseAttachment: (input: UploadCaseAttachmentInput) => transport.request<AttachmentUploadResponse>({ method: "POST", path: interpolatePath("/api/v1/cases/{caseId}/attachments", { "caseId": input["caseId"] }), body: input.body }),
   removePendingCaseAttachment: (input: RemovePendingCaseAttachmentInput) => transport.request<void>({ method: "DELETE", path: interpolatePath("/api/v1/cases/{caseId}/attachments/{attachmentId}", { "caseId": input["caseId"], "attachmentId": input["attachmentId"] }) }),
   apiAttachmentControllerDownload: (input: ApiAttachmentControllerDownloadInput) => transport.request<Blob>({ method: "GET", responseType: "blob", path: interpolatePath("/api/v1/cases/{caseId}/attachments/{attachmentId}", { "caseId": input["caseId"], "attachmentId": input["attachmentId"] }) }),
+  previewCaseAttachment: (input: PreviewCaseAttachmentInput) => transport.request<Blob>({ method: "GET", responseType: "blob", path: interpolatePath("/api/v1/cases/{caseId}/attachments/{attachmentId}/preview", { "caseId": input["caseId"], "attachmentId": input["attachmentId"] }) }),
   retryCaseAttachmentScan: (input: RetryCaseAttachmentScanInput) => transport.request<AttachmentUploadResponse>({ method: "POST", path: interpolatePath("/api/v1/cases/{caseId}/attachments/{attachmentId}/scan", { "caseId": input["caseId"], "attachmentId": input["attachmentId"] }) }),
   claimCase: (input: ClaimCaseInput) => transport.request<ClaimCaseResponse>({ method: "POST", path: interpolatePath("/api/v1/cases/{caseId}/claim", { "caseId": input["caseId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] } }),
   ignoreCase: (input: IgnoreCaseInput) => transport.request<IgnoreCaseResponse>({ method: "POST", path: interpolatePath("/api/v1/cases/{caseId}/ignore", { "caseId": input["caseId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] }, body: input.body }),

@@ -1,4 +1,4 @@
-type DeliveryPresentation = { message: string; retryMessage?: string; integration?: boolean }
+type DeliveryPresentation = { message: string; retryMessage?: string; integration?: boolean; requiredScope?: string }
 
 const generic = { message: "Nie udało się dostarczyć wiadomości." }
 const integration = { message: "Administrator musi ponownie połączyć integrację Slack.", integration: true }
@@ -25,6 +25,8 @@ const errors: Record<string, DeliveryPresentation> = {
   SLACK_TOKEN_REVOKED: integration,
   SLACK_TOKEN_EXPIRED: integration,
   SLACK_MISSING_SCOPE: integration,
+  SLACK_MISSING_SCOPE_FILES_READ: { ...integration, requiredScope: "files:read" },
+  SLACK_MISSING_SCOPE_FILES_WRITE: { ...integration, requiredScope: "files:write" },
   SLACK_TEAM_ACCESS_NOT_GRANTED: integration,
   SLACK_NOT_ALLOWED_TOKEN_TYPE: integration,
   SLACK_BOT_TOKEN_MISSING: integration,

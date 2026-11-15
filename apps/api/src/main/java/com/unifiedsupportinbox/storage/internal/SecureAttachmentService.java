@@ -117,12 +117,22 @@ class SecureAttachmentService {
         return security.scan(attachmentId);
     }
 
-    Download openForDownload(UUID caseId, UUID attachmentId) {
+    Download openForRead(UUID caseId, UUID attachmentId, UUID userId, boolean preview) {
         if (!metadata.belongsToCase(attachmentId, caseId)) {
             throw ApiProblemException.notFound("Attachment was not found for this Case.");
         }
+        AttachmentMetadata stored = metadata.findById(attachmentId)
+                .orElseThrow(() -> ApiProblemException.notFound("Attachment was not found for this Case."));
+        if (stored.messageId() == null) requireCurrentOwner(caseId, userId);
         AttachmentMetadata clean = security.requireClean(attachmentId);
-        return new Download(clean, objects.open(clean.storageKey()));
+        if (preview && !AttachmentFilePolicy.supportsInlineImage(clean.detectedContentType())) {
+            throw ApiProblemException.notFound("Image preview is unavailable.");
+        }
+        try {
+            return new Download(clean, objects.open(clean.storageKey()));
+        } catch (com.unifiedsupportinbox.storage.AttachmentObjectNotFoundException missing) {
+            throw ApiProblemException.notFound("Attachment was not found for this Case.");
+        }
     }
 
     @Transactional

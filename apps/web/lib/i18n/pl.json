@@ -830,6 +830,12 @@
     "Próg ostrzeżenia dla starszych spraw": "Próg ostrzeżenia dla starszych spraw",
     "Nowe sprawy mają próg przy 25% pozostałego czasu.": "Nowe sprawy mają próg przy 25% pozostałego czasu.",
     "Poniedziałek, 16:30. Przykładowy kalendarz: dni robocze 08:00–17:00.": "Poniedziałek, 16:30. Przykładowy kalendarz: dni robocze 08:00–17:00.",
-    "FRT i NRT korzystają z kalendarza zapisanego przy sprawie.": "FRT i NRT korzystają z kalendarza zapisanego przy sprawie."
+    "FRT i NRT korzystają z kalendarza zapisanego przy sprawie.": "FRT i NRT korzystają z kalendarza zapisanego przy sprawie.",
+    "Pobieranie pliku ze Slacka…": "Pobieranie pliku ze Slacka…",
+    "Skanowanie pliku…": "Skanowanie pliku…",
+    "Otwórz podgląd {{name}}": "Otwórz podgląd {{name}}",
+    "Pobierz oryginał": "Pobierz oryginał",
+    "Podgląd obrazu jest niedostępny.": "Podgląd obrazu jest niedostępny.",
+    "Brakujące uprawnienie Slacka: {{scope}}": "Brakujące uprawnienie Slacka: {{scope}}"
   }
 }

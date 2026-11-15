@@ -125,8 +125,11 @@ export interface InboxAttachment {
   size: string
   type: "image" | "document" | "archive"
   downloadUrl?: string
+  previewUrl?: string
   scanStatus?: string
   failureStage?: string
+  processingStage?: string
+  requiredSlackScope?: string
 }
 
 export interface InboxMessage {

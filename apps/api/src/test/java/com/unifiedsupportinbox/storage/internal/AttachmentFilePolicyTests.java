@@ -77,6 +77,75 @@ class AttachmentFilePolicyTests {
                 .isEqualTo(AttachmentPolicyViolationException.Code.UNSUPPORTED_TYPE);
     }
 
+    @Test
+    void validatesRealOfficePackagesAndRejectsGenericZipWithOfficeExtension() throws Exception {
+        for (var office : OfficeAttachmentPackage.values()) {
+            String extension = switch (office) {
+                case WORD -> "docx";
+                case EXCEL -> "xlsx";
+                case POWERPOINT -> "pptx";
+            };
+            try (var content = getClass().getResourceAsStream("/attachments/preview-fixtures/sample." + extension)) {
+                assertThat(policy.verifyOfficePackage("sample." + extension, content)).isEqualTo(office.mime());
+            }
+        }
+
+        var archive = new java.io.ByteArrayOutputStream();
+        try (var zip = new java.util.zip.ZipOutputStream(archive)) {
+            zip.putNextEntry(new java.util.zip.ZipEntry("notes.txt"));
+            zip.write("plain archive".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        assertThatThrownBy(() -> policy.verifyOfficePackage("renamed.docx",
+                new ByteArrayInputStream(archive.toByteArray())))
+                .isInstanceOf(AttachmentPolicyViolationException.class)
+                .extracting(error -> ((AttachmentPolicyViolationException) error).code())
+                .isEqualTo(AttachmentPolicyViolationException.Code.BLOCKED_ARCHIVE);
+    }
+
+    @Test
+    void rejectsUnsafePartsWithinAnOtherwiseValidOfficePackage() throws Exception {
+        for (String entry : java.util.List.of("word/vbaProject.bin", "word/embeddings/package.zip", "word/payload.exe",
+                "../outside.xml")) {
+            byte[] candidate = addOfficePart(entry);
+            assertThatThrownBy(() -> policy.verifyOfficePackage("sample.docx", new ByteArrayInputStream(candidate)))
+                    .as(entry)
+                    .isInstanceOf(AttachmentPolicyViolationException.class);
+        }
+    }
+
+    private byte[] addOfficePart(String entryName) throws Exception {
+        var target = new java.io.ByteArrayOutputStream();
+        try (var source = new java.util.zip.ZipInputStream(
+                    getClass().getResourceAsStream("/attachments/preview-fixtures/sample.docx"));
+                var archive = new java.util.zip.ZipOutputStream(target)) {
+            for (var item = source.getNextEntry(); item != null; item = source.getNextEntry()) {
+                archive.putNextEntry(new java.util.zip.ZipEntry(item.getName()));
+                source.transferTo(archive);
+                archive.closeEntry();
+            }
+            archive.putNextEntry(new java.util.zip.ZipEntry(entryName));
+            archive.write("Synthetic blocked item".getBytes(StandardCharsets.UTF_8));
+            archive.closeEntry();
+        }
+        return target.toByteArray();
+    }
+
+    @Test
+    void recognizesModernRasterFormatsAndKeepsNonPreviewableTypesDownloadOnly() throws Exception {
+        for (String extension : java.util.List.of("webp", "avif", "bmp", "tiff")) {
+            try (var content = getClass().getResourceAsStream("/attachments/preview-fixtures/sample." + extension)) {
+                byte[] bytes = content.readAllBytes();
+                assertAccepted("sample." + extension, "image/" + extension, bytes, "image/" + extension);
+            }
+        }
+        assertAccepted("sample.heic", "image/heic",
+                new byte[] {0, 0, 0, 16, 'f', 't', 'y', 'p', 'h', 'e', 'i', 'c', 0, 0, 0, 0}, "image/heic");
+        assertThat(AttachmentFilePolicy.supportsInlineImage("image/tiff")).isFalse();
+        assertThat(AttachmentFilePolicy.supportsInlineImage("image/heic")).isFalse();
+        assertThat(AttachmentFilePolicy.supportsInlineImage("image/svg+xml")).isFalse();
+    }
+
     private void assertAccepted(String filename, String declared, byte[] bytes, String expectedDetected) throws Exception {
         String detected = policy.detectContentType(new ByteArrayInputStream(bytes));
         assertThat(detected).isEqualTo(expectedDetected);

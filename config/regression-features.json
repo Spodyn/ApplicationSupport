@@ -309,12 +309,13 @@
       "feature": "Uploads/downloads/quarantine/storage",
       "status": "PARTIALLY_IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Clipboard PNG and picker share a queue and limits; owner uploads and rescans; CLEAN-only send/download; localized scan and policy errors; independently persisted Slack attachment status",
+      "expected": "Clipboard and picker limits; CLEAN-only authorized preview and download; typed Office packages; Slack uploads, download and retry; localized scan and scope errors",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/ProviderAttachmentGatewayContractTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackOutboundAttachmentServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackProviderAttachmentGatewayTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentFilePolicyTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDeliveryErrorClassifierTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentMetadataIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentObjectStorageIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentScanStateIntegrationTests.java",
@@ -324,7 +325,7 @@
         "apps/web/tests/unit/inbox-api-adapter.test.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFileReferenceTests.java"
       ],
-      "gap": "Archives rejected wholesale; actual ClamAV/TLS/signatures and archive acceptance remain gaps"
+      "gap": "Live Slack and real scanner acceptance is separate from deterministic full-stack tests; TIFF and HEIC/HEIF are download-only"
     },
     {
       "id": "RETRY",

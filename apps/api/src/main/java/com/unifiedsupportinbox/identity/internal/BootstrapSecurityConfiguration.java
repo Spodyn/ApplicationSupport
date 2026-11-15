@@ -107,7 +107,8 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers(HttpMethod.GET, "/api/v1/cases").authenticated()
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/cases/*/messages",
-                                "/api/v1/cases/*/attachments/*").authenticated()
+                                "/api/v1/cases/*/attachments/*",
+                                "/api/v1/cases/*/attachments/*/preview").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/cases/*", "/api/v1/cases/*/activity").authenticated()
                         .requestMatchers(HttpMethod.POST,
                                 "/api/v1/cases/bulk",

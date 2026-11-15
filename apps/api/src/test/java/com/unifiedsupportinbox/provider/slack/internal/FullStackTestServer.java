@@ -94,8 +94,19 @@ public final class FullStackTestServer {
                 response = Map.of("changed", changed);
             } else if (path.equals("/observed")) response = Map.of("messages", DELIVERED, "files", SHARED_FILES);
             else if (path.equals("/files.getUploadURLExternal")) {
-                String fileId = "F" + UUID.randomUUID().toString().replace("-", "");
-                response = Map.of("ok", true, "file_id", fileId, "upload_url", providerUri.resolve("/bytes/" + fileId).toString());
+                String form = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+                if (!"application/x-www-form-urlencoded".equals(exchange.getRequestHeaders().getFirst("Content-Type"))
+                        || !form.matches("filename=[^&]+&length=[0-9]+")) {
+                    response = Map.of("ok", false, "error", "invalid_arguments");
+                } else {
+                    String filename = java.net.URLDecoder.decode(form.substring("filename=".length(), form.indexOf('&')), StandardCharsets.UTF_8);
+                    if (filename.startsWith("scope-required-")) {
+                        response = Map.of("ok", false, "error", "missing_scope", "needed", "files:write");
+                    } else {
+                        String fileId = "F" + UUID.randomUUID().toString().replace("-", "");
+                        response = Map.of("ok", true, "file_id", fileId, "upload_url", providerUri.resolve("/bytes/" + fileId).toString());
+                    }
+                }
             } else if (path.startsWith("/bytes/")) {
                 if (exchange.getRequestBody().readAllBytes().length > 0) UPLOADED_FILES.add(path.substring("/bytes/".length()));
                 response = Map.of("ok", true);
@@ -105,10 +116,10 @@ public final class FullStackTestServer {
                 if (id.startsWith("F-inbound-")) {
                     if (id.startsWith("F-inbound-missing-scope-")
                             || !"Bearer test-only-fullstack-bot".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
-                        response = Map.of("ok", false, "error", "missing_scope");
+                        response = Map.of("ok", false, "error", "missing_scope", "needed", "files:read");
                     } else {
-                        response = Map.of("ok", true, "file", Map.of("id", id, "name", id + ".txt",
-                                "mimetype", "text/plain", "size", inboundFileBytes(id).length,
+                        response = Map.of("ok", true, "file", Map.of("id", id, "name", id + "." + fixtureExtension(id),
+                                "mimetype", fixtureType(id), "size", inboundFileBytes(id).length,
                                 "url_private_download", providerUri.resolve("/download/" + id).toString()));
                     }
                 } else response = shared.<Map<String, ?>>map(file -> Map.of("ok", true, "file", Map.of(
@@ -120,7 +131,7 @@ public final class FullStackTestServer {
                 boolean allowed = "Bearer test-only-fullstack-bot".equals(exchange.getRequestHeaders().getFirst("Authorization"))
                         && !id.startsWith("F-inbound-denied-");
                 byte[] payload = allowed ? inboundFileBytes(id) : new byte[0];
-                exchange.getResponseHeaders().set("Content-Type", "text/plain");
+                exchange.getResponseHeaders().set("Content-Type", fixtureType(id));
                 exchange.sendResponseHeaders(allowed ? 200 : 403, payload.length);
                 try (var output = exchange.getResponseBody()) { output.write(payload); }
                 return;
@@ -248,7 +259,31 @@ public final class FullStackTestServer {
         }
     }
 
-    private static byte[] inboundFileBytes(String id) {
+    private static final Map<String, String> FIXTURE_MIME_TYPES = Map.ofEntries(
+            Map.entry("png", "image/png"), Map.entry("jpeg", "image/jpeg"), Map.entry("gif", "image/gif"),
+            Map.entry("webp", "image/webp"), Map.entry("avif", "image/avif"), Map.entry("bmp", "image/bmp"),
+            Map.entry("tiff", "image/tiff"), Map.entry("pdf", "application/pdf"),
+            Map.entry("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            Map.entry("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            Map.entry("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"));
+
+    private static String fixtureExtension(String id) {
+        if (!id.startsWith("F-inbound-format-")) return "txt";
+        String extension = id.substring(id.lastIndexOf('-') + 1);
+        if (!FIXTURE_MIME_TYPES.containsKey(extension)) throw new IllegalArgumentException("Unknown fixture type");
+        return extension;
+    }
+
+    private static String fixtureType(String id) {
+        return FIXTURE_MIME_TYPES.getOrDefault(fixtureExtension(id), "text/plain");
+    }
+
+    private static byte[] inboundFileBytes(String id) throws java.io.IOException {
+        if (id.startsWith("F-inbound-format-")) {
+            try (var file = FullStackTestServer.class.getResourceAsStream("/attachments/preview-fixtures/sample." + fixtureExtension(id))) {
+                return java.util.Objects.requireNonNull(file).readAllBytes();
+            }
+        }
         return (id.startsWith("F-inbound-infected-") ? "test-only-infected" :
                 id.startsWith("F-inbound-scan-error-") ? "test-only-scanner-offline-" + id : "Synthetic inbound " + id)
                 .getBytes(StandardCharsets.UTF_8);

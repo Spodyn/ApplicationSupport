@@ -128,7 +128,7 @@ reply is rejected. Ask Customer still requires text. Clipboard images and
 selected files share the same draft queue and limits. The owner can retry a
 technical scan failure while the upload is still unassociated.
 
-Attachment limits are 25 MiB/file, 10 files and 50 MiB/message, with lower provider limit winning. Uploads stream through backend/object storage. Common images, PDF, text/CSV, OOXML and ZIP are baseline allowed classes; executables/scripts/active HTML are blocked. Scanning states are PENDING/CLEAN/INFECTED/ERROR; only CLEAN is normally usable. Default self-hosted scanner is ClamAV. There is no "allow anyway" path for infected/error files.
+Attachment limits are 25 MiB/file, 10 files and 50 MiB/message, with lower provider limit winning. Uploads stream through backend/object storage. Approved raster images, PDF, text/CSV and validated Office OOXML are accepted. General archives, executables, scripts and active markup are blocked. Scanning states include PENDING, SCANNING, CLEAN, INFECTED and ERROR. Send, preview and download require CLEAN. Default self-hosted scanner is ClamAV. There is no "allow anyway" path for infected/error files.
 
 ## 16. SLA
 

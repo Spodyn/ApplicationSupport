@@ -1,4 +1,6 @@
 import { createHmac, randomUUID } from 'node:crypto'
+import { readFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { expect, test, type Page } from '@playwright/test'
 
 type SlackFixture = { channelId: string; externalChannelId: string; workspaceId: string }
@@ -1228,3 +1230,130 @@ test('private messaging persists, reconnects and denies an unrelated administrat
     await contextC.close()
   }
 })
+
+for (const visibility of ['public', 'private'] as const) {
+  test('renders and delivers verified image and document formats through ' + visibility + ' Slack', async ({page, browser, baseURL}) => {
+    test.setTimeout(90_000)
+    const account = await (await page.request.post(visibility === 'public' ? '/__test/account' : '/__test/private-account')).json()
+    const secondAccount = await testAccount(page)
+    const secondContext = await browser.newContext({baseURL, viewport: {width: 390, height: 844}})
+    const second = await secondContext.newPage()
+    fixtures.set(page, account)
+    try {
+      await login(page, account.email)
+      const marker = randomUUID().slice(0, 8)
+      const root = await inbound(page, 'File format acceptance ' + marker)
+      const cases = async () => (await (await page.request.get('/api/v1/cases', {params: {search: account.externalChannelId}})).json()).items
+      await expect.poll(async () => (await cases()).length).toBe(1)
+      const id = (await cases())[0].id
+      const path = '/api/v1/cases/' + id
+      const history = async () => (await (await page.request.get(path + '/messages')).json()).items
+      const fixturesForTest = [
+        ['png', 'image/png'], ['jpeg', 'image/jpeg'], ['gif', 'image/gif'], ['webp', 'image/webp'],
+        ['avif', 'image/avif'], ['bmp', 'image/bmp'], ['pdf', 'application/pdf'],
+        ['docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+        ['xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
+        ['pptx', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+      ] as const
+      const inline = new Set(['png', 'jpeg', 'gif', 'webp', 'avif', 'bmp'])
+      const data = await Promise.all(fixturesForTest.map(async ([extension, mimeType]) => ({
+        extension, mimeType,
+        buffer: await readFile(resolve(__dirname, '../../../api/src/test/resources/attachments/preview-fixtures/sample.' + extension)),
+      })))
+      await page.goto('/cases?caseId=' + id)
+      const feed = page.getByRole('region', {name: /^Rozmowa /})
+      const caption = 'Files from Slack ' + marker
+      await inbound(page, caption, root.ts, {files: data.map(fixture => ({id: 'F-inbound-format-' + marker + '-' + fixture.extension}))})
+      const inboundItems = async () => (await history()).find((item: {body: string}) => item.body === caption)?.attachments ?? []
+      await expect.poll(async () => (await inboundItems()).map((item: {scanStatus: string}) => item.scanStatus),
+        {timeout: 25_000}).toEqual(data.map(() => 'CLEAN'))
+      for (const fixture of data) {
+        const fileName = 'F-inbound-format-' + marker + '-' + fixture.extension + '.' + fixture.extension
+        const item = (await inboundItems()).find((candidate: {fileName: string}) => candidate.fileName === fileName)
+        expect(item.detectedContentType).toBe(fixture.mimeType)
+        const url = path + '/attachments/' + item.id
+        const download = await page.request.get(url)
+        expect(download.headers()['content-disposition']).toMatch(/^attachment/)
+        expect(download.headers()['cache-control']).toContain('no-store')
+        expect(await download.body()).toEqual(fixture.buffer)
+        const preview = await page.request.get(url + '/preview')
+        expect(preview.status()).toBe(inline.has(fixture.extension) ? 200 : 404)
+        if (inline.has(fixture.extension)) {
+          expect(preview.headers()['content-type']).toBe(fixture.mimeType)
+          expect(preview.headers()['x-content-type-options']).toBe('nosniff')
+          expect(preview.headers()['cross-origin-resource-policy']).toBe('same-origin')
+          expect(preview.headers()['cache-control']).toContain('no-store')
+          expect(preview.headers()['content-disposition']).toMatch(/^inline/)
+          const image = feed.getByRole('img', {name: fileName, exact: true})
+          await image.scrollIntoViewIfNeeded()
+          await expect.poll(() => image.evaluate(el => (el as HTMLImageElement).naturalWidth)).toBeGreaterThan(0)
+        } else {
+          const link = feed.getByRole('link', {name: new RegExp(fileName)})
+          await expect(link).toContainText(fixture.extension.toUpperCase())
+          await expect(link.locator('svg').first()).toBeVisible()
+        }
+      }
+      const selected = (await inboundItems()).find((item: {detectedContentType: string}) => item.detectedContentType === 'image/png')
+      const selectedUrl = path + '/attachments/' + selected.id
+      await expect(feed.getByRole('img', {name: selected.fileName, exact: true})).toBeVisible()
+      expect((await second.request.get(selectedUrl + '/preview')).status()).toBe(401)
+      expect((await second.request.get(selectedUrl)).status()).toBe(401)
+      expect((await page.request.get('/api/v1/cases/' + randomUUID() + '/attachments/' + selected.id + '/preview')).status()).toBe(404)
+
+      await login(second, secondAccount.email, true)
+      await second.goto('/cases?caseId=' + id)
+      await second.reload()
+      await second.getByRole('button', {name: 'Open preview for ' + selected.fileName}).click()
+      const dialog = second.getByRole('dialog', {name: selected.fileName})
+      await expect(dialog.getByRole('img', {name: selected.fileName})).toBeVisible()
+      await expect(dialog.getByRole('link', {name: 'Download original'})).toHaveAttribute('href', selectedUrl)
+      expect(await second.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
+      await second.keyboard.press('Escape')
+      await expect(dialog).toHaveCount(0)
+
+      const infection = 'F-inbound-infected-' + marker
+      await inbound(page, 'Quarantined batch', root.ts, {files: [{id: infection}, {id: 'F-inbound-missing-scope-' + marker}]})
+      await expect(feed.getByText(/W pliku wykryto zagrożenie/)).toBeVisible()
+      await expect(feed.getByText('Brakujące uprawnienie Slacka: files:read')).toBeVisible()
+      const rejected = (await history()).find((item: {body: string}) => item.body === 'Quarantined batch').attachments
+        .find((item: {scanStatus: string}) => item.scanStatus === 'INFECTED')
+      for (const suffix of ['', '/preview']) {
+        expect((await page.request.get(path + '/attachments/' + rejected.id + suffix)).status()).toBe(409)
+      }
+      await expect(feed.locator('[data-case-attachment="' + rejected.id + '"]').locator('img, a')).toHaveCount(0)
+      await feed.getByRole('button', {name: 'Przejmij', exact: true}).click()
+      const picker = feed.getByLabel('Dodaj pliki')
+      const composer = feed.getByRole('textbox', {name: 'Treść odpowiedzi'})
+      const send = feed.getByRole('button', {name: 'Wyślij', exact: true})
+      const filenames = data.map(fixture => (fixture.extension === 'png' ? 'retry-' : 'out-') + marker + '.' + fixture.extension)
+      await expect(picker).toBeEnabled()
+      await picker.setInputFiles(data.map((fixture, index) => ({name: filenames[index], mimeType: fixture.mimeType, buffer: fixture.buffer})))
+      await expect(feed.getByRole('button', {name: filenames.at(-1)!, exact: true})).toBeVisible()
+      const outgoing = 'Files from USI ' + marker
+      await composer.fill(outgoing)
+      await send.click()
+      await expect.poll(async () => (await history()).find((item: {body: string}) => item.body === outgoing)?.deliveryStatus,
+        {timeout: 25_000}).toBe('SENT')
+      const stored = (await history()).find((item: {body: string}) => item.body === outgoing)
+      expect(stored.attachments.map((item: {detectedContentType: string}) => item.detectedContentType).sort())
+        .toEqual(data.map(fixture => fixture.mimeType).sort())
+      const provider = await (await page.request.get('/__test/observed')).json()
+      expect(provider.files.filter((file: {thread: string}) => file.thread === root.ts).map((file: {title: string}) => file.title).sort())
+        .toEqual([...filenames].sort())
+      expect(provider.messages.filter((message: {clientMessageId: string; thread: string}) => message.clientMessageId === stored.id))
+        .toEqual([expect.objectContaining({thread: root.ts})])
+      await page.reload()
+      await expect(feed.getByRole('img', {name: filenames[0], exact: true})).toBeVisible()
+      await expect(feed.getByRole('link', {name: new RegExp(filenames.at(-1)!)})).toBeVisible()
+
+      await inbound(page, 'Follow-up before permission check', root.ts)
+      await expect(composer).toBeEnabled()
+      await picker.setInputFiles({name: 'scope-required-' + marker + '.pdf', mimeType: 'application/pdf',
+        buffer: data.find(item => item.extension === 'pdf')!.buffer})
+      await send.click()
+      await expect(feed.getByText('Brakujące uprawnienie Slacka: files:write')).toBeVisible()
+    } finally {
+      await secondContext.close()
+    }
+  })
+}

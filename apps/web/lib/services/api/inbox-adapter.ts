@@ -147,6 +147,8 @@ export function mapCaseDetail(detail: CaseDetail): InboxCase {
   }
 }
 
+const inlineImageTypes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif", "image/bmp"])
+
 export function mapCaseMessage(message: CaseMessage, caseId?: string): InboxMessage
 export function mapCaseMessage(caseId: string, message: CaseMessage): InboxMessage
 export function mapCaseMessage(first: CaseMessage | string, second?: string | CaseMessage): InboxMessage {
@@ -164,17 +166,23 @@ export function mapCaseMessage(first: CaseMessage | string, second?: string | Ca
     retryAllowed: message.retryAllowed ?? false,
     deliveryErrorCode: message.deliveryErrorCode ?? undefined,
     nextRetryAt: message.nextRetryAt ?? undefined,
-    attachments: message.attachments.map((item) => ({
-      id: item.id,
-      fileName: item.fileName,
-      size: formatBytes(item.sizeBytes),
-      type: item.contentType?.startsWith("image/") ? "image" : /\.(zip|rar|7z|tar|gz)$/i.test(item.fileName) ? "archive" : "document",
-      scanStatus: item.scanStatus,
-      failureStage: item.failureStage ?? undefined,
-      downloadUrl: caseId && item.scanStatus === "CLEAN"
-        ? `/api/v1/cases/${encodeURIComponent(caseId)}/attachments/${encodeURIComponent(item.id)}`
-        : undefined,
-    })),
+    attachments: message.attachments.map((item) => {
+      const url = caseId && !message.deletedAt && item.scanStatus === "CLEAN"
+        ? "/api/v1/cases/" + encodeURIComponent(caseId) + "/attachments/" + encodeURIComponent(item.id)
+        : undefined
+      return {
+        id: item.id,
+        fileName: item.fileName,
+        size: formatBytes(item.sizeBytes),
+        type: item.detectedContentType?.startsWith("image/") ? "image" : "document",
+        scanStatus: item.scanStatus,
+        failureStage: item.failureStage ?? undefined,
+        processingStage: item.processingStage ?? undefined,
+        requiredSlackScope: item.requiredSlackScope ?? undefined,
+        downloadUrl: url,
+        previewUrl: url && inlineImageTypes.has(item.detectedContentType ?? "") ? url + "/preview" : undefined,
+      }
+    }),
   }
 }
 

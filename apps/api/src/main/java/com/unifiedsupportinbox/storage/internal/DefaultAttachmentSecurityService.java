@@ -75,6 +75,20 @@ class DefaultAttachmentSecurityService implements AttachmentSecurityService {
                     detectedContentType,
                     claimed.sizeBytes());
 
+            if ("application/zip".equals(detectedContentType)) {
+                InputStream officeObject;
+                try {
+                    officeObject = objects.open(claimed.storageKey());
+                } catch (AttachmentObjectNotFoundException missing) {
+                    return fail(claimed.id(), normalizedFilename, detectedContentType, "OBJECT_MISSING");
+                } catch (RuntimeException unavailable) {
+                    return fail(claimed.id(), normalizedFilename, detectedContentType, "OBJECT_READ_ERROR");
+                }
+                try (officeObject) {
+                    detectedContentType = policy.verifyOfficePackage(normalizedFilename, officeObject);
+                }
+                policy.validate(normalizedFilename, claimed.contentType(), detectedContentType, claimed.sizeBytes());
+            }
             AttachmentMalwareScanner.ScanResult result = malwareScanner.scan(content);
             AttachmentScanStatus finalStatus = result == AttachmentMalwareScanner.ScanResult.CLEAN
                     ? AttachmentScanStatus.CLEAN

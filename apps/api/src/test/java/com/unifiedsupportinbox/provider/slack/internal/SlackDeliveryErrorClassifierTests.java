@@ -72,4 +72,17 @@ class SlackDeliveryErrorClassifierTests {
                 .hasSize(128)
                 .startsWith("SLACK_");
     }
+
+    @Test
+    void retainsKnownFileScopesAndDiscardsUnknownProviderDetails() {
+        assertThat(SlackDeliveryErrorClassifier.attachmentError("missing_scope", "files:read"))
+                .isEqualTo("missing_scope_files_read");
+        assertThat(SlackDeliveryErrorClassifier.attachmentError("missing_scope", "files:write"))
+                .isEqualTo("missing_scope_files_write");
+        assertThat(SlackDeliveryErrorClassifier.attachmentError("missing_scope", "unrecognized value"))
+                .isEqualTo("missing_scope");
+        assertThat(SlackDeliveryErrorClassifier.isIntegrationFailure("SLACK_MISSING_SCOPE_FILES_READ")).isTrue();
+        assertThat(SlackDeliveryErrorClassifier.isIntegrationFailure("SLACK_MISSING_SCOPE_FILES_WRITE")).isTrue();
+    }
+
 }

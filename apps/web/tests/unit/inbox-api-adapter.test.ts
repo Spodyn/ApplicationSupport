@@ -167,6 +167,20 @@ describe("real inbox API adapter", () => {
     await expect(repository.getMessages(caseId)).resolves.toEqual({ items: [], nextCursor: undefined })
   })
 
+  it("uses the Case preview route only for verified clean rasters", () => {
+    const image = {
+      id: attachmentId, fileName: "sample.avif", sizeBytes: 40, contentType: "image/avif",
+      detectedContentType: "image/avif", scanStatus: "CLEAN",
+    }
+    const read = (attachment: typeof image) =>
+      mapCaseMessage(caseId, { ...message, attachments: [attachment] }).attachments?.[0]
+    const url = "/api/v1/cases/" + caseId + "/attachments/" + attachmentId
+    expect(read(image)).toMatchObject({ downloadUrl: url, previewUrl: url + "/preview" })
+    expect(read({ ...image, detectedContentType: "image/tiff" })).toMatchObject({ downloadUrl: url, previewUrl: undefined })
+    expect(read({ ...image, detectedContentType: "image/svg+xml" })?.previewUrl).toBeUndefined()
+    expect(read({ ...image, scanStatus: "SCANNING" })).toMatchObject({ downloadUrl: undefined, previewUrl: undefined })
+  })
+
   it("keeps failed attachments visible without a download link", () => {
     expect(mapCaseMessage(caseId, { ...message, attachments: [{
       id: attachmentId, fileName: "denied.txt", sizeBytes: 0, contentType: null,

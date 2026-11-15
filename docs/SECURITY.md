@@ -69,11 +69,11 @@ When fetching provider-hosted content:
 
 ## 7. Attachment security
 
-Global limits are 25 MiB/file, 10 files and 50 MiB/message; stricter provider rules win. Allowed baseline classes are common images, PDF, text/CSV, OOXML and ZIP. Executables, scripts and active HTML are blocked by default.
+Global limits are 25 MiB/file, 10 files and 50 MiB/message; stricter provider rules win. Allowed Case attachment classes are approved raster images, PDF, text/CSV and validated macro-free OOXML. General archives, scripts, executables and active markup are rejected.
 
 Scanning is pluggable; default self-hosted scanner is ClamAV. States are `PENDING`, `CLEAN`, `INFECTED`, `ERROR`; normal send/download is possible only for `CLEAN`, with no bypass for infected/error files.
 
-Archives: encrypted archives blocked; max nesting 3, max 1000 entries, max 250 MiB expanded content and zip-bomb safeguards. Storage keys are random/internal and never derived directly from untrusted filename.
+Office packages are checked against the ZIP central directory, capped at 1,000 entries and 250 MiB expanded, and checked before scanning. Encrypted or nested packages, unsafe entry paths, macro parts, embedded objects and external non-hyperlink relationships are rejected. The validator disables XML external entity resolution. Original images served to the browser use a verified raster type, same-origin response policy and no-store. Storage keys are random/internal and independent of the filename.
 
 ## 8. Provider callbacks
 

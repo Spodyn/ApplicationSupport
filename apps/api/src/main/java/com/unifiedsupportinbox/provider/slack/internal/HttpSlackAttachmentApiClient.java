@@ -114,10 +114,11 @@ class HttpSlackAttachmentApiClient implements SlackAttachmentApiClient {
     @Override
     public UploadUrlResponse getUploadUrl(byte[] botToken, String filename, long sizeBytes) {
         requireToken(botToken);
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("filename", filename);
-        payload.put("length", sizeBytes);
-        ApiResponse response = sendAuthenticatedJson(botToken, getUploadUrlEndpoint, payload);
+        String form = "filename=" + URLEncoder.encode(filename, StandardCharsets.UTF_8) + "&length=" + sizeBytes;
+        ApiResponse response = sendAuthenticated(botToken, HttpRequest.newBuilder(getUploadUrlEndpoint)
+                .timeout(REQUEST_TIMEOUT)
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(form, StandardCharsets.UTF_8)));
         if (!response.ok()) {
             return new UploadUrlResponse(
                     response.statusCode(), false, null, null, response.errorCode(), response.retryAfter());
@@ -229,7 +230,7 @@ class HttpSlackAttachmentApiClient implements SlackAttachmentApiClient {
             }
             boolean httpOk = response.statusCode() >= 200 && response.statusCode() < 300;
             boolean apiOk = json != null && json.path("ok").asBoolean(false);
-            String error = text(json, "error");
+            String error = SlackDeliveryErrorClassifier.attachmentError(text(json, "error"), text(json, "needed"));
             if (response.statusCode() == 429 && error == null) error = "rate_limited";
             if (!httpOk && error == null) error = "http_" + response.statusCode();
             if (httpOk && !apiOk && error == null) error = "invalid_response";
