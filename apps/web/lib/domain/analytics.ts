@@ -1,3 +1,4 @@
+import type { InboxWorkflowStatus } from "./inbox"
 import type { Channel, User } from "./shared"
 
 /**
@@ -45,6 +46,7 @@ export interface AnalyticsRecord {
   sourceChannel: string
   status: AnalyticsStatusDimension
   statusLabel: string
+  workflowStatus?: InboxWorkflowStatus
   priority: "low" | "medium" | "high" | "urgent"
   tags: string[]
   resolutionReason?: AnalyticsResolutionReason

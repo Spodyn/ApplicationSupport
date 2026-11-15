@@ -815,7 +815,7 @@ test("Case filters omit customer/channel, retain SLA filtering and buttons show 
   await sla.click()
   await expect.poll(() => queries.some((query) => query.includes("quickView=SLA"))).toBe(true)
   await expect(sla).toHaveAttribute("aria-pressed", "true")
-  await page.getByRole("button", {name:"Wszystkie / Archiwum",exact:true}).click()
+  await page.getByRole("button", {name:"Wszystkie",exact:true}).click()
   await expect(sla).toHaveAttribute("aria-pressed", "false")
   await page.getByRole("button", {name:"Filtry",exact:true}).click()
   await expect(page.getByLabel("Klient", {exact:true})).toHaveCount(0)
@@ -934,7 +934,7 @@ test("changing Case filters clears a previous explicit selection", async ({page}
   await page.getByLabel("Zaznacz CASE-00000002",{exact:true}).check()
   await page.getByRole("button",{name:"Moje",exact:true}).click()
   await expect(page.getByRole("group", {name:"Operacje zbiorcze",exact:true})).toContainText("Zaznaczono: 0")
-  await page.getByRole("button",{name:"Wszystkie / Archiwum",exact:true}).click()
+  await page.getByRole("button",{name:"Wszystkie",exact:true}).click()
   await expect(page.getByLabel("Zaznacz CASE-00000002",{exact:true})).not.toBeChecked()
 })
 

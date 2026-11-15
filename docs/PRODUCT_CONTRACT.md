@@ -68,6 +68,8 @@ Core invariants:
 - Terminal Cases are never reopened. A later customer message creates exactly one new linked Case.
 - Workflow state changes are performed through dedicated commands, never a generic `PATCH status`.
 
+The simplified Case projection presents four states: `NEW`, `OPEN`, `WAITING_ON_CUSTOMER` and `RESOLVED`. Existing v1 commands and the legacy `status` field retain the operational representation above for compatibility. `VERIFICATION` projects as `OPEN`, `WAITING_FOR_CUSTOMER` as `WAITING_ON_CUSTOMER`, and `PARTIALLY_IGNORED` as `NEW` with its vote score. Terminal Ignore projects as `RESOLVED` and has `closureReason: IGNORED`. Simplified inbox views exclude waiting from Unassigned and provide an Archive filter. Statistics group by the simplified state and preserve distinct resolved and ignored totals.
+
 Human-readable Case references are immutable sequential references such as `CASE-00000001`; UUID remains the technical primary identifier.
 
 ## 5. Claim, reply, assignment and resolution

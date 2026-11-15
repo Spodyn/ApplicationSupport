@@ -36,6 +36,8 @@ class CaseListController {
             @RequestParam(name = "ownerId", required = false) UUID ownerId,
             @RequestParam(name = "search", required = false) String search,
             @RequestParam(name = "quickView", required = false) CaseListService.QuickView quickView,
+            @RequestParam(name = "workflowStatus", required = false) CaseWorkflowStatus workflowStatus,
+            @RequestParam(name = "actionableQueue", defaultValue = "false") boolean actionableQueue,
             Authentication authentication) {
         if (authentication == null || !authentication.isAuthenticated()) {
             throw ApiProblemException.authenticationRequired();
@@ -48,6 +50,6 @@ class CaseListController {
         }
         return cases.list(userId, cursor, limit, view,
                 new CaseListFilter(mine, unassigned, unread, slaAttention, status, statusScope,
-                        customerId, channelId, provider, ownerId, search), quickView);
+                        customerId, channelId, provider, ownerId, search, workflowStatus, actionableQueue), quickView);
     }
 }

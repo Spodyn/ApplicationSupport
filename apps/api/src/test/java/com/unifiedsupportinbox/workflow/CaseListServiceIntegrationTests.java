@@ -178,6 +178,44 @@ class CaseListServiceIntegrationTests {
                 CaseListService.QuickView.UNASSIGNED)).hasMessageContaining("cursor");
     }
 
+    @Test
+    void simplifiedQueueSharesCountsAndFiltersWhileLegacyWaitingRemainsVisible() {
+        UUID agent = user(true);
+        String marker = "simplified-" + UUID.randomUUID();
+        UUID fresh = caseId(marker + "-fresh");
+        UUID partial = caseId(marker + "-partial");
+        UUID owned = caseId(marker + "-owned");
+        UUID waiting = caseId(marker + "-waiting");
+        UUID ignored = caseId(marker + "-ignored");
+        UUID resolved = caseId(marker + "-resolved");
+        jdbc.update("UPDATE cases SET status = 'PARTIALLY_IGNORED' WHERE id = ?", partial);
+        jdbc.update("UPDATE cases SET status = 'VERIFICATION', owner_user_id = ?, claimed_at = now() WHERE id = ?", agent, owned);
+        jdbc.update("UPDATE cases SET status = 'WAITING_FOR_CUSTOMER', waiting_until = now() + interval '1 hour' WHERE id = ?", waiting);
+        jdbc.update("UPDATE cases SET status = 'IGNORED', ignored_at = now() WHERE id = ?", ignored);
+        jdbc.update("UPDATE cases SET status = 'RESOLVED', resolved_at = now() WHERE id = ?", resolved);
+
+        var legacy = new CaseListFilter(false, false, false, false, null, null, null, null, null, null, marker);
+        var simplified = new CaseListFilter(false, false, false, false, null, null, null, null, null,
+                null, marker, null, true);
+        var legacyUnassigned = cases.list(agent, null, 10, CaseListView.ACTIVE, legacy, CaseListService.QuickView.UNASSIGNED);
+        assertThat(legacyUnassigned.items()).extracting(CaseListService.CaseListItem::id).containsExactlyInAnyOrder(fresh, partial, waiting);
+        var unassigned = cases.list(agent, null, 10, CaseListView.ACTIVE, simplified, CaseListService.QuickView.UNASSIGNED);
+        assertThat(unassigned.items()).extracting(CaseListService.CaseListItem::id).containsExactlyInAnyOrder(fresh, partial);
+        assertThat(unassigned.items()).extracting(CaseListService.CaseListItem::workflowStatus).containsOnly(CaseWorkflowStatus.NEW);
+        assertThat(unassigned.quickViewCounts()).isEqualTo(new CaseListService.QuickViewCounts(2, 1, 0, 6));
+        var archive = new CaseListFilter(false, false, false, false, null, CaseListFilter.StatusScope.TERMINAL,
+                null, null, null, null, marker, CaseWorkflowStatus.RESOLVED, true);
+        var archived = cases.list(agent, null, 10, CaseListView.ACTIVE, archive, CaseListService.QuickView.ALL);
+        assertThat(archived.items()).extracting(CaseListService.CaseListItem::id).containsExactlyInAnyOrder(ignored, resolved);
+        assertThat(archived.items()).extracting(CaseListService.CaseListItem::workflowStatus).containsOnly(CaseWorkflowStatus.RESOLVED);
+        assertThat(archived.items()).extracting(CaseListService.CaseListItem::status)
+                .containsExactlyInAnyOrder(com.unifiedsupportinbox.cases.CaseStatus.IGNORED,
+                        com.unifiedsupportinbox.cases.CaseStatus.RESOLVED);
+        var details = context.getBean(CaseDetailService.class);
+        assertThat(details.detail(owned, agent).workflowStatus()).isEqualTo(CaseWorkflowStatus.OPEN);
+        assertThat(details.detail(waiting, agent).workflowStatus()).isEqualTo(CaseWorkflowStatus.WAITING_ON_CUSTOMER);
+    }
+
     private static UUID user(boolean active) {
         return jdbc.queryForObject("""
                 INSERT INTO users (email, display_name, role, active)

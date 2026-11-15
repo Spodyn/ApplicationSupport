@@ -30,7 +30,7 @@ class CaseDetailService {
     CaseDetail detail(UUID caseId, UUID userId) {
         Actor actor = actor(caseId, userId);
         return jdbc.query("""
-                SELECT c.id, c.reference, c.status, c.owner_user_id, owner.display_name AS owner_display_name,
+                SELECT c.id, c.reference, c.status, c.workflow_status, c.owner_user_id, owner.display_name AS owner_display_name,
                        c.claimed_at, c.waiting_until, c.resolved_at, c.ignored_at, c.resolution_category,
                        c.related_case_id, related.reference AS related_case_reference,
                        c.created_at, c.updated_at, c.last_activity_at, c.version,
@@ -65,6 +65,7 @@ class CaseDetailService {
             Set<CaseTransitionPolicy.Action> actions = policy.availableActions(state, actor.policyActor());
             return new CaseDetail(
                     rs.getObject("id", UUID.class), rs.getString("reference"), status,
+                    CaseWorkflowStatus.valueOf(rs.getString("workflow_status")), status == CaseStatus.IGNORED ? "IGNORED" : null,
                     new Customer(rs.getObject("customer_id", UUID.class), rs.getString("customer_name"), rs.getString("customer_external_ref")),
                     new Owner(rs.getObject("owner_user_id", UUID.class), rs.getString("owner_display_name")),
                     new Channel(rs.getObject("channel_id", UUID.class), rs.getString("channel_name"),
@@ -126,7 +127,7 @@ class CaseDetailService {
         }
     }
 
-    record CaseDetail(UUID id, String reference, CaseStatus status, Customer customer, Owner owner, Channel channel,
+    record CaseDetail(UUID id, String reference, CaseStatus status, CaseWorkflowStatus workflowStatus, String closureReason, Customer customer, Owner owner, Channel channel,
             Integration integration, RelatedCase relatedCase, PersonalState personalState, Sla sla, int ignoreScore,
             List<String> availableActions, Instant claimedAt, Instant waitingUntil, Instant resolvedAt, Instant ignoredAt,
             CaseResolutionCategory resolutionCategory, Instant createdAt, Instant updatedAt, Instant lastActivityAt, long version) {}

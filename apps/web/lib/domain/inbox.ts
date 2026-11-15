@@ -14,6 +14,15 @@ export const inboxStatuses = [
   "resolved",
 ] as const
 
+export const inboxWorkflowStatusLabels = {
+  NEW: "Nowe",
+  OPEN: "Otwarte",
+  WAITING_ON_CUSTOMER: "Oczekuje na klienta",
+  RESOLVED: "Rozwiązane",
+} as const
+
+export type InboxWorkflowStatus = keyof typeof inboxWorkflowStatusLabels
+
 export type InboxStatus = (typeof inboxStatuses)[number]
 
 export const terminalInboxStatuses = ["ignored", "resolved"] as const satisfies
@@ -63,6 +72,8 @@ export interface InboxCase {
   sourceChannel: string
   customer: InboxCustomer
   status: InboxStatus
+  workflowStatus?: InboxWorkflowStatus
+  closureReason?: "IGNORED"
   owner?: Pick<User, "id" | "fullName">
   lastMessageId?: string
   lastMessageAt?: string

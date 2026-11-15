@@ -24,8 +24,8 @@ import {
   ThumbsDown,
   UserRound,
 } from "lucide-react"
-import type { InboxActivity, InboxCase, InboxMessage, InboxStatus } from "@/lib/domain/inbox"
-import { inboxStatusLabels } from "@/lib/domain/inbox"
+import type { InboxActivity, InboxCase, InboxMessage, InboxWorkflowStatus } from "@/lib/domain/inbox"
+import { inboxStatusLabels, inboxWorkflowStatusLabels } from "@/lib/domain/inbox"
 import { deliveryStatusLabels } from "@/lib/domain/labels"
 import { MAX_BULK_SELECTION } from "@/lib/services/bulk-selection"
 import type { InboxListQuery, InboxQuickView } from "@/lib/services/inbox"
@@ -40,7 +40,7 @@ import { slackMessagePreview } from "@/lib/security/external-message"
 import { SafeExternalMessage } from "./safe-external-message"
 
 const quickViews = [
-  ["unassigned", "Nieprzypisane"], ["mine", "Moje"], ["sla", "SLA"], ["all", "Wszystkie / Archiwum"],
+  ["unassigned", "Nieprzypisane"], ["mine", "Moje"], ["sla", "SLA"], ["all", "Wszystkie"],
 ] as const
 
 const wideInboxQuery = "(min-width: 1280px)"
@@ -83,7 +83,7 @@ function timeLabel(value: string): string {
 }
 
 function toPresentation(record: InboxCase, t: ReturnType<typeof useT>): CasePresentation {
-  const statusTone = record.status === "resolved" ? "gray" : record.status === "new" ? "green" : record.status === "verification" ? "purple" : record.status === "waiting_for_customer" ? "blue" : "red"
+  const statusTone = record.status === "resolved" || record.status === "ignored" ? "gray" : record.status === "new" ? "green" : record.status === "verification" ? "purple" : record.status === "waiting_for_customer" ? "blue" : "red"
   const terminal = record.status === "resolved" || record.status === "ignored"
   const paused = record.sla.state === "paused"
   const slaTone = terminal || paused || record.sla.state === "unknown" ? "gray" : record.sla.state === "breached" ? "red" : record.sla.state === "at_risk" ? "amber" : "green"
@@ -105,7 +105,7 @@ function toPresentation(record: InboxCase, t: ReturnType<typeof useT>): CasePres
     time: record.lastMessageAt ?? (record.lastMessageId || bodyPreview ? record.createdAt : undefined),
     platform: record.platform === "slack" ? "Slack" : record.platform === "teams" ? "Teams" : "Telegram",
     source: record.sourceChannel,
-    status: t(inboxStatusLabels[record.status]),
+    status: t(record.workflowStatus ? inboxWorkflowStatusLabels[record.workflowStatus] : inboxStatusLabels[record.status]),
     statusTone,
     sla: paused && !terminal ? `SLA · ${t("Wstrzymane")}` : dueAt && !terminal ? `SLA ${timeLabel(dueAt)}` : t("SLA —"),
     slaTone,
@@ -141,7 +141,7 @@ export function CasesPage({
   const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [advancedFilters, setAdvancedFilters] = useState<AdvancedFilter[]>([])
   const [serverSearch, setServerSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<InboxStatus | "">("")
+  const [statusFilter, setStatusFilter] = useState<InboxWorkflowStatus | "">("")
   const [providerFilter, setProviderFilter] = useState<"slack" | "teams" | "telegram" | "">("")
   const [ownerFilter, setOwnerFilter] = useState("")
   const filterMenuRef = useRef<HTMLDivElement>(null)
@@ -154,7 +154,8 @@ export function CasesPage({
     unread: advancedFilters.includes("unread"),
     slaAttention: advancedFilters.includes("sla"),
     statusScope: advancedFilters.includes("terminal") ? "terminal" : advancedFilters.includes("active") ? "active" : "all",
-    status: statusFilter || undefined,
+    workflowStatus: statusFilter || undefined,
+    actionableQueue: true,
     provider: providerFilter || undefined,
     ownerId: ownerFilter || undefined,
     search: serverSearch || undefined,
@@ -331,7 +332,7 @@ export function CasesPage({
                     ["unread", t("Nieodczytane")],
                     ["snoozed", t("Odłożone")],
                     ["active", t("Aktywne")],
-                    ["terminal", t("Zakończone")],
+                    ["terminal", t("Archiwum")],
                   ] as const).map(([value, label]) => {
                     const active = advancedFilters.includes(value)
                     return (
@@ -347,7 +348,7 @@ export function CasesPage({
                     )
                   })}
                   <div className="mt-2 grid gap-2 border-t border-white/10 pt-2">
-                    <FilterSelect label={t("Status")} value={statusFilter} onChange={(value) => setStatusFilter(value as InboxStatus | "")} options={Object.entries(inboxStatusLabels).map(([value, label]) => ({ value, label: t(label) }))} />
+                    <FilterSelect label={t("Status")} value={statusFilter} onChange={(value) => setStatusFilter(value as InboxWorkflowStatus | "")} options={Object.entries(inboxWorkflowStatusLabels).map(([value, label]) => ({ value, label: t(label) }))} />
                     <FilterSelect label={t("Dostawca")} value={providerFilter} onChange={(value) => setProviderFilter(value as typeof providerFilter)} options={[{ value: "slack", label: "Slack" }, { value: "teams", label: "Teams" }, { value: "telegram", label: "Telegram" }]} />
                     <FilterSelect label={t("Właściciel")} value={ownerFilter} onChange={setOwnerFilter} options={(filterOptions.data?.owners ?? []).map((item) => ({ value: item.id, label: item.name }))} />
                   </div>
@@ -859,6 +860,14 @@ function CaseDetails({ item, record, activity, items }: {
             {item.terminal && record?.sla.state === "breached" && <p className="mt-2 text-xs text-[#cbd3df]">{t("Historyczne przekroczenie SLA")}</p>}
           </dd>
         </div>
+        {record?.closureReason === "IGNORED" && <div>
+          <dt className="text-xs text-[#aeb8c8]">{t("Powód zamknięcia")}</dt>
+          <dd className="mt-1">{t("Zignorowane")}</dd>
+        </div>}
+        {record && record.ignoreVotes.current > 0 && <div>
+          <dt className="text-xs text-[#aeb8c8]">{t("Punkty ignorowania")}</dt>
+          <dd className="mt-1">{record.ignoreVotes.current} / {record.ignoreVotes.required}</dd>
+        </div>}
         {record?.integration && <div>
           <dt className="text-xs text-[#aeb8c8]">{t("Integracja")}</dt>
           <dd className="mt-1">{record.integration.name}{record.integration.workspace && <><br />{record.integration.workspace}</>}</dd>

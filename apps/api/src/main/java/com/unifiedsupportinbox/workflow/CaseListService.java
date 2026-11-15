@@ -66,7 +66,7 @@ class CaseListService {
 
         List<PageRow> rows = jdbc.query("""
                 WITH base AS (
-                    SELECT c.id, c.reference, c.status, c.owner_user_id,
+                    SELECT c.id, c.reference, c.status, c.workflow_status, c.owner_user_id,
                            owner.display_name AS owner_display_name,
                            c.created_at, c.updated_at, c.last_activity_at, c.waiting_until,
                            COALESCE(customer.id, '00000000-0000-0000-0000-000000000000'::uuid) AS customer_id, COALESCE(customer.name, 'Nie przypisano') AS customer_name,
@@ -129,11 +129,13 @@ class CaseListService {
                              OR snoozed_until <= CURRENT_TIMESTAMP
                     END
                       AND (?::boolean = FALSE OR owner_user_id = ?::uuid)
-                      AND (?::boolean = FALSE OR owner_user_id IS NULL)
+                      AND (?::boolean = FALSE OR (owner_user_id IS NULL
+                           AND (?::boolean = FALSE OR workflow_status IN ('NEW', 'OPEN'))))
                       AND (?::boolean = FALSE OR unread)
                       AND (?::boolean = FALSE OR (status NOT IN ('IGNORED', 'RESOLVED', 'WAITING_FOR_CUSTOMER')
                           AND sla_state IN ('WARNING', 'BREACHED')))
                       AND (?::varchar IS NULL OR status = ?::varchar)
+                      AND (?::varchar IS NULL OR workflow_status = ?::varchar)
                       AND (?::varchar = 'ALL'
                            OR (?::varchar = 'ACTIVE' AND status NOT IN ('IGNORED', 'RESOLVED'))
                            OR (?::varchar = 'TERMINAL' AND status IN ('IGNORED', 'RESOLVED')))
@@ -151,7 +153,8 @@ class CaseListService {
                            OR lower(provider) LIKE ?::varchar ESCAPE '\\')
                 ), views AS (
                     SELECT filtered.*,
-                           status NOT IN ('IGNORED', 'RESOLVED') AND owner_user_id IS NULL AS quick_unassigned,
+                           workflow_status <> 'RESOLVED' AND owner_user_id IS NULL
+                               AND (?::boolean = FALSE OR workflow_status IN ('NEW', 'OPEN')) AS quick_unassigned,
                            status NOT IN ('IGNORED', 'RESOLVED') AND owner_user_id = ?::uuid AS quick_mine,
                            status NOT IN ('IGNORED', 'RESOLVED', 'WAITING_FOR_CUSTOMER')
                                AND sla_state IN ('WARNING', 'BREACHED') AS quick_sla
@@ -200,11 +203,13 @@ class CaseListService {
                                 rs.getLong("sla_count"), rs.getLong("all_count"))), userId, userId,
                 view == CaseListView.SNOOZED,
                 applied.mine(), userId,
-                applied.unassigned(),
+                applied.unassigned(), applied.actionableQueue(),
                 applied.unread(),
                 applied.slaAttention(),
                 applied.status() == null ? null : applied.status().name(),
                 applied.status() == null ? null : applied.status().name(),
+                applied.workflowStatus() == null ? null : applied.workflowStatus().name(),
+                applied.workflowStatus() == null ? null : applied.workflowStatus().name(),
                 applied.statusScope().name(), applied.statusScope().name(), applied.statusScope().name(),
                 applied.customerId(), applied.customerId(),
                 applied.channelId(), applied.channelId(),
@@ -213,7 +218,7 @@ class CaseListService {
                 applied.search(), searchPattern(applied.search()), searchPattern(applied.search()),
                 searchPattern(applied.search()), searchPattern(applied.search()), searchPattern(applied.search()),
                 searchPattern(applied.search()), searchPattern(applied.search()),
-                userId, quickView.name(),
+                applied.actionableQueue(), userId, quickView.name(),
                 position == null ? null : position.id(),
                 position == null ? null : OffsetDateTime.ofInstant(position.sortValue(), java.time.ZoneOffset.UTC),
                 position == null ? null : position.id(), limit + 1);
@@ -265,6 +270,8 @@ class CaseListService {
     private static CaseListItem item(ResultSet rs) throws SQLException {
         return new CaseListItem(
                 rs.getObject("id", UUID.class), rs.getString("reference"), CaseStatus.valueOf(rs.getString("status")),
+                CaseWorkflowStatus.valueOf(rs.getString("workflow_status")),
+                "IGNORED".equals(rs.getString("status")) ? "IGNORED" : null,
                 rs.getObject("customer_id", UUID.class), rs.getString("customer_name"),
                 rs.getObject("channel_id", UUID.class), rs.getString("channel_name"),
                 rs.getString("external_channel_id"), rs.getString("provider"),
@@ -297,7 +304,7 @@ class CaseListService {
     record CaseListPage(List<CaseListItem> items, String nextCursor, QuickViewCounts quickViewCounts) {}
     private record PageRow(CaseListItem item, QuickViewCounts counts) {}
 
-    record CaseListItem(UUID id, String reference, CaseStatus status,
+    record CaseListItem(UUID id, String reference, CaseStatus status, CaseWorkflowStatus workflowStatus, String closureReason,
             UUID customerId, String customerName, UUID channelId, String channelName,
             String externalChannelId, String provider, UUID ownerUserId, String ownerDisplayName,
             UUID lastMessageId, String lastMessagePreview,

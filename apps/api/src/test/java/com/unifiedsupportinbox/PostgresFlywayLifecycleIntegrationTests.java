@@ -169,6 +169,22 @@ class PostgresFlywayLifecycleIntegrationTests {
                 .isEqualTo("Existing user");
     }
 
+    @Test
+    void addsCanonicalWorkflowProjectionToV46() throws SQLException {
+        cleanDatabase();
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .target("46").load().migrate();
+        Flyway current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .target("47").load();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
+        current.validate();
+        assertThat(queryString("""
+                SELECT is_generated FROM information_schema.columns
+                WHERE table_schema = 'public' AND table_name = 'cases' AND column_name = 'workflow_status'
+                """)).isEqualTo("ALWAYS");
+        assertThat(tableExists("case_internal_notes")).isTrue();
+    }
+
     private static ConfigurableApplicationContext startApplication() {
         return new SpringApplicationBuilder(UsiApiApplication.class)
                 .profiles("test")

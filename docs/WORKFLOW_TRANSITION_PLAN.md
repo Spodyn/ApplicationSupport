@@ -1,6 +1,6 @@
 # Przejście na cztery statusy sprawy
 
-Analiza bazowa dla SHA `e3ab05e1fe3086fa45657972877193c524826583`. Dokument jest planem warunkowym. Wiążące reguły obecnej wersji opisują [kontrakt produktu](PRODUCT_CONTRACT.md#4-canonical-case-state-machine), [macierz przejść](WORKFLOW_MATRIX.md) i [rejestr decyzji](decision-registry.yaml).
+Analiza bazowa dla SHA `e3ab05e1fe3086fa45657972877193c524826583`. Dokument rejestruje stan bazowy, potwierdzone elementy i plan dalszych zmian. Wiążące reguły obecnej wersji opisują [kontrakt produktu](PRODUCT_CONTRACT.md#4-canonical-case-state-machine), [macierz przejść](WORKFLOW_MATRIX.md) i [rejestr decyzji](decision-registry.yaml).
 
 ## Kontrakt obecny
 
@@ -36,6 +36,14 @@ Analiza bazowa dla SHA `e3ab05e1fe3086fa45657972877193c524826583`. Dokument jest
 Na lokalnej bazie testowej V45 odczytano 25 spraw, w tym 22 `RESOLVED` (20 z zachowanym ownerem), 2 `IGNORED` i 1 `VERIFICATION`. Ostatni audyt rozwiązania wskazuje 5 wpisów CASE_FORCE_RESOLVE i 17 wpisów CASE_RESOLVE. Były 4 zapisane, aktywne głosy, a w chwili odczytu nie było odpowiedzi SUPPORT ze stanem QUEUED lub SENDING. Nie było powiązanych następców ani duplikatów aktywnego kontekstu. Dane tej bazy nie pokrywają wszystkich starych statusów, więc scenariusze brakujące wymagają osobnych fixture.
 
 Kopia bazy została odtworzona w jednorazowym PostgreSQL 18.6. Flyway pomyślnie wykonał jedyną zatwierdzoną zaległą migrację V45 → V46 z PR #155 i zweryfikował łańcuch. Porównanie pełnych wierszy wykazało zgodność 25 spraw, 4 głosów, 25 rekordów SLA, 87 wiadomości, 123 wpisów audytu oraz pustego zestawu Snooze. V46 utworzyła pustą tabelę notatek. Stan źródłowy jest nadal V45. Próba weryfikuje aktualną bazę i obowiązujący łańcuch migracji. Wdrożenie mapowania czterech statusów wymaga zatwierdzenia reguł.
+
+## Potwierdzone elementy i wynik V47
+
+Potwierdzono mapowanie Ignore i filtr archiwum. V47 dodaje wyliczane pole workflow_status przy zachowaniu kontraktu legacy i istniejących komend. OpenAPI udostępnia workflowStatus, closureReason oraz opcjonalne parametry workflowStatus i actionableQueue. Nowy interfejs używa czterech etykiet. Rozkład i filtry statystyk korzystają z projekcji, a metryki rozdzielają zwykłe rozwiązania od Ignore. Utworzenie generacji sprawy blokuje pełny kontekst dostawcy w transakcji.
+
+Na kolejnej kopii tej samej lokalnej bazy Flyway wykonał V45 → V47. Potwierdzono zgodność starych pól 25 spraw, 4 głosów, 25 rekordów SLA, 87 wiadomości i 123 wpisów audytu. Projekcja dała 24 pozycje RESOLVED, w tym 2 z historycznym Ignore, oraz 1 OPEN. Pozostałe przejścia mapowania są sprawdzane na danych syntetycznych w teście CaseListServiceIntegrationTests.
+
+Właściciel potwierdził, że zakres cofnięcia obejmuje także zwykłe Resolve. Uruchomienie komendy zależy jeszcze od reguły SLA po cofnięciu. Osobno pozostaje kwestia, czy zwykła dostarczona odpowiedź ma uruchamiać oczekiwanie, oraz szczegóły Dopytaj i timeout przy ewentualnej zmianie reguł.
 
 ## Kryteria dalszego odbioru
 

@@ -249,6 +249,7 @@
       "risk": "MEDIUM",
       "expected": "Self/admin boundaries; UTC/bounded ranges; status is a projection",
       "tests": [
+        "apps/web/tests/unit/analytics-workflow.test.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/AnalyticsContractDocumentationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/StatisticsOverviewServiceTests.java"

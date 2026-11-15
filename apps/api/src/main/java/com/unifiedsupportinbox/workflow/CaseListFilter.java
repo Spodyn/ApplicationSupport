@@ -16,7 +16,9 @@ record CaseListFilter(
         UUID channelId,
         String provider,
         UUID ownerId,
-        String search) {
+        String search,
+        CaseWorkflowStatus workflowStatus,
+        boolean actionableQueue) {
 
     enum StatusScope { ALL, ACTIVE, TERMINAL }
 
@@ -26,13 +28,20 @@ record CaseListFilter(
         search = normalizeSearch(search);
     }
 
+    CaseListFilter(boolean mine, boolean unassigned, boolean unread, boolean slaAttention,
+            CaseStatus status, StatusScope statusScope, UUID customerId, UUID channelId, String provider,
+            UUID ownerId, String search) {
+        this(mine, unassigned, unread, slaAttention, status, statusScope, customerId, channelId, provider,
+                ownerId, search, null, false);
+    }
+
     static CaseListFilter empty() {
         return new CaseListFilter(false, false, false, false, null, StatusScope.ALL,
                 null, null, null, null, null);
     }
 
     String scopeToken() {
-        return String.join(":",
+        String legacy = String.join(":",
                 Boolean.toString(mine),
                 Boolean.toString(unassigned),
                 Boolean.toString(unread),
@@ -44,6 +53,9 @@ record CaseListFilter(
                 provider == null ? "" : provider,
                 value(ownerId),
                 search == null ? "" : search);
+        if (workflowStatus == null && !actionableQueue) return legacy;
+        return "simplified:" + (workflowStatus == null ? "" : workflowStatus.name())
+                + ":" + actionableQueue + ":" + legacy;
     }
 
     private static String normalizeProvider(String value) {

@@ -5,6 +5,7 @@ import com.unifiedsupportinbox.cases.CaseCreationRejectedException;
 import com.unifiedsupportinbox.cases.CaseCreationRejectedException.Reason;
 import com.unifiedsupportinbox.cases.CaseCreationService;
 import com.unifiedsupportinbox.cases.CaseStatus;
+import com.unifiedsupportinbox.cases.ProviderCaseContextLock;
 import com.unifiedsupportinbox.channel.ChannelContextLookup;
 import com.unifiedsupportinbox.channel.ChannelContextLookup.Context;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
@@ -32,6 +33,7 @@ class CaseCreationDomainService implements CaseCreationService {
     private static final RowMapper<PersistedCase> ROW_MAPPER = CaseCreationDomainService::mapCase;
 
     private final JdbcTemplate jdbc;
+    private final ProviderCaseContextLock providerContextLock;
     private final ChannelContextLookup channels;
     private final OutboxEventStore outbox;
     private final ObjectMapper json;
@@ -39,11 +41,13 @@ class CaseCreationDomainService implements CaseCreationService {
 
     CaseCreationDomainService(
             JdbcTemplate jdbc,
+            ProviderCaseContextLock providerContextLock,
             ChannelContextLookup channels,
             OutboxEventStore outbox,
             ObjectMapper json,
             CaseSlaInitializer sla) {
         this.jdbc = jdbc;
+        this.providerContextLock = providerContextLock;
         this.channels = channels;
         this.outbox = outbox;
         this.json = json;
@@ -66,6 +70,7 @@ class CaseCreationDomainService implements CaseCreationService {
         Context channel = channels.findById(channelId)
                 .orElseThrow(() -> rejected(Reason.CHANNEL_NOT_FOUND, "Channel mapping was not found."));
         validateChannel(channel, integrationId, provider);
+        providerContextLock.acquire(integrationId, channelId, provider, externalConversationId, externalThreadKey);
 
         Optional<PersistedCase> existing = findActive(
                 integrationId, channelId, provider, externalConversationId, externalThreadKey);

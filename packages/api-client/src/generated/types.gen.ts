@@ -81,6 +81,7 @@ export type ApiAnalyticsRecordsControllerFact = {
   "slaState"?: string
   "slaDeadlineAt"?: string
   "excludedFromUserPerformance": boolean
+  "workflowStatus"?: CaseWorkflowStatus
 }
 
 export type ApiAnalyticsRecordsControllerUserOption = {
@@ -544,6 +545,8 @@ export type CaseDetail = {
   "updatedAt": string
   "lastActivityAt": string
   "version": number
+  "workflowStatus"?: CaseWorkflowStatus
+  "closureReason"?: "IGNORED" | null
 }
 
 export type CaseFilterOption = {
@@ -601,6 +604,8 @@ export type CaseListItem = {
   "lastMessageAuthor"?: string | null
   "lastMessageKind"?: "CUSTOMER" | "SUPPORT" | "SYSTEM" | null
   "lastMessageFile"?: string | null
+  "workflowStatus"?: CaseWorkflowStatus
+  "closureReason"?: "IGNORED" | null
 }
 
 export type CaseListPage = {
@@ -677,6 +682,8 @@ export type CaseSla = {
 }
 
 export type CaseStatus = "NEW" | "VERIFICATION" | "WAITING_FOR_CUSTOMER" | "PARTIALLY_IGNORED" | "IGNORED" | "RESOLVED"
+
+export type CaseWorkflowStatus = "NEW" | "OPEN" | "WAITING_ON_CUSTOMER" | "RESOLVED"
 
 export type Channel = "SLACK" | "TEAMS" | "TELEGRAM"
 

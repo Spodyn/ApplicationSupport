@@ -26,6 +26,8 @@ export type InboxQuickView = "unassigned" | "mine" | "sla" | "all"
 
 export interface InboxListQuery {
   quickView?: InboxQuickView
+  workflowStatus?: import("@/lib/domain/inbox").InboxWorkflowStatus
+  actionableQueue?: boolean
   view?: "active" | "snoozed"
   mine?: boolean
   unassigned?: boolean
@@ -236,13 +238,18 @@ export const mockInboxRepository: InboxRepository = {
       if (query?.view === "snoozed" ? terminal || !item.snoozedForCurrentUserUntil : !terminal && item.snoozedForCurrentUserUntil) return false
       if (query?.statusScope === "active" && terminal || query?.statusScope === "terminal" && !terminal) return false
       if (query?.mine && item.owner?.id !== mockCurrentUser.id || query?.unassigned && item.owner || query?.unread && !item.unreadForCurrentUser) return false
+      const workflowStatus = item.status === "verification" ? "OPEN"
+        : item.status === "waiting_for_customer" ? "WAITING_ON_CUSTOMER" : terminal ? "RESOLVED" : "NEW"
+      if (query?.workflowStatus && query.workflowStatus !== workflowStatus) return false
+      if (query?.actionableQueue && query.unassigned && (terminal || item.status === "waiting_for_customer")) return false
       if (query?.status && query.status !== item.status || query?.provider && query.provider !== item.platform) return false
       if (query?.customerId && query.customerId !== item.customer.id || query?.ownerId && query.ownerId !== item.owner?.id) return false
       if (query?.search && ![item.reference, item.customer.name, item.sourceChannel, item.platform].some((value) => value.toLowerCase().includes(query.search!.toLowerCase()))) return false
       return !query?.slaAttention || matchesQuickView(item, "sla")
     })
     const views = {
-      unassigned: matches.filter((item) => matchesQuickView(item, "unassigned")),
+      unassigned: matches.filter((item) => matchesQuickView(item, "unassigned")
+        && (!query?.actionableQueue || item.status !== "waiting_for_customer")),
       mine: matches.filter((item) => matchesQuickView(item, "mine")),
       sla: matches.filter((item) => matchesQuickView(item, "sla")),
       all: matches,
