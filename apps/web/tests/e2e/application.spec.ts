@@ -964,7 +964,7 @@ test("resolved Case indicators use neutral gray without changing the workflow en
   await page.route("**/api/v1/cases?**", route=>route.fulfill({json:{items:[{...caseListItem,status:"RESOLVED"}],nextCursor:null}}))
   await page.goto("/cases")
   const list = page.getByRole("button",{name:/Slack Test Customer/})
-  await expect(list).toHaveClass(/border-white/)
+  await expect(list).toHaveClass(/border-slate-400/)
   await expect(list).not.toHaveClass(/border-red-500/)
   await expect(list.getByText("SLA —", {exact: true})).toHaveClass(/text-slate-300/)
   await expect(page.getByRole("region", { name: /Rozmowa Slack Test Customer/ })
