@@ -185,6 +185,21 @@ class PostgresFlywayLifecycleIntegrationTests {
         assertThat(tableExists("case_internal_notes")).isTrue();
     }
 
+    @Test
+    void upgradesV47ForOwnedWaitingAndDurableReplyIntent() throws SQLException {
+        cleanDatabase();
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .target("47").load().migrate();
+        Flyway current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .target("48").load();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
+        current.validate();
+        assertThat(queryInt("""
+                SELECT count(*) FROM information_schema.columns
+                WHERE table_name = 'messages' AND column_name = 'reply_wait_case_version'
+                """)).isEqualTo(1);
+    }
+
     private static ConfigurableApplicationContext startApplication() {
         return new SpringApplicationBuilder(UsiApiApplication.class)
                 .profiles("test")

@@ -49,7 +49,7 @@ class WaitingTimeoutService {
         }
         Instant now = Instant.now();
         List<DueCase> due = jdbc.query("""
-                SELECT id, waiting_until, version
+                SELECT id, waiting_until, version, owner_user_id
                 FROM cases
                 WHERE status = 'WAITING_FOR_CUSTOMER'
                   AND waiting_until <= ?
@@ -59,17 +59,17 @@ class WaitingTimeoutService {
                 """, (rs, rowNum) -> new DueCase(
                         rs.getObject("id", UUID.class),
                         rs.getObject("waiting_until", OffsetDateTime.class).toInstant(),
-                        rs.getLong("version")),
+                        rs.getLong("version"), rs.getObject("owner_user_id", UUID.class)),
                 OffsetDateTime.ofInstant(now, ZoneOffset.UTC),
                 batchSize);
 
         int processed = 0;
         for (DueCase item : due) {
             long nextVersion = item.version() + 1;
+            String status = item.owner() == null ? "NEW" : "VERIFICATION";
             int changed = jdbc.update("""
                     UPDATE cases
-                    SET status = 'NEW',
-                        owner_user_id = NULL,
+                    SET status = ?,
                         waiting_until = NULL,
                         updated_at = statement_timestamp(),
                         last_activity_at = statement_timestamp(),
@@ -77,7 +77,7 @@ class WaitingTimeoutService {
                     WHERE id = ?
                       AND status = 'WAITING_FOR_CUSTOMER'
                       AND version = ?
-                    """, item.id(), item.version());
+                    """, status, item.id(), item.version());
             if (changed != 1) continue;
 
             sla.resumeAfterWaiting(item.id(), now);
@@ -85,7 +85,7 @@ class WaitingTimeoutService {
             Map<String, Object> metadata = new LinkedHashMap<>();
             metadata.put("reason", "WAITING_TIMEOUT");
             metadata.put("previousStatus", "WAITING_FOR_CUSTOMER");
-            metadata.put("status", "NEW");
+            metadata.put("status", status);
             metadata.put("waitingUntil", item.waitingUntil().toString());
             metadata.put("version", nextVersion);
             String correlationId = UUID.randomUUID().toString();
@@ -102,7 +102,7 @@ class WaitingTimeoutService {
                         CASE_UPDATED,
                         "case",
                         item.id(),
-                        payload(item.id(), nextVersion),
+                        payload(item.id(), nextVersion, status, item.owner()),
                         correlationId);
             }
             processed++;
@@ -110,16 +110,17 @@ class WaitingTimeoutService {
         return processed;
     }
 
-    private String payload(UUID caseId, long version) {
+    private String payload(UUID caseId, long version, String status, UUID owner) {
         ObjectNode payload = json.createObjectNode();
         payload.put("caseId", caseId.toString());
-        payload.put("status", "NEW");
-        payload.putNull("ownerUserId");
+        payload.put("status", status);
+        if (owner == null) payload.putNull("ownerUserId");
+        else payload.put("ownerUserId", owner.toString());
         payload.putNull("waitingUntil");
         payload.put("reason", "WAITING_TIMEOUT");
         payload.put("version", version);
         return payload.toString();
     }
 
-    private record DueCase(UUID id, Instant waitingUntil, long version) {}
+    private record DueCase(UUID id, Instant waitingUntil, long version, UUID owner) {}
 }

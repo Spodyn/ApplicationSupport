@@ -62,6 +62,7 @@ export interface InboxActivity {
   action?: string
   snoozedAt?: string
   snoozedUntil?: string
+  historicalSlaBreach?: boolean
 }
 
 export interface InboxCase {

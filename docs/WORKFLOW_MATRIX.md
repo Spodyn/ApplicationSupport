@@ -32,21 +32,21 @@ RESOLVED / IGNORED + later customer message -> new linked NEW Case
 
 ## 2. Status invariants
 
-| Status | Owner | Terminal | Normal support reply | Notes |
+| Legacy v1 status | Owner | Terminal | Normal support reply | Notes |
 |---|---|---:|---:|---|
 | `NEW` | none | no | no | Active unclaimed work |
 | `PARTIALLY_IGNORED` | none | no | no | Ignore points below threshold |
 | `VERIFICATION` | exactly one | no | current owner only | Active owned work |
-| `WAITING_FOR_CUSTOMER` | none | no | no normal Reply | Waiting after Ask was accepted by provider |
+| `WAITING_FOR_CUSTOMER` | retained after Reply, none after Ask Customer | no | no normal Reply | Wait starts after successful delivery |
 | `IGNORED` | none | yes | no | Never reopened |
-| `RESOLVED` | historical last owner or null | yes | no | Never reopened |
+| `RESOLVED` | historical last owner or null | yes | no | Explicit administrative undo only |
 
 ## 3. Action matrix
 
 | Action | Actor / permission | Allowed from | Preconditions | Result | Owner after | Primary side effects |
 |---|---|---|---|---|---|---|
 | Claim | active USER/ADMIN | `NEW`, `PARTIALLY_IGNORED` | target remains unowned; actor is not lifetime ignore voter | `VERIFICATION` | actor | deactivate active partial ignore votes; clear stale snoozes; audit Claim; start/resume in-progress, pause unclaimed |
-| Reply | current owner | `VERIFICATION` | actor has not ever voted Ignore in this Case | `VERIFICATION` | unchanged | durable SUPPORT Message + outbox; delivery async; first-response may complete on `SENT` |
+| Reply | current owner | `VERIFICATION` | actor has not ever voted Ignore in this Case | waits after successful delivery if the Case has not moved on | unchanged | durable SUPPORT Message + outbox, default wait of 24 hours, first-response completion, SLA pause |
 | Ignore | eligible viewer | `NEW`, `PARTIALLY_IGNORED` | effective weight calculated by backend | partial or `IGNORED` | none | store immutable vote snapshot; update points; actor becomes lifetime-ineligible for Claim/Reply |
 | Ask Customer | current owner | `VERIFICATION` | outgoing human support message required | remains `VERIFICATION` until provider `SENT`; then `WAITING_FOR_CUSTOMER` | owner until `SENT`, then null | set waiting deadline after `SENT`; waiting SLA pause if policy; delivery failure keeps ownership |
 | Resolve | current owner | `VERIFICATION` | optional controlled resolution category | `RESOLVED` | preserves owner | end SLA timers; clear snoozes; audit resolution |
@@ -54,6 +54,7 @@ RESOLVED / IGNORED + later customer message -> new linked NEW Case
 | Admin reassign | `ADMIN + reassign_cases` | `VERIFICATION` | target active/eligible/not lifetime ignore voter | `VERIFICATION` | target | in-progress time continues; audit change |
 | Admin unassign | `ADMIN + reassign_cases` | `VERIFICATION` | none | `NEW` | null | preserve elapsed SLA; audit; unclaimed resumes |
 | Force resolve | `ADMIN + force_resolve` | any nonterminal | none | `RESOLVED` | previous owner if any, otherwise null | `forced=true`; admin actor only in audit; end timers/snoozes |
+| Undo resolution | `ADMIN + force_resolve` | `RESOLVED` | serialize with intake for the full provider context | return the active generation or reopen original as `NEW` | unchanged on redirect, otherwise none | audit, preserve previous SLA history and restart the unclaimed clock for an actual reopen |
 | Personal Snooze | any active viewer | any nonterminal | 5m-30d | status unchanged | unchanged | mark read for actor; private reminder; SLA unchanged |
 | Mark read | current user | any visible Case | frontend actually displayed content | status unchanged | unchanged | advance only current user's stable read cursor |
 
@@ -101,7 +102,7 @@ This ordering prevents a Case from appearing to wait for a customer who never re
 Customer inbound while waiting:
 
 - stores/dedupes the customer Message;
-- Case -> `NEW`;
+- Case -> `VERIFICATION` with retained owner for owned waiting, or `NEW` for unassigned waiting;
 - clears waiting deadline;
 - marks Case unread for eligible users;
 - ends personal snoozes;
@@ -111,7 +112,7 @@ Customer inbound while waiting:
 
 At `waiting_until`:
 
-- atomically Case -> `NEW`;
+- return to `VERIFICATION` with retained owner for owned waiting, or `NEW` for unassigned waiting;
 - clear waiting deadline;
 - write system/audit `WAITING_TIMEOUT`;
 - resume applicable SLA timers with preserved accumulated time;
@@ -119,7 +120,7 @@ At `waiting_until`:
 
 ## 6. Terminal Case and linked successor
 
-`RESOLVED` and `IGNORED` cannot reopen.
+`IGNORED` remains terminal. An explicit administrative undo can reopen ordinary or forced `RESOLVED` Cases when no active generation exists.
 
 When the next customer message arrives for the same provider conversation identity:
 

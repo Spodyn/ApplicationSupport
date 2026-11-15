@@ -466,6 +466,7 @@ export type CaseActivityItem = {
   "occurredAt": string
   "snoozedAt"?: string | null
   "snoozedUntil"?: string | null
+  "historicalSlaBreach"?: boolean
 }
 
 export type CaseActivityPage = {
@@ -659,6 +660,11 @@ export type CaseQuickViewCounts = {
 export type CaseRelated = {
   "id": string | null
   "reference": string | null
+}
+
+export type CaseReopenResult = {
+  "caseId": string
+  "changed": boolean
 }
 
 export type CaseResolutionCategory = "SOLVED" | "NO_ACTION_REQUIRED" | "DUPLICATE" | "OTHER"

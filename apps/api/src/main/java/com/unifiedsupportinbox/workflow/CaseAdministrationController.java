@@ -21,9 +21,11 @@ import tools.jackson.databind.JsonNode;
 @RequestMapping("/api/v1/admin/cases")
 class CaseAdministrationController {
     private final CaseAdministrationService cases;
+    private final CaseReopenService reopens;
 
-    CaseAdministrationController(CaseAdministrationService cases) {
+    CaseAdministrationController(CaseAdministrationService cases, CaseReopenService reopens) {
         this.cases = cases;
+        this.reopens = reopens;
     }
 
     @GetMapping("/{caseId}/assignees")
@@ -74,6 +76,15 @@ class CaseAdministrationController {
         return result(cases.forceResolve(caseId, authenticatedUserId(authentication),
                 CaseResolveController.resolutionCategory(body == null ? null : body.resolutionCategory()),
                 key, correlationId(request)));
+    }
+
+    @PostMapping("/{caseId}/reopen")
+    ResponseEntity<JsonNode> reopen(
+            @PathVariable UUID caseId,
+            @RequestHeader(ApiV1Conventions.IDEMPOTENCY_KEY_HEADER) String key,
+            Authentication authentication,
+            HttpServletRequest request) {
+        return result(reopens.reopen(caseId, authenticatedUserId(authentication), key, correlationId(request)));
     }
 
     private static ResponseEntity<JsonNode> result(IdempotencyResult result) {

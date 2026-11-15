@@ -103,14 +103,14 @@ class SupportSendMessageService {
             String correlationId) {
         requireEligibleUser(userId);
         CaseSendContext context = jdbc.query("""
-                SELECT owner_user_id, status, external_thread_key
+                SELECT owner_user_id, status, external_thread_key, version
                 FROM cases
                 WHERE id = ?
                 FOR UPDATE
                 """, (rs, rowNum) -> new CaseSendContext(
                 rs.getObject("owner_user_id", UUID.class),
                 rs.getString("status"),
-                rs.getString("external_thread_key")), caseId)
+                rs.getString("external_thread_key"), rs.getLong("version")), caseId)
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> ApiProblemException.notFound("Case was not found."));
@@ -140,8 +140,8 @@ class SupportSendMessageService {
                     provider_created_at,
                     edited_at,
                     deleted_at,
-                    correlation_id
-                ) VALUES (?, NULL, ?, 'SUPPORT', ?, NULL, (SELECT display_name FROM users WHERE id = ?), ?, ?, FALSE, 'QUEUED', NULL, NULL, NULL, ?)
+                    correlation_id, created_at, reply_wait_case_version
+                ) VALUES (?, NULL, ?, 'SUPPORT', ?, NULL, (SELECT display_name FROM users WHERE id = ?), ?, ?, FALSE, 'QUEUED', NULL, NULL, NULL, ?, statement_timestamp(), ?)
                 RETURNING id
                 """, UUID.class,
                 caseId,
@@ -150,7 +150,7 @@ class SupportSendMessageService {
                 userId,
                 body,
                 bodyFormat.name(),
-                correlationId);
+                correlationId, context.version());
 
         if (messageId == null) {
             throw new IllegalStateException("Support Message insert returned no id.");
@@ -277,7 +277,7 @@ class SupportSendMessageService {
         return normalized;
     }
 
-    private record CaseSendContext(UUID ownerUserId, String status, String externalThreadKey) {
+    private record CaseSendContext(UUID ownerUserId, String status, String externalThreadKey, long version) {
     }
 
     private record AttachmentCandidate(

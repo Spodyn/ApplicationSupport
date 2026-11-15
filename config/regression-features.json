@@ -115,7 +115,7 @@
       "feature": "Case identity/create/terminal linking",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Canonical six statuses; immutable reference; authorization, audit and single linked successor after terminal",
+      "expected": "Canonical workflow projection; compatible v1 states; audited undo and one active case per provider thread",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseCreationServiceIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CasePersistenceIntegrationTests.java",
@@ -144,7 +144,7 @@
       "feature": "Reply/Ask Customer",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Owner only; Ask transitions only after provider acceptance; failure retains owner",
+      "expected": "Owner-only commands; owned and unassigned waiting after delivery; failed or stale sends preserve state",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/SupportSendMessageServiceIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"

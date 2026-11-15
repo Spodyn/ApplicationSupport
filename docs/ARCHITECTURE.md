@@ -99,7 +99,7 @@ availability from the same eligibility rules used for execution. It is a pure
 policy: decisions contain the next state and the required effects; provider I/O,
 message delivery, vote storage, SLA and audit effects remain in their dedicated
 command handlers. Ask remains owned until provider `SENT`; terminal inbound
-activity requests a linked successor rather than a reopen.
+activity requests a linked successor. An explicit administrative undo and intake serialize on the same provider context.
 
 `CaseWorkflowTransactions.execute` is an internal application boundary for
 human commands. It locks the Case, rejects an outdated version with the existing

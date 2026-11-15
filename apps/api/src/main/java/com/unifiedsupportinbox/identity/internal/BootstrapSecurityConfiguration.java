@@ -132,7 +132,7 @@ class BootstrapSecurityConfiguration {
                                 "/api/v1/admin/cases/*/assign",
                                 "/api/v1/admin/cases/*/reassign",
                                 "/api/v1/admin/cases/*/unassign").hasAuthority("reassign_cases")
-                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/cases/*/force-resolve")
+                        .requestMatchers(HttpMethod.POST, "/api/v1/admin/cases/*/force-resolve", "/api/v1/admin/cases/*/reopen")
                                 .hasAuthority("force_resolve")
                         .requestMatchers(HttpMethod.PUT, "/api/v1/admin/users/*/ignore-weight")
                                 .hasAuthority(PermissionCatalog.MANAGE_USERS)

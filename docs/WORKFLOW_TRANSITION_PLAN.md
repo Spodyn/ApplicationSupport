@@ -43,9 +43,15 @@ Potwierdzono mapowanie Ignore i filtr archiwum. V47 dodaje wyliczane pole workfl
 
 Na kolejnej kopii tej samej lokalnej bazy Flyway wykonał V45 → V47. Potwierdzono zgodność starych pól 25 spraw, 4 głosów, 25 rekordów SLA, 87 wiadomości i 123 wpisów audytu. Projekcja dała 24 pozycje RESOLVED, w tym 2 z historycznym Ignore, oraz 1 OPEN. Pozostałe przejścia mapowania są sprawdzane na danych syntetycznych w teście CaseListServiceIntegrationTests.
 
-Właściciel potwierdził, że zakres cofnięcia obejmuje także zwykłe Resolve. Uruchomienie komendy zależy jeszcze od reguły SLA po cofnięciu. Osobno pozostaje kwestia, czy zwykła dostarczona odpowiedź ma uruchamiać oczekiwanie, oraz szczegóły Dopytaj i timeout przy ewentualnej zmianie reguł.
+Właściciel potwierdził cofnięcie zwykłego i wymuszonego Resolve, zachowanie historii SLA i wznowienie zegara do przejęcia. Potwierdził również oczekiwanie po zwykłej odpowiedzi. V48 dopuszcza zachowanego właściciela w oczekiwaniu i zapisuje wersję sprawy przy zwykłej odpowiedzi. Istniejące wysyłki bez tej intencji kończą się zgodnie z regułą, z którą je zapisano.
 
-## Kryteria dalszego odbioru
+Nowy backend obsługuje stary kontrakt pól i statusów v1, ale stary proces aplikacji zakłada brak właściciela podczas oczekiwania. Przed przywróceniem obrazu sprzed V48 trzeba zatrzymać zapisy i worker dostawy, sprawdzić kolejkę wiadomości ze znacznikiem V48 oraz obsłużyć oczekujące sprawy z właścicielem. Nie wolno uruchomić starego backendu równolegle do nowych zapisów. Zachować kopię właścicieli i terminów do ewentualnego odtworzenia. Preferowany rollback przy danych zapisanych w nowym modelu to poprawiona wersja kodu z obsługą V48.
+
+## Próba V48
+
+Flyway wykonał migracje V45 → V48 na kopii lokalnej bazy testowej PostgreSQL 18.6. Porównanie starych pól wykazało zgodność 25 spraw, 4 głosów, 25 rekordów SLA, 87 wiadomości i 123 wpisów audytu. Baza źródłowa pozostała na V45. Oczekiwanie z właścicielem, puste intencje historycznych wysyłek i przejścia po dostawie są dodatkowo testowane na danych syntetycznych.
+
+## Kryteria odbioru
 
 - Macierz uprawnień z adminem bez wymaganego uprawnienia, zwykłym agentem i właścicielem. Replay, konflikt klucza i brak skutków po odmowie.
 - Cofnięcie po force resolve, normalne Resolve zgodnie z decyzją, istniejąca aktywna sprawa i wyścig z dwiema wiadomościami w jednym wątku. Test audytu i wznowienia odpowiedzi.

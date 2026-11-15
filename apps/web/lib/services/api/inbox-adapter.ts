@@ -250,6 +250,7 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
           action: item.action,
           snoozedAt: item.snoozedAt ?? undefined,
           snoozedUntil: item.snoozedUntil ?? undefined,
+          historicalSlaBreach: item.historicalSlaBreach,
         })),
         nextCursor: page.nextCursor ?? undefined,
       }
@@ -317,6 +318,9 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     },
     async unassign(caseId) {
       await client.unassignCase({ caseId, "Idempotency-Key": crypto.randomUUID() })
+    },
+    reopen(caseId, idempotencyKey) {
+      return client.reopenCase({ caseId, "Idempotency-Key": idempotencyKey })
     },
     async forceResolve(caseId, input) {
       await client.forceResolveCase({

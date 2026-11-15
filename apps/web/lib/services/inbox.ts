@@ -112,6 +112,7 @@ export interface InboxRepository {
   assign(caseId: string, userId: string, reassign: boolean): Promise<void>
   unassign(caseId: string): Promise<void>
   forceResolve(caseId: string, input: InboxResolveInput): Promise<void>
+  reopen(caseId: string, idempotencyKey: string): Promise<{caseId: string; changed: boolean}>
   addInternalNote(caseId: string, input: InboxInternalNoteInput): Promise<void>
   sendMessage(caseId: string, input: InboxSendInput): Promise<InboxMessage>
   uploadAttachment(caseId: string, file: File): Promise<InboxPendingAttachment>
@@ -444,6 +445,8 @@ export const mockInboxRepository: InboxRepository = {
     record.status = "new"
     await wait(undefined, 80)
   },
+
+  async reopen() { throw new Error(t("Ta operacja wymaga połączenia z API.")) },
 
   async forceResolve(caseId, input) {
     const record = getRecord(caseId)

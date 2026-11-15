@@ -167,6 +167,7 @@ class CaseCreationDomainService implements CaseCreationService {
                   AND external_conversation_id = ?
                   AND COALESCE(external_thread_key, '') = COALESCE(?, '')
                   AND status NOT IN ('IGNORED', 'RESOLVED')
+                FOR UPDATE
                 """,
                 ROW_MAPPER,
                 integrationId,
@@ -189,7 +190,7 @@ class CaseCreationDomainService implements CaseCreationService {
                   AND external_conversation_id = ?
                   AND COALESCE(external_thread_key, '') = COALESCE(?, '')
                   AND status IN ('IGNORED', 'RESOLVED')
-                ORDER BY created_at DESC, id DESC
+                ORDER BY COALESCE(resolved_at, ignored_at) DESC, created_at DESC, id DESC
                 LIMIT 1
                 """,
                 ROW_MAPPER,

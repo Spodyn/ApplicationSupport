@@ -84,8 +84,9 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
     return history.items.find((item: {id: string}) => item.id === sentBody.messageId)?.deliveryStatus
   }).toBe('SENT')
   const profile = await (await page.request.get('/api/v1/auth/me')).json()
-  expect(await (await page.request.get('/api/v1/cases/' + caseId)).json())
-    .toMatchObject({status: 'VERIFICATION', owner: {id: profile.id}, waitingUntil: null})
+  const casePath = '/api/v1/cases/' + caseId
+  expect(await (await page.request.get(casePath)).json())
+    .toMatchObject({workflowStatus: 'WAITING_ON_CUSTOMER', owner: {id: profile.id}, waitingUntil: expect.any(String)})
   const replay = await command(page, `/api/v1/cases/${caseId}/messages`, sent.request().postDataJSON(), 'POST', sent.request().headers()['idempotency-key'])
   expect(replay.status()).toBe(202)
   expect((await replay.json()).messageId).toBe(sentBody.messageId)
@@ -97,6 +98,8 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   }})).status()).toBe(200)
   await inbound(page, `Synthetic follow-up ${marker}`, first.ts)
   await expect(conversation.getByText(`Synthetic follow-up ${marker}`, {exact: true})).toBeVisible()
+  expect(await (await page.request.get(casePath)).json())
+    .toMatchObject({workflowStatus: 'OPEN', owner: {id: profile.id}, waitingUntil: null})
   expect(frames.some(frame => frame.includes('MESSAGE') && frame.includes(caseId))).toBe(true)
   await page.reload()
   await expect(page.getByText(`Synthetic answer ${marker}`, {exact: true})).toBeVisible()
@@ -160,6 +163,17 @@ test('force resolve requires administrator authority and concurrent replies shar
     expect(next.status).toBe('NEW')
     const nextPath = '/api/v1/cases/' + next.id
     expect(await (await page.request.get(nextPath)).json()).toMatchObject({relatedCase: {id: caseId}})
+    const reopen = '/api/v1/admin/cases/' + caseId + '/reopen'
+    expect((await command(other, reopen, undefined)).status()).toBe(403)
+    await page.goto('/cases?caseId=' + caseId)
+    await page.getByRole('button', {name: 'Cofnij rozwiązanie', exact: true}).click()
+    const redirectResponse = page.waitForResponse(reply => reply.url().endsWith('/reopen') && reply.request().method() === 'POST')
+    await page.getByRole('dialog').getByRole('button', {name: 'Cofnij rozwiązanie', exact: true}).click()
+    const redirected = await redirectResponse
+    expect(redirected.status()).toBe(200)
+    expect(await redirected.json()).toEqual({caseId: next.id, changed: false})
+    await expect(page).toHaveURL('/cases?caseId=' + next.id)
+    expect((await activity()).filter((event: {action: string}) => event.action === 'CASE_REOPEN_REDIRECTED')).toHaveLength(1)
     const messages = async (casePath: string) => (await (await page.request.get(casePath + '/messages')).json())
       .items.map((item: {body: string}) => item.body).sort()
     await expect.poll(() => messages(nextPath)).toEqual([...replies].sort())
@@ -170,6 +184,76 @@ test('force resolve requires administrator authority and concurrent replies shar
   } finally {
     await agentContext.close()
   }
+})
+
+test('undo ordinary resolution restarts claim SLA and allows a subsequent public reply', async ({page}) => {
+  const owner = await testAccount(page, 'account')
+  fixtures.set(page, owner)
+  await login(page, owner.email)
+  const marker = 'Undo ordinary resolution ' + randomUUID().slice(0, 8)
+  const root = await inbound(page, marker)
+  await page.getByRole('button').filter({hasText: marker}).click()
+  const list = await (await page.request.get('/api/v1/cases', {params: {search: owner.externalChannelId}})).json()
+  const caseId = list.items[0].id
+  const path = '/api/v1/cases/' + caseId
+  const detail = async () => (await (await page.request.get(path)).json())
+  const send = async (body: string) => {
+    const response = await command(page, path + '/messages', {body})
+    expect(response.status()).toBe(202)
+    await expect.poll(async () => (await detail()).workflowStatus).toBe('WAITING_ON_CUSTOMER')
+  }
+  expect((await command(page, path + '/claim', undefined)).status()).toBe(200)
+  await send('First delivered reply')
+  await inbound(page, 'Customer reply before ordinary resolve', root.ts)
+  await expect.poll(async () => (await detail()).workflowStatus).toBe('OPEN')
+  expect(await (await page.request.post('/__test/breach', {data: {caseId}})).json()).toEqual({changed: 1})
+  expect((await command(page, path + '/resolve', {resolutionCategory: 'SOLVED'})).status()).toBe(200)
+  const closed = await detail()
+  await page.getByRole('button', {name: 'Cofnij rozwiązanie', exact: true}).click()
+  const response = page.waitForResponse(reply => reply.url().endsWith('/reopen') && reply.request().method() === 'POST')
+  await page.getByRole('dialog').getByRole('button', {name: 'Cofnij rozwiązanie', exact: true}).click()
+  const reopened = await response
+  expect(reopened.status()).toBe(200)
+  expect(await reopened.json()).toEqual({caseId, changed: true})
+  const replay = await command(page, '/api/v1/admin/cases/' + caseId + '/reopen', undefined, 'POST',
+    reopened.request().headers()['idempotency-key'])
+  expect(await replay.json()).toEqual({caseId, changed: true})
+  expect(await detail()).toMatchObject({
+    workflowStatus: 'NEW', owner: {id: null}, resolvedAt: null, version: closed.version + 1,
+    sla: {firstResponseCompletedAt: closed.sla.firstResponseCompletedAt, unclaimedCompletedAt: null},
+  })
+  expect((await detail()).sla.unclaimedStartedAt > closed.sla.unclaimedStartedAt).toBe(true)
+  const events = (await (await page.request.get(path + '/activity')).json()).items
+  expect(events.filter((event: {action: string}) => event.action === 'CASE_REOPEN'))
+    .toEqual([expect.objectContaining({historicalSlaBreach: true})])
+  expect(events.filter((event: {action: string}) => event.action === 'CASE_RESOLVE')).toHaveLength(1)
+  expect((await command(page, path + '/claim', undefined)).status()).toBe(200)
+  await send('Delivered after reopening')
+  expect(await detail()).toMatchObject({workflowStatus: 'WAITING_ON_CUSTOMER', owner: {id: owner.userId}})
+})
+
+test('undo and inbound race converge on one active Case for the provider thread', async ({page}) => {
+  const admin = await testAccount(page, 'account')
+  fixtures.set(page, admin)
+  await login(page, admin.email)
+  const marker = 'Reopen race ' + randomUUID().slice(0, 8)
+  const root = await inbound(page, marker)
+  await expect(page.getByRole('button').filter({hasText: marker})).toBeVisible()
+  const list = async () => (await (await page.request.get('/api/v1/cases', {
+    params: {search: admin.externalChannelId},
+  })).json()).items
+  const original = (await list())[0]
+  const base = '/api/v1/admin/cases/' + original.id
+  expect((await command(page, base + '/force-resolve', {})).status()).toBe(200)
+  const body = 'Incoming during undo ' + marker
+  const [response] = await Promise.all([command(page, base + '/reopen', undefined), inbound(page, body, root.ts)])
+  expect(response.status()).toBe(200)
+  const result = await response.json()
+  const active = async () => (await list()).filter((item: {workflowStatus: string}) => item.workflowStatus !== 'RESOLVED')
+  await expect.poll(async () => (await active()).map((item: {id: string}) => item.id)).toEqual([result.caseId])
+  const history = async () => (await (await page.request.get('/api/v1/cases/' + result.caseId + '/messages')).json()).items
+  await expect.poll(async () => (await history()).filter((item: {body: string}) => item.body === body).length).toBe(1)
+  expect(result.changed).toBe(result.caseId === original.id)
 })
 
 for (const visibility of ['public', 'private'] as const) {
@@ -337,6 +421,9 @@ test('internal Case notes stay in USI with independent drafts, realtime and publ
     await page.getByRole('button', {name: 'public-only.txt', exact: true}).click()
     await page.getByRole('button', {name: 'Wyślij', exact: true}).click()
     await expect.poll(observed).toHaveLength(1)
+    await expect.poll(async () => (await detail()).workflowStatus).toBe('WAITING_ON_CUSTOMER')
+    await inbound(page, 'Customer follow-up after the public reply', root.ts)
+    await expect.poll(async () => (await detail()).workflowStatus).toBe('OPEN')
     await page.goto('/cases?caseId=' + caseId)
     await page.reload()
     await expect(rendered(page)).toHaveCount(1)
@@ -416,6 +503,10 @@ test('responsive inbox shares quick-view predicates and preserves the actual rep
   await conversation.getByRole('button', {name: 'Wyślij', exact: true}).click()
   const reply = conversation.locator('[data-message-kind="support"]')
   await expect(reply.locator('[data-message-author]')).toHaveText(admin.displayName)
+  const readStatus = async () => (await (await page.request.get('/api/v1/cases/' + caseId)).json()).workflowStatus
+  await expect.poll(readStatus).toBe('WAITING_ON_CUSTOMER')
+  await inbound(page, 'Customer follows up after delivery', root.ts)
+  await expect.poll(readStatus).toBe('OPEN')
   expect((await command(page, '/api/v1/admin/cases/' + caseId + '/reassign', {targetUserId: nextOwner.userId})).status()).toBe(200)
   await expect(count('mine')).toHaveText('0')
   await expect(details.locator('[data-case-detail-owner]')).toHaveText(nextOwner.displayName)
@@ -749,6 +840,8 @@ test('Case composer uploads pasted PNG, retries scans and resumes partial Slack 
   const fileOnly = await sendFromComposer()
   await expect(panel.getByRole('link', {name: new RegExp(screenshot)})).toBeVisible()
   expect((await observed()).messages.filter(message => message.clientMessageId === fileOnly)).toHaveLength(0)
+  await inbound(page, 'Customer acknowledgement for the image', root.ts)
+  await expect(composer).toBeEnabled()
 
   await picker.setInputFiles({name: 'oversized.txt', mimeType: 'text/plain', buffer: Buffer.alloc(25 * 1024 * 1024 + 1)})
   await expect(panel.getByRole('alert')).toContainText('Pojedynczy plik nie może przekraczać 25 MiB.')
@@ -882,7 +975,7 @@ test('archived Slack failure shows the actual reason and never offers an ineligi
 test('Slack rate limiting schedules a retry and only one message is delivered', async ({page}) => {
   await login(page)
   const marker = randomUUID().slice(0, 8)
-  await inbound(page, 'Rate limit scenario ' + marker)
+  const root = await inbound(page, 'Rate limit scenario ' + marker)
   await page.getByRole('button').filter({hasText: 'Rate limit scenario ' + marker}).click()
   await page.getByRole('button', {name: 'Przejmij', exact: true}).click()
   const sent = page.waitForResponse(response => response.url().endsWith('/messages') && response.request().method() === 'POST')
@@ -895,7 +988,13 @@ test('Slack rate limiting schedules a retry and only one message is delivered', 
   await expect(bubble.getByText(/Osiągnięto limit wysyłki Slack/)).toBeVisible()
   await expect(bubble.getByText(/Następna próba/)).toBeVisible()
   await expect(bubble.getByRole('button', {name: 'Ponów wysyłkę'})).toHaveCount(0)
+  const casePath = new URL(response.url()).pathname.replace(/\/messages$/, '')
+  const newer = 'Customer writes during provider retry ' + marker
+  await inbound(page, newer, root.ts)
+  await expect(page.getByText(newer, {exact: true})).toBeVisible()
   await expect(bubble.getByText(/Wysłano/)).toBeVisible()
+  expect(await (await page.request.get(casePath)).json())
+    .toMatchObject({workflowStatus: 'OPEN', waitingUntil: null})
   await expect.poll(async () => (await (await page.request.get('/__test/observed')).json()).messages
     .filter((item: {clientMessageId: string}) => item.clientMessageId === messageId).length).toBe(1)
 })

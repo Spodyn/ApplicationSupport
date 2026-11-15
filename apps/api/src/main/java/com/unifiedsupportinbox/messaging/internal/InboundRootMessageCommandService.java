@@ -84,9 +84,10 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                     inbound,
                     delivery_status,
                     provider_created_at,
+                    created_at,
                     correlation_id
                 )
-                VALUES (?, ?, ?, 'CUSTOMER', NULL, ?, ?, ?, 'PLAIN_TEXT', TRUE, NULL, ?, ?)
+                VALUES (?, ?, ?, 'CUSTOMER', NULL, ?, ?, ?, 'PLAIN_TEXT', TRUE, NULL, ?, statement_timestamp(), ?)
                 ON CONFLICT (case_id, external_message_id)
                     WHERE external_message_id IS NOT NULL
                 DO NOTHING

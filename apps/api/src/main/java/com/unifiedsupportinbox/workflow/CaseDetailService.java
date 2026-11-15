@@ -74,11 +74,19 @@ class CaseDetailService {
                             rs.getString("integration_display_name"), rs.getString("workspace_external_id"), rs.getString("workspace_name")),
                     new RelatedCase(rs.getObject("related_case_id", UUID.class), rs.getString("related_case_reference")),
                     new PersonalState(rs.getObject("last_read_message_id", UUID.class), instant(rs, "last_read_at"), instant(rs, "snoozed_until"), instant(rs, "snoozed_at")),
-                    sla(rs), rs.getInt("ignore_score"), actions.stream().map(Enum::name).sorted().toList(),
+                    sla(rs), rs.getInt("ignore_score"), availableActions(status, actor, actions),
                     instant(rs, "claimed_at"), instant(rs, "waiting_until"), instant(rs, "resolved_at"), instant(rs, "ignored_at"),
                     enumValue(rs, "resolution_category"), instant(rs, "created_at"), instant(rs, "updated_at"),
                     instant(rs, "last_activity_at"), rs.getLong("version"));
         }, userId, userId, caseId).stream().findFirst().orElseThrow(() -> ApiProblemException.notFound("Case was not found."));
+    }
+
+    private static List<String> availableActions(CaseStatus status, Actor actor, Set<CaseTransitionPolicy.Action> actions) {
+        var names = new java.util.ArrayList<>(actions.stream().map(Enum::name).toList());
+        if (status == CaseStatus.RESOLVED && actor.active() && actor.role() == UserRole.ADMIN
+                && actor.permissions().contains("force_resolve")) names.add("REOPEN");
+        names.sort(String::compareTo);
+        return List.copyOf(names);
     }
 
     private Actor actor(UUID caseId, UUID userId) {

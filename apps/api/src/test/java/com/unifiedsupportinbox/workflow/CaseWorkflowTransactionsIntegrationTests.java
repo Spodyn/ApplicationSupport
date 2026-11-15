@@ -118,6 +118,24 @@ class CaseWorkflowTransactionsIntegrationTests {
     }
 
     @Test
+    void ownedWaitingTimeoutRestoresOpenWorkflowAndKeepsOwner() {
+        UUID id = newCase();
+        UUID owner = newActor().id();
+        jdbc.update("""
+                UPDATE cases SET status = 'WAITING_FOR_CUSTOMER', owner_user_id = ?, claimed_at = now(),
+                    waiting_until = now() - interval '1 minute'
+                WHERE id = ?
+                """, owner, id);
+        assertThat(context.getBean(WaitingTimeoutService.class).processDue(10)).isOne();
+        assertThat(jdbc.queryForObject("""
+                SELECT workflow_status = 'OPEN' AND owner_user_id = ? AND waiting_until IS NULL
+                FROM cases WHERE id = ?
+                """, Boolean.class, owner, id)).isTrue();
+        assertThat(jdbc.queryForList("SELECT action FROM audit_events WHERE case_id = ?", String.class, id))
+                .containsExactly("CASE_WAITING_TIMEOUT");
+    }
+
+    @Test
     void effectFailureRollsBackWorkflowAndOtherWrites() {
         UUID id = newCase();
         Actor actor = newActor();

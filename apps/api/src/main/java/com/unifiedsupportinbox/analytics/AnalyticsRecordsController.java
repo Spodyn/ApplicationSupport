@@ -45,7 +45,11 @@ class AnalyticsRecordsController {
                        COALESCE(c.customer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS customer_id, COALESCE(customer.name, 'Nie przypisano') AS customer_name, c.provider,
                        channel.name AS channel_name, c.status, c.workflow_status, c.resolution_category,
                        sla.first_response_completed_at, sla.first_response_due_at, sla.state AS sla_state,
-                       EXISTS (SELECT 1 FROM audit_events a WHERE a.case_id = c.id AND a.action = 'CASE_FORCE_RESOLVE') AS force_resolved
+                       COALESCE(c.status = 'RESOLVED' AND (
+                           SELECT a.action = 'CASE_FORCE_RESOLVE' FROM audit_events a
+                           WHERE a.case_id = c.id AND a.action IN ('CASE_RESOLVE', 'CASE_FORCE_RESOLVE')
+                           ORDER BY occurred_at DESC, id DESC LIMIT 1
+                       ), FALSE) AS force_resolved
                 FROM cases c
                 LEFT JOIN customers customer ON customer.id = c.customer_id
                 JOIN channels channel ON channel.id = c.channel_id

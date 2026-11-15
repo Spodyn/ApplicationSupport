@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { deliveryPresentation } from "@/lib/i18n/delivery-presentation"
 import { attachmentLimitError } from "@/lib/services/attachment-limits"
 import { userError } from "@/lib/i18n/errors"
@@ -124,6 +125,7 @@ export function CasesPage({
 }) {
   const t = useT()
   const shell = useShell()
+  const router = useRouter()
   const [selectedCaseId, setSelectedCaseId] = useState<string | undefined>(initialCaseId)
   const [mobileConversationOpen, setMobileConversationOpen] = useState(Boolean(initialCaseId))
   const [desktopDetailsOpen, setDesktopDetailsOpen] = useState(true)
@@ -414,6 +416,10 @@ export function CasesPage({
         loadOlderMessages={() => messagesQuery.fetchNextPage()}
         workflow={workflow}
         onBack={returnToQueue}
+        onRedirect={(caseId) => {
+          setSelectedCaseId(caseId)
+          router.replace("?caseId=" + encodeURIComponent(caseId), { scroll: false })
+        }}
         detailsOpen={detailsOpen}
         onToggleDetails={() => wideInbox ? setDesktopDetailsOpen(!desktopDetailsOpen) : setDrawerOpen(!drawerOpen)}
         detailsToggleRef={detailsToggleRef}
@@ -550,7 +556,7 @@ function SlaBadge({ tone, children }: { tone: CasePresentation["slaTone"]; child
 }
 
 function ConversationPanel({
-  item, record, detailError, messages, messagesLoading, messagesError, hasOlderMessages, loadOlderMessages, workflow, onBack, detailsOpen, onToggleDetails, detailsToggleRef, conversationTitleRef, className,
+  item, record, detailError, messages, messagesLoading, messagesError, hasOlderMessages, loadOlderMessages, workflow, onBack, onRedirect, detailsOpen, onToggleDetails, detailsToggleRef, conversationTitleRef, className,
 }: {
   item: CasePresentation
   record?: InboxCase
@@ -562,6 +568,7 @@ function ConversationPanel({
   loadOlderMessages: () => void
   workflow: ReturnType<typeof useInboxWorkflow>
   onBack: () => void
+  onRedirect: (caseId: string) => void
   detailsOpen: boolean
   onToggleDetails: () => void
   detailsToggleRef: React.RefObject<HTMLButtonElement | null>
@@ -576,7 +583,7 @@ function ConversationPanel({
   const noteKey = useRef<string | null>(null)
   const [files, setFiles] = useState<File[]>([])
   const [sendError, setSendError] = useState<Error | null>(null)
-  const [actionDialog, setActionDialog] = useState<"ask" | "ignore" | "resolve" | "snooze" | "admin" | null>(null)
+  const [actionDialog, setActionDialog] = useState<"ask" | "ignore" | "resolve" | "snooze" | "reopen" | "admin" | null>(null)
   const [actionText, setActionText] = useState("")
   const [resolutionCategory, setResolutionCategory] = useState("")
   const [waitingMinutes, setWaitingMinutes] = useState(24 * 60)
@@ -592,6 +599,7 @@ function ConversationPanel({
   const canAsk = Boolean(record?.availableActions?.includes("ASK_CUSTOMER"))
   const canIgnore = Boolean(record?.availableActions?.includes("IGNORE"))
   const canResolve = Boolean(record?.availableActions?.includes("RESOLVE"))
+  const canReopen = Boolean(record?.availableActions?.includes("REOPEN"))
   const canSnooze = Boolean(record?.availableActions?.includes("SNOOZE"))
   const canAdmin = Boolean(record?.availableActions?.some((action) => ["ASSIGN", "REASSIGN", "UNASSIGN", "FORCE_RESOLVE"].includes(action)))
   const assignees = useInboxAssignees(record?.id, actionDialog === "admin")
@@ -606,6 +614,7 @@ function ConversationPanel({
     || workflow.assign.isPending
     || workflow.unassign.isPending
     || workflow.forceResolve.isPending
+    || workflow.reopen.isPending
 
   const hasContent = noteMode ? Boolean(noteDraft.trim()) : Boolean(draft.trim() || files.length)
   const submitting = workflow.sendMessage.isPending || workflow.addInternalNote.isPending
@@ -663,6 +672,10 @@ function ConversationPanel({
       } else if (actionDialog === "resolve") {
         workflowActionKey.current ??= crypto.randomUUID()
         await workflow.resolve.mutateAsync({ category: resolutionCategory || undefined, idempotencyKey: workflowActionKey.current })
+      } else if (actionDialog === "reopen") {
+        workflowActionKey.current ??= crypto.randomUUID()
+        const result = await workflow.reopen.mutateAsync(workflowActionKey.current)
+        if (result.caseId !== item.id) onRedirect(result.caseId)
       } else if (actionDialog === "snooze") {
         await workflow.snooze.mutateAsync(new Date(snoozeUntil).toISOString())
       }
@@ -717,6 +730,10 @@ function ConversationPanel({
             <button type="button" onClick={() => setActionDialog("ignore")} disabled={!canIgnore} className="flex h-8 items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-2.5 text-[11px] text-[#d8dce4] disabled:opacity-50"><ThumbsDown className="size-[17px]" /> {t("Ignoruj")} {record ? `${record.ignoreVotes.current}/2` : ""}</button>
             <button type="button" onClick={() => setActionDialog("ask")} disabled={!canAsk} className="flex h-8 items-center rounded-[9px] border border-white/[0.07] bg-[#111a28] px-2.5 text-[11px] text-[#d8dce4] disabled:opacity-50">{t("Dopytaj")}</button>
             <button type="button" onClick={() => setActionDialog("resolve")} disabled={!canResolve} className="flex h-8 items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-2.5 text-[11px] text-[#d8dce4] disabled:opacity-50"><Check className="size-[17px]" /> {t("Rozwiąż")}</button>
+            {canReopen && <button type="button" onClick={() => setActionDialog("reopen")}
+              className="flex h-8 items-center rounded-[9px] border border-violet-500/20 bg-violet-950/30 px-2.5 text-[11px] text-violet-200">
+              <RotateCcw className="mr-2 size-3.5" />{t("Cofnij rozwiązanie")}
+            </button>}
             {canAdmin && <button type="button" onClick={() => setActionDialog("admin")} className="flex h-8 items-center rounded-[9px] border border-violet-500/20 bg-violet-950/30 px-2.5 text-[11px] text-violet-200">{t("Administruj")}</button>}
           </div>
         {record?.snoozedForCurrentUserUntil && <p className="mt-2 text-xs text-[#cbd3df]" data-active-snooze>
@@ -822,14 +839,15 @@ function ConversationPanel({
         <p id="composer-help" className="mt-1 text-[11px] text-[#9aa5b6]">{t(noteMode ? "Enter zapisuje · Shift+Enter dodaje nowy wiersz" : "Enter wysyła · Shift+Enter dodaje nowy wiersz")}</p>
         {(noteMode ? noteError : sendError) && <p role="alert" className="mt-2 text-sm text-red-400">{userError(noteMode ? noteError : sendError)}</p>}
       </div>
-      {actionDialog && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111b29] p-5 shadow-2xl"><h3 className="text-lg font-semibold text-white">{actionDialog === "ask" ? t("Dopytaj klienta") : actionDialog === "ignore" ? t("Głos ignorowania") : actionDialog === "resolve" ? t("Rozwiąż sprawę") : actionDialog === "snooze" ? t("Odłóż sprawę") : t("Administracja sprawą")}</h3>
+      {actionDialog && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111b29] p-5 shadow-2xl"><h3 className="text-lg font-semibold text-white">{actionDialog === "ask" ? t("Dopytaj klienta") : actionDialog === "ignore" ? t("Głos ignorowania") : actionDialog === "resolve" ? t("Rozwiąż sprawę") : actionDialog === "snooze" ? t("Odłóż sprawę") : actionDialog === "reopen" ? t("Cofnij rozwiązanie") : t("Administracja sprawą")}</h3>
+        {actionDialog === "reopen" && <p className="mt-3 text-sm text-[#cbd3df]">{t("Sprawa wróci do kolejki. Jeśli ten wątek ma już aktywną sprawę, otworzy się ona.")}</p>}
         {actionDialog === "ask" && <><textarea autoFocus value={actionText} onChange={(event) => setActionText(event.target.value)} className="mt-4 h-28 w-full rounded-lg border border-white/10 bg-[#08111f] p-3 text-sm" placeholder={t("Pytanie do klienta")} /><label className="mt-3 block text-xs text-[#aeb8c8]">{t("Czas oczekiwania")}<select value={waitingMinutes} onChange={(event) => setWaitingMinutes(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-white/10 bg-[#08111f] p-2"><option value={60}>{t("1 godzina")}</option><option value={24 * 60}>{t("24 godziny")}</option><option value={3 * 24 * 60}>{t("3 dni")}</option><option value={7 * 24 * 60}>{t("7 dni")}</option></select></label></>}
         {actionDialog === "ignore" && <textarea autoFocus value={actionText} onChange={(event) => setActionText(event.target.value)} className="mt-4 h-24 w-full rounded-lg border border-white/10 bg-[#08111f] p-3 text-sm" placeholder={t("Powód (opcjonalnie)")} />}
         {(actionDialog === "resolve" || actionDialog === "admin") && <label className="mt-4 block text-xs text-[#aeb8c8]">{t("Kategoria rozwiązania")}<select value={resolutionCategory} onChange={(event) => setResolutionCategory(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[#08111f] p-2"><option value="">{t("Bez kategorii")}</option><option value="SOLVED">{t("Rozwiązane")}</option><option value="NO_ACTION_REQUIRED">{t("Brak wymaganej akcji")}</option><option value="DUPLICATE">{t("Duplikat")}</option><option value="OTHER">{t("Inne")}</option></select></label>}
         {actionDialog === "snooze" && <><div className="mt-4 flex gap-2">{[["1h", 60], [t("Jutro"), 24 * 60], [t("Tydzień"), 7 * 24 * 60]].map(([label, minutes]) => <button key={String(label)} type="button" onClick={() => setSnoozeUntil(localDateTime(new Date(Date.now() + Number(minutes) * 60_000)))} className="rounded-md border border-white/10 px-3 py-1.5 text-xs">{label}</button>)}</div><input aria-label={t("Data i godzina zakończenia odłożenia")} type="datetime-local" value={snoozeUntil} onChange={(event) => setSnoozeUntil(event.target.value)} className="mt-3 w-full rounded-lg border border-white/10 bg-[#08111f] p-2 text-sm" /></>}
         {actionDialog === "admin" && <label className="mt-4 block text-xs text-[#aeb8c8]">{t("Agent")}<select value={validAssignee ? assigneeId : ""} onChange={(event) => setAssigneeId(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[#08111f] p-2"><option value="">{t("Wybierz agenta")}</option>{availableAssignees.map((agent) => <option key={agent.id} value={agent.id}>{agent.displayName}{agent.ignoreWeight === 2 ? t(" · głos ignorowania ×2") : ""}</option>)}</select></label>}
         {actionError && <p role="alert" className="mt-3 text-sm text-red-400">{userError(actionError)}</p>}
-        <div data-case-action-region aria-busy={actionPending} className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => { setActionDialog(null); setActionError(null); workflowActionKey.current = null }} disabled={actionPending} className="rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-50">{t("Anuluj")}</button>{actionDialog === "admin" ? <>{record?.availableActions?.includes("ASSIGN") && <button type="button" onClick={() => void performAdminAction("assign")} disabled={actionPending || !validAssignee} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz")}</button>}{record?.availableActions?.includes("REASSIGN") && <button type="button" onClick={() => void performAdminAction("reassign")} disabled={actionPending || !validAssignee} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz ponownie")}</button>}{record?.availableActions?.includes("UNASSIGN") && <button type="button" onClick={() => void performAdminAction("unassign")} disabled={actionPending} className="rounded-lg border border-amber-400/30 px-4 py-2 text-sm text-amber-200 disabled:opacity-50">{t("Cofnij przypisanie")}</button>}{record?.availableActions?.includes("FORCE_RESOLVE") && <button type="button" onClick={() => void performAdminAction("forceResolve")} disabled={actionPending} className="rounded-lg bg-red-700 px-4 py-2 text-sm disabled:opacity-50">{t("Wymuś rozwiązanie")}</button>}</> : <button type="button" onClick={() => void performAction()} disabled={actionPending || (actionDialog === "ask" && !actionText.trim())} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{actionPending ? t("Zapisywanie…") : t("Zatwierdź")}</button>}</div>
+        <div data-case-action-region aria-busy={actionPending} className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => { setActionDialog(null); setActionError(null); workflowActionKey.current = null }} disabled={actionPending} className="rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-50">{t("Anuluj")}</button>{actionDialog === "admin" ? <>{record?.availableActions?.includes("ASSIGN") && <button type="button" onClick={() => void performAdminAction("assign")} disabled={actionPending || !validAssignee} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz")}</button>}{record?.availableActions?.includes("REASSIGN") && <button type="button" onClick={() => void performAdminAction("reassign")} disabled={actionPending || !validAssignee} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz ponownie")}</button>}{record?.availableActions?.includes("UNASSIGN") && <button type="button" onClick={() => void performAdminAction("unassign")} disabled={actionPending} className="rounded-lg border border-amber-400/30 px-4 py-2 text-sm text-amber-200 disabled:opacity-50">{t("Cofnij przypisanie")}</button>}{record?.availableActions?.includes("FORCE_RESOLVE") && <button type="button" onClick={() => void performAdminAction("forceResolve")} disabled={actionPending} className="rounded-lg bg-red-700 px-4 py-2 text-sm disabled:opacity-50">{t("Wymuś rozwiązanie")}</button>}</> : <button type="button" onClick={() => void performAction()} disabled={actionPending || (actionDialog === "ask" && !actionText.trim())} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{actionPending ? t("Zapisywanie…") : actionDialog === "reopen" ? t("Cofnij rozwiązanie") : t("Zatwierdź")}</button>}</div>
       </div></div>}
     </section>
   )
@@ -910,7 +928,7 @@ function ActivityDescription({ event }: { event: InboxActivity }) {
   if (event.action === "CASE_SNOOZE" && event.snoozedUntil) {
     return <SnoozeTime until={event.snoozedUntil} from={event.snoozedAt} />
   }
-  return <>{t(event.label)} · {event.author ?? t("System")}{event.snoozedUntil && <> · <SnoozeTime until={event.snoozedUntil} from={event.snoozedAt} /></>}</>
+  return <>{t(event.label)} · {event.author ?? t("System")}{event.historicalSlaBreach && <> · {t("Historyczne przekroczenie SLA")}</>}{event.snoozedUntil && <> · <SnoozeTime until={event.snoozedUntil} from={event.snoozedAt} /></>}</>
 }
 
 function FilterSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (value: string) => void; options: Array<{ value: string; label: string }> }) {

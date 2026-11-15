@@ -11,6 +11,7 @@ import com.unifiedsupportinbox.messaging.internal.MessageDeliveryRepository.Deli
 import com.unifiedsupportinbox.messaging.internal.MessageDeliveryRepository.DeliveryMessageRecord;
 import com.unifiedsupportinbox.messaging.internal.MessageDeliveryRepository.DueDeliveryRecord;
 import com.unifiedsupportinbox.sla.CaseSlaResponseRecorder;
+import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -36,8 +37,9 @@ class MessageDeliveryService {
     private final IdempotentCommandExecutor idempotency;
     private final ObjectMapper json;
     private final ApplicationEventPublisher events;
-    private final AskCustomerDeliveryFinalizer askFinalizer;
+    private final WaitingDeliveryFinalizer waitingFinalizer;
     private final CaseSlaResponseRecorder slaResponses;
+    private final CaseSlaWaitingRecorder slaWaiting;
 
     MessageDeliveryService(
             MessageDeliveryRepository repository,
@@ -46,16 +48,17 @@ class MessageDeliveryService {
             IdempotentCommandExecutor idempotency,
             ObjectMapper json,
             ApplicationEventPublisher events,
-            AskCustomerDeliveryFinalizer askFinalizer,
-            CaseSlaResponseRecorder slaResponses) {
+            WaitingDeliveryFinalizer waitingFinalizer,
+            CaseSlaResponseRecorder slaResponses, CaseSlaWaitingRecorder slaWaiting) {
         this.repository = repository;
         this.properties = properties;
         this.outbox = outbox;
         this.idempotency = idempotency;
         this.json = json;
         this.events = events;
-        this.askFinalizer = askFinalizer;
+        this.waitingFinalizer = waitingFinalizer;
         this.slaResponses = slaResponses;
+        this.slaWaiting = slaWaiting;
     }
 
     @Transactional
@@ -103,11 +106,12 @@ class MessageDeliveryService {
             throw new IllegalStateException("Message delivery claim was lost before success checkpoint: " + current.messageId());
         }
         Instant sentAt = Instant.now();
+        boolean enteredWaiting = waitingFinalizer.finalizeWaiting(current, sentAt);
         // System deliveries (including OOO) are never the first human response.
         if (current.authorUserId() != null) {
             slaResponses.recordProviderAcceptedResponse(current.caseId(), sentAt);
         }
-        askFinalizer.finalizeIfAsk(current, sentAt);
+        if (enteredWaiting) slaWaiting.pauseForWaiting(current.caseId(), sentAt);
         publish(current, status, null, null, null);
     }
 
