@@ -195,6 +195,7 @@
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseCreationServiceIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/sla/BusinessTimeCalculatorTests.java",
         "apps/web/tests/unit/sla.test.ts",
         "apps/web/tests/unit/analytics-workflow.test.ts",
