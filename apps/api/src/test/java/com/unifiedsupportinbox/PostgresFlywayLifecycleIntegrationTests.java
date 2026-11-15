@@ -140,10 +140,33 @@ class PostgresFlywayLifecycleIntegrationTests {
                 .target("44").load().migrate();
         assertThat(tableExists("case_snooze_history")).isFalse();
         Flyway current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
-                .load();
+                .target("45").load();
         assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
         current.validate();
         assertThat(tableExists("case_snooze_history")).isTrue();
+    }
+
+    @Test
+    void upgradesFromV45ToInternalNotesAndRetainsExistingUsers() throws SQLException {
+        cleanDatabase();
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .target("45").load().migrate();
+        assertThat(tableExists("case_internal_notes")).isFalse();
+        try (Connection connection = connection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    INSERT INTO users (email, display_name, role, active)
+                    VALUES ('note-upgrade@example.test', 'Existing user', 'USER', TRUE)
+                    """);
+        }
+
+        Flyway current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .target("46").load();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
+        current.validate();
+        assertThat(tableExists("case_internal_notes")).isTrue();
+        assertThat(queryBoolean("SELECT to_regclass('public.idx_case_internal_notes_history') IS NOT NULL")).isTrue();
+        assertThat(queryString("SELECT display_name FROM users WHERE email = 'note-upgrade@example.test'"))
+                .isEqualTo("Existing user");
     }
 
     private static ConfigurableApplicationContext startApplication() {
