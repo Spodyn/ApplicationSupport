@@ -4,7 +4,6 @@ import com.unifiedsupportinbox.OutboxEventStore;
 import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.identity.UserRole;
-import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -17,43 +16,47 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Finalizes Ask Customer only after the provider accepted the outbound Message.
+ * Enters customer waiting only after the provider accepted the outbound Message.
  * A delivery-state race never causes a second provider send: the Message success
  * remains authoritative even if the Case can no longer enter WAITING.
  */
 @Service
-class AskCustomerDeliveryFinalizer {
+class WaitingDeliveryFinalizer {
 
+    private static final long REPLY_WAIT_SECONDS = 24 * 60 * 60;
     private static final String CASE_UPDATED = "case.updated";
 
     private final JdbcTemplate jdbc;
     private final AuditEventStore audit;
     private final OutboxEventStore outbox;
     private final ObjectMapper json;
-    private final CaseSlaWaitingRecorder sla;
 
-    AskCustomerDeliveryFinalizer(
+    WaitingDeliveryFinalizer(
             JdbcTemplate jdbc,
             AuditEventStore audit,
             OutboxEventStore outbox,
-            ObjectMapper json,
-            CaseSlaWaitingRecorder sla) {
+            ObjectMapper json) {
         this.jdbc = jdbc;
         this.audit = audit;
         this.outbox = outbox;
         this.json = json;
-        this.sla = sla;
     }
 
-    void finalizeIfAsk(MessageDeliveryRepository.DeliveryMessageRecord message, Instant sentAt) {
+    boolean finalizeWaiting(MessageDeliveryRepository.DeliveryMessageRecord message, Instant sentAt) {
         Long waitingSeconds = message.askWaitingSeconds();
-        if (waitingSeconds == null) return;
-
-        Instant waitingUntil = sentAt.plusSeconds(waitingSeconds);
+        Long replyVersion = message.replyWaitCaseVersion();
+        if (waitingSeconds == null && replyVersion == null) return false;
+        boolean ask = waitingSeconds != null;
+        Instant waitingUntil = sentAt.plusSeconds(ask ? waitingSeconds : REPLY_WAIT_SECONDS);
+        UUID retainedOwner = ask ? null : message.authorUserId();
+        String action = ask ? "ASK_CUSTOMER" : "REPLY_WAITING";
+        // Intake takes this row lock before inserting a customer message. Checking in
+        // a separate statement observes the committed inbound message after a lock wait.
+        jdbc.query("SELECT id FROM cases WHERE id = ? FOR UPDATE", rs -> { }, message.caseId());
         Transition transition = jdbc.query("""
                 UPDATE cases
                 SET status = 'WAITING_FOR_CUSTOMER',
-                    owner_user_id = NULL,
+                    owner_user_id = ?,
                     waiting_until = ?,
                     updated_at = statement_timestamp(),
                     last_activity_at = statement_timestamp(),
@@ -61,19 +64,22 @@ class AskCustomerDeliveryFinalizer {
                 WHERE id = ?
                   AND status = 'VERIFICATION'
                   AND owner_user_id = ?
+                  AND (?::bigint IS NULL OR (version = ?::bigint AND NOT EXISTS (
+                      SELECT 1 FROM messages inbound
+                      WHERE inbound.case_id = cases.id AND inbound.inbound
+                        AND inbound.created_at >= ?::timestamptz
+                  )))
                 RETURNING version
                 """, (rs, rowNum) -> new Transition(rs.getLong("version")),
-                OffsetDateTime.ofInstant(waitingUntil, ZoneOffset.UTC),
-                message.caseId(),
-                message.authorUserId()).stream().findFirst().orElse(null);
+                retainedOwner, OffsetDateTime.ofInstant(waitingUntil, ZoneOffset.UTC),
+                message.caseId(), message.authorUserId(), replyVersion, replyVersion,
+                OffsetDateTime.ofInstant(message.createdAt(), ZoneOffset.UTC)).stream().findFirst().orElse(null);
 
         if (transition == null) {
             // Provider acceptance is already durable. Do not throw and accidentally
             // retry the provider post if an admin/state race made WAITING inapplicable.
-            return;
+            return false;
         }
-
-        sla.pauseForWaiting(message.caseId(), sentAt);
 
         UserRole role = jdbc.queryForObject(
                 "SELECT role FROM users WHERE id = ?",
@@ -81,7 +87,8 @@ class AskCustomerDeliveryFinalizer {
                 message.authorUserId());
 
         Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("action", "ASK_CUSTOMER");
+        metadata.put("action", action);
+        if (retainedOwner != null) metadata.put("ownerUserId", retainedOwner.toString());
         metadata.put("status", "WAITING_FOR_CUSTOMER");
         metadata.put("messageId", message.messageId().toString());
         metadata.put("waitingUntil", waitingUntil.toString());
@@ -89,7 +96,7 @@ class AskCustomerDeliveryFinalizer {
         audit.append(
                 role == UserRole.ADMIN ? AuditActorType.ADMIN : AuditActorType.USER,
                 message.authorUserId(),
-                "CASE_ASK_CUSTOMER",
+                "CASE_" + action,
                 "CASE",
                 message.caseId(),
                 message.caseId(),
@@ -99,15 +106,17 @@ class AskCustomerDeliveryFinalizer {
                 CASE_UPDATED,
                 "case",
                 message.caseId(),
-                payload(message.caseId(), message.messageId(), waitingUntil, transition.version()),
+                payload(message.caseId(), message.messageId(), waitingUntil, retainedOwner, transition.version()),
                 message.correlationId());
+        return true;
     }
 
-    private String payload(UUID caseId, UUID messageId, Instant waitingUntil, long version) {
+    private String payload(UUID caseId, UUID messageId, Instant waitingUntil, UUID owner, long version) {
         ObjectNode payload = json.createObjectNode();
         payload.put("caseId", caseId.toString());
         payload.put("status", "WAITING_FOR_CUSTOMER");
-        payload.putNull("ownerUserId");
+        if (owner == null) payload.putNull("ownerUserId");
+        else payload.put("ownerUserId", owner.toString());
         payload.put("messageId", messageId.toString());
         payload.put("waitingUntil", waitingUntil.toString());
         payload.put("version", version);

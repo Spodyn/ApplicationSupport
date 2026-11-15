@@ -15,7 +15,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
- * Applies the WAITING_FOR_CUSTOMER -> NEW transition after a newly persisted
+ * Resumes the owned or unassigned workflow after a newly persisted
  * inbound customer Message. The caller owns the surrounding Message transaction.
  */
 @Service
@@ -51,10 +51,9 @@ class CustomerReplyWaitingService {
             UUID messageId,
             Instant providerOccurredAt,
             String correlationId) {
-        Long version = jdbc.query("""
+        Resumed resumed = jdbc.query("""
                 UPDATE cases
-                SET status = 'NEW',
-                    owner_user_id = NULL,
+                SET status = CASE WHEN owner_user_id IS NULL THEN 'NEW' ELSE 'VERIFICATION' END,
                     waiting_until = NULL,
                     updated_at = statement_timestamp(),
                     last_activity_at = statement_timestamp(),
@@ -62,13 +61,14 @@ class CustomerReplyWaitingService {
                 WHERE id = ?
                   AND status = 'WAITING_FOR_CUSTOMER'
                   AND waiting_until IS NOT NULL
-                RETURNING version
-                """, (rs, rowNum) -> rs.getLong("version"),
+                RETURNING version, status, owner_user_id
+                """, (rs, rowNum) -> new Resumed(rs.getLong("version"), rs.getString("status"),
+                        rs.getObject("owner_user_id", UUID.class)),
                 caseId)
                 .stream().findFirst().orElse(null);
 
         snoozes.wake(caseId);
-        if (version == null) {
+        if (resumed == null) {
             Long resetVersion = jdbc.query("""
                     UPDATE cases
                     SET status = 'NEW',
@@ -98,7 +98,7 @@ class CustomerReplyWaitingService {
                             "messageId", messageId.toString(),
                             "version", resetVersion));
             outbox.append(CASE_UPDATED, "case", caseId,
-                    payload(caseId, messageId, resetVersion), correlationId);
+                    payload(caseId, messageId, new Resumed(resetVersion, "NEW", null)), correlationId);
             return true;
         }
 
@@ -112,27 +112,29 @@ class CustomerReplyWaitingService {
                 caseId,
                 Map.of(
                         "previousStatus", "WAITING_FOR_CUSTOMER",
-                        "status", "NEW",
+                        "status", resumed.status(),
                         "messageId", messageId.toString(),
-                        "version", version));
+                        "version", resumed.version()));
 
         outbox.append(
                 CASE_UPDATED,
                 "case",
                 caseId,
-                payload(caseId, messageId, version),
+                payload(caseId, messageId, resumed),
                 correlationId);
         return true;
     }
 
-    private String payload(UUID caseId, UUID messageId, long version) {
+    private String payload(UUID caseId, UUID messageId, Resumed resumed) {
         ObjectNode payload = json.createObjectNode();
         payload.put("caseId", caseId.toString());
-        payload.put("status", "NEW");
-        payload.putNull("ownerUserId");
+        payload.put("status", resumed.status());
+        if (resumed.owner() == null) payload.putNull("ownerUserId");
+        else payload.put("ownerUserId", resumed.owner().toString());
         payload.putNull("waitingUntil");
         payload.put("messageId", messageId.toString());
-        payload.put("version", version);
+        payload.put("version", resumed.version());
         return payload.toString();
     }
+    private record Resumed(long version, String status, UUID owner) {}
 }

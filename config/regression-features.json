@@ -115,7 +115,7 @@
       "feature": "Case identity/create/terminal linking",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Canonical six statuses; one linked successor after terminal; immutable reference",
+      "expected": "Canonical workflow projection; compatible v1 states; audited undo and one active case per provider thread",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseCreationServiceIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CasePersistenceIntegrationTests.java",
@@ -144,7 +144,7 @@
       "feature": "Reply/Ask Customer",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Owner only; Ask transitions only after provider acceptance; failure retains owner",
+      "expected": "Owner-only commands; owned and unassigned waiting after delivery; failed or stale sends preserve state",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/SupportSendMessageServiceIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
@@ -193,6 +193,7 @@
       "risk": "HIGH",
       "expected": "Business-calendar time; first human provider-accepted response; waiting pause; terminal and paused Cases excluded from active SLA attention",
       "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/sla/BusinessTimeCalculatorTests.java",
         "apps/web/tests/unit/sla.test.ts",
@@ -248,6 +249,7 @@
       "risk": "MEDIUM",
       "expected": "Self/admin boundaries; UTC/bounded ranges; status is a projection",
       "tests": [
+        "apps/web/tests/unit/analytics-workflow.test.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/AnalyticsContractDocumentationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/StatisticsOverviewServiceTests.java"

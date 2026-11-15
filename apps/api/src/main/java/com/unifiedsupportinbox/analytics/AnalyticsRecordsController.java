@@ -43,9 +43,13 @@ class AnalyticsRecordsController {
                        EXTRACT(hour FROM c.created_at AT TIME ZONE business.timezone_id)::integer AS created_hour,
                        c.owner_user_id, u.display_name AS user_name,
                        COALESCE(c.customer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS customer_id, COALESCE(customer.name, 'Nie przypisano') AS customer_name, c.provider,
-                       channel.name AS channel_name, c.status, c.resolution_category,
+                       channel.name AS channel_name, c.status, c.workflow_status, c.resolution_category,
                        sla.first_response_completed_at, sla.first_response_due_at, sla.state AS sla_state,
-                       EXISTS (SELECT 1 FROM audit_events a WHERE a.case_id = c.id AND a.action = 'CASE_FORCE_RESOLVE') AS force_resolved
+                       COALESCE(c.status = 'RESOLVED' AND (
+                           SELECT a.action = 'CASE_FORCE_RESOLVE' FROM audit_events a
+                           WHERE a.case_id = c.id AND a.action IN ('CASE_RESOLVE', 'CASE_FORCE_RESOLVE')
+                           ORDER BY occurred_at DESC, id DESC LIMIT 1
+                       ), FALSE) AS force_resolved
                 FROM cases c
                 LEFT JOIN customers customer ON customer.id = c.customer_id
                 JOIN channels channel ON channel.id = c.channel_id
@@ -80,7 +84,7 @@ class AnalyticsRecordsController {
                 rs.getObject("owner_user_id", UUID.class), rs.getString("user_name"),
                 rs.getObject("customer_id", UUID.class), rs.getString("customer_name"),
                 rs.getString("provider").toLowerCase(), rs.getString("channel_name"), status.toLowerCase(),
-                statusLabel(status), "medium", List.of(), resolution, slaState,
+                statusLabel(status), rs.getString("workflow_status"), "medium", List.of(), resolution, slaState,
                 instant(rs, "first_response_due_at"), rs.getBoolean("force_resolved"));
     }
 
@@ -112,7 +116,7 @@ class AnalyticsRecordsController {
     record Fact(UUID id, String reference, Instant createdAt, String createdDate, String claimedDate, String resolvedDate,
                 int createdDayIndex, int createdHour, Instant claimedAt, Instant firstResponseAt, Instant resolvedAt,
                 UUID userId, String userName, UUID customerId, String customerName, String platform,
-                String sourceChannel, String status, String statusLabel, String priority, List<String> tags,
+                String sourceChannel, String status, String statusLabel, String workflowStatus, String priority, List<String> tags,
                 String resolutionReason, String slaState, Instant slaDeadlineAt,
                 boolean excludedFromUserPerformance) { }
 }

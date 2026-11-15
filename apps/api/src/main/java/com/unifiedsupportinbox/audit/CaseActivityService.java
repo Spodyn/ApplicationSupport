@@ -51,7 +51,9 @@ class CaseActivityService {
                 actionDescription(event.action()), workflowChange(metadata),
                 event.relatedCaseId() == null ? null : new RelatedCase(event.relatedCaseId(), event.relatedCaseReference()),
                 event.occurredAt(), metadata, metadata.path("snoozedAt").asText(null),
-                metadata.path("snoozedUntil").asText(null));
+                metadata.path("snoozedUntil").asText(null),
+                "CASE_REOPEN".equals(event.action()) && ("BREACHED".equals(metadata.path("previousSlaState").asText())
+                        || "BREACHED".equals(metadata.path("previousUnclaimedOutcome").asText())));
     }
 
     private JsonNode sanitizedMetadata(String value) {
@@ -88,6 +90,9 @@ class CaseActivityService {
             case "CASE_SNOOZE_DUE" -> "Snooze expired";
             case "CASE_SNOOZE_WOKEN" -> "Snooze ended automatically";
             case "CASE_CUSTOMER_REPLY" -> "Customer replied";
+            case "CASE_REPLY_WAITING" -> "Reply delivered, waiting for customer";
+            case "CASE_REOPEN" -> "Resolution undone";
+            case "CASE_REOPEN_REDIRECTED" -> "Active Case found in the same conversation";
             case "CASE_WAITING_TIMEOUT" -> "Waiting period expired";
             default -> action.replace('_', ' ').toLowerCase(Locale.ROOT);
         };
@@ -111,7 +116,7 @@ class CaseActivityService {
                        UUID relatedCaseId, String relatedCaseReference) {}
     record ActivityItem(UUID id, AuditActorType actorType, UUID actorUserId, String actorLabel, String action,
                         String actionDescription, WorkflowChange workflowChange, RelatedCase relatedCase,
-                        Instant occurredAt, JsonNode metadata, String snoozedAt, String snoozedUntil) {}
+                        Instant occurredAt, JsonNode metadata, String snoozedAt, String snoozedUntil, boolean historicalSlaBreach) {}
     record WorkflowChange(String previousStatus, String currentStatus) {}
     record RelatedCase(UUID id, String reference) {}
 }

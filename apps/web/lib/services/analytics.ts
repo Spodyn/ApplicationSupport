@@ -1,3 +1,4 @@
+import { inboxWorkflowStatusLabels } from "@/lib/domain/inbox"
 import type {
   AnalyticsFilters,
   AnalyticsKpis,
@@ -54,12 +55,20 @@ function enumerateDates(from: string, to: string) {
   return dates
 }
 
+function statusDimension(record: AnalyticsRecord): string {
+  return record.workflowStatus ?? record.status
+}
+
+function dimensionLabel(record: AnalyticsRecord): string {
+  return record.workflowStatus ? inboxWorkflowStatusLabels[record.workflowStatus] : record.statusLabel
+}
+
 function matchesDimensions(record: AnalyticsRecord, filters: AnalyticsFilters) {
   if (filters.userId && record.userId !== filters.userId) return false
   if (filters.customerId && record.customerId !== filters.customerId) return false
   if (filters.platform && record.platform !== filters.platform) return false
   if (filters.sourceChannel && record.sourceChannel !== filters.sourceChannel) return false
-  if (filters.status && record.status !== filters.status) return false
+  if (filters.status && statusDimension(record) !== filters.status) return false
   if (filters.slaState && record.slaState !== filters.slaState) return false
   if (filters.priority && record.priority !== filters.priority) return false
   if (filters.tag && !record.tags.includes(filters.tag)) return false
@@ -325,10 +334,10 @@ export function buildAnalyticsResult(
       .sort((a, b) => a.name.localeCompare(b.name, "pl"))
     const allChannels = [...new Map(records.map((record) => [record.sourceChannel, { value: record.sourceChannel, label: record.sourceChannel, platform: record.platform }])).values()]
       .sort((a, b) => a.label.localeCompare(b.label, "pl"))
-    const allStatuses = [...new Map(records.map((record) => [record.status, { value: record.status, label: record.statusLabel }])).values()]
+    const allStatuses = [...new Map(records.map((record) => [statusDimension(record), { value: statusDimension(record), label: dimensionLabel(record) }])).values()]
       .sort((a, b) => a.label.localeCompare(b.label, "pl"))
-    const statusStates = [...new Set(current.createdRecords.map((record) => record.status))]
-    const statusLabels = new Map(current.createdRecords.map((record) => [record.status, record.statusLabel]))
+    const statusStates = [...new Set(current.createdRecords.map(statusDimension))]
+    const statusLabels = new Map(current.createdRecords.map((record) => [statusDimension(record), dimensionLabel(record)]))
 
     const sourceDistribution = distribution<Channel>(
       ["slack", "teams", "telegram"],
@@ -338,7 +347,7 @@ export function buildAnalyticsResult(
     const statusDistribution = distribution(
       statusStates,
       (status) => statusLabels.get(status) ?? status,
-      (status) => current.createdRecords.filter((record) => record.status === status).length,
+      (status) => current.createdRecords.filter((record) => statusDimension(record) === status).length,
     )
     const slaDistribution = distribution<AnalyticsSlaState>(
       ["met", "warning", "breached"],
@@ -375,8 +384,8 @@ export function buildAnalyticsResult(
         customerName: record.customerName,
         platform: record.platform,
         sourceChannel: record.sourceChannel,
-        status: record.status,
-        statusLabel: record.statusLabel,
+        status: statusDimension(record),
+        statusLabel: dimensionLabel(record),
         userName: record.userName,
         createdAt: record.createdAt,
         slaState: record.slaState,

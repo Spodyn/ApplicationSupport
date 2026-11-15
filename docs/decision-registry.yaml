@@ -466,6 +466,40 @@ decisions:
       sla_or_workflow_effect: false
       details: docs/PRODUCT_CONTRACT.md
 
+  - id: DEC-CASE-WORKFLOW-PROJECTION-001
+    area: case_workflow_presentation
+    status: owner_approved
+    source: [OWNER_REQUEST_2026_11_15_WORKFLOW_APPROVAL]
+    decision:
+      projected_statuses: [NEW, OPEN, WAITING_ON_CUSTOMER, RESOLVED]
+      verification_projection: OPEN
+      waiting_projection: WAITING_ON_CUSTOMER
+      partially_ignored_projection: NEW
+      ignored_projection: RESOLVED
+      ignore_votes_preserved: true
+      ignored_closure_reason: IGNORED
+      actionable_unassigned_excludes_waiting: true
+      archive_filter: true
+      release_compatibility: additive_v1_projection
+
+  - id: DEC-CASE-WORKFLOW-COMMANDS-001
+    area: case_workflow_commands
+    status: owner_approved
+    source: [OWNER_REQUEST_2026_11_15_WORKFLOW_APPROVAL]
+    decision:
+      undo_resolution: [ordinary, forced]
+      undo_permission: force_resolve
+      undo_with_active_successor: return_existing_active_case
+      undo_without_successor: NEW_unassigned
+      undo_sla: preserve_first_response_and_history_restart_unclaimed
+      ordinary_reply_enters_waiting: after_successful_delivery
+      ordinary_waiting_retains_owner: true
+      ordinary_waiting_default_hours: 24
+      ask_waiting_releases_owner: true
+      owned_waiting_exit: OPEN_with_owner
+      unassigned_waiting_exit: NEW
+      customer_contact_after_terminal: linked_successor
+
 technical_resolutions:
   - id: TECH-VIEW-MAPPER-001
     source: [USI-88]

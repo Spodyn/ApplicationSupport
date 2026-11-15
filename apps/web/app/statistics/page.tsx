@@ -114,8 +114,8 @@ const platformColors: Record<Channel, string> = {
   telegram: "var(--channel-telegram)",
 }
 const statusColors: Record<string, string> = {
-  new: "var(--primary)", verification: "var(--channel-teams)",
-  waiting_for_customer: "var(--info)", partially_ignored: "var(--warning)",
+  new: "var(--primary)", open: "var(--channel-teams)", verification: "var(--channel-teams)",
+  waiting_on_customer: "var(--info)", waiting_for_customer: "var(--info)", partially_ignored: "var(--warning)",
   ignored: "var(--destructive)", resolved: "var(--muted-foreground)",
 }
 const slaColors = {

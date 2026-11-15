@@ -205,6 +205,14 @@ class CaseTransitionPolicyTests {
     }
 
     @Test
+    void ownedWaitingReturnsToOpenWithItsOwner() {
+        State waiting = new State(WAITING_FOR_CUSTOMER, OWNER, NOW);
+        assertThat(policy.customerMessage(waiting).state()).isEqualTo(state(VERIFICATION));
+        assertThat(policy.waitingTimeout(waiting, NOW).state()).isEqualTo(state(VERIFICATION));
+        assertThat(policy.availableActions(waiting, ADMIN)).doesNotContain(REPLY, ASK_CUSTOMER, RESOLVE);
+    }
+
+    @Test
     void snoozeIsPersonalBoundedAndDoesNotChangeWorkflow() {
         for (Duration duration : new Duration[] {Duration.ofMinutes(5), Duration.ofDays(30)}) {
             Decision result = policy.decide(state(VERIFICATION), TARGET, SNOOZE,
@@ -221,8 +229,8 @@ class CaseTransitionPolicyTests {
     @Test
     void rejectsInvalidOwnershipAndWaitingSnapshots() {
         assertThatIllegalArgumentException().isThrownBy(() -> new State(VERIFICATION, null, null));
-        for (CaseStatus status : Set.of(NEW, PARTIALLY_IGNORED, WAITING_FOR_CUSTOMER, IGNORED)) {
-            assertThatIllegalArgumentException().isThrownBy(() -> new State(status, OWNER, status == WAITING_FOR_CUSTOMER ? NOW : null));
+        for (CaseStatus status : Set.of(NEW, PARTIALLY_IGNORED, IGNORED)) {
+            assertThatIllegalArgumentException().isThrownBy(() -> new State(status, OWNER, null));
         }
         for (CaseStatus status : CaseStatus.values()) {
             assertThatIllegalArgumentException().isThrownBy(() -> new State(status,

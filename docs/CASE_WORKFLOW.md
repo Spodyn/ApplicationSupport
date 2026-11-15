@@ -62,7 +62,7 @@ Optional/nullable for normal and force resolve. If present, controlled codes are
 
 ## Terminal semantics
 
-`IGNORED` and `RESOLVED` never reopen. A later customer message for the same provider context creates exactly one linked NEW successor Case. Force-resolve is invalid on terminal state.
+`IGNORED` remains terminal. An administrative undo can return a resolved Case to NEW when no active generation exists. A later customer message uses the active generation or creates exactly one linked NEW successor.
 
 ## Concurrency
 

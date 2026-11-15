@@ -57,7 +57,7 @@ Exactly six statuses exist:
 - `IGNORED` - terminal, no owner.
 - `RESOLVED` - terminal, preserving previous owner when one existed.
 
-Terminal Cases never reopen. A later customer message creates exactly one linked new Case generation.
+A later customer message uses the active generation or creates exactly one linked new Case. An explicit administrative undo can reopen resolved Cases when there is no active generation.
 
 ## 7. Claim
 

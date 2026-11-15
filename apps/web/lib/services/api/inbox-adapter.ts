@@ -33,6 +33,8 @@ function commonCase(input: {
   id: string
   reference: string
   status: CaseListItem["status"]
+  workflowStatus?: CaseListItem["workflowStatus"]
+  closureReason?: CaseListItem["closureReason"]
   customerId: string | null
   customerName: string
   channelName: string
@@ -60,6 +62,8 @@ function commonCase(input: {
     sourceChannel: input.provider === "SLACK" ? `#${input.channelName}` : input.channelName,
     customer: { id: !input.customerId || input.customerId === "00000000-0000-0000-0000-000000000000" ? "unassigned" : input.customerId, name: input.customerName, contactName: input.customerName },
     status: input.status.toLowerCase() as InboxCase["status"],
+    workflowStatus: input.workflowStatus,
+    closureReason: input.closureReason ?? (input.status === "IGNORED" ? "IGNORED" : undefined),
     owner: input.ownerUserId && input.ownerDisplayName
       ? { id: input.ownerUserId, fullName: input.ownerDisplayName }
       : undefined,
@@ -102,6 +106,8 @@ export function mapCaseDetail(detail: CaseDetail): InboxCase {
       id: detail.id,
       reference: detail.reference,
       status: detail.status,
+      workflowStatus: detail.workflowStatus,
+      closureReason: detail.closureReason,
       customerId: detail.customer.id,
       customerName: detail.customer.name,
       channelName: detail.channel.name,
@@ -206,6 +212,8 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
         unread: query.unread,
         slaAttention: query.slaAttention,
         status: query.status?.toUpperCase() as CaseListItem["status"] | undefined,
+        workflowStatus: query.workflowStatus,
+        actionableQueue: query.actionableQueue,
         statusScope: query.statusScope?.toUpperCase() as "ALL" | "ACTIVE" | "TERMINAL" | undefined,
         customerId: query.customerId,
         channelId: query.channelId,
@@ -242,6 +250,7 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
           action: item.action,
           snoozedAt: item.snoozedAt ?? undefined,
           snoozedUntil: item.snoozedUntil ?? undefined,
+          historicalSlaBreach: item.historicalSlaBreach,
         })),
         nextCursor: page.nextCursor ?? undefined,
       }
@@ -309,6 +318,9 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     },
     async unassign(caseId) {
       await client.unassignCase({ caseId, "Idempotency-Key": crypto.randomUUID() })
+    },
+    reopen(caseId, idempotencyKey) {
+      return client.reopenCase({ caseId, "Idempotency-Key": idempotencyKey })
     },
     async forceResolve(caseId, input) {
       await client.forceResolveCase({

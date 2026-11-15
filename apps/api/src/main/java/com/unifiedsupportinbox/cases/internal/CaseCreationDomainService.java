@@ -5,6 +5,7 @@ import com.unifiedsupportinbox.cases.CaseCreationRejectedException;
 import com.unifiedsupportinbox.cases.CaseCreationRejectedException.Reason;
 import com.unifiedsupportinbox.cases.CaseCreationService;
 import com.unifiedsupportinbox.cases.CaseStatus;
+import com.unifiedsupportinbox.cases.ProviderCaseContextLock;
 import com.unifiedsupportinbox.channel.ChannelContextLookup;
 import com.unifiedsupportinbox.channel.ChannelContextLookup.Context;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
@@ -32,6 +33,7 @@ class CaseCreationDomainService implements CaseCreationService {
     private static final RowMapper<PersistedCase> ROW_MAPPER = CaseCreationDomainService::mapCase;
 
     private final JdbcTemplate jdbc;
+    private final ProviderCaseContextLock providerContextLock;
     private final ChannelContextLookup channels;
     private final OutboxEventStore outbox;
     private final ObjectMapper json;
@@ -39,11 +41,13 @@ class CaseCreationDomainService implements CaseCreationService {
 
     CaseCreationDomainService(
             JdbcTemplate jdbc,
+            ProviderCaseContextLock providerContextLock,
             ChannelContextLookup channels,
             OutboxEventStore outbox,
             ObjectMapper json,
             CaseSlaInitializer sla) {
         this.jdbc = jdbc;
+        this.providerContextLock = providerContextLock;
         this.channels = channels;
         this.outbox = outbox;
         this.json = json;
@@ -66,6 +70,7 @@ class CaseCreationDomainService implements CaseCreationService {
         Context channel = channels.findById(channelId)
                 .orElseThrow(() -> rejected(Reason.CHANNEL_NOT_FOUND, "Channel mapping was not found."));
         validateChannel(channel, integrationId, provider);
+        providerContextLock.acquire(integrationId, channelId, provider, externalConversationId, externalThreadKey);
 
         Optional<PersistedCase> existing = findActive(
                 integrationId, channelId, provider, externalConversationId, externalThreadKey);
@@ -162,6 +167,7 @@ class CaseCreationDomainService implements CaseCreationService {
                   AND external_conversation_id = ?
                   AND COALESCE(external_thread_key, '') = COALESCE(?, '')
                   AND status NOT IN ('IGNORED', 'RESOLVED')
+                FOR UPDATE
                 """,
                 ROW_MAPPER,
                 integrationId,
@@ -184,7 +190,7 @@ class CaseCreationDomainService implements CaseCreationService {
                   AND external_conversation_id = ?
                   AND COALESCE(external_thread_key, '') = COALESCE(?, '')
                   AND status IN ('IGNORED', 'RESOLVED')
-                ORDER BY created_at DESC, id DESC
+                ORDER BY COALESCE(resolved_at, ignored_at) DESC, created_at DESC, id DESC
                 LIMIT 1
                 """,
                 ROW_MAPPER,

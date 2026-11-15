@@ -26,7 +26,7 @@ public final class CaseTransitionPolicy {
         public State {
             Objects.requireNonNull(status, "status");
             if (status == CaseStatus.VERIFICATION && ownerId == null
-                    || status != CaseStatus.VERIFICATION && status != CaseStatus.RESOLVED && ownerId != null
+                    || status != CaseStatus.VERIFICATION && status != CaseStatus.RESOLVED && status != CaseStatus.WAITING_FOR_CUSTOMER && ownerId != null
                     || (status == CaseStatus.WAITING_FOR_CUSTOMER) != (waitingUntil != null)) {
                 throw new IllegalArgumentException("Invalid Case ownership or waiting state.");
             }
@@ -133,8 +133,8 @@ public final class CaseTransitionPolicy {
         return switch (state.status()) {
             case PARTIALLY_IGNORED -> decision(CaseStatus.NEW, null, null,
                     Effect.DEACTIVATE_IGNORE_VOTES, Effect.CLEAR_SNOOZES, Effect.AUDIT, Effect.UPDATE_SLA);
-            case WAITING_FOR_CUSTOMER -> decision(CaseStatus.NEW, null, null,
-                    Effect.CLEAR_SNOOZES, Effect.AUDIT, Effect.UPDATE_SLA);
+            case WAITING_FOR_CUSTOMER -> decision(state.ownerId() == null ? CaseStatus.NEW : CaseStatus.VERIFICATION,
+                    state.ownerId(), null, Effect.CLEAR_SNOOZES, Effect.AUDIT, Effect.UPDATE_SLA);
             default -> decision(state, Effect.CLEAR_SNOOZES);
         };
     }
@@ -143,7 +143,8 @@ public final class CaseTransitionPolicy {
         if (state.status() != CaseStatus.WAITING_FOR_CUSTOMER || now.isBefore(state.waitingUntil())) {
             throw ApiProblemException.conflict("The Case waiting deadline is not due.");
         }
-        return decision(CaseStatus.NEW, null, null, Effect.AUDIT, Effect.UPDATE_SLA);
+        return decision(state.ownerId() == null ? CaseStatus.NEW : CaseStatus.VERIFICATION,
+                state.ownerId(), null, Effect.AUDIT, Effect.UPDATE_SLA);
     }
 
     private boolean allowed(State state, Actor actor, Action action) {

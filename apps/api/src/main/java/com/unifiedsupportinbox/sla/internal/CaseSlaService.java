@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.sla.internal;
 
 import com.unifiedsupportinbox.sla.CaseSlaInitializer;
+import com.unifiedsupportinbox.sla.CaseSlaReopenRecorder;
 import com.unifiedsupportinbox.sla.CaseSlaClaimRecorder;
 import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import com.unifiedsupportinbox.sla.CaseSlaResponseRecorder;
@@ -11,6 +12,8 @@ import com.unifiedsupportinbox.sla.SlaPolicyView;
 import com.unifiedsupportinbox.notification.NotificationDeliveryQueue;
 import com.unifiedsupportinbox.notification.NotificationDeliveryQueue.NotificationIntent;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -22,7 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder, CaseSlaWaitingRecorder, CaseSlaResponseRecorder {
+class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder, CaseSlaWaitingRecorder, CaseSlaResponseRecorder, CaseSlaReopenRecorder {
     private final JdbcTemplate jdbc;
     private final SlaPolicyRepository policies;
     private final BusinessHoursScheduleCatalog schedules;
@@ -180,6 +183,47 @@ class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder, CaseSl
                 """, current.totalPausedSeconds() + pausedBusinessTime.toSeconds(),
                 at(firstDue), at(unclaimedWarning), at(unclaimedBreach), at(progressWarning), at(progressBreach),
                 state, at(resumedAt), caseId);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> restartUnclaimed(UUID caseId, Instant restartedAt) {
+        var policy = policies.active();
+        var schedule = schedules.findActiveSchedule()
+                .orElseThrow(() -> new IllegalStateException("Active business-hours schedule is missing."));
+        var previous = jdbc.query("""
+                SELECT state, unclaimed_outcome, unclaimed_started_at, unclaimed_completed_at,
+                       unclaimed_warning_at, unclaimed_breach_at, in_progress_started_at,
+                       in_progress_warning_at, in_progress_breach_at, paused_at
+                FROM case_sla WHERE case_id = ? FOR UPDATE
+                """, (rs, row) -> {
+            Map<String, Object> values = new LinkedHashMap<>();
+            values.put("previousSlaState", rs.getString("state"));
+            var outcome = rs.getString("unclaimed_outcome");
+            if (outcome != null) values.put("previousUnclaimedOutcome", outcome);
+            for (String key : List.of("unclaimed_started_at", "unclaimed_completed_at", "unclaimed_warning_at",
+                    "unclaimed_breach_at", "in_progress_started_at", "in_progress_warning_at", "in_progress_breach_at", "paused_at")) {
+                var timestamp = rs.getObject(key, OffsetDateTime.class);
+                if (timestamp != null) values.put(key, timestamp.toInstant().toString());
+            }
+            return Map.copyOf(values);
+        }, caseId).stream().findFirst().orElseGet(() -> {
+            initialize(caseId, restartedAt);
+            return Map.of();
+        });
+        jdbc.update("""
+                UPDATE case_sla
+                SET unclaimed_started_at = ?, unclaimed_warning_at = ?, unclaimed_breach_at = ?,
+                    unclaimed_completed_at = NULL, unclaimed_outcome = NULL,
+                    in_progress_started_at = NULL, in_progress_warning_at = NULL, in_progress_breach_at = NULL,
+                    paused_at = NULL, updated_at = ?,
+                    state = CASE WHEN COALESCE(first_response_completed_at, ?) > first_response_due_at
+                                 THEN 'BREACHED' ELSE 'ON_TRACK' END
+                WHERE case_id = ?
+                """, at(restartedAt), at(dueAt(schedule, restartedAt, policy.unclaimedWarningMinutes())),
+                at(dueAt(schedule, restartedAt, policy.unclaimedBreachMinutes())),
+                at(restartedAt), at(restartedAt), caseId);
+        return previous;
     }
 
     private Instant shift(BusinessHoursScheduleView schedule, Instant value, Duration duration) {

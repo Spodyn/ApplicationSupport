@@ -253,6 +253,10 @@ export function useInboxWorkflow(caseId?: string) {
     mutationFn: () => serviceRegistry.inbox.unassign(requireCaseId()),
     onSuccess: invalidateConversation,
   })
+  const reopen = useMutation({
+    mutationFn: (key: string) => serviceRegistry.inbox.reopen(requireCaseId(), key),
+    onSuccess: invalidateConversation,
+  })
   const forceResolve = useMutation({
     mutationFn: (input: InboxResolveInput) => serviceRegistry.inbox.forceResolve(requireCaseId(), input),
     onSuccess: invalidateConversation,
@@ -271,7 +275,7 @@ export function useInboxWorkflow(caseId?: string) {
     onSuccess: invalidateConversation,
   })
 
-  return { claim, ignore, askCustomer, resolve, snooze, cancelSnooze, assign, unassign, forceResolve, sendMessage, retryMessage, addInternalNote }
+  return { claim, ignore, askCustomer, resolve, snooze, cancelSnooze, assign, unassign, forceResolve, sendMessage, retryMessage, addInternalNote, reopen }
 }
 
 export function useMarkAllResolvedRead() {

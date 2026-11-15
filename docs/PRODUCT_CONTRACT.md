@@ -55,18 +55,20 @@ Rules:
 
 ## 4. Canonical Case state machine
 
-The only Case statuses are:
+The legacy storage and v1 mutation contracts use the following Case statuses.
 
 `NEW`, `VERIFICATION`, `WAITING_FOR_CUSTOMER`, `PARTIALLY_IGNORED`, `IGNORED`, `RESOLVED`.
 
 Core invariants:
 
-- `VERIFICATION` is the only status with an active owner, and it has exactly one owner.
-- `NEW`, `PARTIALLY_IGNORED` and `WAITING_FOR_CUSTOMER` are unassigned.
+- `VERIFICATION` requires an active owner. `WAITING_FOR_CUSTOMER` retains the owner only when entered through a delivered ordinary reply.
+- `NEW` and `PARTIALLY_IGNORED` are unassigned. Waiting entered through Ask Customer is unassigned.
 - `IGNORED` is terminal and has no owner.
 - `RESOLVED` is terminal and preserves the last owner if there was one; a force-resolve from an unassigned state leaves owner `null`.
-- Terminal Cases are never reopened. A later customer message creates exactly one new linked Case.
+- A customer message after terminal closure uses the active generation or creates one linked Case. An explicit administrative undo may reopen `RESOLVED`. Ignore freezes that generation.
 - Workflow state changes are performed through dedicated commands, never a generic `PATCH status`.
+
+The simplified Case projection presents the states `NEW`, `OPEN`, `WAITING_ON_CUSTOMER` and `RESOLVED`. Existing v1 commands and the legacy `status` field retain the operational representation above for compatibility. `VERIFICATION` projects as `OPEN`, `WAITING_FOR_CUSTOMER` as `WAITING_ON_CUSTOMER`, and `PARTIALLY_IGNORED` as `NEW` with its vote score. Terminal Ignore projects as `RESOLVED` and has `closureReason: IGNORED`. Simplified inbox views exclude waiting from Unassigned and provide an Archive filter. Statistics group by the simplified state and preserve distinct resolved and ignored totals.
 
 Human-readable Case references are immutable sequential references such as `CASE-00000001`; UUID remains the technical primary identifier.
 
@@ -79,7 +81,8 @@ Human-readable Case references are immutable sequential references such as `CASE
 - `resolution_category` is optional. If provided in v1 it is a controlled code from `SOLVED`, `NO_ACTION_REQUIRED`, `DUPLICATE`, `OTHER`; it is not free text.
 - `ADMIN + reassign_cases` may assign an eligible user to `NEW` or `PARTIALLY_IGNORED`, or reassign `VERIFICATION`; the target user must be active and may not be a lifetime ignore voter for that Case. Result: `VERIFICATION` with the target owner.
 - Admin unassign moves `VERIFICATION` to `NEW`, clears the owner and retains ownership history in audit.
-- `ADMIN + force_resolve` may force-resolve any nonterminal status. The administrator is the audit actor but does not become owner merely by force-resolving.
+- `ADMIN + force_resolve` may force-resolve any nonterminal status. The administrator is the audit actor and does not become owner merely by force-resolving.
+- `ADMIN + force_resolve` may undo either ordinary or forced resolution. An existing active Case in the same provider context is returned as the target, with the original still archived. Otherwise the original Case returns to `NEW` without an owner, resumes the unclaimed clock from the undo and preserves the first response record and prior SLA in its audit history. The original resolution and undo are auditable.
 
 ## 6. Ignore voting
 
@@ -100,9 +103,9 @@ Human-readable Case references are immutable sequential references such as `CASE
 - The Case remains `VERIFICATION` with the same owner until the provider actually accepts the outgoing Ask message and it becomes `SENT`.
 - On `SENT`: move to `WAITING_FOR_CUSTOMER`, clear owner, set `waiting_until`, and apply the configured waiting SLA pause.
 - Permanent delivery failure leaves the Case in `VERIFICATION` with the same owner. Transient failure follows the normal message retry policy.
-- Default wait is 24 hours; command override range is 1 hour to 30 days.
-- Customer reply while waiting -> `NEW`, clear waiting and resume applicable SLA while preserving accumulated business time.
-- Timeout -> `NEW`, clear waiting, emit/audit `WAITING_TIMEOUT`. V1 sends no automatic follow-up message on timeout.
+- Default wait is 24 hours. Ask Customer also supports a command override from 1 hour to 30 days.
+- A delivered ordinary public reply enters waiting for 24 hours and retains its owner. Failed or queued sends preserve the state. A reply whose Case version changed or whose customer sent a newer message before acceptance leaves the newer workflow intact.
+- A customer reply or timeout resumes SLA and clears the waiting deadline. Owned waiting returns to `VERIFICATION` with its owner. Unassigned waiting after Ask Customer returns to `NEW`. Timeout emits and audits `WAITING_TIMEOUT`. V1 sends no automatic follow-up message on timeout.
 
 ## 8. Snooze and read/unread
 

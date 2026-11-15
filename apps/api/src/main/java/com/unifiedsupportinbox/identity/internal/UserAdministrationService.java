@@ -229,7 +229,7 @@ class UserAdministrationService {
     }
 
     private int assignedCases(UUID userId) {
-        Integer count = jdbc.queryForObject("SELECT count(*) FROM cases WHERE owner_user_id = ? AND status = 'VERIFICATION'", Integer.class, userId);
+        Integer count = jdbc.queryForObject("SELECT count(*) FROM cases WHERE owner_user_id = ? AND status IN ('VERIFICATION', 'WAITING_FOR_CUSTOMER')", Integer.class, userId);
         return count == null ? 0 : count;
     }
 
