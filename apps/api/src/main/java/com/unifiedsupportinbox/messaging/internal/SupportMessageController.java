@@ -28,10 +28,12 @@ class SupportMessageController {
 
     private final SupportSendMessageService service;
     private final MessageHistoryService history;
+    private final CaseInternalNoteService notes;
 
-    SupportMessageController(SupportSendMessageService service, MessageHistoryService history) {
+    SupportMessageController(SupportSendMessageService service, MessageHistoryService history, CaseInternalNoteService notes) {
         this.service = service;
         this.history = history;
+        this.notes = notes;
     }
 
     @GetMapping("/{caseId}/messages")
@@ -39,8 +41,21 @@ class SupportMessageController {
             @PathVariable UUID caseId,
             @RequestParam(name = "before", required = false) String before,
             @RequestParam(name = ApiV1Conventions.LIMIT_QUERY_PARAMETER, required = false) @jakarta.validation.constraints.Min(1) @jakarta.validation.constraints.Max(100) Integer limit,
+            @RequestParam(name = "includeInternalNotes", defaultValue = "false") boolean includeInternalNotes,
             Authentication authentication) {
-        return history.history(caseId, before, limit, authenticatedUserId(authentication));
+        return history.history(caseId, before, limit, authenticatedUserId(authentication), includeInternalNotes);
+    }
+
+    @PostMapping("/{caseId}/internal-notes")
+    ResponseEntity<JsonNode> addInternalNote(
+            @PathVariable UUID caseId,
+            @RequestHeader(ApiV1Conventions.IDEMPOTENCY_KEY_HEADER) String idempotencyKey,
+            @RequestBody InternalNoteRequest request,
+            Authentication authentication,
+            HttpServletRequest httpRequest) {
+        IdempotencyResult result = notes.add(caseId, authenticatedUserId(authentication), idempotencyKey,
+                request.body(), correlationId(httpRequest));
+        return ResponseEntity.status(result.status()).body(result.body());
     }
 
     @PostMapping("/{caseId}/messages")
@@ -51,9 +66,6 @@ class SupportMessageController {
             Authentication authentication,
             HttpServletRequest httpRequest) {
         UUID userId = authenticatedUserId(authentication);
-        Object correlationValue = httpRequest.getAttribute(CORRELATION_ID_ATTRIBUTE);
-        String correlationId = correlationValue instanceof String value ? value : UUID.randomUUID().toString();
-
         IdempotencyResult result = service.send(
                 caseId,
                 userId,
@@ -61,8 +73,13 @@ class SupportMessageController {
                 request.body(),
                 request.bodyFormat(),
                 request.attachmentIds(),
-                correlationId);
+                correlationId(httpRequest));
         return ResponseEntity.status(result.status()).body(result.body());
+    }
+
+    private static String correlationId(HttpServletRequest request) {
+        Object value = request.getAttribute(CORRELATION_ID_ATTRIBUTE);
+        return value instanceof String correlationId ? correlationId : UUID.randomUUID().toString();
     }
 
     private static UUID authenticatedUserId(Authentication authentication) {
@@ -75,6 +92,8 @@ class SupportMessageController {
             throw ApiProblemException.authenticationRequired();
         }
     }
+
+    record InternalNoteRequest(String body) {}
 
     record SendMessageRequest(
             String body,

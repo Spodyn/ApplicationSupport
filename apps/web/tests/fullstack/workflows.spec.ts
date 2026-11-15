@@ -185,6 +185,112 @@ for (const visibility of ['public', 'private'] as const) {
   })
 }
 
+test('internal Case notes stay in USI with independent drafts, realtime and public delivery', async ({page, browser, baseURL}) => {
+  const author = await testAccount(page, 'account')
+  const viewer = await testAccount(page)
+  fixtures.set(page, author)
+  const otherContext = await browser.newContext({baseURL})
+  const other = await otherContext.newPage()
+  try {
+    await Promise.all([login(page, author.email), login(other, viewer.email, true)])
+    const marker = 'Internal note intake ' + randomUUID().slice(0, 8)
+    const root = await inbound(page, marker)
+    const tile = page.getByRole('button').filter({hasText: marker})
+    await tile.click()
+    await page.getByRole('button', {name: 'Przejmij', exact: true}).click()
+    const list = async () => (await (await page.request.get('/api/v1/cases', {params: {search: author.externalChannelId}})).json()).items
+    const caseId = (await list())[0].id
+    const path = '/api/v1/cases/' + caseId
+    const endpoint = path + '/internal-notes'
+    const detail = async () => (await (await page.request.get(path)).json())
+    const observed = async () => (await (await page.request.get('/__test/observed')).json()).messages
+      .filter((delivery: {thread: string}) => delivery.thread === root.ts)
+    await other.goto('/cases?caseId=' + caseId)
+    await expect(other.getByText(marker, {exact: true})).toBeVisible()
+    await expect(other.getByRole('button', {name: 'Internal note', exact: true})).toBeDisabled()
+    expect((await command(other, endpoint, {body: 'Attempt by non-owner'})).status()).toBe(403)
+    const anonymous = await browser.newContext({baseURL})
+    try {
+      expect((await anonymous.request.get(path + '/messages?includeInternalNotes=true')).status()).toBe(401)
+    } finally {
+      await anonymous.close()
+    }
+
+    const editor = page.getByRole('group', {name: 'Tryb edytora'})
+    const publicMode = editor.getByRole('button', {name: 'Odpowiedź publiczna'})
+    const noteMode = editor.getByRole('button', {name: 'Notatka wewnętrzna'})
+    const publicDraft = page.getByRole('textbox', {name: 'Treść odpowiedzi'})
+    const noteDraft = page.getByRole('textbox', {name: 'Treść notatki'})
+    await expect(publicDraft).toBeEnabled()
+    const before = await detail()
+    const latestBefore = (await list())[0].lastMessageId
+    await publicDraft.fill('Public draft retained independently')
+    await page.getByLabel('Dodaj pliki').setInputFiles({name: 'public-only.txt', mimeType: 'text/plain', buffer: Buffer.from('Public attachment')})
+    await noteMode.click()
+    await expect(noteDraft).toBeEmpty()
+    await expect(page.getByLabel('Dodaj pliki')).toHaveCount(0)
+    await expect(page.getByRole('button', {name: 'Zapisz notatkę'})).toBeDisabled()
+    const noteText = 'Internal text <b>shown literally</b>'
+    await noteDraft.fill(noteText)
+    await publicMode.click()
+    await expect(publicDraft).toHaveValue('Public draft retained independently')
+    await expect(page.getByRole('button', {name: 'public-only.txt', exact: true})).toBeVisible()
+    await noteMode.click()
+    await expect(noteDraft).toHaveValue(noteText)
+    const saved = page.waitForResponse(response => response.url().endsWith('/internal-notes') && response.request().method() === 'POST')
+    await page.getByRole('button', {name: 'Zapisz notatkę'}).click()
+    const response = await saved
+    expect(response.status()).toBe(201)
+    const key = response.request().headers()['idempotency-key']
+    const result = await response.json()
+    const replay = await command(page, endpoint, {body: noteText}, 'POST', key)
+    expect(replay.status()).toBe(201)
+    expect(await replay.json()).toEqual(result)
+    expect((await command(page, endpoint, {body: 'Different body'}, 'POST', key)).status()).toBe(409)
+    const rendered = (tab: Page) => tab.locator('[data-message-kind="internal_note"]')
+    for (const tab of [page, other]) {
+      await expect(rendered(tab)).toHaveCount(1)
+      await expect(rendered(tab).getByText(noteText, {exact: true})).toBeVisible()
+      await expect(rendered(tab).locator('[data-message-author]')).toHaveText(author.displayName)
+      await expect(rendered(tab).locator('time')).toHaveAttribute('datetime', /T/)
+      await expect(rendered(tab).locator('b')).toHaveCount(0)
+    }
+    await expect(rendered(other)).toContainText('Internal note')
+    const blended = await (await page.request.get(path + '/messages?includeInternalNotes=true&limit=1')).json()
+    expect(blended.items).toEqual([expect.objectContaining({id: result.noteId, kind: 'INTERNAL_NOTE', deliveryStatus: null})])
+    const pageTwo = await (await page.request.get(path + '/messages', {params: {
+      includeInternalNotes: true, limit: 1, before: blended.nextCursor,
+    }})).json()
+    expect(pageTwo.items).toEqual([expect.objectContaining({id: latestBefore, kind: 'CUSTOMER'})])
+    expect((await (await page.request.get(path + '/messages')).json()).items.map((item: {id: string}) => item.id)).toEqual([latestBefore])
+    expect((await list())[0].lastMessageId).toBe(latestBefore)
+    expect(await detail()).toMatchObject({status: before.status, version: before.version, waitingUntil: before.waitingUntil, sla: before.sla})
+    expect(await observed()).toHaveLength(0)
+
+    await publicMode.click()
+    await expect(publicDraft).toHaveValue('Public draft retained independently')
+    await page.getByRole('button', {name: 'public-only.txt', exact: true}).click()
+    await page.getByRole('button', {name: 'Wyślij', exact: true}).click()
+    await expect.poll(observed).toHaveLength(1)
+    await page.goto('/cases?caseId=' + caseId)
+    await page.reload()
+    await expect(rendered(page)).toHaveCount(1)
+    await expect(page.locator('[data-message-kind="support"]').getByText('Public draft retained independently')).toBeVisible()
+    await selectLanguage(page, "English", "pl")
+    const englishEditor = page.getByRole('group', {name: 'Composer mode'})
+    await expect(englishEditor.getByRole('button', {name: 'Public reply'})).toBeVisible()
+    const englishNoteMode = englishEditor.getByRole('button', {name: 'Internal note'})
+    await englishNoteMode.click()
+    await expect(page.getByRole('button', {name: 'Save note'})).toBeDisabled()
+    expect((await command(page, path + '/resolve', {})).status()).toBe(200)
+    await expect(englishNoteMode).toBeDisabled()
+    expect((await command(page, endpoint, {body: 'Closed Case attempt'})).status()).toBe(409)
+    await expect(rendered(page)).toBeVisible()
+  } finally {
+    await otherContext.close()
+  }
+})
+
 test('responsive inbox shares quick-view predicates and preserves the actual reply author', async ({page}, testInfo) => {
   await page.setViewportSize({width: 1440, height: 960})
   const admin = await testAccount(page, 'account')

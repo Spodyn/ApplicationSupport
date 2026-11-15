@@ -34,6 +34,7 @@ class MessageCreatedRealtimeRabbitConfiguration {
     static final String DEAD_LETTER_QUEUE = "usi.realtime.message-created.dlq";
     static final String DEAD_LETTER_ROUTING_KEY = "realtime.message-created.dead";
     static final String ROUTING_KEY = "message.created";
+    static final String NOTE_ROUTING_KEY = "case.internal_note_added";
 
     @Bean
     Queue messageCreatedRealtimeQueue() {
@@ -65,6 +66,13 @@ class MessageCreatedRealtimeRabbitConfiguration {
             @Qualifier("messageCreatedRealtimeQueue") Queue queue,
             TopicExchange usiOutboxExchange) {
         return BindingBuilder.bind(queue).to(usiOutboxExchange).with("message.updated");
+    }
+
+    @Bean
+    Binding internalNoteRealtimeBinding(
+            @Qualifier("messageCreatedRealtimeQueue") Queue queue,
+            TopicExchange usiOutboxExchange) {
+        return BindingBuilder.bind(queue).to(usiOutboxExchange).with(NOTE_ROUTING_KEY);
     }
 
     @Bean
@@ -100,18 +108,18 @@ class MessageCreatedRealtimeRabbitListener {
         Map<String, Object> envelope = new LinkedHashMap<>();
         envelope.put("eventType", message.getMessageProperties().getReceivedRoutingKey());
         envelope.put("version", 1);
-        envelope.put("entityId", event.messageId().toString());
+        envelope.put("entityId", event.entryId().toString());
         envelope.put("occurredAt", event.occurredAt().toString());
         envelope.put("correlationId", event.correlationId());
         envelope.put("payload", Map.of(
-                "messageId", event.messageId().toString(),
+                event.idField(), event.entryId().toString(),
                 "caseId", event.caseId().toString()));
         try {
             messaging.convertAndSend(destination(event.caseId()), (Object) envelope);
         } catch (RuntimeException failure) {
             LOGGER.warn(
-                    "Message-created realtime signal could not be published; messageId={}, caseId={}, reason={}",
-                    event.messageId(),
+                    "Message-created realtime signal could not be published; entryId={}, caseId={}, reason={}",
+                    event.entryId(),
                     event.caseId(),
                     SensitiveDataRedactor.safeExceptionMessage(failure));
         }
@@ -124,14 +132,17 @@ class MessageCreatedRealtimeRabbitListener {
     private ParsedMessageCreated parse(Message message) {
         try {
             String routingKey = message.getMessageProperties().getReceivedRoutingKey();
-            if (!MessageCreatedRealtimeRabbitConfiguration.ROUTING_KEY.equals(routingKey) && !"message.updated".equals(routingKey)) {
+            boolean note = MessageCreatedRealtimeRabbitConfiguration.NOTE_ROUTING_KEY.equals(routingKey);
+            if (!note && !MessageCreatedRealtimeRabbitConfiguration.ROUTING_KEY.equals(routingKey)
+                    && !"message.updated".equals(routingKey)) {
                 throw new IllegalArgumentException("Unexpected Message-created routing key.");
             }
             JsonNode root = json.readTree(message.getBody());
             if (root == null || !root.isObject()) {
                 throw new IllegalArgumentException("Event payload must be an object.");
             }
-            UUID messageId = requiredUuid(root, "messageId");
+            String idField = note ? "noteId" : "messageId";
+            UUID entryId = requiredUuid(root, idField);
             UUID caseId = requiredUuid(root, "caseId");
             Object headerCorrelationId = message.getMessageProperties().getHeaders().get("usi_correlation_id");
             String correlationId = headerCorrelationId == null
@@ -143,7 +154,7 @@ class MessageCreatedRealtimeRabbitListener {
             Instant occurredAt = message.getMessageProperties().getTimestamp() == null
                     ? Instant.now()
                     : message.getMessageProperties().getTimestamp().toInstant();
-            return new ParsedMessageCreated(messageId, caseId, occurredAt, correlationId);
+            return new ParsedMessageCreated(entryId, idField, caseId, occurredAt, correlationId);
         } catch (JacksonException | IllegalArgumentException malformed) {
             throw new AmqpRejectAndDontRequeueException("Malformed message-created realtime event.", malformed);
         }
@@ -158,7 +169,8 @@ class MessageCreatedRealtimeRabbitListener {
     }
 
     private record ParsedMessageCreated(
-            UUID messageId,
+            UUID entryId,
+            String idField,
             UUID caseId,
             Instant occurredAt,
             String correlationId) {

@@ -131,6 +131,8 @@ Read/unread:
 ## 9. Messages and delivery
 
 - Conversation-visible message authorship is `CUSTOMER`, `SUPPORT` or `SYSTEM`.
+- A Case may also contain a text-only internal note. The current owner can add a note in `VERIFICATION` under the existing Reply eligibility rules. An eligible USER or ADMIN with Case read access can read notes, including in terminal Case history.
+- A note records the authenticated author, their display name at creation and the server timestamp. It is stored within USI and does not enter provider delivery, public previews, customer unread state, waiting transitions or FRT/NRT. The dedicated command uses the standard Case-scoped idempotency window.
 - Claim, resolve, reassign and internal provider events belong in Activity/audit, not fake chat messages.
 - Supported body formats are `PLAIN_TEXT` and `MARKDOWN`. Provider rich content is normalized to safe text/Markdown. Raw executable HTML is never canonical content.
 - A send command creates a durable local Message plus transactional outbox work; the external provider call is asynchronous.

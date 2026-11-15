@@ -11,6 +11,7 @@ import type {
   InboxListQuery,
   InboxResolveInput,
   InboxSendInput,
+  InboxInternalNoteInput,
 } from "./inbox"
 import type {
   AdministrationSettings,
@@ -256,6 +257,10 @@ export function useInboxWorkflow(caseId?: string) {
     mutationFn: (input: InboxResolveInput) => serviceRegistry.inbox.forceResolve(requireCaseId(), input),
     onSuccess: invalidateConversation,
   })
+  const addInternalNote = useMutation({
+    mutationFn: (input: InboxInternalNoteInput) => serviceRegistry.inbox.addInternalNote(requireCaseId(), input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.inboxMessages(caseId ?? "") }),
+  })
   const sendMessage = useMutation({
     mutationFn: (input: InboxSendInput) =>
       serviceRegistry.inbox.sendMessage(requireCaseId(), input),
@@ -266,7 +271,7 @@ export function useInboxWorkflow(caseId?: string) {
     onSuccess: invalidateConversation,
   })
 
-  return { claim, ignore, askCustomer, resolve, snooze, cancelSnooze, assign, unassign, forceResolve, sendMessage, retryMessage }
+  return { claim, ignore, askCustomer, resolve, snooze, cancelSnooze, assign, unassign, forceResolve, sendMessage, retryMessage, addInternalNote }
 }
 
 export function useMarkAllResolvedRead() {

@@ -452,6 +452,20 @@ decisions:
       retain_history_on_account_deactivation: true
       details: docs/DIRECT_MESSAGES.md
 
+  - id: DEC-CASE-INTERNAL-NOTES-001
+    area: case_conversation
+    status: owner_approved
+    source: [OWNER_REQUEST_2026_11_15]
+    decision:
+      text_only: true
+      write_eligibility: existing_reply_eligibility
+      read_eligibility: existing_case_access
+      author: authenticated_actor_with_name_snapshot
+      provider_delivery: false
+      public_preview: false
+      sla_or_workflow_effect: false
+      details: docs/PRODUCT_CONTRACT.md
+
 technical_resolutions:
   - id: TECH-VIEW-MAPPER-001
     source: [USI-88]

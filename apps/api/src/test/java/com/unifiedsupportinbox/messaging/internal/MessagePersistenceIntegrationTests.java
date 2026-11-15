@@ -155,13 +155,13 @@ class MessagePersistenceIntegrationTests {
         var first = history.history(fixture.caseId(), null, 1, supportUserId);
         assertThat(first.items()).hasSize(1);
         assertThat(first.items().getFirst().id()).isEqualTo(support.id());
-        assertThat(first.items().getFirst().kind()).isEqualTo(MessageKind.SUPPORT);
+        assertThat(first.items().getFirst().kind()).isEqualTo("SUPPORT");
         assertThat(first.nextCursor()).isNotBlank();
 
         var older = history.history(fixture.caseId(), first.nextCursor(), 1, supportUserId);
         assertThat(older.items()).hasSize(1);
         assertThat(older.items().getFirst().id()).isEqualTo(customer.id());
-        assertThat(older.items().getFirst().kind()).isEqualTo(MessageKind.CUSTOMER);
+        assertThat(older.items().getFirst().kind()).isEqualTo("CUSTOMER");
         assertThat(older.nextCursor()).isNull();
     }
 

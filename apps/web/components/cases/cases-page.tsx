@@ -194,7 +194,7 @@ export function CasesPage({
     return (messagesQuery.data?.pages.flatMap((page) => page.items) ?? [])
       .filter((message) => { if (seen.has(message.id)) return false; seen.add(message.id); return true }).reverse()
   }, [messagesQuery.data])
-  const latestMessageId = messagesQuery.data?.pages[0]?.items[0]?.id
+  const latestMessageId = messages.findLast((message) => message.kind !== "internal_note")?.id
 
   const counts = casesQuery.data?.pages[0]?.quickViewCounts
   const activity = useInboxActivity(detailsOpen ? selectedId : undefined)
@@ -569,6 +569,10 @@ function ConversationPanel({
 }) {
   const t = useT()
   const [draft, setDraft] = useState("")
+  const [noteDraft, setNoteDraft] = useState("")
+  const [noteMode, setNoteMode] = useState(false)
+  const [noteError, setNoteError] = useState<Error | null>(null)
+  const noteKey = useRef<string | null>(null)
   const [files, setFiles] = useState<File[]>([])
   const [sendError, setSendError] = useState<Error | null>(null)
   const [actionDialog, setActionDialog] = useState<"ask" | "ignore" | "resolve" | "snooze" | "admin" | null>(null)
@@ -602,10 +606,11 @@ function ConversationPanel({
     || workflow.unassign.isPending
     || workflow.forceResolve.isPending
 
-  const hasContent = Boolean(draft.trim() || files.length)
+  const hasContent = noteMode ? Boolean(noteDraft.trim()) : Boolean(draft.trim() || files.length)
+  const submitting = workflow.sendMessage.isPending || workflow.addInternalNote.isPending
 
   const addFiles = (selected: File[]) => {
-    if (!canReply || sending.current || !selected.length) return
+    if (!canReply || noteMode || sending.current || !selected.length) return
     const next = [...files, ...selected]
     const error = attachmentLimitError(next)
     setSendError(error ?? null)
@@ -615,8 +620,22 @@ function ConversationPanel({
   }
 
   const send = async () => {
-    if (!canReply || !hasContent || sending.current || workflow.sendMessage.isPending) return
+    if (!canReply || !hasContent || sending.current || submitting) return
     sending.current = true
+    if (noteMode) {
+      noteKey.current ??= crypto.randomUUID()
+      setNoteError(null)
+      try {
+        await workflow.addInternalNote.mutateAsync({ body: noteDraft, idempotencyKey: noteKey.current })
+        setNoteDraft("")
+        noteKey.current = null
+      } catch (error) {
+        setNoteError(error instanceof Error ? error : new Error(t("Nie udało się zapisać notatki.")))
+      } finally {
+        sending.current = false
+      }
+      return
+    }
     submission.current ??= { body: draft, attachments: files, idempotencyKey: crypto.randomUUID() }
     setSendError(null)
     try {
@@ -712,6 +731,18 @@ function ConversationPanel({
         {messagesLoading ? <p className="text-sm text-[#9aa5b6]">{t("Wczytywanie wiadomości…")}</p> : messagesError ? <p role="alert" className="text-sm text-red-400">{t("Nie udało się wczytać wiadomości.")}</p> : messages.length === 0 ? <p className="text-sm text-[#9aa5b6]">{t("Brak wiadomości.")}</p> : (
           <div className="flex w-full max-w-[820px] flex-col gap-5">
             {messages.map((message) => {
+              if (message.kind === "internal_note") {
+                return (
+                  <article key={message.id} data-message-kind="internal_note" className="min-w-0 rounded-lg border border-amber-400/50 bg-amber-400/15 px-3 py-2 [overflow-wrap:anywhere]">
+                    <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-amber-100">
+                      <span className="font-semibold text-amber-300">{t("Notatka wewnętrzna")}</span>
+                      <span data-message-author>{message.sender}</span>
+                      <time dateTime={message.createdAt}>{timeLabel(message.createdAt)}</time>
+                    </div>
+                    <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-amber-50">{message.body}</p>
+                  </article>
+                )
+              }
               const sender = message.sender || t(message.kind === "support" ? "Wsparcie" : message.kind === "customer" ? "Klient" : "System")
               return (
                 <article key={message.id} data-message-kind={message.kind} className="flex min-w-0 items-start gap-2.5">
@@ -739,13 +770,21 @@ function ConversationPanel({
       </div>
 
       <div className="shrink-0 px-3 pb-3 pt-1 sm:px-5">
-        <div className="max-w-[820px] rounded-[11px] border border-white/[0.085] bg-[linear-gradient(110deg,#0d1725,#0b1522)]">
+        <div className={cn("max-w-[820px] rounded-[11px] border bg-[linear-gradient(110deg,#0d1725,#0b1522)]",
+          noteMode ? "border-amber-400/50" : "border-white/[0.085]")}>
+          <div role="group" aria-label={t("Tryb edytora")} className="flex flex-wrap gap-1.5 border-b border-white/10 px-3 py-2">
+            <Button type="button" size="sm" variant="ghost" aria-pressed={!noteMode} disabled={submitting}
+              className="aria-pressed:bg-violet-500/20" onClick={() => setNoteMode(false)}>{t("Odpowiedź publiczna")}</Button>
+            <Button type="button" size="sm" variant="ghost" aria-pressed={noteMode} disabled={submitting || !canReply}
+              className="text-amber-200 aria-pressed:bg-amber-400/20" onClick={() => setNoteMode(true)}>{t("Notatka wewnętrzna")}</Button>
+          </div>
           <textarea aria-describedby="composer-help" onCompositionStart={() => { composing.current = true }} onCompositionEnd={() => { composing.current = false }} onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !composing.current && event.nativeEvent.keyCode !== 229) {
               event.preventDefault()
               if (!event.repeat) void send()
             }
           }} onPaste={(event) => {
+            if (noteMode) return
             const clipboard = event.clipboardData
             const pasted = clipboard.files.length > 0 ? Array.from(clipboard.files) : Array.from(clipboard.items)
               .filter((item) => item.kind === "file")
@@ -760,12 +799,27 @@ function ConversationPanel({
             if (!images.length) return
             if (!event.clipboardData.types.includes("text/plain")) event.preventDefault()
             addFiles(images)
-          }} value={draft} onChange={(event) => { setDraft(event.target.value); submission.current = null }} disabled={!canReply || workflow.sendMessage.isPending} placeholder={canReply ? t("Napisz odpowiedź...") : t("Przejmij case, aby odpowiedzieć")} aria-label={t("Treść odpowiedzi")} className="block h-[80px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa] disabled:cursor-not-allowed" />
-          {files.length > 0 && <div className="flex flex-wrap gap-2 px-[19px] pb-2">{files.map((file, index) => <button key={`${file.name}-${file.size}-${index}`} type="button" disabled={workflow.sendMessage.isPending} onClick={() => { setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index)); submission.current = null; setSendError(null) }} className="flex min-w-0 max-w-full items-center gap-2 rounded-md bg-white/[0.06] px-2 py-1 text-left text-xs text-[#cbd3df] [overflow-wrap:anywhere]" title={t("Usuń plik")}><AttachmentPreview file={file} /><span>{file.name}</span></button>)}</div>}
-          <div className="flex h-[51px] items-center justify-between px-[19px]"><label className={cn("inline-flex cursor-pointer items-center gap-2 rounded text-xs text-[#aeb8c8] focus-within:ring-2 focus-within:ring-violet-400", !canReply && "pointer-events-none opacity-50")}><Paperclip className="size-4" /> {t("Dodaj pliki")}<input type="file" multiple disabled={!canReply || workflow.sendMessage.isPending} className="sr-only" onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = "" }} /></label><button type="button" data-case-action aria-busy={workflow.sendMessage.isPending} onClick={send} disabled={!canReply || !hasContent || workflow.sendMessage.isPending} className="h-[45px] w-[117px] rounded-[9px] bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-[12px] font-medium text-white disabled:cursor-not-allowed disabled:opacity-50">{workflow.sendMessage.isPending ? t("Wysyłanie…") : t("Wyślij")}</button></div>
+          }} value={noteMode ? noteDraft : draft} maxLength={noteMode ? 10000 : undefined} onChange={(event) => {
+            if (noteMode) {
+              setNoteDraft(event.target.value)
+              noteKey.current = null
+            } else {
+              setDraft(event.target.value)
+              submission.current = null
+            }
+          }} disabled={!canReply || submitting} placeholder={canReply ? t(noteMode ? "Napisz notatkę..." : "Napisz odpowiedź...") : t("Przejmij case, aby odpowiedzieć")} aria-label={t(noteMode ? "Treść notatki" : "Treść odpowiedzi")} className="block h-[80px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa] disabled:cursor-not-allowed" />
+          {!noteMode && files.length > 0 && <div className="flex flex-wrap gap-2 px-[19px] pb-2">{files.map((file, index) => <button key={`${file.name}-${file.size}-${index}`} type="button" disabled={workflow.sendMessage.isPending} onClick={() => { setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index)); submission.current = null; setSendError(null) }} className="flex min-w-0 max-w-full items-center gap-2 rounded-md bg-white/[0.06] px-2 py-1 text-left text-xs text-[#cbd3df] [overflow-wrap:anywhere]" title={t("Usuń plik")}><AttachmentPreview file={file} /><span>{file.name}</span></button>)}</div>}
+          <div className="flex min-h-[51px] items-center justify-between gap-2 px-[19px]">
+            {noteMode ? <span className="text-xs text-amber-200">{t("Widoczna tylko w USI")}</span> : <label className={cn("inline-flex cursor-pointer items-center gap-2 rounded text-xs text-[#aeb8c8] focus-within:ring-2 focus-within:ring-violet-400", !canReply && "pointer-events-none opacity-50")}><Paperclip className="size-4" /> {t("Dodaj pliki")}<input type="file" multiple disabled={!canReply || submitting} className="sr-only" onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = "" }} /></label>}
+            <button type="button" data-case-action aria-busy={submitting} onClick={send} disabled={!canReply || !hasContent || submitting}
+              className={cn("h-[42px] shrink-0 rounded-[9px] px-4 text-[12px] font-medium disabled:cursor-not-allowed disabled:opacity-50",
+                noteMode ? "bg-amber-300 text-amber-950" : "bg-[linear-gradient(135deg,#5b23e5,#4c17c9)] text-white")}>
+              {noteMode ? t(submitting ? "Zapisywanie…" : "Zapisz notatkę") : t(submitting ? "Wysyłanie…" : "Wyślij")}
+            </button>
+          </div>
         </div>
-        <p id="composer-help" className="mt-1 text-[11px] text-[#9aa5b6]">{t("Enter wysyła · Shift+Enter dodaje nowy wiersz")}</p>
-        {sendError && <p role="alert" className="mt-2 text-sm text-red-400">{userError(sendError)}</p>}
+        <p id="composer-help" className="mt-1 text-[11px] text-[#9aa5b6]">{t(noteMode ? "Enter zapisuje · Shift+Enter dodaje nowy wiersz" : "Enter wysyła · Shift+Enter dodaje nowy wiersz")}</p>
+        {(noteMode ? noteError : sendError) && <p role="alert" className="mt-2 text-sm text-red-400">{userError(noteMode ? noteError : sendError)}</p>}
       </div>
       {actionDialog && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111b29] p-5 shadow-2xl"><h3 className="text-lg font-semibold text-white">{actionDialog === "ask" ? t("Dopytaj klienta") : actionDialog === "ignore" ? t("Głos ignorowania") : actionDialog === "resolve" ? t("Rozwiąż sprawę") : actionDialog === "snooze" ? t("Odłóż sprawę") : t("Administracja sprawą")}</h3>
         {actionDialog === "ask" && <><textarea autoFocus value={actionText} onChange={(event) => setActionText(event.target.value)} className="mt-4 h-28 w-full rounded-lg border border-white/10 bg-[#08111f] p-3 text-sm" placeholder={t("Pytanie do klienta")} /><label className="mt-3 block text-xs text-[#aeb8c8]">{t("Czas oczekiwania")}<select value={waitingMinutes} onChange={(event) => setWaitingMinutes(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-white/10 bg-[#08111f] p-2"><option value={60}>{t("1 godzina")}</option><option value={24 * 60}>{t("24 godziny")}</option><option value={3 * 24 * 60}>{t("3 dni")}</option><option value={7 * 24 * 60}>{t("7 dni")}</option></select></label></>}

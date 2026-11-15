@@ -228,7 +228,7 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
       return mapCaseDetail(await client.getCaseDetail({ caseId }))
     },
     async getMessages(caseId, before) {
-      const page = await client.getCaseMessages({ caseId, before, limit: 50 })
+      const page = await client.getCaseMessages({ caseId, before, limit: 50, includeInternalNotes: true })
       return { items: page.items.map((message) => mapCaseMessage(message, caseId)), nextCursor: page.nextCursor ?? undefined }
     },
     async getActivity(caseId, cursor) {
@@ -316,6 +316,9 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
         "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
         body: { resolutionCategory: input.category as CaseResolutionCategory | undefined },
       })
+    },
+    async addInternalNote(caseId, input) {
+      await client.addCaseInternalNote({ caseId, "Idempotency-Key": input.idempotencyKey, body: { body: input.body } })
     },
     async sendMessage(caseId, input) {
       if (input.simulateFailure) throw new Error(t("Symulowanie błędu jest dostępne wyłącznie w trybie demonstracyjnym."))
