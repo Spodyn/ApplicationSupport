@@ -85,3 +85,7 @@ The grouped owner requests of 2026-11-10 and 2026-11-12 define the interface and
 ## Owner Case conversation extension, 2026-11-15
 
 - DEC-CASE-INTERNAL-NOTES-001: Case-scoped internal text notes use existing Reply eligibility for authorship and Case read access for visibility. Notes have a separate persistence and realtime path from customer delivery. See [Product Contract](PRODUCT_CONTRACT.md#9-messages-and-delivery).
+
+## Simplified Case workflow projection
+
+- DEC-CASE-WORKFLOW-PROJECTION-001: four workflow labels with separate Ignore votes and terminal reason. The unassigned work queue excludes waiting, and Archive is an explicit history filter. Existing v1 writes remain compatible. See [Product Contract](PRODUCT_CONTRACT.md#4-canonical-case-state-machine).
