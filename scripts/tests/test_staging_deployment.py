@@ -129,6 +129,14 @@ class StagingWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("StrictHostKeyChecking=yes", deploy)
         self.assertIn("AllowedIPs = 10.77.0.1/32", deploy)
 
+    def test_both_required_ci_and_release_build_enforce_container_scan(self):
+        self.assertIn("scan_images.py", (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+        self.assertIn("scan_images.py", (ROOT / "infra/staging/build-images.sh").read_text(encoding="utf-8"))
+        scanner = (ROOT / "infra/staging/scan_images.py").read_text(encoding="utf-8")
+        self.assertIn('"HIGH,CRITICAL"', scanner)
+        self.assertNotIn("--ignore-unfixed", scanner)
+        self.assertNotIn("docker.sock", scanner)
+
 
 class StagingComposeTests(unittest.TestCase):
     @classmethod

@@ -25,7 +25,9 @@ def main():
     project = "usi-staging-test-" + uuid.uuid4().hex[:10]
     env = {key: value for key, value in os.environ.items() if not key.startswith(("USI_", "STAGING_", "COMPOSE_"))}
     with tempfile.TemporaryDirectory(prefix=project) as temporary:
-        directory = Path(temporary)
+        directory = Path(temporary).resolve()
+        if directory.parent != Path(tempfile.gettempdir()).resolve() or not directory.name.startswith(project):
+            raise ValueError("Unexpected disposable staging directory")
         state = directory / "state"
         state.mkdir()
         # Root helper is restricted to this random disposable directory. On

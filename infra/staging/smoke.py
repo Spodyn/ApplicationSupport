@@ -3,10 +3,12 @@
 import argparse
 import base64
 import hashlib
+import html
 import http.cookiejar
 import json
 import os
 from pathlib import Path
+import re
 import socket
 import ssl
 import struct
@@ -39,8 +41,13 @@ def check(origin: str, email: str, password_file: Path, ca_file: str | None = No
             return response.read(2 * 1024 * 1024)
 
     login_html = request("/login")
-    if b"STAGING" not in login_html:
+    if b">STAGING</div>" not in login_html:
         raise AssertionError("Staging must be visibly marked")
+    assets = re.findall(r'(?:src|href)="(/_next/static/[^\"]+)"', login_html.decode())
+    for suffix in (".css", ".js"):
+        asset = next((html.unescape(path) for path in assets if suffix in path), None)
+        if asset is None or not request(asset):
+            raise AssertionError("Standalone static application assets are missing")
     request("/actuator/health", expected=404)
     request("/api/v1/auth/me", expected=401)
     request("/api/v1/auth/login", {"email": email, "password": password_file.read_text(encoding="utf-8").strip()})

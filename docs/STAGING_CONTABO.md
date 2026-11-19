@@ -127,6 +127,14 @@ GitHub token. This short-lived token is sent through encrypted VPN+SSH stdin and
 used in a temporary root-only Docker config, which is deleted at command exit;
 there is no permanent GHCR PAT on the VPS and images need not be public.
 
+Application image scanning is a mandatory infrastructure and release-build gate.
+Pinned Trivy scans isolated saved-image archives without Docker socket or runtime
+secret access. Any HIGH/CRITICAL result fails, including unfixed findings; there is
+no suppression/ignore-unfixed switch. The web runtime copies only Node and traced
+application files into patched Ubuntu 24.04, leaving npm/build tooling in the build
+stage. The initial Debian/npm runtime failed this gate and was replaced before
+release rather than suppressing its findings.
+
 The root-owned forced command accepts only `check` or `deploy <40-character-SHA>`.
 It rechecks main and CI, fetches that main commit from the public repository,
 extracts only the reviewed staging directory, validates image repositories/digests
@@ -182,6 +190,7 @@ docker build -f apps/api/Dockerfile -t usi-staging-test-api:local .
 docker build -f apps/web/Dockerfile -t usi-staging-test-web:local .
 bash infra/minio/build-source-images.sh all
 python3 infra/staging/test_compose.py
+python3 infra/staging/scan_images.py usi-staging-test-api:local usi-staging-test-web:local
 ```
 
 The staging acceptance script generates its own random project/state and synthetic

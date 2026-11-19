@@ -7,6 +7,7 @@ release=$(mktemp)
 trap 'rm -f "$release"' EXIT
 printf '{"sha":"%s","images":{' "$USI_RELEASE_SHA" > "$release"
 separator=
+version=$(python3 -c 'import json; print(json.load(open("package.json"))["version"])')
 for name in api web minio mc; do
   context=.
   case "$name" in
@@ -17,6 +18,7 @@ for name in api web minio mc; do
   esac
   image="ghcr.io/spodyn/applicationsupport-$name:$USI_RELEASE_SHA"
   docker build --label "org.opencontainers.image.revision=$USI_RELEASE_SHA" \
+    --label "org.opencontainers.image.version=$version-staging+$USI_RELEASE_SHA" \
     --label org.opencontainers.image.source=https://github.com/Spodyn/ApplicationSupport \
     -f "$file" -t "$image" "$context"
   docker push "$image"
@@ -24,6 +26,9 @@ for name in api web minio mc; do
   printf '%s"%s":"%s"' "$separator" "$name" "$digest" >> "$release"
   separator=,
 done
+python3 infra/staging/scan_images.py \
+  "ghcr.io/spodyn/applicationsupport-api:$USI_RELEASE_SHA" \
+  "ghcr.io/spodyn/applicationsupport-web:$USI_RELEASE_SHA"
 printf '}}\n' >> "$release"
 python3 - "$release" <<'PY'
 import json,sys
