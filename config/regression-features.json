@@ -438,9 +438,23 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackProviderAttachmentGatewayTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramChatCaseMappingIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramTopicCaseMappingIntegrationTests.java",
-        "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramWebhookIntegrationTests.java"
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramWebhookIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsInboxIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsSecurityTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsActivityTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsConnectorClientTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsWebhookIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsMessageDeliveryProviderTests.java",
+        "scripts/tests/test_teams_development_contract.py",
+        "scripts/tests/test_teams_package.py",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsSigningKeysTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsFilesHttpClientTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsOutboundAttachmentsTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsFilesAdminControllerTests.java",
+        "apps/web/tests/unit/inbox-api-adapter.test.ts",
+        "apps/web/tests/e2e/application.spec.ts"
       ],
-      "gap": "Telegram inbound has synthetic tests; Teams adapter and Telegram outbound acceptance are absent on this baseline. Live provider sandbox is NOT RUN."
+      "gap": "Teams text and attachment transfer have synthetic regressions; live permission/recipient acceptance is tracked in the technical audit. Group-chat live acceptance, recovery and full installation lifecycle remain outstanding."
     },
     {
       "id": "I18N",

@@ -27,10 +27,13 @@ function MessageAttachment({ file, admin }: { file: InboxAttachment; admin: bool
   const extension = /[.]([a-z0-9]{1,12})$/i.exec(file.fileName)?.[1].toLowerCase()
   const Icon = file.type === "image" ? ImageIcon : documentIcons[extension as keyof typeof documentIcons] ?? File
   const sizeAndType = [extension?.toUpperCase(), file.size].filter(Boolean).join(" · ")
-  const status = file.failureStage === "DOWNLOAD" ? "Nie udało się pobrać pliku ze Slacka."
+  const status = file.errorCode === "POLICY_MIME_MISMATCH" ? "Typ pliku nie zgadza się z jego zawartością."
+    : file.errorCode === "TEAMS_FILE_PERMISSION_REQUIRED" ? "Administrator musi nadać aplikacji Teams dostęp do magazynu plików."
+    : file.errorCode === "TEAMS_FILE_STORAGE_CONFIGURATION_REQUIRED" ? "Administrator musi skonfigurować magazyn plików tego kanału Teams."
+    : file.failureStage === "DOWNLOAD" ? "Nie udało się pobrać pliku od dostawcy."
     : file.scanStatus === "ERROR" ? "Nie udało się zeskanować pliku."
     : file.scanStatus === "INFECTED" ? "W pliku wykryto zagrożenie."
-    : file.processingStage === "DOWNLOAD" ? "Pobieranie pliku ze Slacka…"
+    : file.processingStage === "DOWNLOAD" ? "Pobieranie pliku od dostawcy…"
     : file.scanStatus === "PENDING" || file.scanStatus === "SCANNING" ? "Skanowanie pliku…"
     : undefined
   const text = <span className="min-w-0 [overflow-wrap:anywhere]">

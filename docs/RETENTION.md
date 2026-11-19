@@ -4,6 +4,8 @@ Stan na 20 sierpnia 2026 r. Dokument zamraża decyzję z Jira USI-40 w ramach ep
 
 ## Model single-tenant
 
+Owner override 2026-11-19: usunięcie wiadomości u dostawcy oznacza logiczny marker w USI z zachowaną ostatnią zaakceptowaną treścią i załącznikami. Jest odrębne od expiry/purge z tego dokumentu: po upływie retencji body i binary są nadal usuwane/redagowane zgodnie z poniższą polityką. Dostęp do zachowanych plików wymaga normalnej autoryzacji Case i stanu CLEAN. Nie rekonstruujemy automatycznie treści wcześniej wymazanej.
+
 W v1 jeden klient oznacza jeden niezależny deployment:
 
 - osobną bazę PostgreSQL;

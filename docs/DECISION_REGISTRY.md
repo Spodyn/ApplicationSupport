@@ -2,6 +2,10 @@
 
 **Status:** FROZEN v1 decisions
 
+## Owner override — 2026-11-19 / provider deletion
+
+The owner requested retained information for deleted messages during the Teams audit. A trustworthy provider delete now preserves the last accepted text, author, timestamps and attachments, with a muted explicit deletion marker. Later edits cannot resurrect it. Normal Case authorization, CLEAN-only attachment access, retention expiry and legal erasure still apply. Previously erased text is not reconstructed automatically. Machine decision: `DEC-PROVIDER-DELETED-CONTENT-001`; source: `OWNER_REQUEST_2026_11_19_TEAMS_AUDIT`.
+
 This is the human-readable index. `decision-registry.yaml` is the machine-readable companion used by agents/orchestrators.
 
 ## Interpretation
@@ -91,3 +95,5 @@ The grouped owner requests of 2026-11-10 and 2026-11-12 define the interface and
 - DEC-CASE-WORKFLOW-PROJECTION-001: four workflow labels with separate Ignore votes and terminal reason. The unassigned work queue excludes waiting, and Archive is an explicit history filter. Existing v1 writes remain compatible. See [Product Contract](PRODUCT_CONTRACT.md#4-canonical-case-state-machine).
 
 - DEC-CASE-WORKFLOW-COMMANDS-001: administrative undo applies to ordinary and forced resolution. Public replies enter owned waiting after delivery, while Ask Customer enters unassigned waiting. The shared provider-context lock protects active generation uniqueness.
+
+- TECH-TEAMS-SELECTED-FILES-001 (owner approval, 2026-11-19): the sandbox bot receives Graph application `Sites.Selected` and `write` only on USISandbox. A separate transient administrator session assigns the site grant; the bot receives no tenant-wide file access. See [Integration attachment boundaries](INTEGRATIONS.md#teams-attachment-transfer-owner-approved-2026-11-19).

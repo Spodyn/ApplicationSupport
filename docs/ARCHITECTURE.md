@@ -197,6 +197,13 @@ Frozen provider scope:
 
 Exact SDK/API patch details are technical choices based on current official vendor documentation and must not expand product scope.
 
+Teams attachment enrichment commits a durable per-message job with the inbound
+message, then performs provider/object-store/scanner I/O outside DB transactions.
+Provider-owned tables checkpoint file transfers and actual asynchronous HTTP 202
+acceptance. They do not introduce a second workflow or SLA engine: accepted outbound
+messages finalize through the shared delivery service. Storage is configured per
+context and restricted to explicitly approved selected sites; see [INTEGRATIONS.md](INTEGRATIONS.md#teams-attachment-transfer-owner-approved-2026-11-19).
+
 ## 7. Security and secrets boundary
 
 Backend rechecks session, role/permission, active account, workflow state and ownership. Browser visibility is never authorization. Provider/customer content is untrusted and sanitized.

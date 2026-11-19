@@ -130,6 +130,7 @@ export interface InboxAttachment {
   failureStage?: string
   processingStage?: string
   requiredSlackScope?: string
+  errorCode?: string
 }
 
 export interface InboxMessage {

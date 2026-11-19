@@ -425,7 +425,7 @@ test("real API Case opens, is marked read, claimed, and receives one persisted s
   await expect(page.getByRole("complementary", { name: "Szczegóły sprawy" }).locator("[data-case-detail-owner]")).toHaveText("Anna Kowalska")
   await conversation.getByLabel("Treść odpowiedzi").fill("USI test reply")
   await conversation.getByRole("button", { name: "Wyślij" }).click()
-  await expect(conversation.getByText("USI test reply")).toBeVisible()
+  await expect(conversation.getByRole("paragraph").filter({hasText:/^USI test reply$/})).toBeVisible()
   expect(sends).toEqual(["USI test reply"])
   expect(externalRequests).toEqual([])
 })
@@ -568,6 +568,36 @@ test("empty persisted conversation renders an empty state", async ({ page }) => 
   const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
   await expect(conversation.getByText("Brak wiadomości.")).toBeVisible()
   await expect(conversation.getByText("Nie udało się wczytać wiadomości.")).toHaveCount(0)
+})
+
+test("deleted provider message remains muted with its text, author and clean document", async ({ page }) => {
+  await preparePage(page, true, { english: true })
+  await page.route("**/api/v1/cases/*/messages*", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items: [{
+      ...inboundMessage, body: "Retained accepted information", deletedAt: "2026-11-19T18:00:00Z", authorName: "Retained author",
+      attachments: [{ id: "018f0000-0000-7000-8000-000000000205", fileName: "retained.pdf", sizeBytes: 100,
+        contentType: "application/pdf", detectedContentType: "application/pdf", scanStatus: "CLEAN" }],
+    }], nextCursor: null }) })
+  })
+  await page.goto("/cases")
+  const deleted = page.getByRole("article", { name: "Deleted message", exact: true })
+  await expect(deleted).toHaveAttribute("data-message-deleted", "true")
+  await expect(deleted).toHaveClass(/grayscale/)
+  await expect(deleted.getByText("This message was deleted.", { exact: true })).toBeVisible()
+  await expect(deleted.getByText("Retained accepted information", { exact: true })).toBeVisible()
+  await expect(deleted.getByText("Retained author", { exact: true })).toBeVisible()
+  await expect(deleted.getByRole("link", { name: /retained.pdf/ })).toHaveAttribute("href", /\/attachments\//)
+})
+
+test("a rejected file explains its type mismatch and has no download link", async ({page}) => {
+  await preparePage(page,true,{english:true})
+  await page.route("**/api/v1/cases/*/messages*",route=>route.fulfill({json:{items:[{...inboundMessage,
+    attachments:[{id:"018f0000-0000-7000-8000-000000000206",fileName:"invalid.pdf",sizeBytes:142,
+      contentType:"application/pdf",detectedContentType:"image/png",scanStatus:"ERROR",errorCode:"POLICY_MIME_MISMATCH",failureStage:"DOWNLOAD"}],
+  }],nextCursor:null}}))
+  await page.goto("/cases")
+  await expect(page.getByText("invalid.pdf · The file type does not match its contents.",{exact:true})).toBeVisible()
+  await expect(page.getByRole("link",{name:/invalid.pdf/})).toHaveCount(0)
 })
 
 test("API user directory opens a fresh account editor for an authorized administrator", async ({ page }) => {

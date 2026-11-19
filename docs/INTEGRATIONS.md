@@ -123,7 +123,7 @@ Messages arriving before discovery retry durably rather than being silently disc
 ### 2.5 Edits and deletes
 
 - Customer edit updates the existing Message and `edited_at`; it produces activity and unread.
-- Customer delete clears stored body and marks the existing Message deleted (`deleted_at`/safe marker), preserves identity/history and does not create/reopen a Case.
+- Owner override 2026-11-19: customer delete marks the existing Message deleted (`deleted_at`) and preserves its last accepted body, author, timestamps and attachments under normal retention. The UI shows a muted deletion marker and retained information. It does not create/reopen a Case; later edits cannot resurrect it. Historic erased body is not automatically reconstructed.
 - Edits/deletes target the original provider Message across Case generations, with row locks and stale/duplicate suppression. Missing originals retry as `MESSAGE_MUTATION_TARGET_PENDING`; they never create a Case. Edits of read Messages reset eligible read projections; deleted Messages cannot be resurrected by a late edit.
 - A transactional `message.updated` outbox event triggers an authenticated per-Case realtime hint; clients refetch the persisted conversation, activity and list.
 
@@ -268,6 +268,43 @@ All providers inherit the same attachment security pipeline:
 6. only `CLEAN` can be normally sent/downloaded.
 
 The provider's lower size/type limit always wins over the global USI limit.
+
+### Teams attachment transfer (owner-approved, 2026-11-19)
+
+The Teams Connector callback commits text and a durable per-message file job before
+provider I/O. Images are read from trusted provider endpoints or Graph
+`hostedContents`; reference documents are resolved within the explicitly configured
+SharePoint drive. Customer HTML image URLs are never a source of server-side fetches.
+The existing object storage, file policy and scanner gate download and outbound use.
+Limits are 10 files, 25 MiB per file and 50 MiB per logical message.
+
+RSC `ChannelMessage.Read.Group` / `ChatMessage.Read.Chat` authorizes message reads;
+it does not grant access to referenced SharePoint/OneDrive files. The owner approved
+Graph application `Sites.Selected` and `write` on the USISandbox site for the sandbox.
+Another site requires a separate explicit administrator grant. No tenant-wide file
+permission is granted to the bot. Per-context `metadata_json.teamsFiles` holds the
+approved drive ID, destination folder ID and exact SharePoint host allowlist.
+Group-chat OneDrive files outside the selected storage remain a visible authorization
+error until their storage is explicitly approved; the adapter never broadens access.
+
+Outbound uses the normal Bot Connector reply in the original conversation/root.
+Small supported images use native image attachments; other clean images/documents
+are uploaded to the configured channel folder and linked in an Adaptive Card in
+the same reply. These links retain Microsoft 365 membership-based authorization;
+they are neither anonymous shares nor USI download URLs. Stable per-attachment
+paths and stored drive/item checkpoints prevent duplicate uploads on ordinary retry.
+Recorded Connector acceptance skips both upload and a second customer-visible send.
+Connector HTTP 202 may carry no `ResourceResponse`. Its actual HTTP acceptance is
+checkpointed separately, without inventing a provider message ID; it finalizes SENT
+and the shared human-response SLA at delivery finalization, rather than enqueue time.
+An ambiguous Connector send remains non-retryable pending inspection of the thread.
+
+Failed inbound transfers remain visible. An administrator with `manage_integrations`
+can use Settings → Integrations → Retry Teams attachments after repairing consent
+or configuration. The endpoint only schedules existing failed jobs for that enabled
+Teams integration; it creates no message or Case and does not alter SLA. Policy and
+quarantine failures cannot be bypassed by retry. Automatic transient retries are
+bounded to eight attempts and 24 hours, respecting provider Retry-After.
 
 ## 6. Provider-neutral guarantees
 

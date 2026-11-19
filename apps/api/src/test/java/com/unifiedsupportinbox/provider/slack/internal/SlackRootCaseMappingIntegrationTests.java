@@ -317,7 +317,7 @@ class SlackRootCaseMappingIntegrationTests {
         assertThat(count("cases")).isEqualTo(2);
         assertThat(count("messages")).isEqualTo(2);
         assertThat(jdbc.queryForObject("SELECT status FROM cases WHERE id = ?", String.class, originalCase)).isEqualTo("RESOLVED");
-        assertThat(jdbc.queryForObject("SELECT body FROM messages WHERE case_id = ?", String.class, originalCase)).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT body FROM messages WHERE case_id = ?", String.class, originalCase)).isEqualTo("original");
         assertThat(jdbc.queryForObject("SELECT deleted_at IS NOT NULL FROM messages WHERE case_id = ?", Boolean.class, originalCase)).isTrue();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE action = 'CUSTOMER_MESSAGE_DELETED'", Integer.class)).isEqualTo(1);
         assertThat(countOutbox("message.updated")).isEqualTo(1);

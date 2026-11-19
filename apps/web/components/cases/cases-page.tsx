@@ -774,18 +774,19 @@ function ConversationPanel({
               }
               const sender = message.sender || t(message.kind === "support" ? "Wsparcie" : message.kind === "customer" ? "Klient" : "System")
               return (
-                <article key={message.id} data-message-kind={message.kind} className="flex min-w-0 items-start gap-2.5">
+                <article key={message.id} data-message-kind={message.kind} data-message-deleted={message.deleted || undefined} aria-label={message.deleted ? t("Usunięta wiadomość") : undefined} className={cn("flex min-w-0 items-start gap-2.5", message.deleted && "grayscale")}>
                   <Avatar initials={initials(sender)} size="sm" />
                   <div className={cn("min-w-0 flex-1 rounded-lg px-3 py-2 [overflow-wrap:anywhere]",
-                    message.kind === "support" ? "border border-violet-400/15 bg-violet-500/10" : "border border-white/[0.05] bg-white/[0.025]")}>
+                    message.deleted ? "border border-white/10 bg-white/[0.02]" : message.kind === "support" ? "border border-violet-400/15 bg-violet-500/10" : "border border-white/[0.05] bg-white/[0.025]")}>
                     <div className="flex flex-wrap items-baseline gap-x-2 text-xs text-[#aeb8c8]">
                       <span className="font-semibold text-[#e1e5ed]" data-message-author>{sender}</span>
                       <time dateTime={message.createdAt}>{timeLabel(message.createdAt)}</time>
                       {message.edited && <span>{t("Edytowano")}</span>}
                       {message.deliveryStatus && <span>{t(deliveryStatusLabels[message.deliveryStatus])}</span>}
                     </div>
-                    {(message.body || message.deleted) && <p className={cn("mt-1 whitespace-pre-wrap text-sm leading-6 text-[#edf0f4]", message.deleted && "italic text-[#aeb8c8]")}>
-                      <SafeExternalMessage slack={message.kind === "customer" && item.platform === "Slack"} content={message.deleted ? t("Wiadomość została usunięta w Slack.") : message.body} />
+                    {message.deleted && <p className="mt-1 text-xs italic text-[#aeb8c8]">{t("Wiadomość została usunięta.")}</p>}
+                    {message.body && <p className={cn("mt-1 whitespace-pre-wrap text-sm leading-6", message.deleted ? "text-[#aeb8c8]" : "text-[#edf0f4]")}>
+                      <SafeExternalMessage slack={message.kind === "customer" && item.platform === "Slack"} content={message.body} />
                     </p>}
                     <MessageAttachments attachments={message.attachments} canManageIntegrations={canManageIntegrations} />
                     <DeliveryNotice message={message} canManageIntegrations={canManageIntegrations} />

@@ -373,6 +373,10 @@ export function useAdministrationSettingsActions() {
     mutationFn: (id: string) => serviceRegistry.administrationSettings.discoverChannels(id),
     onSuccess: invalidate,
   })
+  const retryTeamsAttachments = useMutation({
+    mutationFn: (id: string) => serviceRegistry.administrationSettings.retryTeamsAttachments(id),
+    onSuccess: invalidate,
+  })
   const configureChannel = useMutation({
     mutationFn: ({ id, customerId, ignored, groupingStrategy }: { id: string; customerId?: string; ignored: boolean; groupingStrategy?: import("@/lib/domain/administration").ChannelGroupingStrategy }) =>
       serviceRegistry.administrationSettings.configureChannel(id, customerId, ignored, groupingStrategy),
@@ -403,6 +407,7 @@ export function useAdministrationSettingsActions() {
     setIntegrationStatus,
     testIntegration,
     discoverChannels,
+    retryTeamsAttachments,
     configureChannel,
     saveCustomer,
     deactivateCustomer,

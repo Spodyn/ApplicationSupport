@@ -142,7 +142,8 @@ class MessageHistoryService {
             AttachmentScanStatus scanStatus,
             String failureStage,
             String processingStage,
-            String requiredSlackScope) {
+            String requiredSlackScope,
+            String errorCode) {
         static MessageAttachmentItem from(AttachmentMetadata metadata) {
             return new MessageAttachmentItem(
                     metadata.id(),
@@ -159,7 +160,7 @@ class MessageHistoryService {
                         case "SLACK_DOWNLOAD_SLACK_MISSING_SCOPE_FILES_READ" -> "files:read";
                         case "SLACK_DOWNLOAD_SLACK_MISSING_SCOPE_FILES_WRITE" -> "files:write";
                         default -> null;
-                    });
+                    }, metadata.scanError()!=null && metadata.scanError().matches("[A-Z][A-Z0-9_]{0,127}") ? metadata.scanError() : null);
         }
     }
 }
