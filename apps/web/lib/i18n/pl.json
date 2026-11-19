@@ -343,6 +343,8 @@
     "Odpowiadanie jest niedostępne w aktualnym stanie case’u.": "Odpowiadanie jest niedostępne w aktualnym stanie case’u.",
     "Symulowany błąd dostarczenia wiadomości.": "Symulowany błąd dostarczenia wiadomości.",
     "Wiadomość została usunięta w Slack.": "Wiadomość została usunięta w Slack.",
+    "Wiadomość została usunięta.": "Wiadomość została usunięta.",
+    "Usunięta wiadomość": "Usunięta wiadomość",
     "Select 1 to 1000 Cases.": "Select 1 to 1000 Cases.",
     "Symulowanie błędu jest dostępne wyłącznie w trybie demonstracyjnym.": "Symulowanie błędu jest dostępne wyłącznie w trybie demonstracyjnym.",
     "Wiadomość nie może być pusta.": "Wiadomość nie może być pusta.",
@@ -383,7 +385,20 @@
     "Otwórz ustawienia integracji": "Otwórz ustawienia integracji",
     "Odzyskaj wynik operacji zbiorczej": "Odzyskaj wynik operacji zbiorczej",
     "Akcja jest niedostępna dla tej sprawy.": "Akcja jest niedostępna dla tej sprawy.",
-    "Wygasł czas na odzyskanie wyniku operacji zbiorczej.": "Wygasł czas na odzyskanie wyniku operacji zbiorczej."
+    "Wygasł czas na odzyskanie wyniku operacji zbiorczej.": "Wygasł czas na odzyskanie wyniku operacji zbiorczej.",
+    "Administrator musi nadać aplikacji Teams dostęp do magazynu plików.": "Administrator musi nadać aplikacji Teams dostęp do magazynu plików.",
+    "Administrator musi skonfigurować magazyn plików tego kanału Teams.": "Administrator musi skonfigurować magazyn plików tego kanału Teams.",
+    "Administrator musi ponownie połączyć integrację Teams.": "Administrator musi ponownie połączyć integrację Teams.",
+    "Aplikacja Teams utraciła uprawnienia do tej rozmowy.": "Aplikacja Teams utraciła uprawnienia do tej rozmowy.",
+    "Teams nie potwierdził wyniku wysyłki. Sprawdź wątek przed ponownym wysłaniem.": "Teams nie potwierdził wyniku wysyłki. Sprawdź wątek przed ponownym wysłaniem.",
+    "Transfer pliku Teams jest chwilowo niedostępny.": "Transfer pliku Teams jest chwilowo niedostępny.",
+    "Transfer pliku Teams zostanie ponowiony automatycznie.": "Transfer pliku Teams zostanie ponowiony automatycznie.",
+    "Nie udało się pobrać pliku od dostawcy.": "Nie udało się pobrać pliku od dostawcy.",
+    "Pobieranie pliku od dostawcy…": "Pobieranie pliku od dostawcy…",
+    "Ponów załączniki Teams": "Ponów załączniki Teams",
+    "Zaplanowano ponowienie transferu plików Teams.": "Zaplanowano ponowienie transferu plików Teams.",
+    "Liczba zadań: {{count}}": "Liczba zadań: {{count}}",
+    "Nie udało się ponowić załączników Teams.": "Nie udało się ponowić załączników Teams."
   },
   "settings": {
     "Ogólne": "Ogólne",
@@ -836,6 +851,7 @@
     "Otwórz podgląd {{name}}": "Otwórz podgląd {{name}}",
     "Pobierz oryginał": "Pobierz oryginał",
     "Podgląd obrazu jest niedostępny.": "Podgląd obrazu jest niedostępny.",
-    "Brakujące uprawnienie Slacka: {{scope}}": "Brakujące uprawnienie Slacka: {{scope}}"
+    "Brakujące uprawnienie Slacka: {{scope}}": "Brakujące uprawnienie Slacka: {{scope}}",
+    "Typ pliku nie zgadza się z jego zawartością.": "Typ pliku nie zgadza się z jego zawartością."
   }
 }

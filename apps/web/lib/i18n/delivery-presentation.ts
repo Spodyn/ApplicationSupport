@@ -7,6 +7,12 @@ const unavailable = { message: "Slack jest chwilowo niedostępny. Nie udało si�
 const restricted = { message: "Aplikacja nie ma uprawnień do wysyłania wiadomości w tym kanale Slack." }
 
 const errors: Record<string, DeliveryPresentation> = {
+  TEAMS_FILE_PERMISSION_REQUIRED: { message: "Administrator musi nadać aplikacji Teams dostęp do magazynu plików.", integration: true },
+  TEAMS_FILE_STORAGE_CONFIGURATION_REQUIRED: { message: "Administrator musi skonfigurować magazyn plików tego kanału Teams.", integration: true },
+  TEAMS_AUTH_FAILED: { message: "Administrator musi ponownie połączyć integrację Teams.", integration: true },
+  TEAMS_PERMISSION_DENIED: { message: "Aplikacja Teams utraciła uprawnienia do tej rozmowy.", integration: true },
+  TEAMS_DELIVERY_UNCONFIRMED: { message: "Teams nie potwierdził wyniku wysyłki. Sprawdź wątek przed ponownym wysłaniem." },
+  TEAMS_FILE_TRANSFER_UNAVAILABLE: { message: "Transfer pliku Teams jest chwilowo niedostępny.", retryMessage: "Transfer pliku Teams zostanie ponowiony automatycznie." },
   SLACK_IS_ARCHIVED: { message: "Kanał Slack jest zarchiwizowany. Nie można wysyłać do niego wiadomości." },
   SLACK_CHANNEL_NOT_FOUND: { message: "Kanał Slack jest niedostępny lub bot utracił do niego dostęp." },
   SLACK_NOT_IN_CHANNEL: { message: "Bot nie należy do tego kanału Slack." },

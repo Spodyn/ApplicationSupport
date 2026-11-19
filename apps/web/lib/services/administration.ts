@@ -57,6 +57,7 @@ export interface AdministrationSettingsRepository {
   ): Promise<ManagedIntegration>
   testIntegration(id: string): Promise<ManagedIntegration>
   discoverChannels(id: string): Promise<ManagedChannel[]>
+  retryTeamsAttachments(id: string): Promise<number>
   listCustomers(): Promise<import("@/lib/domain/administration").ManagedCustomerOption[]>
   configureChannel(id: string, customerId: string | undefined, ignored: boolean, groupingStrategy?: import("@/lib/domain/administration").ChannelGroupingStrategy): Promise<void>
   saveCustomer(input: Pick<ManagedCustomer, "name" | "externalRef">, id?: string): Promise<ManagedCustomer>
@@ -285,6 +286,7 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
     return delay(integration, 600)
   },
 
+  async retryTeamsAttachments() { return 0 },
   async discoverChannels() {
     requireCurrentAdministrationPermission("manage_integrations")
     return delay(settingsState.channels)

@@ -463,6 +463,11 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                 <Button variant="outline" size="sm" onClick={() => openConfiguration(integration)}><Settings2 /> {t("Konfiguruj")}</Button>
                 <Button variant="outline" size="sm" disabled={integration.status === "disabled" || !integration.hasSecretReference || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> {t("Testuj")}</Button>
                 {integration.platform === "slack" && <Button variant="outline" size="sm" disabled={integration.status === "disabled" || integration.health !== "healthy" || actions.discoverChannels.isPending} onClick={() => void discover(integration)}><RefreshCw /> {t("Pobierz kanały")}</Button>}
+                {integration.platform === "teams" && <Button variant="outline" size="sm" disabled={integration.status === "disabled" || actions.retryTeamsAttachments.isPending} onClick={() => {
+                  void actions.retryTeamsAttachments.mutateAsync(integration.id)
+                    .then((count) => notify.success(t("Zaplanowano ponowienie transferu plików Teams."), t("Liczba zadań: {{count}}", { count })))
+                    .catch((error) => notify.error(t("Nie udało się ponowić załączników Teams."), getErrorMessage(error)))
+                }}><RefreshCw /> {t("Ponów załączniki Teams")}</Button>}
                 {integration.status === "configuring" && integration.health === "healthy" && <Button size="sm" onClick={() => void completeConfiguration(integration)}><CheckCircle2 /> {t("Włącz")}</Button>}
                 {integration.status === "disabled" && <Button size="sm" disabled={!integration.hasSecretReference || actions.setIntegrationStatus.isPending} onClick={() => void completeConfiguration(integration)}><CheckCircle2 /> {t("Włącz")}</Button>}
                 {integration.status !== "disabled" && <Button variant="destructive" size="sm" onClick={() => setDisabledIntegration(integration)}><Unplug /> {t("Wyłącz")}</Button>}

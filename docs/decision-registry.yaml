@@ -510,7 +510,23 @@ decisions:
       unassigned_waiting_exit: NEW
       customer_contact_after_terminal: linked_successor
 
+  - id: DEC-PROVIDER-DELETED-CONTENT-001
+    area: provider_message_deletion
+    status: owner_approved
+    source: [OWNER_REQUEST_2026_11_19_TEAMS_AUDIT]
+    decision:
+      deletion: retain_last_accepted_content_with_deleted_marker
+      retained: [text, author, timestamps, attachments]
+      presentation: muted_with_explicit_deleted_notice
+      clean_attachment_authorization: unchanged_case_access
+      stale_edit_resurrection: forbidden
+      retention_and_legal_erasure: unchanged
+      automatic_historic_reconstruction: false
+
 technical_resolutions:
+  - id: TECH-TEAMS-SELECTED-FILES-001
+    source: [OWNER_REQUEST_2026_11_19_TEAMS_AUDIT, OWNER_APPROVAL_2026_11_19_TEAMS_SITE_WRITE]
+    rule: Teams sandbox file transfer uses Graph application Sites.Selected and write on USISandbox only; retain exact RSC message permissions, require explicit approval per additional storage site, and never grant tenant-wide file access to the bot.
   - id: TECH-VIEW-MAPPER-001
     source: [USI-88]
     rule: Use one explicit API DTO to stable frontend domain/view mapper; component fixtures are not backend contract.
