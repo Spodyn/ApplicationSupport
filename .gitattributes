@@ -2,3 +2,7 @@
 * text=auto
 apps/api/mvnw text eol=lf
 apps/api/.mvn/wrapper/maven-wrapper.properties text eol=lf
+infra/staging/*.sh text eol=lf
+infra/staging/*.py text eol=lf
+apps/api/Dockerfile text eol=lf
+apps/web/Dockerfile text eol=lf

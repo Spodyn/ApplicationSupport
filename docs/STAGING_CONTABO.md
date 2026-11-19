@@ -53,9 +53,13 @@ select a different command, destination path or shell through its key.
 
 Core configuration is initialized explicitly, once, on the VPS:
 
+The prepared helper is copied from `infra/staging` to
+`/root/usi-bootstrap/staging` over the trusted administrator SSH session. This
+keeps setup files separate from immutable application releases.
+
 ```bash
 install -d -m700 /srv/usi-staging
-python3 infra/staging/init_state.py --directory /srv/usi-staging/state \
+python3 /root/usi-bootstrap/staging/init_state.py --directory /srv/usi-staging/state \
   --admin-email admin@application-support.duckdns.org
 ```
 
@@ -143,6 +147,8 @@ age-encrypted PostgreSQL custom dump before starting new API code. The age key i
 store; it is not included in ordinary backups. This is a staging database checkpoint,
 not production WAL/PITR, off-host object backups, HA or proven RPO/RTO. Those remain
 release/operations acceptance work. Do not claim production backup compliance.
+Full production monitoring/alerting and its acceptance are also outside this small
+staging bootstrap; bounded container diagnostics do not replace those systems.
 
 Flyway runs the existing append-only migration chain. Deployment waits for private
 dependency/API/web health, then trusted public HTTPS. First deployment additionally

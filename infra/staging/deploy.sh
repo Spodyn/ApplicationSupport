@@ -19,6 +19,7 @@ if [ "$table" = t ]; then
   "${compose[@]}" exec -T postgres pg_dump -U usi_staging -d usi_staging -Fc \
     | age -r "$recipient" -o "$state/backups/$(date -u +%Y%m%dT%H%M%SZ).dump.age"
 fi
+[[ "$consumed" = t || "$consumed" = f ]] || { echo 'Invalid bootstrap checkpoint; deployment refused.' >&2; exit 1; }
 export STAGING_BOOTSTRAP_ENABLED=false
 if [ "$consumed" = f ]; then export STAGING_BOOTSTRAP_ENABLED=true; fi
 "${compose[@]}" up -d --wait --wait-timeout 600

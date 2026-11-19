@@ -109,6 +109,10 @@ class StagingStateTests(unittest.TestCase):
 
 
 class StagingWorkflowBoundaryTests(unittest.TestCase):
+    def test_windows_checkout_keeps_linux_entrypoint_shebang(self):
+        content = subprocess.check_output(["git", "-c", "core.autocrlf=true", "cat-file", "--filters", "HEAD:infra/staging/api-entrypoint.sh"], cwd=ROOT)
+        self.assertTrue(content.startswith(b"#!/bin/sh\n"), "Windows checkout must not turn the container shebang into /bin/sh\\r")
+
     def test_deployment_gate_matches_every_required_ci_job(self):
         workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8").split("\njobs:", 1)[1]
         self.assertEqual(set(re.findall(r"^  ([a-z]+):$", workflow, re.MULTILINE)), REQUIRED)

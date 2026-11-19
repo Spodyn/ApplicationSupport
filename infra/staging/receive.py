@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -38,9 +39,11 @@ def main() -> None:
     images = validate_images(sha, envelope)
     token = envelope.pop("registryToken", "")
     actor = envelope.pop("registryUser", "")
-    if not isinstance(token, str) or not token or len(token) > 4096 or not re.fullmatch(r"[A-Za-z0-9-]{1,100}", actor):
+    if not isinstance(token, str) or not token or len(token) > 4096 or not re.fullmatch(r"[A-Za-z0-9-]{1,90}(?:\[bot\])?", actor):
         raise ValueError("Ephemeral read-only registry credentials are required")
     ROOT.mkdir(mode=0o700, exist_ok=True)
+    if shutil.disk_usage(ROOT).free < 8 * 1024**3:
+        raise ValueError("At least 8 GiB free disk is required before pulling a release")
     with (ROOT / "deploy.lock").open("w") as lock, tempfile.TemporaryDirectory(prefix="usi-registry-", dir="/run") as registry:
         fcntl.flock(lock, fcntl.LOCK_EX)
         os.environ["GH_TOKEN"] = token
@@ -67,12 +70,16 @@ def main() -> None:
         os.chmod(env_file, 0o600)
         os.environ["DOCKER_CONFIG"] = registry
         run("docker", "login", "ghcr.io", "--username", actor, "--password-stdin", input=token.encode(), stdout=subprocess.DEVNULL)
-        del token
         for name, image in images.items():
             run("docker", "pull", image)
             label = subprocess.check_output(["docker", "inspect", "--format", '{{index .Config.Labels "org.opencontainers.image.revision"}}', image], text=True).strip()
             if label != sha:
                 raise ValueError(f"Image revision mismatch: {name}")
+        # Pulling can take minutes; refuse a newly stale main before migration.
+        os.environ["GH_TOKEN"] = token
+        check(sha)
+        del os.environ["GH_TOKEN"]
+        del token
         run("bash", str(release / "infra/staging/deploy.sh"))
 
 
