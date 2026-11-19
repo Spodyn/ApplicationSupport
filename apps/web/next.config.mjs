@@ -1,10 +1,13 @@
 import { developmentProxyRewrites, developmentPublicOrigin } from "./config/development-proxy.mjs"
 import { parsePublicEnvironment } from "./config/public-environment.mjs"
+import { fileURLToPath } from "node:url"
 
 parsePublicEnvironment(process.env)
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: "standalone",
+  outputFileTracingRoot: fileURLToPath(new URL("../../", import.meta.url)),
   allowedDevOrigins: developmentPublicOrigin(process.env)
     ? [developmentPublicOrigin(process.env).hostname] : [],
   images: {

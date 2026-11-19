@@ -482,6 +482,19 @@
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
       "gap": "Single deployment and text-only scope."
+    },
+    {
+      "id": "STAGING",
+      "feature": "Single-host staging deployment",
+      "status": "PARTIALLY_IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Immutable gated-main images, VPN-only forced deployment SSH, private durable services, trusted HTTPS, secure login and authenticated STOMP",
+      "tests": [
+        "scripts/tests/test_staging_deployment.py",
+        "infra/staging/test_compose.py",
+        "infra/staging/smoke.py"
+      ],
+      "gap": "First VPS application deployment and public ACME acceptance wait for merge; small staging has no production load/HA/off-host DR acceptance"
     }
   ]
 }

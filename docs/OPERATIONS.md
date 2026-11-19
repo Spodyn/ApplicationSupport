@@ -149,6 +149,10 @@ Performance tuning is evidence-driven; significant query/index/cache/config tuni
 
 ## 10. Staging and UAT
 
+The owner-authorized single-host Contabo staging recipe, VPN-only CI deployment,
+secret locations and first-deploy acceptance are in [STAGING_CONTABO.md](STAGING_CONTABO.md).
+It preserves the production boundary and does not claim production capacity or DR acceptance.
+
 Staging is production-like but isolated: separate DB, object storage, secrets, domain and provider sandbox/test credentials; no production data by default. Staging UI is visibly marked.
 
 UAT covers auth/users, full Case workflow, unread/snooze, SLA/OOO/notifications, all three providers, attachments, statistics/admin/audit and failure/reconnect paths. Critical/High product/security defects block release; Medium requires documented risk and follow-up.

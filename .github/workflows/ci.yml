@@ -47,7 +47,7 @@ jobs:
 
   infrastructure:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
 
     steps:
       - name: Checkout
@@ -60,6 +60,15 @@ jobs:
 
       - name: Verify clean start, health, persistence, and reset
         run: infra/tests/verify-compose-lifecycle.sh
+
+      - name: Build real staging application images and reviewed object-store client
+        run: |
+          docker build -f apps/api/Dockerfile -t usi-staging-test-api:local .
+          docker build -f apps/web/Dockerfile -t usi-staging-test-web:local .
+          bash infra/minio/build-source-images.sh all
+
+      - name: Verify staging HTTPS login, API, STOMP and persistent state
+        run: python3 infra/staging/test_compose.py
 
   backend:
     runs-on: ubuntu-latest

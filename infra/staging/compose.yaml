@@ -1,0 +1,215 @@
+name: usi-staging
+
+x-logging: &logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "5"
+
+services:
+  caddy:
+    image: caddy:2.11.2-alpine@sha256:834468128c7696cec0ceea6172f7d692daf645ae51983ca76e39da54a97c570d
+    restart: unless-stopped
+    environment:
+      USI_SITE_ADDRESS: ${USI_SITE_ADDRESS:-application-support.duckdns.org}
+      USI_TLS_DIRECTIVE: ${USI_TLS_DIRECTIVE:-}
+    ports:
+      - ${USI_BIND_ADDRESS:-0.0.0.0}:${USI_HTTP_PORT:-80}:80
+      - ${USI_BIND_ADDRESS:-0.0.0.0}:${USI_HTTPS_PORT:-443}:443
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [ingress, egress]
+    depends_on:
+      api: {condition: service_healthy}
+      web: {condition: service_healthy}
+    logging: *logging
+
+  web:
+    image: ${USI_WEB_IMAGE:?Set an immutable web image digest}
+    restart: unless-stopped
+    environment:
+      USI_DEPLOYMENT_PROFILE: staging
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 512m
+    networks: [ingress]
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/login').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+  api:
+    image: ${USI_API_IMAGE:?Set an immutable API image digest}
+    restart: unless-stopped
+    environment:
+      SPRING_PROFILES_ACTIVE: staging
+      USI_PUBLIC_BASE_URL: https://${USI_PUBLIC_HOST:-application-support.duckdns.org}
+      USI_SLACK_CALLBACK_URL: https://${USI_PUBLIC_HOST:-application-support.duckdns.org}/api/v1/providers/slack/events
+      USI_TEAMS_CALLBACK_URL: https://${USI_PUBLIC_HOST:-application-support.duckdns.org}/api/v1/provider-callbacks/teams
+      USI_TELEGRAM_CALLBACK_URL: https://${USI_PUBLIC_HOST:-application-support.duckdns.org}/api/v1/provider-callbacks/telegram
+      USI_DATABASE_URL: jdbc:postgresql://postgres:5432/usi_staging
+      USI_RABBITMQ_HOST: rabbitmq
+      USI_RABBITMQ_PORT: "5672"
+      USI_RABBITMQ_VHOST: usi_staging
+      USI_OBJECT_STORAGE_ENDPOINT: https://minio:9000
+      USI_OBJECT_STORAGE_REGION: us-east-1
+      USI_ATTACHMENTS_BUCKET: usi-attachments-staging
+      USI_EXPORTS_BUCKET: usi-exports-staging
+      USI_CORE_SECRETS_DIRECTORY: /run/usi-core/
+      USI_INTEGRATION_SECRETS_DIRECTORY: /run/usi-integrations/
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      MANAGEMENT_SERVER_PORT: "8081"
+      USI_MESSAGES_DELIVERY_WORKER_ENABLED: "true"
+      USI_SLACK_INBOUND_WORKER_ENABLED: "true"
+      USI_TELEGRAM_INBOUND_WORKER_ENABLED: "true"
+      USI_ATTACHMENTS_SCANNER_HOST: clamav
+      USI_ATTACHMENTS_SCANNER_PORT: "3310"
+      USI_BOOTSTRAP_ADMIN_ENABLED: ${STAGING_BOOTSTRAP_ENABLED:-false}
+      USI_BOOTSTRAP_ADMIN_EMAIL: ${STAGING_ADMIN_EMAIL:-}
+      USI_BOOTSTRAP_ADMIN_DISPLAY_NAME: Staging administrator
+      USI_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/usi-core/bootstrap-admin-password
+      USI_TEAMS_CLIENT_ID: ${USI_TEAMS_CLIENT_ID:-}
+      USI_TEAMS_TENANT_ID: ${USI_TEAMS_TENANT_ID:-}
+    volumes:
+      - ${USI_STATE_DIRECTORY:?Set absolute staging state directory}/core:/run/usi-core:ro
+      - ${USI_STATE_DIRECTORY}/integrations:/run/usi-integrations:ro
+      - ${USI_STATE_DIRECTORY}/trust:/run/usi-trust:ro
+    read_only: true
+    tmpfs: ["/tmp:size=256m,mode=1777"]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 1536m
+    networks: [ingress, data, egress]
+    depends_on:
+      postgres: {condition: service_healthy}
+      rabbitmq: {condition: service_healthy}
+      minio-init: {condition: service_completed_successfully}
+      clamav: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, http://127.0.0.1:8081/actuator/health]
+      interval: 10s
+      timeout: 5s
+      retries: 24
+      start_period: 60s
+    logging: *logging
+
+  postgres:
+    image: postgres:18.6@sha256:e3d24f6906d0760bf4da0dae872415391ededefad23fd471c47dc53b0ddf3c42
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: usi_staging
+      POSTGRES_USER: usi_staging
+      POSTGRES_PASSWORD_FILE: /run/db-password
+    group_add: ["10001"]
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ${USI_STATE_DIRECTORY}/core/spring.datasource.password:/run/db-password:ro
+    networks: [data]
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -q -U usi_staging -d usi_staging]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+    logging: *logging
+
+  rabbitmq:
+    image: rabbitmq:4.3.5-management@sha256:57bddb6fbc3498b5d8b5a14dc6f4506073ebcf94c66ba2a7678c335faa8dd631
+    hostname: rabbitmq
+    restart: unless-stopped
+    entrypoint: [/bin/bash, -ec]
+    command:
+      - |
+        export RABBITMQ_DEFAULT_USER=usi_staging
+        IFS= read -r RABBITMQ_DEFAULT_PASS < /run/broker-password
+        export RABBITMQ_DEFAULT_PASS
+        exec docker-entrypoint.sh rabbitmq-server
+    environment:
+      RABBITMQ_DEFAULT_VHOST: usi_staging
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ${USI_STATE_DIRECTORY}/core/spring.rabbitmq.password:/run/broker-password:ro
+    networks: [data]
+    healthcheck:
+      test: [CMD-SHELL, rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_port_connectivity]
+      interval: 10s
+      timeout: 10s
+      retries: 18
+    logging: *logging
+
+  minio:
+    image: ${USI_MINIO_IMAGE:?Set an immutable source-built MinIO digest}
+    restart: unless-stopped
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        IFS= read -r MINIO_ROOT_USER < /run/usi-core/usi.object-storage.access-key
+        IFS= read -r MINIO_ROOT_PASSWORD < /run/usi-core/usi.object-storage.secret-key
+        export MINIO_ROOT_USER MINIO_ROOT_PASSWORD
+        exec /usr/bin/minio server /data --certs-dir /run/minio-tls --console-address :9001
+    volumes:
+      - minio_data:/data
+      - ${USI_STATE_DIRECTORY}/core/usi.object-storage.access-key:/run/usi-core/usi.object-storage.access-key:ro
+      - ${USI_STATE_DIRECTORY}/core/usi.object-storage.secret-key:/run/usi-core/usi.object-storage.secret-key:ro
+      - ${USI_STATE_DIRECTORY}/minio-tls:/run/minio-tls:ro
+      - ${USI_STATE_DIRECTORY}/trust/CAs/minio-ca.crt:/run/minio-ca.crt:ro
+    networks: [data]
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --cacert, /run/minio-ca.crt, https://localhost:9000/minio/health/ready]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+    logging: *logging
+
+  minio-init:
+    image: ${USI_MC_IMAGE:?Set an immutable source-built mc digest}
+    restart: "no"
+    entrypoint: [/bin/sh, -ec]
+    command:
+      - |
+        mc alias set staging https://minio:9000 \
+          "$$(cat /run/usi-core/usi.object-storage.access-key)" "$$(cat /run/usi-core/usi.object-storage.secret-key)" >/dev/null
+        mc mb --ignore-existing staging/usi-attachments-staging staging/usi-exports-staging
+    volumes:
+      - ${USI_STATE_DIRECTORY}/core/usi.object-storage.access-key:/run/usi-core/usi.object-storage.access-key:ro
+      - ${USI_STATE_DIRECTORY}/core/usi.object-storage.secret-key:/run/usi-core/usi.object-storage.secret-key:ro
+      - ${USI_STATE_DIRECTORY}/trust/CAs:/root/.mc/certs/CAs:ro
+    networks: [data]
+    depends_on:
+      minio: {condition: service_healthy}
+    logging: *logging
+
+  clamav:
+    image: clamav/clamav:1.4@sha256:b7357e2c1c59480628839df301b0d27923561389b36cf341911e1dd9e02cdd05
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
+    networks: [data, egress]
+    mem_limit: 2048m
+    healthcheck:
+      test: [CMD, clamdcheck.sh]
+      interval: 15s
+      timeout: 10s
+      retries: 30
+      start_period: 120s
+    logging: *logging
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  minio_data:
+  clamav_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  ingress:
+    internal: true
+  data:
+    internal: true
+  egress:

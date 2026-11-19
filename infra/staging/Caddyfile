@@ -1,0 +1,26 @@
+{
+  admin off
+}
+
+{$USI_SITE_ADDRESS:application-support.duckdns.org} {
+  {$USI_TLS_DIRECTIVE}
+  encode zstd gzip
+  header {
+    X-USI-Environment staging
+    Strict-Transport-Security "max-age=31536000"
+    -Server
+  }
+  @private path /actuator /actuator/*
+  respond @private 404
+  @backend path /api /api/* /ws /ws/*
+  handle @backend {
+    header Cache-Control "no-store"
+    reverse_proxy api:8080 {
+      # Drop untrusted RFC Forwarded; Caddy supplies its own X-Forwarded-*.
+      header_up -Forwarded
+    }
+  }
+  handle {
+    reverse_proxy web:3000
+  }
+}
