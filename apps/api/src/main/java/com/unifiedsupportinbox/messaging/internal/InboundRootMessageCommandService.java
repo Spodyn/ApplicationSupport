@@ -59,7 +59,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         validateInboundCreate(command);
         if (command.mutation() != Mutation.CREATE) return mutations.apply(command);
 
-        if (command.provider() == IntegrationProvider.SLACK) {
+        if (command.provider() == IntegrationProvider.SLACK || command.provider() == IntegrationProvider.TEAMS) {
             Result existing = findSlackMessage(command);
             if (existing != null) return existing;
         }
@@ -179,9 +179,6 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         requiredText(command.correlationId(), "correlationId", 128);
 
         Objects.requireNonNull(command.mutation(), "mutation");
-        if (provider != IntegrationProvider.SLACK && provider != IntegrationProvider.TELEGRAM) {
-            throw notReady("Only Slack and Telegram inbound message mapping is active in the current phase.");
-        }
     }
 
     private static IllegalStateException notReady(String message) {

@@ -40,7 +40,7 @@ class InboundMessageMutationService {
                 JOIN channels channel ON channel.id = c.channel_id
                 WHERE c.integration_id = ? AND c.channel_id = ? AND c.provider = ?
                   AND channel.external_channel_id = ?
-                  AND m.external_message_id = ? AND m.external_thread_key = ?
+                  AND m.external_message_id = ? AND m.external_thread_key IS NOT DISTINCT FROM ?
                   AND m.kind = 'CUSTOMER' AND m.inbound = TRUE
                   AND m.author_external_id = ?
                 ORDER BY m.created_at DESC, m.id DESC
@@ -59,7 +59,7 @@ class InboundMessageMutationService {
                     """, command.body(), occurredAt, target.messageId(), occurredAt);
         } else {
             changed = jdbc.update("""
-                    UPDATE messages SET body = '', deleted_at = ?
+                    UPDATE messages SET deleted_at = ?
                     WHERE id = ? AND deleted_at IS NULL
                     """, occurredAt, target.messageId());
         }

@@ -39,6 +39,14 @@ For a feature, run `pnpm --dir apps/web exec vitest run tests/unit/inbox-api-ada
 
 The full-stack launcher whitelists process environment variables, never loads `.env`, fails on occupied ports 3190/3191, starts fresh containers, and creates a separate random user/channel for each scenario. Browser cookies belong to fresh contexts. Production Next runs behind a loopback gateway with actual HTTP/WebSocket forwarding. Backend fixtures are on the test classpath only and never shipped in the application JAR. Shutdown hooks/Testcontainers Ryuk own cleanup. The Java launcher uses temporary dummy integration secrets, never customer credentials.
 
+The multi-session full-stack server uses the production maximum of 20 datasource
+connections; ordinary unit/integration tests retain their small four-connection
+pool. Three browser sessions, realtime invalidations and durable workers must not
+inherit unit-test resource sizing. The Snooze/SLA scenario also verifies 16 concurrent
+attention reads, requiring HTTP 200 and the same SLA exclusion predicate for every
+response. This is a bounded regression, not a production throughput certification;
+connection timeouts and zero test retries remain unchanged.
+
 Ordinary provider tests use synthetic payloads and HTTP servers. Full-stack tests exercise the real Slack HTTP client, signed intake, durable workers/outbox, RabbitMQ, persistence, actual STOMP frames and real MinIO bytes. Service-worker assertions use fetches from an actively controlled browser page and verify offline API refusal while static assets remain available. The malware scanner itself is a deterministic injected boundary; this does not validate a deployed ClamAV daemon. Existing scanner/SSRF/authentication regression tests remain required. `tests/e2e` still tests isolated UI interaction with API stubs; it is not counted as full-stack coverage. Both suites have zero retries and refuse reuse of developer servers. Poll observable results; do not synchronize with arbitrary sleeps.
 
 ## Gates and coverage

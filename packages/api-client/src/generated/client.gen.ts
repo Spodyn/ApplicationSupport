@@ -109,6 +109,10 @@ export interface SetIntegrationStatusInput {
   "body": IntegrationStatusRequest
 }
 
+export interface RetryTeamsAttachmentTransfersInput {
+  "integrationId": string
+}
+
 export interface TestIntegrationConnectionInput {
   "integrationId": string
 }
@@ -392,6 +396,10 @@ export interface RetryMessageDeliveryInput {
   "Idempotency-Key": string
 }
 
+export interface ReceiveTeamsActivityInput {
+  "body": Record<string, unknown>
+}
+
 export interface ApiTelegramWebhookControllerReceiveInput {
   "X-Telegram-Bot-Api-Secret-Token"?: string
   "body": Record<string, unknown>
@@ -463,6 +471,9 @@ export function createApiClient(transport: ApiTransport) {
   apiSlackResyncControllerStart: (input: ApiSlackResyncControllerStartInput) => transport.request<ApiSlackResyncServiceSlackResyncView>({ method: "POST", path: interpolatePath("/api/v1/admin/integrations/{integrationId}/slack/resync", { "integrationId": input["integrationId"] }), body: input.body }),
   apiSlackResyncControllerGet: (input: ApiSlackResyncControllerGetInput) => transport.request<ApiSlackResyncServiceSlackResyncView>({ method: "GET", path: interpolatePath("/api/v1/admin/integrations/{integrationId}/slack/resync/{jobId}", { "integrationId": input["integrationId"], "jobId": input["jobId"] }) }),
   setIntegrationStatus: (input: SetIntegrationStatusInput) => transport.request<IntegrationView>({ method: "PATCH", path: interpolatePath("/api/v1/admin/integrations/{integrationId}/status", { "integrationId": input["integrationId"] }), body: input.body }),
+  retryTeamsAttachmentTransfers: (input: RetryTeamsAttachmentTransfersInput) => transport.request<{
+  "scheduled": number
+}>({ method: "POST", path: interpolatePath("/api/v1/admin/integrations/{integrationId}/teams/attachments/retry", { "integrationId": input["integrationId"] }) }),
   testIntegrationConnection: (input: TestIntegrationConnectionInput) => transport.request<IntegrationConnectionTestView>({ method: "POST", path: interpolatePath("/api/v1/admin/integrations/{integrationId}/test", { "integrationId": input["integrationId"] }) }),
   apiNotificationAdminControllerListDeliveries: () => transport.request<Array<ApiNotificationDeliveryView>>({ method: "GET", path: "/api/v1/admin/notifications/deliveries" }),
   apiNotificationAdminControllerReplayDelivery: (input: ApiNotificationAdminControllerReplayDeliveryInput) => transport.request<ApiNotificationDeliveryView>({ method: "POST", path: interpolatePath("/api/v1/admin/notifications/deliveries/{id}/replay", { "id": input["id"] }) }),
@@ -528,6 +539,7 @@ export function createApiClient(transport: ApiTransport) {
   markDirectConversationRead: (input: MarkDirectConversationReadInput) => transport.request<void>({ method: "PUT", path: interpolatePath("/api/v1/direct-messages/conversations/{id}/read-position", { "id": input["id"] }), body: input.body }),
   listDirectRecipients: (input: ListDirectRecipientsInput) => transport.request<DirectRecipientPage>({ method: "GET", path: "/api/v1/direct-messages/recipients", query: { "cursor": input["cursor"], "limit": input["limit"], "search": input["search"] } }),
   retryMessageDelivery: (input: RetryMessageDeliveryInput) => transport.request<SendMessageResponse>({ method: "POST", path: interpolatePath("/api/v1/messages/{messageId}/retry", { "messageId": input["messageId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] } }),
+  receiveTeamsActivity: (input: ReceiveTeamsActivityInput) => transport.request<void>({ method: "POST", path: "/api/v1/provider-callbacks/teams", body: input.body }),
   apiTelegramWebhookControllerReceive: (input: ApiTelegramWebhookControllerReceiveInput) => transport.request<void>({ method: "POST", path: "/api/v1/provider-callbacks/telegram", headers: { "X-Telegram-Bot-Api-Secret-Token": input["X-Telegram-Bot-Api-Secret-Token"] }, body: input.body }),
   apiSlackWebhookControllerEvents: (input: ApiSlackWebhookControllerEventsInput) => transport.request<Record<string, unknown>>({ method: "POST", path: "/api/v1/providers/slack/events", headers: { "X-Slack-Request-Timestamp": input["X-Slack-Request-Timestamp"], "X-Slack-Signature": input["X-Slack-Signature"] }, body: input.body }),
   apiStatisticsOverviewControllerOverview: (input: ApiStatisticsOverviewControllerOverviewInput) => transport.request<ApiStatisticsOverviewServiceOverview>({ method: "GET", path: "/api/v1/statistics/overview", query: { "from": input["from"], "to": input["to"], "provider": input["provider"], "customerId": input["customerId"] } }),

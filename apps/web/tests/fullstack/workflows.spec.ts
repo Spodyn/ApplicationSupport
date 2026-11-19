@@ -331,9 +331,9 @@ for (const visibility of ['public', 'private'] as const) {
     await inbound(page, undefined, root.ts, {
       files: [{id: deniedId, name: 'download-denied.txt'}, {id: infectedId}, {id: scanErrorId}, {id: missingScopeId}],
     })
-    await expect(panel.getByText('download-denied.txt · Nie udało się pobrać pliku ze Slacka.', {exact: true})).toBeVisible()
+    await expect(panel.getByText('download-denied.txt · Nie udało się pobrać pliku od dostawcy.', {exact: true})).toBeVisible()
     await expect(panel.getByText(/W pliku wykryto zagrożenie/)).toBeVisible()
-    await expect(panel.getByText(`${missingScopeId} · Nie udało się pobrać pliku ze Slacka.`, {exact: true})).toBeVisible()
+    await expect(panel.getByText(`${missingScopeId} · Nie udało się pobrać pliku od dostawcy.`, {exact: true})).toBeVisible()
     await expect(panel.getByText(/Nie udało się zeskanować pliku/)).toBeVisible()
     const caption = `Caption ${marker}`
     await inbound(page, caption, root.ts, {subtype: 'thread_broadcast', files: [{id: fileId}, {id: fileId}]})
@@ -736,8 +736,18 @@ test('Snooze history is personal and timezone-aware while SLA follows workflow',
     await expect.poll(async () => (await (await a.request.get(path)).json()).status).toBe('WAITING_FOR_CUSTOMER')
     const details = (tab: Page) => tab.getByRole('complementary', {name: /^(Szczegóły sprawy|Case details)$/})
     await expect(details(a).getByText('SLA · Wstrzymane', {exact: true})).toBeVisible()
-    const attention = async () => (await (await a.request.get('/api/v1/cases?slaAttention=true')).json()).items
-    expect((await attention()).some((item: {id: string}) => item.id === id)).toBe(false)
+    const attention = async () => {
+      const response=await a.request.get('/api/v1/cases?slaAttention=true')
+      expect(response.status()).toBe(200)
+      const body=await response.json()
+      expect(Array.isArray(body.items)).toBe(true)
+      return body.items as Array<{id:string}>
+    }
+    // Multiple open sessions and realtime invalidations cause concurrent list reads.
+    // Every response must remain successful and preserve the same SLA predicate.
+    for(const items of await Promise.all(Array.from({length:16},()=>attention()))) {
+      expect(items.some(item=>item.id===id)).toBe(false)
+    }
 
     expect((await command(a, `${path}/snooze`, {until: new Date(Date.now() + 60 * 60_000).toISOString()})).status()).toBe(200)
     await inbound(page, 'Customer response to Ask', root.ts)

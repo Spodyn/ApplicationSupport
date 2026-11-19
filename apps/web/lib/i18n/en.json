@@ -343,6 +343,8 @@
     "Odpowiadanie jest niedostępne w aktualnym stanie case’u.": "Replies are unavailable in the current Case state.",
     "Symulowany błąd dostarczenia wiadomości.": "Simulated message delivery failure.",
     "Wiadomość została usunięta w Slack.": "This message was deleted in Slack.",
+    "Wiadomość została usunięta.": "This message was deleted.",
+    "Usunięta wiadomość": "Deleted message",
     "Select 1 to 1000 Cases.": "Select 1 to 1000 Cases.",
     "Symulowanie błędu jest dostępne wyłącznie w trybie demonstracyjnym.": "Failure simulation is only available in demo mode.",
     "Wiadomość nie może być pusta.": "The message cannot be empty.",
@@ -383,7 +385,20 @@
     "Otwórz ustawienia integracji": "Open integration settings",
     "Odzyskaj wynik operacji zbiorczej": "Recover bulk action results",
     "Akcja jest niedostępna dla tej sprawy.": "This action is unavailable for the Case.",
-    "Wygasł czas na odzyskanie wyniku operacji zbiorczej.": "The window to recover the bulk action results has expired."
+    "Wygasł czas na odzyskanie wyniku operacji zbiorczej.": "The window to recover the bulk action results has expired.",
+    "Administrator musi nadać aplikacji Teams dostęp do magazynu plików.": "An administrator must grant the Teams app access to its file storage.",
+    "Administrator musi skonfigurować magazyn plików tego kanału Teams.": "An administrator must configure file storage for this Teams channel.",
+    "Administrator musi ponownie połączyć integrację Teams.": "An administrator must reconnect the Teams integration.",
+    "Aplikacja Teams utraciła uprawnienia do tej rozmowy.": "The Teams app no longer has permission to access this conversation.",
+    "Teams nie potwierdził wyniku wysyłki. Sprawdź wątek przed ponownym wysłaniem.": "Teams did not confirm the send result. Check the thread before sending again.",
+    "Transfer pliku Teams jest chwilowo niedostępny.": "Teams file transfer is temporarily unavailable.",
+    "Transfer pliku Teams zostanie ponowiony automatycznie.": "Teams file transfer will be retried automatically.",
+    "Nie udało się pobrać pliku od dostawcy.": "Could not download the file from the provider.",
+    "Pobieranie pliku od dostawcy…": "Downloading the file from the provider…",
+    "Ponów załączniki Teams": "Retry Teams attachments",
+    "Zaplanowano ponowienie transferu plików Teams.": "Teams file transfer retries have been scheduled.",
+    "Liczba zadań: {{count}}": "Scheduled jobs: {{count}}",
+    "Nie udało się ponowić załączników Teams.": "Could not retry Teams attachments."
   },
   "settings": {
     "Ogólne": "General",
@@ -836,6 +851,7 @@
     "Otwórz podgląd {{name}}": "Open preview for {{name}}",
     "Pobierz oryginał": "Download original",
     "Podgląd obrazu jest niedostępny.": "Image preview is unavailable.",
-    "Brakujące uprawnienie Slacka: {{scope}}": "Missing Slack scope: {{scope}}"
+    "Brakujące uprawnienie Slacka: {{scope}}": "Missing Slack scope: {{scope}}",
+    "Typ pliku nie zgadza się z jego zawartością.": "The file type does not match its contents."
   }
 }

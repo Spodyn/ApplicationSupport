@@ -252,6 +252,19 @@ class MessageDeliveryWorkerIntegrationTests {
         return jdbc.queryForObject("SELECT count(*) FROM case_next_response_cycles WHERE case_id = ?",
                 Integer.class, fixture.caseId());
     }
+    @Test void providerAcceptanceWithoutMessageIdCompletesSlaOnlyAfterDeliveryAndCannotBeCountedTwice() {
+        Fixture fixture=createFixture("ENABLED");sla.initialize(fixture.caseId(),Instant.now().minusSeconds(120));
+        UUID reply=createMessage(fixture,"asynchronous-acceptance");provider.steps(DeliveryResult.sent(null));
+        assertThat(jdbc.queryForObject("SELECT first_response_completed_at IS NULL FROM case_sla WHERE case_id=?",Boolean.class,fixture.caseId())).isTrue();
+        assertThat(worker.process(reply)).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+        var completion=jdbc.queryForObject("SELECT first_response_completed_at FROM case_sla WHERE case_id=?",java.time.OffsetDateTime.class,fixture.caseId());
+        assertThat(completion).isNotNull();
+        assertThat(jdbc.queryForObject("SELECT finished_at FROM delivery_attempts WHERE message_id=?",java.time.OffsetDateTime.class,reply)).isEqualTo(completion);
+        assertThat(worker.process(reply)).isEqualTo(MessageDeliveryWorker.AttemptResult.NOT_CLAIMED);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM delivery_attempts WHERE message_id=?",Integer.class,reply)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT first_response_completed_at FROM case_sla WHERE case_id=?",java.time.OffsetDateTime.class,fixture.caseId())).isEqualTo(completion);
+        assertThat(provider.calls()).isEqualTo(1);
+    }
 
     private UUID deliverInbound(Fixture fixture, String externalMessageId) {
         UUID channel = jdbc.queryForObject("SELECT channel_id FROM cases WHERE id = ?", UUID.class, fixture.caseId());

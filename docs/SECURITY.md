@@ -103,6 +103,14 @@ Codex/CI may work in controlled worktrees, tests and fake/sandbox providers, but
 
 ## Implementation evidence
 
+Owner authorization on 2026-11-19 permits the sandbox Teams application to use
+Graph application `Sites.Selected` with `write` only on the USISandbox SharePoint
+site. RSC message permissions remain unchanged. Assigning the site permission uses
+a separate, transient administrator session with delegated `Sites.FullControl.All`;
+that scope is never assigned to the USI application. Files outside approved storage
+fail closed. Additional sites or tenants require their own explicit consent.
+See the Teams attachment section in [INTEGRATIONS.md](INTEGRATIONS.md).
+
 The [2026-11-09 security audit](SECURITY_AUDIT_REPORT.md) records implemented
 controls, regression evidence and outstanding deployment/release checks. It does
 not replace this frozen baseline or certify production readiness. Authentication

@@ -705,6 +705,13 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
     return channels.map(mapChannel)
   },
 
+  async retryTeamsAttachments(id) {
+    const result = await browserApiTransport.request<{ scheduled: number }>({
+      method: "POST", path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/teams/attachments/retry`,
+    })
+    return result.scheduled
+  },
+
   async listCustomers() {
     return (await listCustomers()).filter((customer) => customer.active).map(({ id, name }) => ({ id, name }))
   },

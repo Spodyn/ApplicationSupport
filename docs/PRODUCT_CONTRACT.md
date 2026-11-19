@@ -138,6 +138,7 @@ Read/unread:
 - A note records the authenticated author, their display name at creation and the server timestamp. It is stored within USI and does not enter provider delivery, public previews, customer unread state, waiting transitions or FRT/NRT. The dedicated command uses the standard Case-scoped idempotency window.
 - Claim, resolve, reassign and internal provider events belong in Activity/audit, not fake chat messages.
 - Supported body formats are `PLAIN_TEXT` and `MARKDOWN`. Provider rich content is normalized to safe text/Markdown. Raw executable HTML is never canonical content.
+- Owner override, 2026-11-19: a trustworthy provider deletion marks the existing Message deleted without erasing its last accepted text, author, timestamps or attachment metadata/bytes. The feed presents a muted deleted marker alongside retained information; CLEAN attachment access remains subject to normal Case authorization. Stale edits cannot resurrect it. This does not exempt data from retention/purge or legal erasure. Previously erased text is not reconstructed automatically.
 - A send command creates a durable local Message plus transactional outbox work; the external provider call is asynchronous.
 - `SENT` means the provider accepted the message successfully and supplied its success/provider identifier where applicable.
 - `DELIVERED` is used only when the provider supplies a trustworthy delivery acknowledgement. Otherwise `SENT` is the final successful state.

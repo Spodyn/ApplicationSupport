@@ -33,6 +33,17 @@ const message: CaseMessage = {
   createdAt: listItem.createdAt, editedAt: null, deletedAt: null, authorName: "Customer", attachments: [],
 }
 
+describe("retained deleted messages", () => {
+  it("keeps the accepted text, author and clean attachment access alongside the deletion marker", () => {
+    const result = mapCaseMessage(caseId, { ...message, body: "Last accepted content", deletedAt: "2026-11-19T18:00:00Z",
+      attachments: [{ id: attachmentId, fileName: "retained.png", sizeBytes: 142, contentType: "image/png",
+        detectedContentType: "image/png", scanStatus: "CLEAN" }] })
+    expect(result).toMatchObject({ body: "Last accepted content", sender: "Customer", deleted: true })
+    expect(result.attachments?.[0]).toMatchObject({ downloadUrl: `/api/v1/cases/${caseId}/attachments/${attachmentId}`,
+      previewUrl: `/api/v1/cases/${caseId}/attachments/${attachmentId}/preview` })
+  })
+})
+
 function fixture() {
   const requests: ApiTransportRequest[] = []
   const request = vi.fn(async (input: ApiTransportRequest) => {

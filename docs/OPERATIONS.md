@@ -201,3 +201,31 @@ filename. Apply the published index migration once with Flyway out-of-order enab
 for that startup, then restore the normal setting. Never relabel the published
 index migration or reset application data. Remove any obsolete copy of the old
 filename from generated build resources before validating the new migration set.
+
+### Teams file transfer repair
+
+For each supported Teams context, configure `channels.metadata_json.teamsFiles`
+with `driveId`, `folderId` and `sharePointHosts` (exact approved SharePoint hostnames).
+An administrator first grants Graph application `Sites.Selected` to the bot and
+assigns `write` to the specifically approved site. RSC message consent alone does
+not authorize document storage. A temporary delegated administration session may
+assign the site permission; never give the bot tenant-wide file scopes.
+
+After fixing storage configuration or consent, an authorized USI administrator uses
+Settings → Integrations → Retry Teams attachments. `POST
+/api/v1/admin/integrations/{integrationId}/teams/attachments/retry` schedules only
+existing non-policy failures for that enabled Teams integration and records an audit
+event. It never imports provider history, changes Case identity or resets SLA.
+Files are unavailable until the normal scanner marks them CLEAN. A MIME mismatch
+requires a valid replacement from the sender, rather than a permission bypass.
+
+`teams_attachment_jobs` records bounded transfer attempts and sanitized failure
+codes; raw-event expiry removes the retry source after normal retention. No tokens
+or provider download URLs are stored in these job tables. `teams_outbound_files`
+checkpoints uploaded drive/item identities. HTTP 202 without a provider-assigned ID
+is recorded in `teams_outbound_acceptance`: it means Connector accepted processing,
+not that a recipient read the file. It finalizes SENT using the existing workflow/SLA
+path; a reclaimed worker skips the accepted request and all file uploads. Timeouts,
+ambiguous responses and a failed acceptance checkpoint remain
+`TEAMS_DELIVERY_UNCONFIRMED` and must not be blindly resent. Inspect the actual
+thread before any operator reconciliation; do not fabricate a Microsoft message ID.

@@ -158,7 +158,7 @@ export function mapCaseMessage(first: CaseMessage | string, second?: string | Ca
     id: message.id,
     kind: message.kind.toLowerCase() as InboxMessage["kind"],
     sender: message.authorName ?? undefined,
-    body: message.deletedAt ? "Wiadomość została usunięta w Slack." : message.body,
+    body: message.body,
     createdAt: message.providerCreatedAt ?? message.createdAt,
     edited: Boolean(message.editedAt),
     deleted: Boolean(message.deletedAt),
@@ -167,7 +167,7 @@ export function mapCaseMessage(first: CaseMessage | string, second?: string | Ca
     deliveryErrorCode: message.deliveryErrorCode ?? undefined,
     nextRetryAt: message.nextRetryAt ?? undefined,
     attachments: message.attachments.map((item) => {
-      const url = caseId && !message.deletedAt && item.scanStatus === "CLEAN"
+      const url = caseId && item.scanStatus === "CLEAN"
         ? "/api/v1/cases/" + encodeURIComponent(caseId) + "/attachments/" + encodeURIComponent(item.id)
         : undefined
       return {
@@ -179,6 +179,7 @@ export function mapCaseMessage(first: CaseMessage | string, second?: string | Ca
         failureStage: item.failureStage ?? undefined,
         processingStage: item.processingStage ?? undefined,
         requiredSlackScope: item.requiredSlackScope ?? undefined,
+        errorCode: item.errorCode ?? undefined,
         downloadUrl: url,
         previewUrl: url && inlineImageTypes.has(item.detectedContentType ?? "") ? url + "/preview" : undefined,
       }

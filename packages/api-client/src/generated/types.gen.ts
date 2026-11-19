@@ -930,6 +930,7 @@ export type MessageAttachment = {
   "failureStage"?: string | null
   "processingStage"?: string | null
   "requiredSlackScope"?: "files:read" | "files:write" | null
+  "errorCode"?: string | null
 }
 
 export type MessageBodyFormat = "PLAIN_TEXT" | "MARKDOWN"

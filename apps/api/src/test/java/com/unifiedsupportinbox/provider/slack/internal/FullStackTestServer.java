@@ -202,6 +202,9 @@ public final class FullStackTestServer {
                     "--spring.datasource.username=" + postgres.getUsername(),
                     "--spring.datasource.password=" + postgres.getPassword(),
                     "--spring.datasource.driver-class-name=" + postgres.getDriverClassName(),
+                    // This suite runs simultaneous browser sessions and durable workers.
+                    // Match the prod pool rather than the four-connection unit-test profile.
+                    "--spring.datasource.hikari.maximum-pool-size=20",
                     "--spring.flyway.enabled=true", "--spring.jpa.hibernate.ddl-auto=validate",
                     "--spring.rabbitmq.host=" + rabbit.getHost(), "--spring.rabbitmq.port=" + rabbit.getAmqpPort(),
                     "--spring.rabbitmq.username=" + rabbit.getAdminUsername(), "--spring.rabbitmq.password=" + rabbit.getAdminPassword(),
