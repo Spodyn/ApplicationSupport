@@ -45,7 +45,9 @@ runtime environment variables, repository files or logs.
 
 The reference directory contains `slack-bot-token` and `slack-signing-secret` for
 Slack, or `teams-client-secret` for Teams. Existing explicitly selected references
-are preserved. Apply nonsecret deployment configuration through the normal gated
+are preserved. A Teams draft saved before VPS setup adopts the first configured
+server tenant during discovery/test, audits that binding, and remains CONFIGURING;
+a previously configured tenant is never silently replaced. Apply nonsecret deployment configuration through the normal gated
 deployment; file-store credentials are resolved on demand. No development secrets
 are copied. `V55` adds configuration state without rewriting existing channels,
 secret references, resync controls or conversation history.

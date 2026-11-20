@@ -65,4 +65,13 @@ class TeamsDiscoveryIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT discovery_requested FROM integration_connection_settings",Boolean.class)).isTrue();
         assertThat(jdbc.queryForObject("SELECT count(*) FROM cases",Integer.class)).isZero();scan();
     }
+    @Test void draftSavedBeforeVpsSetupAdoptsOnlyTheFirstConfiguredTenantWithoutEnabling(){
+        jdbc.update("UPDATE integrations SET status='CONFIGURING',workspace_external_id='teams-unconfigured' WHERE id=?",integration);
+        scan();
+        assertThat(jdbc.queryForObject("SELECT workspace_external_id FROM integrations WHERE id=?",String.class,integration)).isEqualTo("22222222-2222-4222-8222-222222222222");
+        assertThat(jdbc.queryForObject("SELECT status FROM integrations WHERE id=?",String.class,integration)).isEqualTo("CONFIGURING");
+        connections.adoptConfiguredTeamsTenant(integration,UUID.randomUUID().toString());
+        assertThat(jdbc.queryForObject("SELECT workspace_external_id FROM integrations WHERE id=?",String.class,integration)).isEqualTo("22222222-2222-4222-8222-222222222222");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE action='TEAMS_SERVER_IDENTITY_BOUND'",Integer.class)).isEqualTo(1);
+    }
 }

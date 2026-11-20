@@ -37,6 +37,7 @@ class TeamsConnectionDiscovery implements ProviderChannelDiscovery,ProviderConne
         if(!runtime(claim.integrationId()).configured())throw new Failure("TEAMS_BOT_CONFIGURATION_MISSING",Duration.ofMinutes(1));
         var scope=connections.teamScope(claim.integrationId()).orElseThrow(()->new Failure("TEAMS_TEAM_SELECTION_REQUIRED",null));
         if(scope.defaultCustomerId()==null)throw new Failure("TEAMS_DEFAULT_CUSTOMER_REQUIRED",null);
+        connections.adoptConfiguredTeamsTenant(claim.integrationId(),tenant);
         List<DiscoveredChannel> snapshot=new ArrayList<>();
         try {
             for(var c:directory.channels(claim.integrationId(),scope.teamId())) {
@@ -53,6 +54,7 @@ class TeamsConnectionDiscovery implements ProviderChannelDiscovery,ProviderConne
     public Result test(Request request) {
         if(!runtime(request.integrationId()).configured())return new Result(Outcome.UNAVAILABLE,"TEAMS_BOT_CONFIGURATION_MISSING");
         var scope=connections.teamScope(request.integrationId());if(scope.isEmpty())return new Result(Outcome.UNAVAILABLE,"TEAMS_TEAM_SELECTION_REQUIRED");
+        connections.adoptConfiguredTeamsTenant(request.integrationId(),tenant);
         try {directory.channels(request.integrationId(),scope.get().teamId());connections.requestDiscovery(request.integrationId());return Result.success();}
         catch(Failure failure){return new Result(failure.code.contains("403")?Outcome.UNAUTHORIZED:Outcome.UNAVAILABLE,failure.code);}
         catch(ProviderAttachmentException failure){return new Result(Outcome.UNAUTHORIZED,failure.errorCode());}

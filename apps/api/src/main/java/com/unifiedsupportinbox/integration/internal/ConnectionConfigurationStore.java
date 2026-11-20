@@ -13,8 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 class ConnectionConfigurationStore implements ProviderConnectionConfiguration {
     private final JdbcTemplate jdbc;
     private final boolean legacySlackAutomatic;
-    ConnectionConfigurationStore(JdbcTemplate jdbc,@Value("${usi.slack.channel-discovery.enabled:false}") boolean legacySlackAutomatic) {
-        this.jdbc=jdbc;this.legacySlackAutomatic=legacySlackAutomatic;
+    private final com.unifiedsupportinbox.audit.AuditEventStore audit;
+    ConnectionConfigurationStore(JdbcTemplate jdbc,@Value("${usi.slack.channel-discovery.enabled:false}") boolean legacySlackAutomatic,com.unifiedsupportinbox.audit.AuditEventStore audit) {
+        this.jdbc=jdbc;this.legacySlackAutomatic=legacySlackAutomatic;this.audit=audit;
     }
     public Settings settings(UUID integration) {
         return jdbc.query("""
@@ -51,6 +52,16 @@ class ConnectionConfigurationStore implements ProviderConnectionConfiguration {
     public void verifyBotTeam(UUID integration,UUID team,String botTeam) {
         if(jdbc.update("UPDATE teams_instance_binding SET bot_team_id=?,updated_at=CURRENT_TIMESTAMP WHERE integration_id=? AND team_id=?",botTeam,integration,team)!=1)
             throw ApiProblemException.authenticationRequired();
+    }
+    @Transactional public void adoptConfiguredTeamsTenant(UUID integration,String tenant) {
+        String canonical=UUID.fromString(tenant).toString();
+        jdbc.query("SELECT integration_id FROM integration_connection_settings WHERE integration_id=? FOR UPDATE",rs->{},integration);
+        var scope=teamScope(integration);if(scope.isEmpty())return;
+        lockTeam(integration,scope.get().teamId());
+        // Only a draft saved before VPS setup may adopt the server identity. Never
+        // retarget an existing configured tenant or silently enable a connection.
+        if(jdbc.update("UPDATE integrations SET workspace_external_id=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND provider='TEAMS' AND status='CONFIGURING' AND workspace_external_id='teams-unconfigured'",canonical,integration)==1)
+            audit.append(com.unifiedsupportinbox.audit.AuditActorType.SYSTEM,null,"TEAMS_SERVER_IDENTITY_BOUND","integration",integration,null,Map.of("tenantId",canonical));
     }
     @Transactional public void lockTeam(UUID integration,UUID team) {
         if(jdbc.query("SELECT integration_id FROM teams_instance_binding WHERE integration_id=? AND team_id=? FOR SHARE",(rs,n)->rs.getObject(1,UUID.class),integration,team).isEmpty())

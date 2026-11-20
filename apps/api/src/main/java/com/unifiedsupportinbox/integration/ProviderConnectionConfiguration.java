@@ -13,6 +13,7 @@ public interface ProviderConnectionConfiguration {
     Settings configure(UUID integrationId, boolean automaticDiscovery);
     Optional<TeamScope> teamScope(UUID integrationId);
     void selectTeam(UUID integrationId, UUID teamId, UUID defaultCustomerId);
+    void adoptConfiguredTeamsTenant(UUID integrationId, String tenantId);
     void verifyBotTeam(UUID integrationId, UUID teamId, String botTeamId);
     void lockTeam(UUID integrationId, UUID teamId);
     void requestDiscovery(UUID integrationId);
