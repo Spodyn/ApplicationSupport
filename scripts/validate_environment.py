@@ -271,6 +271,8 @@ def _validate_value(
         return _validate_origin_list(name, value, profile)
     if variable_type == "non-empty":
         return None if value else f"{name} must not be empty"
+    if variable_type == "boolean":
+        return None if value in {"true", "false"} else f"{name} must be true or false"
     if variable_type == "optional-identifier":
         if value and not IDENTIFIER.fullmatch(value):
             return f"{name} contains unsupported identifier characters"

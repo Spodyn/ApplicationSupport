@@ -34,6 +34,7 @@ runtime environment variables, repository files or logs.
 
 | Setting | Meaning |
 | --- | --- |
+| `USI_JAVA_PREFER_IPV4` | Prefer IPv4 when a VPS has no usable container IPv6 route; staging defaults true |
 | `USI_PUBLIC_BASE_URL` | This instance's HTTPS origin |
 | `USI_SLACK_DEFAULT_SECRET_REF` | Default reference, e.g. `slack/staging` |
 | `USI_TEAMS_DEFAULT_SECRET_REF` | Default reference, e.g. `teams/staging` |
@@ -79,7 +80,7 @@ After selecting the team in Application Support, use Settings → Integrations �
 the Teams card → Download Teams package. The authenticated ZIP contains exactly
 `manifest.json`, `color.png` (192×192) and `outline.png` (32×32), with instance IDs
 and HTTPS URLs. It contains no secret. It uses the separately versioned
-`docs/poc/teams-onboarding/manifest.template.json`; the older development POC
+`apps/api/src/main/resources/teams/manifest.template.json`; the older development POC
 template remains historical evidence and must not be reused for this flow.
 
 In Teams: Apps → Manage your apps → Upload an app → Upload a custom app → select

@@ -220,7 +220,12 @@
     },
     "USI_SLACK_CHANNEL_DISCOVERY_ENABLED": {
       "classification": "server-non-secret",
-      "type": "non-empty",
+      "type": "boolean",
+      "requiredProfiles": []
+    },
+    "USI_JAVA_PREFER_IPV4": {
+      "classification": "server-non-secret",
+      "type": "boolean",
       "requiredProfiles": []
     }
   },

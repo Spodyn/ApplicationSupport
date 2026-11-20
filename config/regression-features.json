@@ -546,7 +546,9 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/customer/internal/CustomerIntegrationTests.java",
         "apps/web/tests/unit/provider-onboarding.test.ts",
         "apps/web/tests/e2e/application.spec.ts",
-        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDiscoveryRateLimitTests.java"
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDiscoveryRateLimitTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "scripts/tests/test_environment_contract.py"
       ],
       "gap": "Live staging end-to-end acceptance pending credentials, selected-team installation and gated deployment; tracked in PROVIDER_ONBOARDING_VALIDATION.md"
     }

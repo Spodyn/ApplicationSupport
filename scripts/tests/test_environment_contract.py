@@ -55,6 +55,21 @@ def write_core_secret_files(
 class EnvironmentContractTest(unittest.TestCase):
     contract = load_contract(DEFAULT_CONTRACT)
 
+    def test_provider_discovery_and_ipv4_switches_accept_only_boolean_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            core, integrations = Path(directory) / "core", Path(directory) / "integrations"
+            write_core_secret_files(core, self.contract)
+            integrations.mkdir()
+            values = valid_staging_environment(core, integrations)
+            for name in ("USI_SLACK_CHANNEL_DISCOVERY_ENABLED", "USI_JAVA_PREFER_IPV4"):
+                for value in ("true", "false"):
+                    values[name] = value
+                    validate_environment("api", values, contract=self.contract)
+                values[name] = "sometimes"
+                with self.assertRaises(EnvironmentValidationError):
+                    validate_environment("api", values, contract=self.contract)
+                values.pop(name)
+
     def test_checked_in_examples_are_valid_and_separated(self) -> None:
         api_environment = parse_env_file(REPOSITORY_ROOT / ".env.example")
         web_environment = parse_env_file(REPOSITORY_ROOT / "apps/web/.env.example")

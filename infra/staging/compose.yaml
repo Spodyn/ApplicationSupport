@@ -49,6 +49,7 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: staging
+      USI_JAVA_PREFER_IPV4: ${USI_JAVA_PREFER_IPV4:-true}
       USI_PUBLIC_BASE_URL: https://${USI_PUBLIC_HOST:-application-support.duckdns.org}
       USI_SLACK_CALLBACK_URL: https://${USI_PUBLIC_HOST:-application-support.duckdns.org}/api/v1/providers/slack/events
       USI_TEAMS_CALLBACK_URL: https://${USI_PUBLIC_HOST:-application-support.duckdns.org}/api/v1/provider-callbacks/teams
