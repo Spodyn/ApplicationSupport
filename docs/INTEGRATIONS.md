@@ -318,3 +318,9 @@ Provider adapters must not decide:
 - permission catalog.
 
 They normalize provider capabilities into the frozen domain contract. Unsupported vendor behavior is surfaced explicitly rather than changing the product model silently.
+
+## Owner-approved admin onboarding (2026-11-20)
+
+[Provider onboarding](PROVIDER_ONBOARDING.md) defines create/edit/test/enable, callback copy, initial/lifecycle/periodic discovery and the new selected-team Teams security boundary. New connections default automatic discovery on; a nullable migrated setting retains the legacy Slack global flag. Staging enables the legacy flag. API requests run outside database transactions; durable token leases fence snapshots, renew during long scans and resume expired manual work. Transient failures, including Retry-After cooldowns, remain queued even when periodic discovery is off. A manual refresh cannot bypass an active provider cooldown. Partial snapshots never deactivate previously known channels.
+
+New Teams packages are separate from the historical team/group-chat POC template: they install only in a team and request exactly `ChannelMessage.Read.Group` and `ChannelSettings.Read.Group`. Signed activities must prove the selected team's canonical Graph GUID before the inbox stores payloads. Group chats do not meet that condition. Standard channels alone are discovered; customer/ignored settings on known identities are retained.

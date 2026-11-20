@@ -34,6 +34,7 @@ class TeamsInboxIntegrationTests {
     @org.springframework.test.context.bean.override.mockito.MockitoBean TeamsFilesHttpClient files;
     @org.springframework.test.context.bean.override.mockito.MockitoBean com.unifiedsupportinbox.storage.AttachmentObjectStorage objects;
     @org.springframework.test.context.bean.override.mockito.MockitoBean com.unifiedsupportinbox.storage.AttachmentSecurityService scanner;
+    static final String TEAM="11111111-1111-4111-8111-111111111111";
     UUID integration, channel;
 
     @DynamicPropertySource static void infrastructure(DynamicPropertyRegistry registry) {
@@ -55,6 +56,7 @@ class TeamsInboxIntegrationTests {
         jdbc.update("UPDATE integrations SET created_at='2026-11-19T00:00:00Z' WHERE id=?",integration);
         jdbc.update("UPDATE integrations SET secret_ref='synthetic/teams' WHERE id=?",integration);
         UUID customer = jdbc.queryForObject("INSERT INTO customers(name,external_ref) VALUES ('Synthetic customer','teams-test') RETURNING id", UUID.class);
+        jdbc.update("INSERT INTO teams_instance_binding(integration_id,team_id,default_customer_id) VALUES (?,?::uuid,?)",integration,TEAM,customer);
         channel = jdbc.queryForObject("INSERT INTO channels(integration_id,external_channel_id,name,customer_id,grouping_strategy,active) VALUES (?,'conversation','support',?,'TEAMS_ROOT_REPLIES',TRUE) RETURNING id", UUID.class, integration, customer);
         jdbc.update("UPDATE channels SET metadata_json='{\"teamsContextType\":\"standardChannel\"}'::jsonb WHERE id=?",channel);
     }
@@ -87,7 +89,7 @@ class TeamsInboxIntegrationTests {
                 Instant.now(), "teams-test");
     }
     String activity(String id,String thread,String conversationType) {
-        return "{\"id\":\""+id+"\",\"type\":\"message\",\"timestamp\":\"2026-11-19T12:00:00Z\",\"channelId\":\"msteams\",\"serviceUrl\":\"https://smba.trafficmanager.net/emea/\",\"from\":{\"id\":\"human\"},\"recipient\":{\"id\":\"28:bot\"},\"conversation\":{\"id\":\"conversation\",\"conversationType\":\""+conversationType+"\"},\"channelData\":{\"channel\":{\"id\":\"conversation\"}},\"text\":\"ordinary without mention\""+(thread==null ? "" : ",\"replyToId\":\""+thread+"\"")+"}";
+        return "{\"id\":\""+id+"\",\"type\":\"message\",\"timestamp\":\"2026-11-19T12:00:00Z\",\"channelId\":\"msteams\",\"serviceUrl\":\"https://smba.trafficmanager.net/emea/\",\"from\":{\"id\":\"human\"},\"recipient\":{\"id\":\"28:bot\"},\"conversation\":{\"id\":\"conversation\",\"conversationType\":\""+conversationType+"\"},\"channelData\":{\"team\":{\"aadGroupId\":\""+TEAM+"\"},\"channel\":{\"id\":\"conversation\"}},\"text\":\"ordinary without mention\""+(thread==null ? "" : ",\"replyToId\":\""+thread+"\"")+"}";
     }
     @Test void durableWorkerProcessesRootAndReplyOnceAndSavesExactConnectorThreadRoute() {
         var first=deliveries.persistAndWake(integration,"root",activity("root",null,"channel"),"correlation-1");

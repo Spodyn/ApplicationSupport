@@ -527,6 +527,10 @@ decisions:
     source: [OWNER_REQUEST_2026_11_20_SLACK_TEAMS_RESYNC]
     rule: Slack and Teams recovery is opt-in per integration, disabled for existing integrations; manual from-date or all API-accessible history and independent durable automatic interval/lookback scheduling replace the former Slack seven-day recovery limit. Recover replies to older roots. Use existing channel authorization, mapping, Case, unread and attachment rules; provider message identity deduplicates webhook and resync. Persist manual/automatic provenance, sent time and addition time. Both modes start new applicable FRT/NRT at durable Case-message insertion, preserving existing cycles and normal-message provenance.
 
+  - id: DEC-PROVIDER-ADMIN-ONBOARDING-001
+    source: [OWNER_REQUEST_2026_11_20_PROVIDER_ADMIN_ONBOARDING]
+    rule: Administrators configure Slack and Teams connections in Settings using server-only credential references and instance-specific callbacks. New connections enable automatic channel discovery; existing settings and channel mappings/ignored flags survive upgrades. One Teams team per instance is selected by canonical Graph groupId, verified against authenticated bot team identity before activity persistence. New team-only installation packages request ChannelMessage.Read.Group and ChannelSettings.Read.Group; tenant-only or group-chat events cannot satisfy the selected-team boundary. Historical records and the earlier development package remain intact. Initial, lifecycle-triggered and periodic reconciliation discover only selected standard channels and assign the default customer to new channels. Durable retries preserve first-message intake and discovery ownership across restarts.
+
 technical_resolutions:
   - id: TECH-TEAMS-SELECTED-FILES-001
     source: [OWNER_REQUEST_2026_11_19_TEAMS_AUDIT, OWNER_APPROVAL_2026_11_19_TEAMS_SITE_WRITE]

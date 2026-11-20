@@ -130,6 +130,12 @@ class ApiSurfaceIntegrationTests {
         for (var route : routes) {
             if (!route.method().equals("GET") || route.path().contains("{")) continue;
             var response = client.send(HttpRequest.newBuilder(origin.resolve(route.path())).GET().build(), HttpResponse.BodyHandlers.ofString());
+            if(route.path().equals("/api/v1/admin/integrations/teams/package")) {
+                // No live bot credentials in CI. Configured ZIP contents are covered by onboarding tests.
+                assertThat(response.statusCode()).isEqualTo(400);
+                assertThat(JSON.readTree(response.body()).path("code").asText()).isEqualTo("VALIDATION_FAILED");
+                continue;
+            }
             assertThat(response.statusCode()).as("Successful read %s: %s", route.path(), response.body()).isEqualTo(200);
             var schema = contract.path("paths").path(route.path()).path("get").path("responses").path("200").path("content").path("application/json").path("schema");
             assertShape(JSON.readTree(response.body()), schema, contract, route.path()); reads++;

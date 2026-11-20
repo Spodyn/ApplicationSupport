@@ -122,6 +122,16 @@ class CustomerIntegrationTests {
         assertThat(duplicateRef.body()).contains("\"code\":\"CONFLICT\"");
     }
 
+    @Test void defaultCustomerCanBeCreatedAndEditedWithoutAnOptionalExternalReference() throws Exception {
+        createUser("admin@example.com","ADMIN");var cookies=login("admin@example.com");
+        var created=mutate(cookies,"POST","/api/v1/admin/customers","{\"name\":\"Teams Sandbox\"}");
+        assertThat(created.statusCode()).isEqualTo(201);
+        String id=jsonString(created.body(),"id");
+        var updated=mutate(cookies,"PUT","/api/v1/admin/customers/"+id,"{\"name\":\"Teams Sandbox Updated\",\"externalRef\":null}");
+        assertThat(updated.statusCode()).isEqualTo(200);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM audit_events WHERE entity_id=? AND action IN ('CUSTOMER_CREATED','CUSTOMER_UPDATED')",Integer.class,UUID.fromString(id))).isEqualTo(2);
+    }
+
     @Test
     void customerAdminRoutesRequireAuthenticationAndAdminRole() throws Exception {
         CookieManager anonymous = new CookieManager(null, CookiePolicy.ACCEPT_ALL);

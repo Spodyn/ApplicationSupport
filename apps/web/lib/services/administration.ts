@@ -45,6 +45,8 @@ export interface CredentialActionToken {
 }
 
 export interface AdministrationSettingsRepository {
+  getProviderSetup(): Promise<import("@/lib/domain/administration").ProviderRuntimeSetup[]>
+  setAutomaticDiscovery(id: string, automatic: boolean): Promise<void>
   getResync(id: string): Promise<import("@/lib/domain/administration").IntegrationResyncView>
   saveResync(id: string, settings: import("@/lib/domain/administration").IntegrationResyncSettings): Promise<import("@/lib/domain/administration").IntegrationResyncSettings>
   startResync(id: string, mode: "from_date" | "all_history", from?: string): Promise<{ id: string }>
@@ -215,6 +217,8 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
 
 const mockResync = new Map<string, import("@/lib/domain/administration").IntegrationResyncSettings>()
 export const mockAdministrationSettingsRepository: AdministrationSettingsRepository = {
+  async getProviderSetup() { return ["slack", "teams"].map((platform) => ({ platform: platform as "slack" | "teams", callbackUrl: `https://example.invalid/api/v1/${platform === "slack" ? "providers/slack/events" : "provider-callbacks/teams"}`, botConfigured: false })) },
+  async setAutomaticDiscovery(id, automatic) { requireCurrentAdministrationPermission("manage_integrations"); const integration = settingsState.integrations.find((i) => i.id === id); if (integration) integration.automaticDiscovery = automatic },
   async getResync(id) { return { settings: mockResync.get(id) ?? { enabled: false, automatic: false, intervalMinutes: 30, lookbackMinutes: 2880 }, runs: [] } },
   async saveResync(id, settings) { requireCurrentAdministrationPermission("manage_integrations"); mockResync.set(id, settings); return settings },
   async startResync() { throw new Error(t("Resync jest dostępny wyłącznie przez API.")) },
@@ -260,6 +264,9 @@ export const mockAdministrationSettingsRepository: AdministrationSettingsReposit
       hasSecretReference: true,
       health: "unknown",
     }
+    configured.teamId = input.team
+    configured.defaultCustomerId = input.defaultCustomerId
+    configured.automaticDiscovery = input.automaticDiscovery ?? true
     configured.displayName = input.displayName
     configured.workspace = input.workspaceName
     configured.workspaceId = input.workspaceId

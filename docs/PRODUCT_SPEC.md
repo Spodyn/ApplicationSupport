@@ -214,3 +214,7 @@ Direct Messages offers a separate desktop and mobile workspace, a searchable act
 ## History recovery extension (owner request 2026-11-20)
 
 Settings → Integrations provides optional Slack/Teams history recovery with independent manual range and automatic interval/window controls. All-history imports available API pages only when explicitly requested. Existing installations remain opted out. Recovered Messages use existing Case/unread/attachment processing and carry permanent provenance; new response SLA cycles start at durable addition. See [contract](PRODUCT_CONTRACT.md#owner-approved-history-recovery-2026-11-20) and [operations](HISTORY_RECOVERY.md).
+
+## Provider onboarding owner extension (2026-11-20)
+
+The Integrations panel configures Slack and Teams using instance callbacks and server-held secrets, with readiness and per-connection automatic discovery. Teams selects one team and a default customer; standard channels are discovered automatically. The selected Graph team identity is checked before inbound storage. Existing channel mappings and monitoring choices are preserved. See [Product Contract](PRODUCT_CONTRACT.md#owner-approved-provider-onboarding-2026-11-20) and [provider onboarding](PROVIDER_ONBOARDING.md).

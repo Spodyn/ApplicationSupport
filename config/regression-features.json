@@ -527,6 +527,27 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/HttpSlackHistoryClientTests.java"
       ],
       "gap": "Real Slack/Teams resync sandbox acceptance NOT RUN; no live credentials or tenant permission changes performed"
+    },
+    {
+      "id": "PROVIDER_ONBOARDING",
+      "feature": "Admin Slack/Teams connection setup and channel discovery",
+      "status": "PARTIALLY_IMPLEMENTED",
+      "risk": "HIGH",
+      "expected": "Per-instance server secrets/callbacks; selected Teams team checked before persistence; durable paginated discovery; first-message retry; mapping/monitoring preservation; protected team-only RSC package",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/ConnectionOnboardingIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/TeamIdentifierTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDiscoveryIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsDiscoveryIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsDirectoryClientTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsTeamMembershipTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsWebhookIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/customer/internal/CustomerIntegrationTests.java",
+        "apps/web/tests/unit/provider-onboarding.test.ts",
+        "apps/web/tests/e2e/application.spec.ts"
+      ],
+      "gap": "Live staging end-to-end acceptance pending credentials, selected-team installation and gated deployment; tracked in PROVIDER_ONBOARDING_VALIDATION.md"
     }
   ]
 }

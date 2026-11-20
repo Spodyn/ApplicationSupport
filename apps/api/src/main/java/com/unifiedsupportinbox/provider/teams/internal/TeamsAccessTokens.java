@@ -21,7 +21,11 @@ class TeamsAccessTokens {
         this.integrations=integrations;this.secrets=secrets;this.connector=connector;this.client=client;this.tenant=tenant;
     }
     String token(UUID integration, String scope) {
-        var credential=integrations.findEnabledForProvider(IntegrationProvider.TEAMS).stream()
+        return token(integration,scope,true);
+    }
+    String configurationToken(UUID integration,String scope) {return token(integration,scope,false);}
+    private String token(UUID integration,String scope,boolean enabledOnly) {
+        var credential=(enabledOnly?integrations.findEnabledForProvider(IntegrationProvider.TEAMS):integrations.findForProvider(IntegrationProvider.TEAMS)).stream()
                 .filter(i->integration.equals(i.integrationId()) && tenant.equals(i.workspaceExternalId())).findFirst()
                 .orElseThrow(()->ProviderAttachmentException.authentication("TEAMS_AUTH_FAILED"));
         byte[] secret=secrets.resolve(credential.secretRef(),"teams-client-secret")

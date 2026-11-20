@@ -233,3 +233,7 @@ thread before any operator reconciliation; do not fabricate a Microsoft message 
 ## Slack and Teams recovery
 
 Use Settings → Integrations → Message recovery (resync). Enable and save before running manual from-date/all-history recovery; enable Automatic resync with an interval and history window for backend scheduling. Defaults are 30 minutes / 2880 minutes (two days), disabled. Read per-channel results and pending ingestion separately; permission/configuration failures are incomplete recovery, not success. Schedules, cursors, thread tasks and retry deadlines survive process restarts. See [setup, permissions and validation](HISTORY_RECOVERY.md).
+
+## Admin provider onboarding
+
+Use [PROVIDER_ONBOARDING.md](PROVIDER_ONBOARDING.md) for per-instance bot setup, protected secret filenames, Teams RSC consent and acceptance. Automatic channel reconciliation is a PostgreSQL-backed worker; restarting the API does not reset due requests or provider cooldowns. Check Settings → Integrations for last/next discovery, discovered count and sanitized failure reason. Manual refresh is queued and respects Retry-After. No provider HTTP request holds a database transaction.

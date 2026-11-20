@@ -15,6 +15,9 @@ import tools.jackson.databind.node.ObjectNode;
 
 @Component
 class TeamsHistoryRecoveryAdapter implements HistoryRecoveryAdapter {
+    private com.unifiedsupportinbox.integration.ProviderConnectionConfiguration connections;
+    @org.springframework.beans.factory.annotation.Autowired
+    void connectionConfiguration(com.unifiedsupportinbox.integration.ProviderConnectionConfiguration connections){this.connections=connections;}
     private final TeamsAccessTokens tokens;
     private final TeamsInboundDeliveryService inbound;
     private final JdbcTemplate jdbc;
@@ -32,6 +35,10 @@ class TeamsHistoryRecoveryAdapter implements HistoryRecoveryAdapter {
     public Page fetch(Task task) {
         String context=task.metadata().path("teamsContextType").asText("");
         if(!Set.of("standardChannel","groupChat").contains(context))throw new Unavailable("TEAMS_UNSUPPORTED_HISTORY_CONTEXT",null);
+        if(connections!=null) {
+            var scope=connections.teamScope(task.integrationId()).orElseThrow(()->new Unavailable("TEAMS_TEAM_SELECTION_REQUIRED",null));
+            if(!context.equals("standardChannel") || !scope.teamId().toString().equals(team(task)))throw new Unavailable("TEAMS_TEAM_NOT_SELECTED",null);
+        }
         String path=basePath(task,context);
         if(!task.thread().isEmpty())path+="/"+enc(task.thread())+"/replies";
         URI target=task.cursor()==null?origin.resolve(path+"?$top=50"):URI.create(task.cursor());

@@ -235,3 +235,7 @@ Internal Direct Messages use dedicated Messaging tables and a recipient-scoped S
 ## Durable provider history recovery
 
 `HistoryRecoveryWorker` claims PostgreSQL tasks with `FOR UPDATE SKIP LOCKED` and a per-claim fencing token. Each claim reads one provider page outside the transaction, then atomically writes durable inbound deliveries, provenance, discovered thread tasks and the continuation checkpoint. The normal inbound processor owns Case/Message/unread/SLA and attachment enrichment; no parallel workflow implementation exists. Settings and schedule deadlines live in PostgreSQL; overdue schedules use current time/window, and unfinished scans retain their original range. Inbound event recovery metadata is server-owned and never accepted from webhook JSON. See [HISTORY_RECOVERY.md](HISTORY_RECOVERY.md).
+
+## Durable provider connection discovery
+
+Integration-owned ports define connection configuration, runtime readiness and discovery claims. Provider adapters implement them without an integration-to-provider module dependency. PostgreSQL stores per-integration discovery settings, cooldowns and leased requests; SKIP LOCKED claims and conditional lease tokens fence stale snapshots. A singleton Teams binding protects the selected team. Channel snapshot publication preserves customer/ignored settings and merges provider metadata. Webhooks and discovery share the normal durable inbox/message/attachment/SLA pipeline. See [provider onboarding](PROVIDER_ONBOARDING.md).

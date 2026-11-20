@@ -41,7 +41,8 @@ class SlackChannelDiscoveryService {
         this.objectMapper = objectMapper;
     }
 
-    synchronized List<ChannelView> discover(UUID integrationId) {
+    synchronized List<ChannelView> discover(UUID integrationId) { return discover(integrationId,null); }
+    synchronized List<ChannelView> discover(UUID integrationId,com.unifiedsupportinbox.integration.ProviderConnectionConfiguration.Claim claim) {
         CredentialReference integration = integrations.findForProvider(IntegrationProvider.SLACK).stream()
                 .filter(reference -> reference.integrationId().equals(integrationId))
                 .findFirst()
@@ -66,10 +67,12 @@ class SlackChannelDiscoveryService {
                         .forEach(discovered::add);
                 cursor = response.nextCursor();
                 if (cursor == null || cursor.isBlank()) {
-                    return channels.replace(integrationId, discovered);
+                    return claim==null?channels.replace(integrationId, discovered):channels.replaceClaim(claim,null,discovered);
                 }
             }
             throw ApiProblemException.conflict("Slack channel discovery exceeded the pagination safety limit.");
+        } catch (com.unifiedsupportinbox.integration.ProviderChannelDiscovery.Failure failure) {
+            throw failure;
         } catch (ApiProblemException exception) {
             throw exception;
         } catch (RuntimeException exception) {

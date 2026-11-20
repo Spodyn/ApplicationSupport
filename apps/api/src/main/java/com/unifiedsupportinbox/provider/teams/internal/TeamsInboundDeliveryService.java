@@ -10,6 +10,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 class TeamsInboundDeliveryService {
     static final String OUTBOX_TYPE="teams.inbound.received";
+    private com.unifiedsupportinbox.integration.ProviderConnectionConfiguration connections;
+    @org.springframework.beans.factory.annotation.Autowired
+    void connectionConfiguration(com.unifiedsupportinbox.integration.ProviderConnectionConfiguration connections){this.connections=connections;}
+    @Transactional InboundEvent persistTeamAndWake(UUID integration,UUID team,String key,String payload,String correlation) {
+        connections.lockTeam(integration,team);return persistAndWake(integration,key,payload,correlation);
+    }
     private final InboundEventStore events;
     private final OutboxEventStore outbox;
     private final com.unifiedsupportinbox.integration.IntegrationHealthReporter health;

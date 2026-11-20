@@ -92,6 +92,15 @@ export type IntegrationStatus = "configuring" | "enabled" | "disabled"
 export type IntegrationHealth = "unknown" | "healthy" | "degraded" | "unavailable"
 
 export interface ManagedIntegration {
+  automaticDiscovery?: boolean
+  callbackUrl?: string
+  connectionState?: string
+  botConfigured?: boolean
+  teamId?: string
+  defaultCustomerId?: string
+  lastDiscoveredAt?: string
+  discoveryErrorCode?: string
+  discoveredChannels?: number
   id: string
   platform: Channel
   displayName: string
@@ -137,6 +146,9 @@ export interface ManagedCustomer {
 }
 
 export interface IntegrationConfigurationInput {
+  team?: string
+  defaultCustomerId?: string
+  automaticDiscovery?: boolean
   id?: string
   platform: Channel
   displayName: string
@@ -233,4 +245,25 @@ export interface IntegrationResyncView {
     createdAt: string
     channels: Array<{ channelId: string; channelName: string; status: string; scanned: number; added: number; pending: number; errorCode?: string | null }>
   }>
+}
+
+export interface ProviderRuntimeSetup {
+  platform: "slack" | "teams"
+  callbackUrl: string
+  botConfigured: boolean
+  clientId?: string
+  packageUrl?: string
+}
+export interface ConnectionOnboarding {
+  integrationId: string
+  automaticDiscovery: boolean
+  state: string
+  callbackUrl: string
+  botConfigured: boolean
+  teamId?: string | null
+  defaultCustomerId?: string | null
+  lastDiscoveredAt?: string | null
+  nextDiscoveryAt?: string | null
+  errorCode?: string | null
+  discoveredChannels: number
 }

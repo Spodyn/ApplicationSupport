@@ -110,7 +110,12 @@ class HttpSlackAdministrationApiClient implements SlackAdministrationApiClient {
             HttpRequest request = builder
                     .header("Authorization", new String(authorization, StandardCharsets.US_ASCII))
                     .build();
-            return httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            var response=httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if(response.statusCode()==429||response.statusCode()>=500) {
+                long seconds=response.headers().firstValue("Retry-After").map(v->{try{return Long.parseLong(v);}catch(NumberFormatException e){return 30L;}}).orElse(30L);
+                throw new com.unifiedsupportinbox.integration.ProviderChannelDiscovery.Failure("SLACK_DISCOVERY_HTTP_"+response.statusCode(),Duration.ofSeconds(Math.max(1,Math.min(86400,seconds))));
+            }
+            return response;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Slack administration API call was interrupted.", exception);

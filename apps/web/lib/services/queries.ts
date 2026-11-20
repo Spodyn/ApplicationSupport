@@ -339,6 +339,7 @@ export function useAdministrationSettings() {
   return useQuery({
     queryKey: queryKeys.administrationSettings(),
     queryFn: () => serviceRegistry.administrationSettings.get(),
+    refetchInterval: 5000,
   })
 }
 
@@ -371,6 +372,10 @@ export function useAdministrationSettingsActions() {
   })
   const discoverChannels = useMutation({
     mutationFn: (id: string) => serviceRegistry.administrationSettings.discoverChannels(id),
+    onSuccess: invalidate,
+  })
+  const setAutomaticDiscovery = useMutation({
+    mutationFn: ({ id, automatic }: { id: string; automatic: boolean }) => serviceRegistry.administrationSettings.setAutomaticDiscovery(id, automatic),
     onSuccess: invalidate,
   })
   const retryTeamsAttachments = useMutation({
@@ -408,6 +413,7 @@ export function useAdministrationSettingsActions() {
     testIntegration,
     discoverChannels,
     retryTeamsAttachments,
+    setAutomaticDiscovery,
     configureChannel,
     saveCustomer,
     deactivateCustomer,
@@ -456,4 +462,8 @@ export function useIntegrationResyncActions(id: string) {
   const save = useMutation({ mutationFn: (settings: import("@/lib/domain/administration").IntegrationResyncSettings) => serviceRegistry.administrationSettings.saveResync(id, settings), onSuccess: invalidate })
   const start = useMutation({ mutationFn: (input: { mode: "from_date" | "all_history"; from?: string }) => serviceRegistry.administrationSettings.startResync(id, input.mode, input.from), onSuccess: invalidate })
   return { save, start }
+}
+
+export function useProviderSetup() {
+  return useQuery({ queryKey: ["administration", "provider-setup"], queryFn: () => serviceRegistry.administrationSettings.getProviderSetup(), refetchInterval: 10000 })
 }
