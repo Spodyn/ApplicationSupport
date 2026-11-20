@@ -9,6 +9,7 @@ class TeamIdentifierTests {
     String team="11111111-1111-4111-8111-111111111111",tenant="22222222-2222-4222-8222-222222222222";
     @Test void extractsGraphGroupGuidRatherThanBotThreadIdAndChecksTheTenant() {
         assertThat(TeamIdentifier.parse(team,tenant)).isEqualTo(UUID.fromString(team));
+        assertThat(TeamIdentifier.parse("https://teams.cloud.microsoft/l/team/19%3Aopaque%40thread.tacv2/conversations?groupId="+team,tenant)).isEqualTo(UUID.fromString(team));
         assertThat(TeamIdentifier.parse("https://teams.microsoft.com/l/team/19%3Aopaque%40thread.tacv2/conversations?groupId="+team+"&tenantId="+tenant,tenant)).isEqualTo(UUID.fromString(team));
         assertThatThrownBy(()->TeamIdentifier.parse("https://teams.microsoft.com/l/team/thread/conversations?groupId="+team+"&tenantId="+team,tenant)).isInstanceOf(ApiProblemException.class);
     }

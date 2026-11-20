@@ -337,7 +337,7 @@ class IntegrationIntegrationTests {
     void testConnectionUpdatesOnlySanitizedHealthAndPreservesLastEvent() throws Exception {
         Instant eventAt = Instant.parse("2026-09-24T20:00:00Z");
         IntegrationRecord integration = integrations.create(
-                IntegrationProvider.TEAMS, "Acme Teams", IntegrationStatus.ENABLED, IntegrationHealth.UNKNOWN,
+                IntegrationProvider.TELEGRAM, "Acme Telegram", IntegrationStatus.ENABLED, IntegrationHealth.UNKNOWN,
                 "T123", "Acme", "test-secret", "{}");
         integrations.updateHealth(integration.id(), IntegrationHealth.DEGRADED, eventAt, "OLD_ERROR");
         createUser("admin@example.com", "ADMIN");
