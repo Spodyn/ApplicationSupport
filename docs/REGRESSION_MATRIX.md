@@ -1,5 +1,12 @@
 # Feature-to-regression traceability
 
+STAGING deployment traceability: [test_staging_deployment.py](../scripts/tests/test_staging_deployment.py)
+checks exact-main CI/image/SSH/archive boundaries and private persistent Compose;
+[test_compose.py](../infra/staging/test_compose.py) and [smoke.py](../infra/staging/smoke.py)
+exercise real staging images, TLS, login/API/STOMP, one-time bootstrap and restart
+persistence. Public VPS/ACME acceptance waits for merge; load/HA/off-host DR are not
+claimed. The machine inventory records this as PARTIALLY_IMPLEMENTED, HIGH risk.
+
 Baseline: security PR #147 exact HEAD 1791527. Separate stacked branch/worktree. Implementation status describes this baseline; partial rows name absent production behavior in the gap column. File presence is traceability, not proof that every scenario passes.
 
 | Feature / implementation | Expected behavior | Existing/new tests | Missing coverage / limit | Risk | Required test level |

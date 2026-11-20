@@ -30,7 +30,7 @@ export async function generateMetadata(): Promise<Metadata> {
   const origin = `${protocol}://${host}`
 
   return {
-    title: 'Unified Support Inbox',
+    title: process.env.USI_DEPLOYMENT_PROFILE === 'staging' ? 'STAGING — Unified Support Inbox' : 'Unified Support Inbox',
     description: t(description),
     applicationName: 'Unified Support Inbox',
     manifest: `/pwa/manifest/${selectedLanguage}`,
@@ -81,6 +81,7 @@ export default async function RootLayout({
   return (
     <html lang={initialLanguage} suppressHydrationWarning className="bg-background">
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
+        {process.env.USI_DEPLOYMENT_PROFILE === 'staging' && <div role="status" className="fixed bottom-2 right-2 z-[100] rounded bg-amber-300 px-2 py-1 text-xs font-semibold text-black">STAGING</div>}
         <Providers nonce={nonce} initialLanguage={initialLanguage}>
           <AppShell>{children}</AppShell>
         </Providers>

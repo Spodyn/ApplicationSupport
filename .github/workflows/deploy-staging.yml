@@ -1,0 +1,121 @@
+name: Deploy staging
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: >-
+      github.repository == 'Spodyn/ApplicationSupport' &&
+      ((github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+       (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.event == 'push' && github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      actions: read
+      packages: write
+    outputs:
+      release: ${{ steps.release.outputs.json }}
+      sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - name: Checkout trusted main only
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Require exact main SHA and all eight successful CI jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python3 infra/staging/check_ci.py "$EXPECTED_SHA"
+      - name: Build and push immutable images
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          USI_RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: bash infra/staging/build-images.sh
+      - name: Pass only non-secret immutable release metadata
+        id: release
+        run: |
+          echo "json=$(cat release.json)" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: staging
+      url: https://application-support.duckdns.org
+    permissions:
+      contents: read
+      actions: read
+      packages: read
+    steps:
+      - name: Checkout trusted main only
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Recheck gates and install WireGuard tools
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+          python3 infra/staging/check_ci.py "$EXPECTED_SHA"
+          sudo apt-get update -qq
+          sudo apt-get install -y wireguard-tools iproute2
+      - name: Connect restricted VPN and SSH
+        env:
+          WG_PRIVATE_KEY: ${{ secrets.STAGING_WG_PRIVATE_KEY }}
+          WG_SERVER_PUBLIC_KEY: ${{ secrets.STAGING_WG_SERVER_PUBLIC_KEY }}
+          SSH_PRIVATE_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          test -n "$WG_PRIVATE_KEY" && test -n "$WG_SERVER_PUBLIC_KEY"
+          test -n "$SSH_PRIVATE_KEY" && test -n "$SSH_KNOWN_HOSTS"
+          mkdir -p "$RUNNER_TEMP/usi-ssh"
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/usi-ssh/id_ed25519"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/usi-ssh/known_hosts"
+          {
+            printf '[Interface]\nAddress = 10.77.0.2/32\nPrivateKey = %s\n\n' "$WG_PRIVATE_KEY"
+            printf '[Peer]\nPublicKey = %s\nEndpoint = 158.220.75.88:51820\nAllowedIPs = 10.77.0.1/32\nPersistentKeepalive = 25\n' "$WG_SERVER_PUBLIC_KEY"
+          } > "$RUNNER_TEMP/usi-actions.conf"
+          sudo wg-quick up "$RUNNER_TEMP/usi-actions.conf"
+          ssh -i "$RUNNER_TEMP/usi-ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/usi-ssh/known_hosts" \
+            -o ConnectTimeout=20 usi-deploy@10.77.0.1 check
+      - name: Deploy verified release through the forced command
+        env:
+          RELEASE_JSON: ${{ needs.build.outputs.release }}
+          REGISTRY_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ needs.build.outputs.sha }}
+        run: |
+          python3 - <<'PY' | ssh -i "$RUNNER_TEMP/usi-ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/usi-ssh/known_hosts" usi-deploy@10.77.0.1 "deploy $EXPECTED_SHA"
+          import json,os
+          release=json.loads(os.environ['RELEASE_JSON'])
+          release.update(registryToken=os.environ['REGISTRY_TOKEN'],registryUser=os.environ['GITHUB_ACTOR'])
+          print(json.dumps(release))
+          PY
+      - name: Remove ephemeral VPN and SSH material
+        if: always()
+        run: |
+          if test -f "$RUNNER_TEMP/usi-actions.conf"; then sudo wg-quick down "$RUNNER_TEMP/usi-actions.conf" || true; fi
+          rm -f "$RUNNER_TEMP/usi-actions.conf" "$RUNNER_TEMP/usi-ssh/id_ed25519" "$RUNNER_TEMP/usi-ssh/known_hosts"
