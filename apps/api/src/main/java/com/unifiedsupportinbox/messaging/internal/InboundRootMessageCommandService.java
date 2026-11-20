@@ -64,6 +64,13 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
             if (existing != null) return existing;
         }
 
+        var recovery = jdbc.query("""
+                SELECT r.source,e.resync_task_id FROM inbound_events e
+                JOIN integration_resync_tasks t ON t.id=e.resync_task_id
+                JOIN integration_resync_runs r ON r.id=t.run_id WHERE e.id=?
+                """, (rs,n) -> new Recovery(rs.getString(1),rs.getObject(2,UUID.class)),command.inboundEventId())
+                .stream().findFirst().orElse(null);
+
         CaseCreationService.Result caseResult = cases.create(new CaseCreationService.Command(
                 command.inboundEventId(),
                 command.integrationId(),
@@ -71,7 +78,7 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                 command.provider(),
                 command.externalChannelId(),
                 command.externalThreadKey(),
-                command.correlationId(), command.providerOccurredAt()));
+                command.correlationId(), recovery == null ? command.providerOccurredAt() : null));
 
         List<PersistedMessage> insertedMessages = jdbc.query("""
                 INSERT INTO messages (
@@ -88,14 +95,14 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                     delivery_status,
                     provider_created_at,
                     created_at,
-                    correlation_id
+                    correlation_id, recovery_source, resync_task_id
                 )
-                VALUES (?, ?, ?, 'CUSTOMER', NULL, ?, ?, ?, 'PLAIN_TEXT', TRUE, NULL, ?, statement_timestamp(), ?)
+                VALUES (?, ?, ?, 'CUSTOMER', NULL, ?, ?, ?, 'PLAIN_TEXT', TRUE, NULL, ?, %s, ?, ?, ?)
                 ON CONFLICT (case_id, external_message_id)
                     WHERE external_message_id IS NOT NULL
                 DO NOTHING
                 RETURNING id, created_at
-                """,
+                """.formatted(recovery == null ? "statement_timestamp()" : "transaction_timestamp()"),
                 preparedStatement -> {
                     preparedStatement.setObject(1, caseResult.caseId());
                     preparedStatement.setString(2, command.externalMessageId());
@@ -105,6 +112,8 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
                     preparedStatement.setString(6, command.body());
                     preparedStatement.setObject(7, utc(command.providerOccurredAt()));
                     preparedStatement.setString(8, command.correlationId());
+                    preparedStatement.setString(9, recovery == null ? null : recovery.source());
+                    preparedStatement.setObject(10, recovery == null ? null : recovery.task());
                 },
                 (resultSet, rowNumber) -> new PersistedMessage(resultSet.getObject("id", UUID.class),
                         resultSet.getObject("created_at", OffsetDateTime.class).toInstant()));
@@ -195,6 +204,8 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
         }
         return normalized;
     }
+
+    private record Recovery(String source, UUID task) {}
 
     private record PersistedMessage(UUID id, Instant receivedAt) {}
 

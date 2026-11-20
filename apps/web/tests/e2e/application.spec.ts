@@ -36,8 +36,8 @@ const inboundMessage = {
   }>,
 }
 
-async function preparePage(page: Page, initiallyAuthenticated = true, options: { incomingBody?: string; customerName?: string; sendGate?: Promise<void>; english?: boolean; fileName?: string; caseActions?: boolean } = {}) {
-  const incomingMessage = { ...inboundMessage, body: options.incomingBody ?? inboundMessage.body }
+async function preparePage(page: Page, initiallyAuthenticated = true, options: { incomingBody?: string; customerName?: string; sendGate?: Promise<void>; english?: boolean; fileName?: string; caseActions?: boolean; recoverySource?: "manual" | "automatic" } = {}) {
+  const incomingMessage = { ...inboundMessage, recoverySource: options.recoverySource, body: options.incomingBody ?? inboundMessage.body }
   const attachmentName = options.fileName ?? "evidence.txt"
   const listItem = { ...caseListItem, customerName: options.customerName ?? caseListItem.customerName }
   const externalRequests: string[] = []
@@ -274,12 +274,12 @@ async function preparePage(page: Page, initiallyAuthenticated = true, options: {
   return { externalRequests, sends, uploads, retries, historyBefore, supportMessages }
 }
 
-async function prepareSettingsApi(page: Page, options: { forbidden?: boolean } = {}) {
+async function prepareSettingsApi(page: Page, options: { forbidden?: boolean; provider?: "SLACK" | "TEAMS" } = {}) {
   const writes: Array<{ method: string; path: string; body?: unknown }> = []
   let integration = {
     id: "018f0000-0000-7000-8000-000000000301",
-    provider: "SLACK",
-    displayName: "Acme Slack",
+    provider: options.provider ?? "SLACK",
+    displayName: "Acme integration",
     status: "ENABLED",
     health: "UNKNOWN",
     workspaceExternalId: "T-ACME",
@@ -1030,4 +1030,49 @@ test("selection limit is explicit and never silently truncates loaded rows or ch
   await extra.check()
   await expect(toolbar).toContainText("Zaznaczono: 1000")
   await expect(page.locator('input[type="checkbox"]:checked')).toHaveCount(1000)
+})
+
+for (const provider of ["SLACK", "TEAMS"] as const) {
+  test(`${provider} resync settings, manual ranges and partial channel result`, async ({ page }) => {
+    await preparePage(page)
+    await prepareSettingsApi(page, { provider })
+    let settings = { enabled: false, automatic: false, intervalMinutes: 30, lookbackMinutes: 2880 }
+    const starts: Array<{ mode: string; from?: string }> = []
+    await page.route("**/api/v1/admin/integrations/*/resync", async (route) => {
+      const method = route.request().method()
+      if (method === "PUT") settings = route.request().postDataJSON()
+      if (method === "POST") starts.push(route.request().postDataJSON())
+      const body = method === "PUT" ? settings : method === "POST" ? { id: "run" } : { settings, runs: starts.length ? [{
+        id: "run", source: "manual", until: "2026-11-20T10:30:00Z", createdAt: "2026-11-20T10:30:00Z",
+        channels: [{ channelId: "channel", channelName: "support", status: "INCOMPLETE", scanned: 20, added: 3, pending: 0, errorCode: "HISTORY_HTTP_403" }],
+      }] : [] }
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) })
+    })
+    await page.goto("/settings")
+    await page.getByRole("tab", { name: "Integracje", exact: true }).click()
+    const panel = page.getByRole("region", { name: "Odzyskiwanie wiadomości (resync)" })
+    await expect(panel.getByRole("switch", { name: "Włącz resync", exact: true })).not.toBeChecked()
+    await panel.getByRole("switch", { name: "Włącz resync", exact: true }).click()
+    await panel.getByRole("switch", { name: "Automatyczny resync", exact: true }).click()
+    await panel.getByRole("button", { name: "Zapisz ustawienia resyncu" }).click()
+    await expect.poll(() => settings.automatic).toBe(true)
+    await panel.locator('input[type="datetime-local"]').fill("2026-11-18T10:30")
+    await panel.getByRole("button", { name: "Uruchom resync", exact: true }).click()
+    await expect(panel.getByText(/Synchronizacja niepełna: Brak uprawnień do odczytu kanału/)).toBeVisible()
+    await panel.getByRole("radio", { name: "Od początku dostępnej historii" }).check()
+    await panel.getByRole("button", { name: "Uruchom resync", exact: true }).click()
+    await expect.poll(() => starts.length).toBe(2)
+    expect(starts[0]).toMatchObject({ mode: "from_date" })
+    expect(starts[0].from).toMatch(/^2026-11-18T/)
+    expect(starts[1]).toEqual({ mode: "all_history" })
+    await page.reload()
+    await page.getByRole("tab", { name: "Integracje", exact: true }).click()
+    await expect(panel.getByRole("switch", { name: "Automatyczny resync", exact: true })).toBeChecked()
+  })
+}
+test("recovered messages display an orange provenance badge in the conversation", async ({ page }) => {
+  await preparePage(page, true, { recoverySource: "manual" })
+  await page.goto("/cases")
+  await expect(page.getByText("Pominięta wiadomość · odzyskana przez resync", { exact: true })).toBeVisible()
+  await expect(page.getByText("Pominięta wiadomość · odzyskana przez resync", { exact: true })).toHaveClass(/text-orange-400/)
 })

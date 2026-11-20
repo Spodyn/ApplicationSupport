@@ -66,6 +66,9 @@ class MessageEntity {
     @Column(name = "provider_created_at")
     private Instant providerCreatedAt;
 
+    @Column(name = "recovery_source", length = 16, updatable = false)
+    private String recoverySource;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -128,6 +131,7 @@ class MessageEntity {
     boolean inbound() { return inbound; }
     MessageDeliveryStatus deliveryStatus() { return deliveryStatus; }
     Instant providerCreatedAt() { return providerCreatedAt; }
+    String recoverySource() { return recoverySource; }
     Instant createdAt() { return createdAt; }
     Instant editedAt() { return editedAt; }
     Instant deletedAt() { return deletedAt; }

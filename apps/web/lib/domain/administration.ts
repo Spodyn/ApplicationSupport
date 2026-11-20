@@ -214,3 +214,23 @@ export function hasAdministrationPermission(
 ) {
   return principal?.role === "ADMIN" && principal.permissions.includes(permission)
 }
+
+export interface IntegrationResyncSettings {
+  enabled: boolean
+  automatic: boolean
+  intervalMinutes: number
+  lookbackMinutes: number
+  lastRunAt?: string | null
+  nextRunAt?: string | null
+}
+export interface IntegrationResyncView {
+  settings: IntegrationResyncSettings
+  runs: Array<{
+    id: string
+    source: "manual" | "automatic"
+    from?: string | null
+    until: string
+    createdAt: string
+    channels: Array<{ channelId: string; channelName: string; status: string; scanned: number; added: number; pending: number; errorCode?: string | null }>
+  }>
+}

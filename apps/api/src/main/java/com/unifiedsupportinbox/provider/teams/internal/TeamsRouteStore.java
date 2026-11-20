@@ -14,6 +14,9 @@ class TeamsRouteStore {
                     AND metadata_json->>'teamsContextType' = ?)
                 """, Boolean.class, integration, channel, type));
     }
+    boolean isRecovery(UUID event) {
+        return Boolean.TRUE.equals(jdbc.queryForObject("SELECT resync_task_id IS NOT NULL FROM inbound_events WHERE id=?", Boolean.class,event));
+    }
     boolean withinMonitoring(UUID integration, java.time.Instant occurredAt) {
         return Boolean.TRUE.equals(jdbc.queryForObject("SELECT EXISTS(SELECT 1 FROM integrations WHERE id=? AND created_at<=?)",
                 Boolean.class,integration,java.time.OffsetDateTime.ofInstant(occurredAt,java.time.ZoneOffset.UTC)));

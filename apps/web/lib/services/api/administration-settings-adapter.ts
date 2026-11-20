@@ -1,3 +1,4 @@
+import type { IntegrationResyncView as ApiResyncView, IntegrationResyncSettings as ApiResyncSettings } from "@usi/api-client/generated"
 import { translate as t } from "@/lib/i18n/catalog"
 import type {
   AdministrationSettings,
@@ -563,7 +564,23 @@ async function saveNotifications(
   return listNotifications()
 }
 
+
+function mapResyncSettings(value: ApiResyncSettings): import("@/lib/domain/administration").IntegrationResyncSettings {
+  return { enabled: value.enabled, automatic: value.automatic, intervalMinutes: value.intervalMinutes,
+    lookbackMinutes: value.lookbackMinutes, lastRunAt: value.lastRunAt, nextRunAt: value.nextRunAt }
+}
+function mapResyncView(value: ApiResyncView): import("@/lib/domain/administration").IntegrationResyncView {
+  return { settings: mapResyncSettings(value.settings), runs: value.runs.map((run) => ({ id: run.id, source: run.source,
+    from: run.from, until: run.until, createdAt: run.createdAt, channels: run.channels.map((channel) => ({
+      channelId: channel.channelId, channelName: channel.channelName, status: channel.status, scanned: channel.scanned,
+      added: channel.added, pending: channel.pending, errorCode: channel.errorCode,
+    })) })) }
+}
+
 export const apiAdministrationSettingsRepository: AdministrationSettingsRepository = {
+  async getResync(id) { return mapResyncView(await browserApiTransport.request<ApiResyncView>({ method: "GET", path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/resync` })) },
+  async saveResync(id, settings) { return mapResyncSettings(await browserApiTransport.request<ApiResyncSettings>({ method: "PUT", path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/resync`, body: settings })) },
+  async startResync(id, mode, from) { return browserApiTransport.request({ method: "POST", path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/resync`, body: { mode, from } }) },
   async get() {
     const [organization, integrations, customers, channels, businessHours, notifications, notificationDeliveries, outOfOffice, outOfOfficePreview, sla] = await Promise.all([
       getOrganizationSettings(),

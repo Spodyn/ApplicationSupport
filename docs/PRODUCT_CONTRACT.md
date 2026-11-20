@@ -251,6 +251,16 @@ Admin current work:
 - Manual test-connection timeout is 10 seconds and may update health/sanitized error, never silently enable/disable integration.
 - Provider callbacks and delivery operations must be idempotent and concurrency-safe.
 
+### Owner-approved history recovery (2026-11-20)
+
+Slack and Teams integrations offer opt-in recovery in Settings → Integrations. Existing integrations default to disabled. ADMIN with `manage_integrations` may independently enable automatic recovery and configure its interval/history window, or run manual recovery from a selected sent date or from all API-accessible history. This explicitly supersedes the former bounded Slack-only recovery restriction; connecting an integration still does not automatically import history.
+
+Both modes scan active monitored contexts under existing access/mapping rules, including replies sent inside the requested window to older roots. Older roots may be read as context without creating out-of-window business Messages. Results enter the existing Case/unread/attachment pipeline as pages arrive. Provider identity is identical to live intake: a concurrent webhook, rescan or restarted task creates one Message, one Case association and one applicable SLA effect. Already received normal Messages retain provenance and SLA.
+
+Persist `manual|automatic` recovery source, original provider sent time and durable addition time. Display the orange “Pominięta wiadomość · odzyskana przez resync” label. For both modes, new applicable FRT/NRT clocks start at durable insertion into the Case, using existing business hours and cycle rules. Running/completed cycles are never reset by duplicates. Original sent time remains the conversation timestamp.
+
+Backend scheduling/checkpoints survive restarts. An overdue schedule computes the current configured window; an in-flight run resumes its captured range, then the overdue current-window run may start. Per-channel progress includes scanned/added/pending counts and sanitized reasons for incomplete recovery. API permission failures are visible, never silently reported as complete. No production/sandbox credentials or permission grants are authorized by this product change.
+
 ## 17. Retention and legal hold
 
 Per deployment defaults and configuration ranges:

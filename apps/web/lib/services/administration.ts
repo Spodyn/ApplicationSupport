@@ -45,6 +45,9 @@ export interface CredentialActionToken {
 }
 
 export interface AdministrationSettingsRepository {
+  getResync(id: string): Promise<import("@/lib/domain/administration").IntegrationResyncView>
+  saveResync(id: string, settings: import("@/lib/domain/administration").IntegrationResyncSettings): Promise<import("@/lib/domain/administration").IntegrationResyncSettings>
+  startResync(id: string, mode: "from_date" | "all_history", from?: string): Promise<{ id: string }>
   get(): Promise<AdministrationSettings>
   saveSection<K extends keyof AdministrationSettings>(
     key: K,
@@ -210,7 +213,11 @@ export const mockAdministrationUserRepository: AdministrationUserRepository = {
   },
 }
 
+const mockResync = new Map<string, import("@/lib/domain/administration").IntegrationResyncSettings>()
 export const mockAdministrationSettingsRepository: AdministrationSettingsRepository = {
+  async getResync(id) { return { settings: mockResync.get(id) ?? { enabled: false, automatic: false, intervalMinutes: 30, lookbackMinutes: 2880 }, runs: [] } },
+  async saveResync(id, settings) { requireCurrentAdministrationPermission("manage_integrations"); mockResync.set(id, settings); return settings },
+  async startResync() { throw new Error(t("Resync jest dostępny wyłącznie przez API.")) },
   async get() {
     requireCurrentAdministrator()
     return delay(settingsState)

@@ -446,3 +446,14 @@ export function useSelectMatchingCases() {
     mutationFn: (query: InboxListQuery) => collectMatchingCaseIds((cursor, filters) => serviceRegistry.inbox.list(cursor, filters), query),
   })
 }
+
+export function useIntegrationResync(id: string) {
+  return useQuery({ queryKey: ["administration", "resync", id], queryFn: () => serviceRegistry.administrationSettings.getResync(id), refetchInterval: 5000 })
+}
+export function useIntegrationResyncActions(id: string) {
+  const client = useQueryClient()
+  const invalidate = () => client.invalidateQueries({ queryKey: ["administration", "resync", id] })
+  const save = useMutation({ mutationFn: (settings: import("@/lib/domain/administration").IntegrationResyncSettings) => serviceRegistry.administrationSettings.saveResync(id, settings), onSuccess: invalidate })
+  const start = useMutation({ mutationFn: (input: { mode: "from_date" | "all_history"; from?: string }) => serviceRegistry.administrationSettings.startResync(id, input.mode, input.from), onSuccess: invalidate })
+  return { save, start }
+}
