@@ -1,5 +1,7 @@
 "use client"
 
+import { IntegrationResyncPanel } from "./integration-resync-panel"
+
 import { userError } from "@/lib/i18n/errors"
 import { locale } from "@/lib/i18n/catalog"
 import { translate as t } from "@/lib/i18n/catalog"
@@ -459,6 +461,7 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                   </dd>
                 </div>
               </dl>
+              {(integration.platform === "slack" || integration.platform === "teams") && <IntegrationResyncPanel id={integration.id} disabled={integration.status !== "enabled"} />}
               <div className="flex flex-wrap gap-2 border-t pt-3">
                 <Button variant="outline" size="sm" onClick={() => openConfiguration(integration)}><Settings2 /> {t("Konfiguruj")}</Button>
                 <Button variant="outline" size="sm" disabled={integration.status === "disabled" || !integration.hasSecretReference || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> {t("Testuj")}</Button>

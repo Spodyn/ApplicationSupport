@@ -160,6 +160,8 @@ export function mapCaseMessage(first: CaseMessage | string, second?: string | Ca
     sender: message.authorName ?? undefined,
     body: message.body,
     createdAt: message.providerCreatedAt ?? message.createdAt,
+    addedAt: message.createdAt,
+    recoverySource: message.recoverySource ?? undefined,
     edited: Boolean(message.editedAt),
     deleted: Boolean(message.deletedAt),
     deliveryStatus: message.deliveryStatus?.toLowerCase() as InboxMessage["deliveryStatus"],

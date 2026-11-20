@@ -785,6 +785,7 @@ function ConversationPanel({
                       {message.deliveryStatus && <span>{t(deliveryStatusLabels[message.deliveryStatus])}</span>}
                     </div>
                     {message.deleted && <p className="mt-1 text-xs italic text-[#aeb8c8]">{t("Wiadomość została usunięta.")}</p>}
+                    {message.recoverySource && <p className="mt-1 text-xs font-medium text-orange-400" title={message.addedAt ? `${t("Dodano do Application Support")}: ${new Date(message.addedAt).toLocaleString()}` : undefined}>{t("Pominięta wiadomość · odzyskana przez resync")}</p>}
                     {message.body && <p className={cn("mt-1 whitespace-pre-wrap text-sm leading-6", message.deleted ? "text-[#aeb8c8]" : "text-[#edf0f4]")}>
                       <SafeExternalMessage slack={message.kind === "customer" && item.platform === "Slack"} content={message.body} />
                     </p>}

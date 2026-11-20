@@ -643,6 +643,7 @@ export type CaseMessage = {
   "retryAllowed"?: boolean
   "deliveryErrorCode"?: string | null
   "nextRetryAt"?: string | null
+  "recoverySource"?: "manual" | "automatic" | null
 }
 
 export type CaseMessagePage = {
@@ -893,6 +894,39 @@ export type IntegrationConnectionTestView = {
 }
 
 export type IntegrationHealth = "UNKNOWN" | "HEALTHY" | "DEGRADED" | "UNAVAILABLE"
+
+export type IntegrationResyncChannelProgress = {
+  "channelId": string
+  "channelName": string
+  "status": string
+  "scanned": number
+  "added": number
+  "pending": number
+  "errorCode"?: string | null
+}
+
+export type IntegrationResyncRun = {
+  "id": string
+  "source": "manual" | "automatic"
+  "from"?: string | null
+  "until": string
+  "createdAt": string
+  "channels": Array<IntegrationResyncChannelProgress>
+}
+
+export type IntegrationResyncSettings = {
+  "enabled": boolean
+  "automatic": boolean
+  "intervalMinutes": number
+  "lookbackMinutes": number
+  "lastRunAt"?: string | null
+  "nextRunAt"?: string | null
+}
+
+export type IntegrationResyncView = {
+  "settings": IntegrationResyncSettings
+  "runs": Array<IntegrationResyncRun>
+}
 
 export type IntegrationStatus = "CONFIGURING" | "ENABLED" | "DISABLED"
 

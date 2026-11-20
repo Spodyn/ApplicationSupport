@@ -523,6 +523,10 @@ decisions:
       retention_and_legal_erasure: unchanged
       automatic_historic_reconstruction: false
 
+  - id: DEC-PROVIDER-HISTORY-RECOVERY-001
+    source: [OWNER_REQUEST_2026_11_20_SLACK_TEAMS_RESYNC]
+    rule: Slack and Teams recovery is opt-in per integration, disabled for existing integrations; manual from-date or all API-accessible history and independent durable automatic interval/lookback scheduling replace the former Slack seven-day recovery limit. Recover replies to older roots. Use existing channel authorization, mapping, Case, unread and attachment rules; provider message identity deduplicates webhook and resync. Persist manual/automatic provenance, sent time and addition time. Both modes start new applicable FRT/NRT at durable Case-message insertion, preserving existing cycles and normal-message provenance.
+
 technical_resolutions:
   - id: TECH-TEAMS-SELECTED-FILES-001
     source: [OWNER_REQUEST_2026_11_19_TEAMS_AUDIT, OWNER_APPROVAL_2026_11_19_TEAMS_SITE_WRITE]

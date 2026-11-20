@@ -139,8 +139,8 @@ Messages arriving before discovery retry durably rather than being silently disc
 
 - No automatic full historical import on first connection.
 - `monitoring_started_at` is the boundary for normal live Case creation.
-- Recovery/backfill is for gaps after that boundary: default 24 hours, one admin run max 7 days.
-- Larger historic imports are outside v1.
+- Owner override 2026-11-20: optional manual from-date/all-available-history and durable automatic interval/window recovery for Slack and Teams supersede the seven-day limit. Normal live intake retains its monitoring boundary; explicitly requested recovery can precede it.
+- Recovery is disabled by default and does not start at first connection. See [History recovery](HISTORY_RECOVERY.md).
 - All backfill is deduplicated against live intake.
 
 ### 2.8 Health

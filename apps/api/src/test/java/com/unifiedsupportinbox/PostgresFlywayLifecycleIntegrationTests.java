@@ -37,6 +37,24 @@ class PostgresFlywayLifecycleIntegrationTests {
     }
 
     @Test
+    void upgradesV53ToOptInRecoveryWithoutEnablingExistingIntegrations() throws SQLException {
+        cleanDatabase();
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword())
+                .target("53").load().migrate();
+        try (Connection connection=connection();var statement=connection.createStatement()) {
+            statement.executeUpdate("INSERT INTO integrations(provider,display_name,status,health) VALUES ('SLACK','Existing integration','ENABLED','HEALTHY')");
+        }
+        Flyway current=Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).load();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);current.validate();
+        assertThat(current.info().pending()).isEmpty();
+        assertThat(queryInt("SELECT count(*) FROM integrations")).isEqualTo(1);
+        assertThat(queryInt("SELECT count(*) FROM integration_resync_settings WHERE enabled OR automatic")).isZero();
+        try(ConfigurableApplicationContext application=startApplication()) {
+            assertThat(application.getEnvironment().getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
+        }
+    }
+
+    @Test
     void cleanDatabaseMigratesBeforeContextStartAndSecondStartIsIdempotent() throws Exception {
         cleanDatabase();
         assertThat(tableExists("flyway_schema_history")).isFalse();

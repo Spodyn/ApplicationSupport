@@ -114,10 +114,11 @@ class MessageHistoryService {
             Instant editedAt,
             Instant deletedAt,
             String authorName,
+            String recoverySource,
             List<MessageAttachmentItem> attachments) {
         static MessageHistoryItem from(CaseInternalNoteService.Note note) {
             return new MessageHistoryItem(note.id(), "INTERNAL_NOTE", note.body(), MessageBodyFormat.PLAIN_TEXT,
-                    false, null, false, null, null, null, note.createdAt(), null, null, note.authorName(), List.of());
+                    false, null, false, null, null, null, note.createdAt(), null, null, note.authorName(), null, List.of());
         }
 
         static MessageHistoryItem from(MessageEntity message, List<AttachmentMetadata> attachments, MessageDeliveryRepository.FailureView failure, String historicalAuthor) {
@@ -128,7 +129,7 @@ class MessageHistoryService {
                     message.deliveryStatus(), failure != null && failure.retryAllowed(), failure == null ? null : failure.errorCode(),
                     failure == null ? null : failure.nextRetryAt(),
                     message.providerCreatedAt(), message.createdAt(), message.editedAt(),
-                    message.deletedAt(), author,
+                    message.deletedAt(), author, message.recoverySource(),
                     attachments.stream().map(MessageAttachmentItem::from).toList());
         }
     }

@@ -108,7 +108,7 @@ Każdy adapter ma używać fake/sandbox providera i testować:
 - ignored/disabled contexts bez niedozwolonych business records,
 - edit/delete semantics,
 - transient/permanent outbound failures i Retry-After,
-- recovery/resync bez pełnego history importu.
+- recovery/resync: ręcznie od daty lub od początku dostępnej historii oraz trwały harmonogram Slack/Teams (owner override 2026-11-20).
 
 Aktualne vendor API paths/scopes/SDK details są weryfikowane względem oficjalnej dokumentacji przy implementacji; product semantics pozostają frozen.
 

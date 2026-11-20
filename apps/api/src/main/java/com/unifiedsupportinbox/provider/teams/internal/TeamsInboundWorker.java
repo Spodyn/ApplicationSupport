@@ -43,7 +43,7 @@ class TeamsInboundWorker {
                 }
                 var activity = TeamsActivity.parse(json.readTree(event.payloadJson()), clientId);
                 if (activity==null) { outcomes.mark(id, InboundEventOutcomeStore.UNSUPPORTED_PROVIDER_EVENT); return; }
-                if (!routes.withinMonitoring(event.integrationId(),activity.occurredAt())) {
+                if (!routes.isRecovery(id) && !routes.withinMonitoring(event.integrationId(),activity.occurredAt())) {
                     outcomes.mark(id,InboundEventOutcomeStore.UNSUPPORTED_PROVIDER_EVENT); return;
                 }
                 var channel=channels.resolve(event.integrationId(), activity.channelId()).orElseThrow(ContextPending::new);

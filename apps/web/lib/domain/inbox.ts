@@ -134,6 +134,8 @@ export interface InboxAttachment {
 }
 
 export interface InboxMessage {
+  recoverySource?: "manual" | "automatic"
+  addedAt?: string
   id: string
   kind: "customer" | "support" | "system" | "internal_note"
   sender?: string

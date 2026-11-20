@@ -120,3 +120,5 @@ trusted-proxy/client-attribution configuration and legitimate multi-agent traffi
 verification are required before rollout behind an ingress proxy.
 
 Direct Messages authorize the authenticated participant at the database query boundary. Administrators have no override. The browser subscribes only to its server-resolved private queue, and notices carry no message content. See [DIRECT_MESSAGES.md](DIRECT_MESSAGES.md).
+
+History recovery administration requires existing ADMIN + `manage_integrations`, with session/CSRF protections. Slack/Teams adapters read only configured active monitored contexts. Graph continuation URLs must match the configured Graph origin and exact message/reply collection; redirects never forward bearer credentials. Secrets remain behind `secret_ref`; no token is stored in checkpoints/UI/audit. Permission failures produce sanitized per-channel errors. Recovery provenance derives from a server-owned FK on durable inbound events, never a provider-supplied marker. No additional tenant-wide or production grant is made by this implementation. See [HISTORY_RECOVERY.md](HISTORY_RECOVERY.md).

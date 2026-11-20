@@ -97,3 +97,7 @@ The grouped owner requests of 2026-11-10 and 2026-11-12 define the interface and
 - DEC-CASE-WORKFLOW-COMMANDS-001: administrative undo applies to ordinary and forced resolution. Public replies enter owned waiting after delivery, while Ask Customer enters unassigned waiting. The shared provider-context lock protects active generation uniqueness.
 
 - TECH-TEAMS-SELECTED-FILES-001 (owner approval, 2026-11-19): the sandbox bot receives Graph application `Sites.Selected` and `write` only on USISandbox. A separate transient administrator session assigns the site grant; the bot receives no tenant-wide file access. See [Integration attachment boundaries](INTEGRATIONS.md#teams-attachment-transfer-owner-approved-2026-11-19).
+
+## Owner history recovery extension, 2026-11-20
+
+- DEC-PROVIDER-HISTORY-RECOVERY-001: opt-in Slack and Teams manual from-date/all-history recovery, independent durable automatic schedules, old-thread replies, permanent provenance and FRT/NRT from durable addition. This replaces the older seven-day Slack-only recovery bound. See [History recovery](HISTORY_RECOVERY.md) and [Product Contract](PRODUCT_CONTRACT.md#owner-approved-history-recovery-2026-11-20).
