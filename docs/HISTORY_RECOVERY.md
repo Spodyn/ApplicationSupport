@@ -41,7 +41,7 @@ public/private/Slack Connect channels; no DM/group DM import. Configure
 the app after scope changes. `files:read` remains required for attachments.
 Use the existing `slack-bot-token`; an optional `slack-history-token` file under
 the integration's existing server-side `secret_ref` can supply an authorized
-history/user token if channel thread reads reject the bot token. No token enters
+history/user token if channel thread reads reject the bot token. Every recovery page first verifies `auth.test` workspace identity against the integration; a mismatched token fails with `SLACK_HISTORY_WORKSPACE_MISMATCH` before any history is read. No token enters
 the panel or database. A missing scope/channel membership remains a visible
 incomplete result. [History API](https://docs.slack.dev/reference/methods/conversations.history/)
 and [replies API](https://docs.slack.dev/reference/methods/conversations.replies/).
@@ -109,21 +109,22 @@ does not establish release acceptance.
 
 ## Recorded local validation, 2026-11-20
 
-Runtime source: `99bf202`; subsequent edits to this evidence are documentation only.
+Runtime source: `d2de98f`; frontend/full-stack checks used `99bf202` (frontend unchanged). Subsequent edits to this evidence are documentation only.
 
 | Check | Result |
 | --- | --- |
 | `pnpm install --frozen-lockfile` in a clean worktree | PASS |
 | `pnpm check` in the clean worktree | PASS: 108 frontend unit tests, 39 Playwright UI tests, production build, lint/typecheck, 87 Python configuration tests, 34 regression feature mappings, gate assertions, secret scan, OpenAPI lint/generation/client checks |
-| Maven Wrapper `verify -DexcludedGroups=integration` | PASS: 331 tests; application JAR build |
+| Maven Wrapper `verify -DexcludedGroups=integration` | PASS: 333 tests at `d2de98f`; application JAR build |
 | Maven Wrapper `test -Dgroups=integration` | PASS: 295 tests at preceding runtime revision `491ec57` |
 | Final focused `HistoryRecoveryIntegrationTests,PostgresFlywayLifecycleIntegrationTests,ApiSurfaceIntegrationTests` | PASS: 27 tests at `99bf202`, including 15 recovery cases, clean/previous-schema migration and HTTP authorization/contract coverage |
+| Final workspace guard integration check | PASS: all 15 recovery integration cases at `d2de98f`; wrong-workspace and authentication-outage regressions passed in the unit suite |
 | `pnpm test:fullstack` in the clean worktree | PASS: 20 tests, real backend/frontend, disposable PostgreSQL/RabbitMQ/MinIO and synthetic Slack HTTP |
 | `pnpm audit --audit-level=high` | PASS: no known vulnerabilities |
 | Maven dependency scan (`scripts/security_dependencies.py`) | PASS: 250 packages, no OSV findings |
 | `pnpm openapi:compat -- --base-ref 064ab5d` | PASS: additive-only v1 compatibility |
 | Decision/orchestrator YAML parsing and `git diff --check` | PASS |
-| Real Slack/Teams resync sandbox acceptance | NOT RUN |
+| Real Slack/Teams resync sandbox acceptance | NOT RUN, explicitly retained by the owner in this chat |
 
 The initial Slack lower-bound regression was reproduced as a failing HTTP-client
 test before correction. Expired Slack/Graph cursor tests likewise failed before
