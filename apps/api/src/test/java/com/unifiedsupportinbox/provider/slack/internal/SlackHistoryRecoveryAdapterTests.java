@@ -13,12 +13,14 @@ import tools.jackson.databind.ObjectMapper;
 class SlackHistoryRecoveryAdapterTests {
     ObjectMapper json=new ObjectMapper();
     SlackHistoryClient client=mock(SlackHistoryClient.class);
+    SlackAdministrationApiClient authentication=mock(SlackAdministrationApiClient.class);
     ProviderIntegrationCredentialLookup integrations=mock(ProviderIntegrationCredentialLookup.class);
     ConfiguredProviderSecretResolver secrets=mock(ConfiguredProviderSecretResolver.class);
-    SlackHistoryRecoveryAdapter adapter=new SlackHistoryRecoveryAdapter(client,integrations,secrets,mock(SlackInboundDeliveryService.class),json);
+    SlackHistoryRecoveryAdapter adapter=new SlackHistoryRecoveryAdapter(client,authentication,integrations,secrets,mock(SlackInboundDeliveryService.class),json);
     UUID integration=UUID.randomUUID();
     Instant now=Instant.parse("2026-11-20T10:30:00Z");
     @BeforeEach void setup() {
+        when(authentication.testAuthentication(any())).thenReturn(new SlackAdministrationApiClient.AuthResponse(200,true,"T-SYNTHETIC","Fixture",null));
         when(integrations.findEnabledForProvider(IntegrationProvider.SLACK)).thenReturn(List.of(
                 new ProviderIntegrationCredentialLookup.CredentialReference(integration,"T-SYNTHETIC","fixture/slack")));
         when(secrets.resolve(anyString(),anyString())).thenAnswer(i->Optional.of("synthetic-history-token".getBytes(java.nio.charset.StandardCharsets.US_ASCII)));
@@ -60,5 +62,21 @@ class SlackHistoryRecoveryAdapterTests {
                 .thenReturn(new SlackHistoryClient.Page(200,true,List.of(json.readTree("{\"ts\":\"1.000001\",\"reply_count\":1}")),"fresh-cursor",null,null));
         var recovered=adapter.fetch(stale);
         assertThat(recovered.threads()).containsExactly("1.000001");assertThat(recovered.nextCursor()).isEqualTo("fresh-cursor");
+    }
+    @Test void historyCredentialsForAnotherWorkspaceCannotReadOrImportAnyChannel() {
+        when(authentication.testAuthentication(any())).thenReturn(new SlackAdministrationApiClient.AuthResponse(200,true,"T-OTHER","Other workspace",null));
+        when(client.history(any(),anyString(),isNull(),isNull(),anyString(),anyInt()))
+                .thenReturn(new SlackHistoryClient.Page(200,true,List.of(),null,null,null));
+        assertThatThrownBy(()->adapter.fetch(task("",null))).isInstanceOfSatisfying(Unavailable.class,e->{
+            assertThat(e.code).isEqualTo("SLACK_HISTORY_WORKSPACE_MISMATCH");assertThat(e.retryAfter).isNull();
+        });
+        verifyNoInteractions(client);
+    }
+    @Test void authenticationOutageRetriesBeforeReadingHistory() {
+        when(authentication.testAuthentication(any())).thenReturn(new SlackAdministrationApiClient.AuthResponse(503,false,null,null,null));
+        assertThatThrownBy(()->adapter.fetch(task("",null))).isInstanceOfSatisfying(Unavailable.class,e->{
+            assertThat(e.code).isEqualTo("SLACK_HISTORY_AUTH_HTTP_503");assertThat(e.retryAfter).isEqualTo(Duration.ofSeconds(30));
+        });
+        verifyNoInteractions(client);
     }
 }

@@ -14,13 +14,14 @@ import tools.jackson.databind.node.ObjectNode;
 @Component
 class SlackHistoryRecoveryAdapter implements HistoryRecoveryAdapter {
     private final SlackHistoryClient client;
+    private final SlackAdministrationApiClient authentication;
     private final ProviderIntegrationCredentialLookup integrations;
     private final ConfiguredProviderSecretResolver secrets;
     private final SlackInboundDeliveryService inbound;
     private final ObjectMapper json;
-    SlackHistoryRecoveryAdapter(SlackHistoryClient client, ProviderIntegrationCredentialLookup integrations,
+    SlackHistoryRecoveryAdapter(SlackHistoryClient client, SlackAdministrationApiClient authentication, ProviderIntegrationCredentialLookup integrations,
             ConfiguredProviderSecretResolver secrets, SlackInboundDeliveryService inbound, ObjectMapper json) {
-        this.client=client;this.integrations=integrations;this.secrets=secrets;this.inbound=inbound;this.json=json;
+        this.client=client;this.authentication=authentication;this.integrations=integrations;this.secrets=secrets;this.inbound=inbound;this.json=json;
     }
     public String provider() { return "SLACK"; }
     public Page fetch(Task task) {
@@ -32,6 +33,16 @@ class SlackHistoryRecoveryAdapter implements HistoryRecoveryAdapter {
                 .or(()->secrets.resolve(credential.secretRef(),SlackMessageDeliveryProvider.BOT_TOKEN_CREDENTIAL_FILE))
                 .orElseThrow(()->new Unavailable("SLACK_HISTORY_TOKEN_MISSING",null));
         try {
+            var identity=authentication.testAuthentication(token);
+            if(identity==null)throw new Unavailable("SLACK_HISTORY_AUTH_UNAVAILABLE",Duration.ofSeconds(30));
+            if(identity.statusCode()==429)throw new Unavailable("SLACK_RATE_LIMITED",Duration.ofMinutes(1));
+            if(identity.statusCode()<200 || identity.statusCode()>=300)
+                throw new Unavailable("SLACK_HISTORY_AUTH_HTTP_"+identity.statusCode(),
+                        SlackDeliveryErrorClassifier.isTransientHttpStatus(identity.statusCode())?Duration.ofSeconds(30):null);
+            if(!identity.ok())throw new Unavailable(SlackDeliveryErrorClassifier.normalizedApiError(identity.errorCode()),
+                    SlackDeliveryErrorClassifier.isTransientApiError(identity.errorCode())?Duration.ofSeconds(30):null);
+            if(credential.workspaceExternalId()==null || !credential.workspaceExternalId().equals(identity.workspaceId()))
+                throw new Unavailable("SLACK_HISTORY_WORKSPACE_MISMATCH",null);
             var page=task.thread().isEmpty()
                     ? client.history(token,task.externalChannelId(),task.cursor(),null,ts(task.until()),15)
                     : client.replies(token,task.externalChannelId(),task.thread(),task.cursor(),ts(task.from()),ts(task.until()),15);
