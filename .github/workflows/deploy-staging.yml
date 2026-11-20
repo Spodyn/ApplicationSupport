@@ -58,6 +58,8 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    env:
+      WIREGUARD_CONFIG: /etc/wireguard/usi-actions.conf
     timeout-minutes: 25
     environment:
       name: staging
@@ -94,11 +96,14 @@ jobs:
           mkdir -p "$RUNNER_TEMP/usi-ssh"
           printf '%s\n' "$SSH_PRIVATE_KEY" > "$RUNNER_TEMP/usi-ssh/id_ed25519"
           printf '%s\n' "$SSH_KNOWN_HOSTS" > "$RUNNER_TEMP/usi-ssh/known_hosts"
+          # Ubuntu confines wg-quick to the standard WireGuard configuration directory.
+          sudo install -d -m 0700 /etc/wireguard
+          sudo install -m 0600 /dev/null "$WIREGUARD_CONFIG"
           {
             printf '[Interface]\nAddress = 10.77.0.2/32\nPrivateKey = %s\n\n' "$WG_PRIVATE_KEY"
             printf '[Peer]\nPublicKey = %s\nEndpoint = 158.220.75.88:51820\nAllowedIPs = 10.77.0.1/32\nPersistentKeepalive = 25\n' "$WG_SERVER_PUBLIC_KEY"
-          } > "$RUNNER_TEMP/usi-actions.conf"
-          sudo wg-quick up "$RUNNER_TEMP/usi-actions.conf"
+          } | sudo tee "$WIREGUARD_CONFIG" > /dev/null
+          sudo wg-quick up "$WIREGUARD_CONFIG"
           ssh -i "$RUNNER_TEMP/usi-ssh/id_ed25519" -o IdentitiesOnly=yes -o BatchMode=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/usi-ssh/known_hosts" \
             -o ConnectTimeout=20 usi-deploy@10.77.0.1 check
@@ -117,5 +122,8 @@ jobs:
       - name: Remove ephemeral VPN and SSH material
         if: always()
         run: |
-          if test -f "$RUNNER_TEMP/usi-actions.conf"; then sudo wg-quick down "$RUNNER_TEMP/usi-actions.conf" || true; fi
-          rm -f "$RUNNER_TEMP/usi-actions.conf" "$RUNNER_TEMP/usi-ssh/id_ed25519" "$RUNNER_TEMP/usi-ssh/known_hosts"
+          if sudo test -f "$WIREGUARD_CONFIG"; then
+            sudo wg-quick down "$WIREGUARD_CONFIG" || true
+            sudo rm -f "$WIREGUARD_CONFIG"
+          fi
+          rm -f "$RUNNER_TEMP/usi-ssh/id_ed25519" "$RUNNER_TEMP/usi-ssh/known_hosts"
