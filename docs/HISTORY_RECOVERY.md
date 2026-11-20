@@ -75,7 +75,7 @@ settings, runs, per-channel/thread tasks and nullable recovery references.
 No existing rows are opted in. Each page has an independent lease token;
 an expired worker cannot commit after another worker reclaims its task. Provider
 HTTP happens outside transactions. Inbound events, thread discovery and page
-checkpoints commit together; failed pages are safe to replay. Retryable provider
+checkpoints commit together; failed pages are safe to replay. Expired Slack/Graph continuation cursors restart the same captured collection/range and rely on Message identity deduplication; a Slack response advertising more pages without a cursor cannot report success. Retryable provider
 outages have durable retry deadlines without an attempt cap; rate-limit delays
 also defer queued work for that integration. Read permission failures are terminal
 for that task and visible per channel, while independent channels continue.

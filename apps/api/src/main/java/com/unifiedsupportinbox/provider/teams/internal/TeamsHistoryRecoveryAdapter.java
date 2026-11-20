@@ -43,6 +43,8 @@ class TeamsHistoryRecoveryAdapter implements HistoryRecoveryAdapter {
             String token=tokens.token(task.integrationId(),"https://graph.microsoft.com/.default");
             var request=HttpRequest.newBuilder(target).timeout(Duration.ofSeconds(15)).header("Authorization","Bearer "+token).GET().build();
             var response=http.send(request,HttpResponse.BodyHandlers.ofString());
+            if(task.cursor()!=null && (response.statusCode()==400 || response.statusCode()==410))
+                return fetch(task.withoutCursor());
             if(response.statusCode()!=200) {
                 Duration retry=null;
                 if(response.statusCode()==429||response.statusCode()>=500) {

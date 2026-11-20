@@ -4,7 +4,7 @@ import java.time.Duration;
 import java.util.List;
 import tools.jackson.databind.JsonNode;
 
-/** Provider-only boundary for bounded Slack recovery/history reads. */
+/** Provider-only paginated history reads; a null oldest timestamp scans all available roots. */
 interface SlackHistoryClient {
 
     Page history(

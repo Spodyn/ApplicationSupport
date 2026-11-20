@@ -125,6 +125,9 @@ class HttpSlackHistoryClient implements SlackHistoryClient {
             if (metadata != null && metadata.isObject()) {
                 nextCursor = text(metadata, "next_cursor");
             }
+            if (root != null && root.path("has_more").asBoolean(false) && (nextCursor == null || nextCursor.isBlank())) {
+                throw new IllegalStateException("Slack history advertised more pages without a continuation cursor.");
+            }
             return new Page(response.statusCode(), ok, messages, nextCursor, error, retryAfter);
         } catch (JacksonException exception) {
             throw new IllegalStateException("Slack history JSON could not be processed.", exception);
@@ -145,7 +148,7 @@ class HttpSlackHistoryClient implements SlackHistoryClient {
             String latestTs,
             int limit) {
         requireText(channelId, "channelId");
-        requireText(oldestTs, "oldestTs");
+        if (oldestTs != null) requireText(oldestTs, "oldestTs");
         requireText(latestTs, "latestTs");
         if (limit < 1 || limit > MAX_PAGE_SIZE) {
             throw new IllegalArgumentException("Slack history page limit must be between 1 and 15.");
@@ -153,7 +156,7 @@ class HttpSlackHistoryClient implements SlackHistoryClient {
 
         Map<String, String> query = new LinkedHashMap<>();
         query.put("channel", channelId);
-        query.put("oldest", oldestTs);
+        if (oldestTs != null) query.put("oldest", oldestTs);
         query.put("latest", latestTs);
         query.put("inclusive", "true");
         query.put("limit", Integer.toString(limit));

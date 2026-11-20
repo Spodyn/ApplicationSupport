@@ -23,7 +23,7 @@ class TeamsHistoryRecoveryAdapterTests {
     @BeforeEach void setup() throws Exception {
         server=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);
         server.createContext("/",exchange->{paths.add(exchange.getRequestURI().getPath());byte[] data=body.get().getBytes(java.nio.charset.StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().set("Retry-After","120");exchange.sendResponseHeaders(code.get(),data.length);exchange.getResponseBody().write(data);exchange.close();});server.start();
+            exchange.getResponseHeaders().set("Retry-After","120");exchange.sendResponseHeaders(exchange.getRequestURI().getRawQuery().contains("skiptoken=expired")?410:code.get(),data.length);exchange.getResponseBody().write(data);exchange.close();});server.start();
         origin=URI.create("http://127.0.0.1:"+server.getAddress().getPort()+"/v1.0/");
         when(tokens.token(any(),anyString())).thenReturn("synthetic-graph-token");
         adapter=new TeamsHistoryRecoveryAdapter(tokens,mock(TeamsInboundDeliveryService.class),mock(JdbcTemplate.class),json,HttpClient.newHttpClient(),origin);
@@ -51,5 +51,11 @@ class TeamsHistoryRecoveryAdapterTests {
         assertThatThrownBy(()->adapter.fetch(task("",null,null,"standardChannel"))).isInstanceOfSatisfying(Unavailable.class,e->{assertThat(e.code).isEqualTo("TEAMS_HISTORY_HTTP_403");assertThat(e.retryAfter).isNull();});
         for(int status:new int[]{429,503}) {code.set(status);
             assertThatThrownBy(()->adapter.fetch(task("",null,null,"standardChannel"))).isInstanceOfSatisfying(Unavailable.class,e->assertThat(e.retryAfter).isEqualTo(Duration.ofSeconds(120)));}
+    }
+    @Test void expiredContinuationRestartsTheCapturedCollectionAndRange() {
+        body.set("{\"value\":["+message("new","2026-11-20T09:30:00Z")+"]}");
+        String expired=origin+"teams/11111111-1111-1111-1111-111111111111/channels/channel/messages?$skiptoken=expired";
+        assertThat(adapter.fetch(task("",now.minusSeconds(7200),expired,"standardChannel")).messages()).hasSize(1);
+        assertThat(paths).hasSize(2);
     }
 }

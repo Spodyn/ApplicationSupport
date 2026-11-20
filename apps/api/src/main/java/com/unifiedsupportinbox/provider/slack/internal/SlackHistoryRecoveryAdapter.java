@@ -35,6 +35,11 @@ class SlackHistoryRecoveryAdapter implements HistoryRecoveryAdapter {
             var page=task.thread().isEmpty()
                     ? client.history(token,task.externalChannelId(),task.cursor(),null,ts(task.until()),15)
                     : client.replies(token,task.externalChannelId(),task.thread(),task.cursor(),ts(task.from()),ts(task.until()),15);
+            if (!page.ok() && "invalid_cursor".equals(page.errorCode()) && task.cursor()!=null) {
+                // Provider cursors can expire during an outage. Replay this collection's captured
+                // range; the shared message identity and durable thread keys suppress duplicates.
+                return fetch(task.withoutCursor());
+            }
             if(page.statusCode()==429) throw new Unavailable("SLACK_RATE_LIMITED",positive(page.retryAfter(),Duration.ofMinutes(1)));
             if(page.statusCode()<200||page.statusCode()>=300) throw new Unavailable("SLACK_HTTP_"+page.statusCode(),
                     SlackDeliveryErrorClassifier.isTransientHttpStatus(page.statusCode())?positive(page.retryAfter(),Duration.ofSeconds(30)):null);

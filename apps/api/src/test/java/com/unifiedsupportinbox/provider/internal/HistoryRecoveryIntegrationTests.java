@@ -186,4 +186,17 @@ class HistoryRecoveryIntegrationTests {
         assertThat(store.claim()).isEmpty();
         assertThat(jdbc.queryForObject("SELECT provider_retry_at>CURRENT_TIMESTAMP+INTERVAL '1 minute' FROM integration_resync_settings",Boolean.class)).isTrue();
     }
+    @ParameterizedTest @CsvSource({"SLACK","TEAMS"})
+    void manualAllHistoryStreamsOldAndNewPostsWhileTheNextPageIsStillQueued(String provider) {
+        fixture(provider);Instant now=Instant.now();Instant old=now.minusSeconds(86400*25),recent=now.minusSeconds(60);
+        store.start(integration,null,"manual",now);Task first=store.claim().orElseThrow();
+        store.commit(first,adapter(),new Page(List.of(payload(id(old),old,id(old))),List.of(),"page-two"));processInbound();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages",Integer.class)).isEqualTo(1);
+        assertThat(store.view(integration).runs().getFirst().channels().getFirst().status()).isEqualTo("RUNNING");
+        Task next=store.claim().orElseThrow();assertThat(next.cursor()).isEqualTo("page-two");assertThat(next.from()).isNull();
+        store.commit(next,adapter(),new Page(List.of(payload(id(recent),recent,id(recent))),List.of(),null));processInbound();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages",Integer.class)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM cases",Integer.class)).isEqualTo(2);
+        assertThat(store.view(integration).runs().getFirst().channels().getFirst().added()).isEqualTo(2);
+    }
 }

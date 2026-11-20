@@ -51,4 +51,14 @@ class SlackHistoryRecoveryAdapterTests {
                 .thenReturn(new SlackHistoryClient.Page(200,false,List.of(),null,"missing_scope",null));
         assertThatThrownBy(()->adapter.fetch(task("",null))).isInstanceOfSatisfying(Unavailable.class,e->{assertThat(e.retryAfter).isNull();assertThat(e.code).contains("MISSING_SCOPE");});
     }
+    @Test void expiredCursorRestartsTheSameRangeWithoutLosingOldThreadDiscovery() {
+        var original=task("",now.minusSeconds(7200));
+        var stale=new Task(original.id(),original.runId(),original.integrationId(),original.channelId(),original.externalChannelId(),original.provider(),original.source(),original.from(),original.until(),original.thread(),"expired-cursor",original.lease(),original.metadata());
+        when(client.history(any(),anyString(),eq("expired-cursor"),isNull(),anyString(),anyInt()))
+                .thenReturn(new SlackHistoryClient.Page(200,false,List.of(),null,"invalid_cursor",null));
+        when(client.history(any(),anyString(),isNull(),isNull(),anyString(),anyInt()))
+                .thenReturn(new SlackHistoryClient.Page(200,true,List.of(json.readTree("{\"ts\":\"1.000001\",\"reply_count\":1}")),"fresh-cursor",null,null));
+        var recovered=adapter.fetch(stale);
+        assertThat(recovered.threads()).containsExactly("1.000001");assertThat(recovered.nextCursor()).isEqualTo("fresh-cursor");
+    }
 }

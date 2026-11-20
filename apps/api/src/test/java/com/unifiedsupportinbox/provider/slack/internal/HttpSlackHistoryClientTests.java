@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.provider.slack.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -23,6 +24,26 @@ class HttpSlackHistoryClientTests {
     @AfterEach
     void stopServer() {
         if (server != null) server.stop(0);
+    }
+
+    @Test
+    void allHistoryAndOldThreadDiscoveryOmitTheLowerTimeBoundary() throws Exception {
+        AtomicReference<String> query = new AtomicReference<>();
+        startServer(exchange -> {
+            query.set(exchange.getRequestURI().getRawQuery());
+            respond(exchange,200,"{\"ok\":true,\"messages\":[],\"response_metadata\":{\"next_cursor\":\"page-two\"}}");
+        });
+        assertThat(client().history(credential(),"C123",null,null,"1713000000.000000",15).ok()).isTrue();
+        assertThat(query.get()).doesNotContain("oldest=").contains("latest=1713000000.000000");
+        assertThat(client().replies(credential(),"C123","1712000000.000001","page-two",null,"1713000000.000000",15).ok()).isTrue();
+        assertThat(query.get()).doesNotContain("oldest=").contains("cursor=page-two").contains("ts=1712000000.000001");
+    }
+
+    @Test
+    void missingContinuationCannotBeReportedAsCompleteHistory() throws Exception {
+        startServer(exchange->respond(exchange,200,"{\"ok\":true,\"has_more\":true,\"messages\":[{\"ts\":\"1.000001\"}]}"));
+        assertThatThrownBy(()->client().history(credential(),"C123",null,null,"1713000000.000000",15))
+                .isInstanceOf(IllegalStateException.class);
     }
 
     @Test

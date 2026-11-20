@@ -16,6 +16,9 @@ public interface HistoryRecoveryAdapter {
         public boolean includes(Instant sent) {
             return (from == null || !sent.isBefore(from)) && !sent.isAfter(until);
         }
+        public Task withoutCursor() {
+            return new Task(id,runId,integrationId,channelId,externalChannelId,provider,source,from,until,thread,null,lease,metadata);
+        }
     }
     record Page(List<JsonNode> messages, List<String> threads, String nextCursor, int scanned) {
         public Page(List<JsonNode> messages, List<String> threads, String nextCursor) {

@@ -523,7 +523,8 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackHistoryRecoveryAdapterTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsHistoryRecoveryAdapterTests.java",
         "apps/web/tests/unit/integration-resync.test.ts",
-        "apps/web/tests/e2e/application.spec.ts"
+        "apps/web/tests/e2e/application.spec.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/HttpSlackHistoryClientTests.java"
       ],
       "gap": "Real Slack/Teams resync sandbox acceptance NOT RUN; no live credentials or tenant permission changes performed"
     }
