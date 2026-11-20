@@ -72,7 +72,7 @@ consent before rerunning. Permissions and routes are never guessed.
 
 V54 is additive and compatible with the immediately previous application:
 settings, runs, per-channel/thread tasks and nullable recovery references.
-No existing rows are opted in. Each page has an independent lease token;
+No existing rows are opted in. Before rolling back to an older application, disable recovery and drain already-enqueued recovered inbound events: the older consumer does not implement the new provenance/SLA semantics. Pending scan tasks can remain paused until the compatible version returns. Each page has an independent lease token;
 an expired worker cannot commit after another worker reclaims its task. Provider
 HTTP happens outside transactions. Inbound events, thread discovery and page
 checkpoints commit together; failed pages are safe to replay. Expired Slack/Graph continuation cursors restart the same captured collection/range and rely on Message identity deduplication; a Slack response advertising more pages without a cursor cannot report success. Retryable provider
@@ -106,3 +106,29 @@ tests. A dedicated authorized sandbox and securely supplied test credentials
 are required for real outage/recovery acceptance. Full repository gate results
 are recorded separately in the completion report; a green focused suite alone
 does not establish release acceptance.
+
+## Recorded local validation, 2026-11-20
+
+Runtime source: `99bf202`; subsequent edits to this evidence are documentation only.
+
+| Check | Result |
+| --- | --- |
+| `pnpm install --frozen-lockfile` in a clean worktree | PASS |
+| `pnpm check` in the clean worktree | PASS: 108 frontend unit tests, 39 Playwright UI tests, production build, lint/typecheck, 87 Python configuration tests, 34 regression feature mappings, gate assertions, secret scan, OpenAPI lint/generation/client checks |
+| Maven Wrapper `verify -DexcludedGroups=integration` | PASS: 331 tests; application JAR build |
+| Maven Wrapper `test -Dgroups=integration` | PASS: 295 tests at preceding runtime revision `491ec57` |
+| Final focused `HistoryRecoveryIntegrationTests,PostgresFlywayLifecycleIntegrationTests,ApiSurfaceIntegrationTests` | PASS: 27 tests at `99bf202`, including 15 recovery cases, clean/previous-schema migration and HTTP authorization/contract coverage |
+| `pnpm test:fullstack` in the clean worktree | PASS: 20 tests, real backend/frontend, disposable PostgreSQL/RabbitMQ/MinIO and synthetic Slack HTTP |
+| `pnpm audit --audit-level=high` | PASS: no known vulnerabilities |
+| Maven dependency scan (`scripts/security_dependencies.py`) | PASS: 250 packages, no OSV findings |
+| `pnpm openapi:compat -- --base-ref 064ab5d` | PASS: additive-only v1 compatibility |
+| Decision/orchestrator YAML parsing and `git diff --check` | PASS |
+| Real Slack/Teams resync sandbox acceptance | NOT RUN |
+
+The initial Slack lower-bound regression was reproduced as a failing HTTP-client
+test before correction. Expired Slack/Graph cursor tests likewise failed before
+adding safe collection replay. No assertions were removed, retries enabled or
+CI gates weakened. The full integration count above predates the two added
+all-history streaming cases; final focused coverage verifies both of them.
+GitHub's exact-HEAD workflow remains the integration authority; this local report
+is not a claim that unrun infrastructure/CI or live-provider acceptance passed.

@@ -87,3 +87,11 @@ Generated from controller mappings on 2026-11-09. This is a navigation aid, not 
 | GET | `/api/v1/cases` | [CaseListController](../../apps/api/src/main/java/com/unifiedsupportinbox/workflow/CaseListController.java) | 23 |
 | POST | `/api/v1/cases/{caseId}/resolve` | [CaseResolveController](../../apps/api/src/main/java/com/unifiedsupportinbox/workflow/CaseResolveController.java) | 31 |
 | PUT | `/api/v1/admin/users/{userId}/ignore-weight` | [IgnoreVoteWeightController](../../apps/api/src/main/java/com/unifiedsupportinbox/workflow/IgnoreVoteWeightController.java) | 31 |
+
+History recovery additions (2026-11-20; ADMIN + `manage_integrations`, session/CSRF; covered by `ApiSurfaceIntegrationTests`):
+
+| Method | Path | Controller | Source line |
+| --- | --- | --- | --- |
+| GET | `/api/v1/admin/integrations/{integrationId}/resync` | [HistoryRecoveryController](../../apps/api/src/main/java/com/unifiedsupportinbox/provider/internal/HistoryRecoveryController.java) | 17 |
+| PUT | `/api/v1/admin/integrations/{integrationId}/resync` | [HistoryRecoveryController](../../apps/api/src/main/java/com/unifiedsupportinbox/provider/internal/HistoryRecoveryController.java) | 21 |
+| POST | `/api/v1/admin/integrations/{integrationId}/resync` | [HistoryRecoveryController](../../apps/api/src/main/java/com/unifiedsupportinbox/provider/internal/HistoryRecoveryController.java) | 30 |
