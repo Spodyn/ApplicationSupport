@@ -51,9 +51,18 @@ export function IntegrationResyncPanel({ id, disabled }: { id: string; disabled:
         {run.channels.map((channel) => <div key={channel.channelId}>
           <p>{channel.channelName} · {t(`resync_status_${channel.status}`)}</p>
           <p>{t("Dodano")}: {channel.added} · {t("Przeskanowano")}: {channel.scanned} · {t("Oczekuje na zapis")}: {channel.pending}</p>
-          {channel.errorCode && <p className="text-orange-500">{t("Synchronizacja niepełna")}: {channel.errorCode}</p>}
+          {channel.errorCode && <p className="text-orange-500">{t("Synchronizacja niepełna")}: {t(recoveryError(channel.errorCode))} <span className="font-mono">({channel.errorCode})</span></p>}
         </div>)}
       </div>)}
     </div>
   </section>
+}
+
+function recoveryError(code: string) {
+  if (/HTTP_403|MISSING_SCOPE|NOT_IN_CHANNEL|CHANNEL_NOT_FOUND/.test(code)) return "Brak uprawnień do odczytu kanału. Sprawdź uprawnienia aplikacji i dostęp do kanału."
+  if (/TEAM_CONTEXT_MISSING|BOT_ROUTE_MISSING/.test(code)) return "Brak konfiguracji kanału Teams. Sprawdź instalację aplikacji i odbiór zdarzeń."
+  if (/RATE_LIMIT|HTTP_429/.test(code)) return "Osiągnięto limit API. Zadanie zostanie automatycznie ponowione."
+  if (/HTTP_401|INVALID_AUTH|TOKEN_MISSING|AUTH_FAILED/.test(code)) return "Nie można uwierzytelnić integracji. Sprawdź jej poświadczenia."
+  if (/UNAVAILABLE|HTTP_5|INTERRUPTED/.test(code)) return "API jest chwilowo niedostępne. Zadanie zostanie automatycznie ponowione."
+  return "Sprawdź konfigurację integracji i szczegóły błędu."
 }

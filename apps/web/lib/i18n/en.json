@@ -205,7 +205,13 @@
     "resync_status_WAITING": "Waiting to retry",
     "resync_status_SUCCEEDED": "Completed",
     "resync_status_RUNNING": "Scanning",
-    "resync_status_PROCESSING": "Processing messages"
+    "resync_status_PROCESSING": "Processing messages",
+    "Brak uprawnień do odczytu kanału. Sprawdź uprawnienia aplikacji i dostęp do kanału.": "Missing channel read permission. Check app permissions and channel access.",
+    "Brak konfiguracji kanału Teams. Sprawdź instalację aplikacji i odbiór zdarzeń.": "Teams channel configuration is missing. Check app installation and activity reception.",
+    "Osiągnięto limit API. Zadanie zostanie automatycznie ponowione.": "API rate limit reached. The job will retry automatically.",
+    "Nie można uwierzytelnić integracji. Sprawdź jej poświadczenia.": "The integration could not authenticate. Check its credentials.",
+    "API jest chwilowo niedostępne. Zadanie zostanie automatycznie ponowione.": "The API is temporarily unavailable. The job will retry automatically.",
+    "Sprawdź konfigurację integracji i szczegóły błędu.": "Check integration configuration and error details."
   },
   "auth": {
     "Bezpieczna aktywacja konta": "Secure account activation",

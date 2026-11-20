@@ -205,7 +205,13 @@
     "resync_status_WAITING": "Oczekuje na ponowienie",
     "resync_status_SUCCEEDED": "Ukończono",
     "resync_status_RUNNING": "Skanowanie",
-    "resync_status_PROCESSING": "Przetwarzanie wiadomości"
+    "resync_status_PROCESSING": "Przetwarzanie wiadomości",
+    "Brak uprawnień do odczytu kanału. Sprawdź uprawnienia aplikacji i dostęp do kanału.": "Brak uprawnień do odczytu kanału. Sprawdź uprawnienia aplikacji i dostęp do kanału.",
+    "Brak konfiguracji kanału Teams. Sprawdź instalację aplikacji i odbiór zdarzeń.": "Brak konfiguracji kanału Teams. Sprawdź instalację aplikacji i odbiór zdarzeń.",
+    "Osiągnięto limit API. Zadanie zostanie automatycznie ponowione.": "Osiągnięto limit API. Zadanie zostanie automatycznie ponowione.",
+    "Nie można uwierzytelnić integracji. Sprawdź jej poświadczenia.": "Nie można uwierzytelnić integracji. Sprawdź jej poświadczenia.",
+    "API jest chwilowo niedostępne. Zadanie zostanie automatycznie ponowione.": "API jest chwilowo niedostępne. Zadanie zostanie automatycznie ponowione.",
+    "Sprawdź konfigurację integracji i szczegóły błędu.": "Sprawdź konfigurację integracji i szczegóły błędu."
   },
   "auth": {
     "Bezpieczna aktywacja konta": "Bezpieczna aktywacja konta",

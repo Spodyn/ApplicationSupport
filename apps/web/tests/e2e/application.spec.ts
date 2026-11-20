@@ -1058,7 +1058,7 @@ for (const provider of ["SLACK", "TEAMS"] as const) {
     await expect.poll(() => settings.automatic).toBe(true)
     await panel.locator('input[type="datetime-local"]').fill("2026-11-18T10:30")
     await panel.getByRole("button", { name: "Uruchom resync", exact: true }).click()
-    await expect(panel.getByText("Synchronizacja niepełna: HISTORY_HTTP_403")).toBeVisible()
+    await expect(panel.getByText(/Synchronizacja niepełna: Brak uprawnień do odczytu kanału/)).toBeVisible()
     await panel.getByRole("radio", { name: "Od początku dostępnej historii" }).check()
     await panel.getByRole("button", { name: "Uruchom resync", exact: true }).click()
     await expect.poll(() => starts.length).toBe(2)

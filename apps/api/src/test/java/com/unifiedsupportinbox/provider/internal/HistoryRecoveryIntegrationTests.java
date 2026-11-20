@@ -136,7 +136,11 @@ class HistoryRecoveryIntegrationTests {
                 SELECT integration_id,'C-SECOND','second',customer_id,grouping_strategy,TRUE,metadata_json FROM channels WHERE id=?
                 """,channel);
         jdbc.update("UPDATE integration_resync_settings SET next_run_at=CURRENT_TIMESTAMP-INTERVAL '2 hours'");
-        Instant now=Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);store.schedule(now);Task task=store.claim().orElseThrow();
+        Instant now=Instant.now().truncatedTo(java.time.temporal.ChronoUnit.MICROS);
+        // Reconstruct the scheduler's repository after the simulated outage; no in-memory deadline survives.
+        var restarted=new HistoryRecoveryStore(jdbc,json);
+        new org.springframework.transaction.support.TransactionTemplate(context.getBean(org.springframework.transaction.PlatformTransactionManager.class))
+                .executeWithoutResult(status->restarted.schedule(now));Task task=store.claim().orElseThrow();
         assertThat(task.source()).isEqualTo("automatic");assertThat(task.from()).isEqualTo(now.minusSeconds(172800));
         assertThat(store.settings(integration).nextRunAt()).isEqualTo(now.plusSeconds(1800));
         store.fail(task,provider+"_HISTORY_HTTP_403",null);
