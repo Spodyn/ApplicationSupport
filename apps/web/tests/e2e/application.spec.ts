@@ -414,7 +414,7 @@ test("Teams onboarding saves team and customer with automatic discovery on, whil
   const dialog=page.getByRole("dialog",{name:"Dodaj Teams",exact:true})
   await expect(dialog.getByRole("switch",{name:"Automatycznie wykrywaj kanały",exact:true})).toBeChecked()
   await dialog.getByRole("textbox",{name:"Nazwa połączenia",exact:true}).fill("Staging Teams")
-  await dialog.getByRole("textbox",{name:"Link do zespołu Teams lub Team ID",exact:true}).fill("11111111-1111-4111-8111-111111111111")
+  await dialog.getByRole("textbox",{name:/^Link do zespołu Teams lub Team ID/}).fill("11111111-1111-4111-8111-111111111111")
   await dialog.getByRole("combobox",{name:"Domyślny klient",exact:true}).click()
   await page.getByRole("option",{name:"Teams Sandbox",exact:true}).click()
   await dialog.getByRole("button",{name:"Zapisz konfigurację",exact:true}).click()
