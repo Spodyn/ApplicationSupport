@@ -129,6 +129,13 @@ class StagingWorkflowBoundaryTests(unittest.TestCase):
         self.assertIn("StrictHostKeyChecking=yes", deploy)
         self.assertIn("AllowedIPs = 10.77.0.1/32", deploy)
 
+    def test_wireguard_conf_is_root_only_and_in_the_standard_directory(self):
+        workflow = (ROOT / ".github/workflows/deploy-staging.yml").read_text(encoding="utf-8")
+        self.assertIn("WIREGUARD_CONFIG: /etc/wireguard/usi-actions.conf", workflow)
+        self.assertIn('sudo install -m 0600 /dev/null "$WIREGUARD_CONFIG"', workflow)
+        self.assertIn('sudo wg-quick up "$WIREGUARD_CONFIG"', workflow)
+        self.assertIn('sudo rm -f "$WIREGUARD_CONFIG"', workflow)
+
     def test_both_required_ci_and_release_build_enforce_container_scan(self):
         self.assertIn("scan_images.py", (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
         self.assertIn("scan_images.py", (ROOT / "infra/staging/build-images.sh").read_text(encoding="utf-8"))
