@@ -3,6 +3,30 @@
 Target: `https://application-support.duckdns.org`. Work in progress; no acceptance
 pass is claimed until the new code is deployed and observed.
 
+## Teams upload compatibility follow-up (2026-11-21)
+
+- Owner reports Slack working. This is owner-observed evidence, not a new
+  automated or agent-observed Slack acceptance run.
+- Owner reports Teams refuses package upload with a request for
+  `supportsChannelFeatures=tier1`; no active Add action is available.
+- Reproduced the outdated generated-package contract with a failing integration
+  assertion: expected schema 1.25, actual 1.21. Updated only the onboarding
+  manifest to schema 1.25, readiness `tier1` and app version 1.1.1. Bot/app identity,
+  callbacks, team-only bot scope and the two RSC grants are preserved.
+- Exported the ZIP using the application's generator and validated all manifest
+  fields against Microsoft's official full 1.25 JSON schema: PASS. ZIP contains
+  only the manifest and both correctly sized icons; no credentials are packaged.
+- Regression coverage checks private/shared exclusion during discovery and that
+  their messages create no Cases, messages or Connector routes, even if a matching
+  standard channel mapping exists. This flag does not implement private/shared
+  inbox support. A flag alone is not proof of live Teams compatibility.
+- Real upload/installation and message/reply acceptance for version 1.1.1:
+  NOT RUN pending owner upload and selected-team consent. Repository CI results
+  for this fix are recorded in its PR; no merge or staging deployment is claimed
+  by the developer worker.
+
+## Original onboarding preflight (historical)
+
 - Staging preflight: SSH and HTTPS available; running application revision
   `064ab5dad74de4fffd24220ebe2086bd5e36792f` before this change.
 - Separate Slack app `Application Support Staging`, test workspace `TestApp` (nonsecret app/workspace identifiers retained in the
