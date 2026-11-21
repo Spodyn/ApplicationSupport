@@ -85,6 +85,17 @@ and HTTPS URLs. It contains no secret. It uses the separately versioned
 `apps/api/src/main/resources/teams/manifest.template.json`; the older development POC
 template remains historical evidence and must not be reused for this flow.
 
+The installation package uses manifest schema 1.25, app version 1.1.1 and
+`supportsChannelFeatures: "tier1"` for current Teams upload validation. Do not add
+this property to the old 1.21 schema or use the obsolete `supportedChannelTypes`.
+This compatibility declaration does not add RSC permissions or change the inbox's
+selected-team, standard-channel scope. The package description explicitly states
+that private/shared channels are not processed; discovery excludes them and
+message processing must not create Cases, messages or reply routes for them.
+If upload reports the missing `tier1` declaration, download the updated package
+after deployment and upload the ZIP intact. Existing bot credentials and callbacks
+do not need replacement.
+
 In Teams: Apps → Manage your apps → Upload an app → Upload a custom app → select
 the ZIP → Add to a team → choose the selected team and test channel → Add.
 For an existing installation, Manage your apps → the app → Upload/Update the
@@ -117,6 +128,9 @@ Official references:
 [RSC permissions](https://learn.microsoft.com/en-us/microsoftteams/platform/graph-api/rsc/resource-specific-consent),
 [team context](https://learn.microsoft.com/en-us/microsoftteams/platform/bots/how-to/get-teams-context),
 [channel lifecycle events](https://learn.microsoft.com/en-us/microsoftteams/platform/bots/how-to/conversations/subscribe-to-conversation-events).
+
+Manifest migration reference:
+[current channel readiness declaration](https://learn.microsoft.com/en-us/microsoftteams/platform/build-apps-for-shared-private-channels#migrate-from-supportedchanneltypes).
 
 ## Acceptance evidence
 

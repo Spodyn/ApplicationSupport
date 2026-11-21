@@ -550,7 +550,7 @@
         "apps/web/tests/fullstack/workflows.spec.ts",
         "scripts/tests/test_environment_contract.py"
       ],
-      "gap": "Live staging end-to-end acceptance pending credentials, selected-team installation and gated deployment; tracked in PROVIDER_ONBOARDING_VALIDATION.md"
+      "gap": "Live staging end-to-end acceptance pending selected-team installation with the schema 1.25/tier1 package and gated deployment; automated ZIP and private/shared rejection coverage tracked in PROVIDER_ONBOARDING_VALIDATION.md"
     }
   ]
 }
