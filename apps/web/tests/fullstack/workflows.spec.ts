@@ -6,6 +6,37 @@ import { expect, test, type Page } from '@playwright/test'
 type SlackFixture = { channelId: string; externalChannelId: string; workspaceId: string }
 const fixtures = new WeakMap<Page, SlackFixture>()
 
+test('administrator creates and edits a selected-team connection through the real API without browser secrets', async ({page},testInfo) => {
+  await login(page)
+  const marker=randomUUID().slice(0,8),name=`Teams onboarding ${marker}`,team=randomUUID()
+  const customerResponse=await command(page,'/api/v1/admin/customers',{name:`Teams customer ${marker}`})
+  expect(customerResponse.status()).toBe(201)
+  const customer=await customerResponse.json()
+  await page.goto('/settings')
+  await page.getByRole('tab',{name:'Integracje',exact:true}).click()
+  await page.getByRole('button',{name:'Dodaj Teams',exact:true}).click()
+  const dialog=page.getByRole('dialog',{name:'Dodaj Teams',exact:true})
+  await expect(dialog.getByRole('switch',{name:'Automatycznie wykrywaj kanały',exact:true})).toBeChecked()
+  await dialog.getByRole('textbox',{name:'Nazwa połączenia',exact:true}).fill(name)
+  await dialog.getByRole('textbox',{name:/^Link do zespołu Teams lub Team ID/}).fill(team)
+  await dialog.getByRole('combobox',{name:'Domyślny klient',exact:true}).click()
+  await page.getByRole('option',{name:customer.name,exact:true}).click()
+  await dialog.getByRole('button',{name:'Zapisz konfigurację',exact:true}).click()
+  await expect(dialog).not.toBeVisible()
+  const card=page.locator('[data-slot="card"]').filter({hasText:name})
+  await expect(card.getByText('Brakuje konfiguracji bota na VPS',{exact:true})).toBeVisible()
+  await card.getByRole('button',{name:'Konfiguruj',exact:true}).click()
+  const edit=page.getByRole('dialog',{name:'Konfiguruj Teams',exact:true})
+  await expect(edit.getByRole('textbox',{name:/^Link do zespołu Teams lub Team ID/})).toHaveValue(team)
+  await edit.getByRole('switch',{name:'Automatycznie wykrywaj kanały',exact:true}).uncheck()
+  await edit.getByRole('button',{name:'Zapisz konfigurację',exact:true}).click()
+  await expect(edit).not.toBeVisible()
+  const list=await (await page.request.get('/api/v1/admin/integrations')).json()
+  const connection=list.find((i:{displayName:string})=>i.displayName===name)
+  expect(await (await page.request.get(`/api/v1/admin/integrations/${connection.id}/onboarding`)).json()).toMatchObject({teamId:team,defaultCustomerId:customer.id,automaticDiscovery:false,state:'MISSING_BOT_CONFIGURATION'})
+  await page.screenshot({path:testInfo.outputPath('provider-onboarding.png'),animations:'disabled'})
+})
+
 async function csrf(page: Page) {
   return (await page.context().cookies()).find(cookie => cookie.name === 'XSRF-TOKEN')?.value ?? ''
 }

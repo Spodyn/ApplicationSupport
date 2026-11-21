@@ -208,3 +208,5 @@ Official implementation references: [Docker Ubuntu install](https://docs.docker.
 [GitHub environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments),
 [Next standalone](https://nextjs.org/docs/app/api-reference/config/next-config-js/output),
 [MinIO client CA directory](https://min.io/docs/minio/linux/reference/minio-mc.html).
+
+Provider onboarding: [PROVIDER_ONBOARDING.md](PROVIDER_ONBOARDING.md). The API entrypoint supports `USI_JAVA_PREFER_IPV4`; staging defaults it to true because the live VPS Java HTTP client timed out on the advertised IPv6 route while the identical authenticated path over IPv4 succeeded. TLS certificate/hostname verification remains enabled, and other instances can explicitly select false. Bot identifiers and credentials are independent per instance.

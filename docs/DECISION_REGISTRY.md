@@ -101,3 +101,7 @@ The grouped owner requests of 2026-11-10 and 2026-11-12 define the interface and
 ## Owner history recovery extension, 2026-11-20
 
 - DEC-PROVIDER-HISTORY-RECOVERY-001: opt-in Slack and Teams manual from-date/all-history recovery, independent durable automatic schedules, old-thread replies, permanent provenance and FRT/NRT from durable addition. This replaces the older seven-day Slack-only recovery bound. See [History recovery](HISTORY_RECOVERY.md) and [Product Contract](PRODUCT_CONTRACT.md#owner-approved-history-recovery-2026-11-20).
+
+## Owner provider onboarding extension, 2026-11-20
+
+- DEC-PROVIDER-ADMIN-ONBOARDING-001: admin-managed Slack/Teams connections, per-connection discovery, instance-specific bot/callback, one selected Teams team verified before persistence, and a new team-only package with message/channel-list RSC. Supersedes the earlier group-chat intake profile while preserving historical data. See [provider onboarding](PROVIDER_ONBOARDING.md).

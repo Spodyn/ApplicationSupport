@@ -45,13 +45,29 @@ class PostgresFlywayLifecycleIntegrationTests {
             statement.executeUpdate("INSERT INTO integrations(provider,display_name,status,health) VALUES ('SLACK','Existing integration','ENABLED','HEALTHY')");
         }
         Flyway current=Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).load();
-        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);current.validate();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(2);current.validate();
         assertThat(current.info().pending()).isEmpty();
         assertThat(queryInt("SELECT count(*) FROM integrations")).isEqualTo(1);
         assertThat(queryInt("SELECT count(*) FROM integration_resync_settings WHERE enabled OR automatic")).isZero();
         try(ConfigurableApplicationContext application=startApplication()) {
             assertThat(application.getEnvironment().getProperty("spring.jpa.hibernate.ddl-auto")).isEqualTo("validate");
         }
+    }
+
+    @Test void upgradesV54PreservingConnectionSecretsMappingAndMonitoringWhileInferringOneLegacyTeam() throws SQLException {
+        cleanDatabase();
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).target("54").load().migrate();
+        try(Connection connection=connection();var statement=connection.createStatement()) {
+            statement.executeUpdate("INSERT INTO customers(name) VALUES ('Legacy customer')");
+            statement.executeUpdate("INSERT INTO integrations(provider,display_name,status,health,secret_ref) VALUES ('TEAMS','Legacy Teams','ENABLED','HEALTHY','legacy/retained'),('SLACK','Legacy Slack','ENABLED','HEALTHY','slack/retained')");
+            statement.executeUpdate("INSERT INTO channels(integration_id,external_channel_id,name,customer_id,ignored,active,grouping_strategy,metadata_json) SELECT i.id,'legacy','Legacy',c.id,TRUE,TRUE,'TEAMS_ROOT_REPLIES','{\"teamsTeamId\":\"11111111-1111-4111-8111-111111111111\"}'::jsonb FROM integrations i CROSS JOIN customers c WHERE i.provider='TEAMS'");
+        }
+        var current=Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).load();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);current.validate();
+        assertThat(queryString("SELECT secret_ref FROM integrations WHERE provider='TEAMS'")).isEqualTo("legacy/retained");
+        assertThat(queryInt("SELECT count(*) FROM channels WHERE ignored AND active AND customer_id IS NOT NULL")).isEqualTo(1);
+        assertThat(queryInt("SELECT count(*) FROM integration_connection_settings WHERE automatic_discovery IS NULL")).isEqualTo(2);
+        assertThat(queryString("SELECT team_id::text FROM teams_instance_binding")).isEqualTo("11111111-1111-4111-8111-111111111111");
     }
 
     @Test

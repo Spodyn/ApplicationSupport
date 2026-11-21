@@ -10,5 +10,10 @@ public record DiscoveredChannel(
         ChannelGroupingStrategy groupingStrategy,
         boolean active,
         Instant lastMessageAt,
-        String metadataJson) {
+        String metadataJson,
+        UUID defaultCustomerId) {
+    public DiscoveredChannel(UUID integrationId,String externalChannelId,String name,ChannelGroupingStrategy groupingStrategy,
+            boolean active,Instant lastMessageAt,String metadataJson) {
+        this(integrationId,externalChannelId,name,groupingStrategy,active,lastMessageAt,metadataJson,null);
+    }
 }

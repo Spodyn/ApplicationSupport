@@ -46,6 +46,7 @@ class HistoryRecoveryIntegrationTests {
         this.provider=provider;
         integration=jdbc.queryForObject("INSERT INTO integrations(provider,display_name,status,health,secret_ref) VALUES (?,'Synthetic recovery','ENABLED','HEALTHY','synthetic/recovery') RETURNING id",UUID.class,provider);
         UUID customer=jdbc.queryForObject("INSERT INTO customers(name) VALUES ('Recovery customer') RETURNING id",UUID.class);
+        if(provider.equals("TEAMS"))jdbc.update("INSERT INTO teams_instance_binding(integration_id,team_id,default_customer_id) VALUES (?,?::uuid,?)",integration,"11111111-1111-1111-1111-111111111111",customer);
         channel=jdbc.queryForObject("INSERT INTO channels(integration_id,external_channel_id,name,customer_id,grouping_strategy,active) VALUES (?,'C-RECOVERY','recovery',?,?,TRUE) RETURNING id",UUID.class,integration,customer,provider.equals("SLACK")?"SLACK_ROOT_THREAD":"TEAMS_ROOT_REPLIES");
         jdbc.update("UPDATE channels SET metadata_json='{\"teamsContextType\":\"standardChannel\",\"teamsTeamId\":\"11111111-1111-1111-1111-111111111111\"}'::jsonb WHERE id=?",channel);
         jdbc.update("INSERT INTO teams_conversation_routes(integration_id,external_channel_id,thread_key,connector_conversation_id,service_url,bot_id,context_type) VALUES (?,'C-RECOVERY','','C-RECOVERY','https://smba.trafficmanager.net/emea/','28:synthetic','standardChannel')",integration);

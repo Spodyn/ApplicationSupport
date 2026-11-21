@@ -23,7 +23,7 @@ class TeamsWebhookIntegrationTests {
     static JdbcTemplate jdbc;
     static URI endpoint;
     static final HttpClient HTTP=HttpClient.newHttpClient();
-    static final String CLIENT=TeamsSecurityTests.CLIENT, TENANT=TeamsSecurityTests.TENANT;
+    static final String CLIENT=TeamsSecurityTests.CLIENT, TENANT=TeamsSecurityTests.TENANT, TEAM="11111111-1111-4111-8111-111111111111";
     @BeforeAll static void start() {
         POSTGRES.start();
         context=new SpringApplicationBuilder(UsiApiApplication.class,SyntheticKeys.class).profiles("test")
@@ -46,9 +46,10 @@ class TeamsWebhookIntegrationTests {
     @BeforeEach void fixture() {
         TestInfrastructure.resetPostgres(POSTGRES);
         jdbc.update("INSERT INTO integrations(provider,display_name,status,health,workspace_external_id,secret_ref) VALUES ('TEAMS','Synthetic Teams','ENABLED','UNKNOWN',?,'synthetic/teams')",TENANT);
+        jdbc.update("INSERT INTO teams_instance_binding(integration_id,team_id) SELECT id,?::uuid FROM integrations WHERE provider='TEAMS'",TEAM);
     }
     String payload(String id,String type,String conversation) {
-        return "{\"id\":\""+id+"\",\"type\":\""+type+"\",\"channelId\":\"msteams\",\"timestamp\":\"2026-11-19T12:00:00Z\",\"serviceUrl\":\"https://smba.trafficmanager.net/emea/\",\"recipient\":{\"id\":\"28:"+CLIENT+"\"},\"channelData\":{\"tenant\":{\"id\":\""+TENANT+"\"}},\"conversation\":{\"id\":\""+conversation+"\"}}";
+        return "{\"id\":\""+id+"\",\"type\":\""+type+"\",\"channelId\":\"msteams\",\"timestamp\":\"2026-11-19T12:00:00Z\",\"serviceUrl\":\"https://smba.trafficmanager.net/emea/\",\"recipient\":{\"id\":\"28:"+CLIENT+"\"},\"channelData\":{\"team\":{\"aadGroupId\":\""+TEAM+"\"},\"tenant\":{\"id\":\""+TENANT+"\"}},\"conversation\":{\"id\":\""+conversation+"\"}}";
     }
     String token() throws Exception {
         var jwt=new SignedJWT(new JWSHeader.Builder(JWSAlgorithm.RS256).keyID(TeamsSecurityTests.KEY.getKeyID()).build(),
@@ -78,8 +79,16 @@ class TeamsWebhookIntegrationTests {
         assertThat(post(body,null).statusCode()).isEqualTo(401);
         assertThat(post(body,"Bearer forged").statusCode()).isEqualTo(401);
         assertThat(post(body.replace(TENANT,"33333333-3333-4333-8333-333333333333"),token()).statusCode()).isEqualTo(401);
+        assertThat(post(body.replace(TEAM,"44444444-4444-4444-8444-444444444444"),token()).statusCode()).isEqualTo(401);
         assertThat(post("{",token()).statusCode()).isEqualTo(400);
         assertThat(post(body.replace("\"id\":\"1\",",""),token()).statusCode()).isEqualTo(400);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM inbound_events",Integer.class)).isZero();
+    }
+    @Test void selectedTeamChangeBetweenVerificationAndPersistenceCannotStoreAnEvent() {
+        UUID integration=jdbc.queryForObject("SELECT integration_id FROM teams_instance_binding",UUID.class);
+        jdbc.update("UPDATE teams_instance_binding SET team_id=?::uuid",UUID.randomUUID().toString());
+        assertThatThrownBy(()->context.getBean(TeamsInboundDeliveryService.class).persistTeamAndWake(integration,UUID.fromString(TEAM),"stale",payload("stale","message","channel"),"stale"))
+                .isInstanceOf(com.unifiedsupportinbox.ApiProblemException.class);
         assertThat(jdbc.queryForObject("SELECT count(*) FROM inbound_events",Integer.class)).isZero();
     }
 }

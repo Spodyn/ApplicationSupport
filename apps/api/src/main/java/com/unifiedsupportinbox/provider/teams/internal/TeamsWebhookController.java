@@ -15,6 +15,11 @@ class TeamsWebhookController {
     private final TeamsInboundDeliveryService deliveries;
     private final ProviderIntegrationCredentialLookup integrations;
     private final ObjectMapper json;
+    private TeamsTeamMembership membership;
+    private com.unifiedsupportinbox.integration.ProviderConnectionConfiguration connections;
+    private com.unifiedsupportinbox.channel.ChannelIngestionPolicy channels;
+    @org.springframework.beans.factory.annotation.Autowired
+    void onboarding(TeamsTeamMembership membership,com.unifiedsupportinbox.integration.ProviderConnectionConfiguration connections,com.unifiedsupportinbox.channel.ChannelIngestionPolicy channels){this.membership=membership;this.connections=connections;this.channels=channels;}
     TeamsWebhookController(TeamsJwtAuthenticator authenticator, TeamsInboundDeliveryService deliveries,
             ProviderIntegrationCredentialLookup integrations, ObjectMapper json) {
         this.authenticator = authenticator; this.deliveries = deliveries; this.integrations = integrations; this.json = json;
@@ -31,6 +36,10 @@ class TeamsWebhookController {
         var matches = integrations.findEnabledForProvider(IntegrationProvider.TEAMS).stream()
                 .filter(i -> tenant.equals(i.workspaceExternalId())).toList();
         if (matches.size() != 1) throw ApiProblemException.authenticationRequired();
+        UUID team=membership.authorize(matches.getFirst().integrationId(),activity);
+        String channel=activity.path("channelData").path("channel").path("id").asText("");
+        if(connections.settings(matches.getFirst().integrationId()).automaticDiscovery() && ("channelCreated".equals(activity.path("channelData").path("eventType").asText()) || !channel.isBlank() && channels.resolve(matches.getFirst().integrationId(),channel).isEmpty()))
+            connections.requestDiscovery(matches.getFirst().integrationId());
         try {
             String id = TeamsActivity.text(activity, "id");
             String conversation = TeamsActivity.text(activity.path("conversation"), "id");
@@ -40,7 +49,7 @@ class TeamsWebhookController {
                     + ("messageUpdate".equals(type) ? ":" + TeamsActivity.text(activity, "timestamp") : "");
             String key = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
                     .digest(identity.getBytes(StandardCharsets.UTF_8)));
-            deliveries.persistAndWake(matches.getFirst().integrationId(), key,
+            deliveries.persistTeamAndWake(matches.getFirst().integrationId(), team, key,
                     new String(body, StandardCharsets.UTF_8), UUID.randomUUID().toString());
         } catch (IllegalArgumentException malformed) {
             throw ApiProblemException.validationFailed("Teams activity identity is invalid.");

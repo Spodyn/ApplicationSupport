@@ -99,6 +99,10 @@ class CustomerService implements CustomerDirectory {
     }
 
     private void appendAudit(Authentication actor, CustomerEntity customer, String action) {
+        var metadata = new java.util.LinkedHashMap<String,Object>();
+        metadata.put("name",customer.name());
+        if(customer.externalRef()!=null)metadata.put("externalRef",customer.externalRef());
+        metadata.put("active",customer.active());
         auditEvents.append(
                 AuditActors.type(actor),
                 AuditActors.userId(actor),
@@ -106,10 +110,7 @@ class CustomerService implements CustomerDirectory {
                 "CUSTOMER",
                 customer.id(),
                 null,
-                java.util.Map.of(
-                        "name", customer.name(),
-                        "externalRef", customer.externalRef(),
-                        "active", customer.active()));
+                metadata);
     }
 
     private static CustomerView view(CustomerEntity customer) {

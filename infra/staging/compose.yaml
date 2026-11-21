@@ -49,6 +49,7 @@ services:
     restart: unless-stopped
     environment:
       SPRING_PROFILES_ACTIVE: staging
+      USI_JAVA_PREFER_IPV4: ${USI_JAVA_PREFER_IPV4:-true}
       USI_PUBLIC_BASE_URL: https://${USI_PUBLIC_HOST:-application-support.duckdns.org}
       USI_SLACK_CALLBACK_URL: https://${USI_PUBLIC_HOST:-application-support.duckdns.org}/api/v1/providers/slack/events
       USI_TEAMS_CALLBACK_URL: https://${USI_PUBLIC_HOST:-application-support.duckdns.org}/api/v1/provider-callbacks/teams
@@ -74,6 +75,10 @@ services:
       USI_BOOTSTRAP_ADMIN_EMAIL: ${STAGING_ADMIN_EMAIL:-}
       USI_BOOTSTRAP_ADMIN_DISPLAY_NAME: Staging administrator
       USI_BOOTSTRAP_ADMIN_PASSWORD_FILE: /run/usi-core/bootstrap-admin-password
+      USI_SLACK_CHANNEL_DISCOVERY_ENABLED: ${USI_SLACK_CHANNEL_DISCOVERY_ENABLED:-true}
+      USI_SLACK_DEFAULT_SECRET_REF: ${USI_SLACK_DEFAULT_SECRET_REF:-slack/default}
+      USI_TEAMS_DEFAULT_SECRET_REF: ${USI_TEAMS_DEFAULT_SECRET_REF:-teams/default}
+      USI_TEAMS_APP_ID: ${USI_TEAMS_APP_ID:-}
       USI_TEAMS_CLIENT_ID: ${USI_TEAMS_CLIENT_ID:-}
       USI_TEAMS_TENANT_ID: ${USI_TEAMS_TENANT_ID:-}
     volumes:

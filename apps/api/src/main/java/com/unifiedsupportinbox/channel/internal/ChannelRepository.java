@@ -90,7 +90,7 @@ class ChannelRepository {
                     last_message_at,
                     metadata_json
                 )
-                VALUES (?, ?, ?, NULL, FALSE, ?, ?, ?, CAST(? AS jsonb))
+                VALUES (?, ?, ?, ?, FALSE, ?, ?, ?, CAST(? AS jsonb))
                 ON CONFLICT (integration_id, external_channel_id)
                 DO UPDATE SET
                     name = EXCLUDED.name,
@@ -100,20 +100,21 @@ class ChannelRepository {
                         WHEN EXCLUDED.last_message_at IS NULL THEN channels.last_message_at
                         ELSE GREATEST(channels.last_message_at, EXCLUDED.last_message_at)
                     END,
-                    metadata_json = EXCLUDED.metadata_json
+                    metadata_json = channels.metadata_json || EXCLUDED.metadata_json
                 RETURNING id
                 """, preparedStatement -> {
             preparedStatement.setObject(1, discovered.integrationId());
             preparedStatement.setString(2, externalChannelId);
             preparedStatement.setString(3, name);
-            preparedStatement.setString(4, discovered.groupingStrategy().name());
-            preparedStatement.setBoolean(5, discovered.active());
+            preparedStatement.setObject(4, discovered.defaultCustomerId());
+            preparedStatement.setString(5, discovered.groupingStrategy().name());
+            preparedStatement.setBoolean(6, discovered.active());
             preparedStatement.setObject(
-                    6,
+                    7,
                     discovered.lastMessageAt() == null
                             ? null
                             : OffsetDateTime.ofInstant(discovered.lastMessageAt(), ZoneOffset.UTC));
-            preparedStatement.setString(7, metadataJson);
+            preparedStatement.setString(8, metadataJson);
         }, (resultSet, rowNumber) -> resultSet.getObject("id", UUID.class)).stream()
                 .findFirst()
                 .flatMap(this::findById)

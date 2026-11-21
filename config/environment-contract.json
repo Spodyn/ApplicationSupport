@@ -202,6 +202,31 @@
       "type": "absolute-directory",
       "requiredProfiles": ["staging", "prod", "production"],
       "allowedProfiles": ["local", "staging", "prod", "production"]
+    },
+    "USI_TEAMS_APP_ID": {
+      "classification": "server-non-secret",
+      "type": "optional-identifier",
+      "requiredProfiles": []
+    },
+    "USI_SLACK_DEFAULT_SECRET_REF": {
+      "classification": "server-non-secret",
+      "type": "optional-identifier",
+      "requiredProfiles": []
+    },
+    "USI_TEAMS_DEFAULT_SECRET_REF": {
+      "classification": "server-non-secret",
+      "type": "optional-identifier",
+      "requiredProfiles": []
+    },
+    "USI_SLACK_CHANNEL_DISCOVERY_ENABLED": {
+      "classification": "server-non-secret",
+      "type": "boolean",
+      "requiredProfiles": []
+    },
+    "USI_JAVA_PREFER_IPV4": {
+      "classification": "server-non-secret",
+      "type": "boolean",
+      "requiredProfiles": []
     }
   },
   "runtimeSecretProfiles": ["staging", "prod", "production"],

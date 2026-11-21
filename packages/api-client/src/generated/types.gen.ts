@@ -149,9 +149,64 @@ export type ApiBusinessHoursScheduleViewScheduleException = {
   "note"?: string
 }
 
+export type ApiConnectionOnboardingControllerDiscoveryInput = {
+  "automaticDiscovery": boolean
+}
+
+export type ApiConnectionOnboardingControllerRuntimeView = {
+  "provider"?: "SLACK" | "TEAMS" | "TELEGRAM"
+  "callbackUrl"?: string
+  "botConfigured": boolean
+  "clientId"?: string
+}
+
+export type ApiConnectionOnboardingControllerSlackInput = {
+  "displayName"?: string
+  "workspaceExternalId"?: string
+  "workspaceName"?: string
+  "secretRef"?: string
+  "automaticDiscovery"?: boolean
+}
+
+export type ApiConnectionOnboardingControllerTeamsInput = {
+  "displayName"?: string
+  "team"?: string
+  "defaultCustomerId"?: string
+  "automaticDiscovery"?: boolean
+}
+
+export type ApiConnectionOnboardingControllerView = {
+  "integrationId"?: string
+  "automaticDiscovery": boolean
+  "state"?: string
+  "callbackUrl"?: string
+  "botConfigured": boolean
+  "teamId"?: string
+  "defaultCustomerId"?: string
+  "lastDiscoveredAt"?: string
+  "nextDiscoveryAt"?: string
+  "errorCode"?: string
+  "discoveredChannels": number
+}
+
 export type ApiCursorPage = {
   "items"?: Array<ApiAuditSearchServiceAuditEventItem>
   "nextCursor"?: string
+}
+
+export type ApiIntegrationView = {
+  "id"?: string
+  "provider"?: "SLACK" | "TEAMS" | "TELEGRAM"
+  "displayName"?: string
+  "status"?: "CONFIGURING" | "ENABLED" | "DISABLED"
+  "health"?: "UNKNOWN" | "HEALTHY" | "DEGRADED" | "UNAVAILABLE"
+  "workspaceExternalId"?: string
+  "workspaceName"?: string
+  "secretConfigured": boolean
+  "lastEventAt"?: string
+  "lastErrorCode"?: string
+  "createdAt"?: string
+  "updatedAt"?: string
 }
 
 export type ApiNotificationAdminControllerDestinationRequest = {

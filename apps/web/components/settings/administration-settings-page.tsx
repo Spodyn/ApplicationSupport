@@ -1,5 +1,7 @@
 "use client"
 
+import { CallbackAddress, ProviderConnectionStatus } from "./provider-connection-status"
+import { useProviderSetup } from "@/lib/services/queries"
 import { IntegrationResyncPanel } from "./integration-resync-panel"
 
 import { userError } from "@/lib/i18n/errors"
@@ -44,6 +46,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -170,7 +173,7 @@ export function AdministrationSettingsPage({ initialTab = "general" }: { initial
               <TabsContent value="sla"><SlaPanel data={settingsQuery.data.sla} actions={actions} /></TabsContent>
               <TabsContent value="schedule"><SchedulePanel data={settingsQuery.data.schedule} actions={actions} /></TabsContent>
               <TabsContent value="out-of-office"><OutOfOfficePanel data={settingsQuery.data.outOfOffice} actions={actions} /></TabsContent>
-              <TabsContent value="integrations"><IntegrationsPanel data={settingsQuery.data.integrations} actions={actions} /></TabsContent>
+              <TabsContent value="integrations"><IntegrationsPanel data={settingsQuery.data.integrations} customers={settingsQuery.data.customers} actions={actions} /></TabsContent>
               <TabsContent value="customers"><CustomersPanel data={settingsQuery.data.customers} actions={actions} /></TabsContent>
               <TabsContent value="channels"><ChannelsPanel data={settingsQuery.data.channels} customers={settingsQuery.data.customers} actions={actions} /></TabsContent>
               <TabsContent value="notifications"><NotificationsPanel data={settingsQuery.data.notifications} deliveries={settingsQuery.data.notificationDeliveries ?? []} integrations={settingsQuery.data.integrations} actions={actions} /></TabsContent>
@@ -357,22 +360,29 @@ const integrationHealthLabels: Record<ManagedIntegration["health"], string> = {
   unavailable: "Brak połączenia",
 }
 
-function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; actions: SettingsActions }) {
+function IntegrationsPanel({ data, customers, actions }: { data: ManagedIntegration[]; customers: ManagedCustomer[]; actions: SettingsActions }) {
   const t = useT()
   const [configured, setConfigured] = useState<ManagedIntegration | null>(null)
+  const runtime = useProviderSetup()
+  const [teamInput, setTeamInput] = useState("")
+  const [defaultCustomer, setDefaultCustomer] = useState("")
+  const [automaticDiscovery, setAutomaticDiscovery] = useState(true)
   const [displayName, setDisplayName] = useState("Slack")
   const [workspaceName, setWorkspaceName] = useState("")
   const [workspaceId, setWorkspaceId] = useState("")
   const [secretRef, setSecretRef] = useState("")
   const [disabledIntegration, setDisabledIntegration] = useState<ManagedIntegration | null>(null)
 
-  const openConfiguration = (integration?: ManagedIntegration) => {
-    setDisplayName(integration?.displayName ?? "Slack")
+  const openConfiguration = (integration?: ManagedIntegration, platform: "slack" | "teams" = "slack") => {
+    setTeamInput(integration?.teamId ?? "")
+    setDefaultCustomer(integration?.defaultCustomerId ?? "")
+    setAutomaticDiscovery(integration?.automaticDiscovery ?? true)
+    setDisplayName(integration?.displayName ?? (platform === "teams" ? "Microsoft Teams" : "Slack"))
     setWorkspaceName(integration?.workspace ?? "")
     setWorkspaceId(integration?.workspaceId ?? "")
     setSecretRef("")
     if (!integration) {
-      setConfigured({ id: "", platform: "slack", displayName: "Slack", status: "configuring", workspace: "", workspaceId: "", hasSecretReference: false, health: "unknown" })
+      setConfigured({ id: "", platform, displayName: platform === "teams" ? "Microsoft Teams" : "Slack", status: "configuring", workspace: "", workspaceId: "", hasSecretReference: false, health: "unknown" })
       return
     }
     setConfigured(integration)
@@ -398,10 +408,10 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
 
   const discover = async (integration: ManagedIntegration) => {
     try {
-      const channels = await actions.discoverChannels.mutateAsync(integration.id)
-      notify.success(t("Odświeżono kanały Slack"), t("Znaleziono {{value0}} kanałów dostępnych dla aplikacji.", { value0: channels.length }))
+      await actions.discoverChannels.mutateAsync(integration.id)
+      notify.success(t("Zlecono wykrywanie kanałów"), t("Kanały pojawią się automatycznie po zakończeniu wykrywania."))
     } catch (error) {
-      notify.error(t("Nie udało się pobrać kanałów Slack"), getErrorMessage(error))
+      notify.error(t("Nie udało się pobrać kanałów"), getErrorMessage(error))
     }
   }
 
@@ -411,11 +421,12 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
         <TriangleAlert />
         <AlertTitle>{t("Zakres Microsoft Teams")}</AlertTitle>
         <AlertDescription>
-          {t("Początkowo obsługiwane są standardowe kanały i czaty grupowe z RSC. Kanały prywatne i udostępnione wymagają osobnej walidacji.")} </AlertDescription>
+          {t("Ta instancja obsługuje standardowe kanały jednego wybranego zespołu Teams. Kanały prywatne i udostępnione nie są obsługiwane.")} </AlertDescription>
       </Alert>
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
         <Button size="sm" onClick={() => openConfiguration()}><Plus /> {t("Dodaj Slack")}</Button>
+        <Button size="sm" disabled={data.some((i) => i.platform === "teams")} onClick={() => openConfiguration(undefined, "teams")}><Plus /> {t("Dodaj Teams")}</Button>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -461,11 +472,14 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
                   </dd>
                 </div>
               </dl>
+              {(integration.platform === "slack" || integration.platform === "teams") && <ProviderConnectionStatus integration={integration} runtime={runtime.data?.find((r) => r.platform === integration.platform)} pending={actions.setAutomaticDiscovery.isPending} setAutomatic={(automatic) => {
+                void actions.setAutomaticDiscovery.mutateAsync({ id: integration.id, automatic }).catch((error) => notify.error(t("Nie udało się zapisać wykrywania kanałów."), getErrorMessage(error)))
+              }} />}
               {(integration.platform === "slack" || integration.platform === "teams") && <IntegrationResyncPanel id={integration.id} disabled={integration.status !== "enabled"} />}
               <div className="flex flex-wrap gap-2 border-t pt-3">
                 <Button variant="outline" size="sm" onClick={() => openConfiguration(integration)}><Settings2 /> {t("Konfiguruj")}</Button>
                 <Button variant="outline" size="sm" disabled={integration.status === "disabled" || !integration.hasSecretReference || actions.testIntegration.isPending} onClick={() => void test(integration)}><PlugZap /> {t("Testuj")}</Button>
-                {integration.platform === "slack" && <Button variant="outline" size="sm" disabled={integration.status === "disabled" || integration.health !== "healthy" || actions.discoverChannels.isPending} onClick={() => void discover(integration)}><RefreshCw /> {t("Pobierz kanały")}</Button>}
+                {(integration.platform === "slack" || integration.platform === "teams") && <Button variant="outline" size="sm" disabled={integration.status === "disabled" || actions.discoverChannels.isPending} onClick={() => void discover(integration)}><RefreshCw /> {t("Pobierz kanały")}</Button>}
                 {integration.platform === "teams" && <Button variant="outline" size="sm" disabled={integration.status === "disabled" || actions.retryTeamsAttachments.isPending} onClick={() => {
                   void actions.retryTeamsAttachments.mutateAsync(integration.id)
                     .then((count) => notify.success(t("Zaplanowano ponowienie transferu plików Teams."), t("Liczba zadań: {{count}}", { count })))
@@ -482,21 +496,33 @@ function IntegrationsPanel({ data, actions }: { data: ManagedIntegration[]; acti
 
       <Dialog open={Boolean(configured)} onOpenChange={(open) => !open && setConfigured(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>{configured?.id ? t("Konfiguruj Slack") : t("Dodaj Slack")}</DialogTitle><DialogDescription>{t("Bezpieczny tryb konfiguracji przez zewnętrzną referencję sekretu. Wartości tokenu i signing secretu nigdy nie trafiają do przeglądarki ani bazy danych.")}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>{configured?.platform === "teams" ? configured.id ? t("Konfiguruj Teams") : t("Dodaj Teams") : configured?.id ? t("Konfiguruj Slack") : t("Dodaj Slack")}</DialogTitle><DialogDescription>{t("Połączenie korzysta z poświadczeń zapisanych wyłącznie w magazynie serwera.")}</DialogDescription></DialogHeader>
           <div className="grid gap-4">
-            <Field label={t("Nazwa połączenia")}><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={t("Slack — Support")} /></Field>
-            <Field label={t("Nazwa workspace")}><Input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder={t("Firma Support")} /></Field>
-            <Field label={t("Slack Workspace ID")} hint={t("Identyfikator team_id zwracany przez Slack, np. T012ABCDEF.")}><Input value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} placeholder="T012ABCDEF" /></Field>
-            <Field label={t("Referencja sekretu")} hint={t("Względny katalog pod USI_INTEGRATION_SECRETS_DIRECTORY.")}><Input value={secretRef} onChange={(event) => setSecretRef(event.target.value)} placeholder="slack/firma-support" /></Field>
+            <CallbackAddress value={runtime.data?.find((r) => r.platform === configured?.platform)?.callbackUrl} />
+            <Field label={t("Nazwa połączenia")}><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></Field>
+            {configured?.platform === "teams" ? <>
+              <Field label={t("Link do zespołu Teams lub Team ID")} hint={t("W Teams wybierz zespół → Więcej opcji → Pobierz link do zespołu. Z linku odczytamy groupId.")}><Input value={teamInput} onChange={(event) => setTeamInput(event.target.value)} /></Field>
+              <Field label={t("Domyślny klient")}><Select value={defaultCustomer} onValueChange={(value) => setDefaultCustomer(String(value))}><SelectTrigger className="w-full" aria-label={t("Domyślny klient")}><SelectValue placeholder={t("Wybierz klienta")} /></SelectTrigger><SelectContent>{customers.filter((c) => c.active).map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></Field>
+              {!customers.some((c) => c.active) && <p className="text-xs text-orange-500">{t("Najpierw dodaj klienta w Settings → Customers.")}</p>}
+              <p className="text-xs text-muted-foreground">{t("Nowe kanały standardowe otrzymają tego klienta. Indywidualne ustawienia istniejących kanałów zostaną zachowane.")}</p>
+            </> : <>
+              <Field label={t("Slack Workspace ID")} hint={t("Identyfikator team_id zwracany przez Slack, np. T012ABCDEF.")}><Input value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} placeholder="T012ABCDEF" /></Field>
+              <details><summary className="cursor-pointer text-xs text-muted-foreground">{t("Zaawansowane")}</summary><div className="mt-3 grid gap-3">
+                <Field label={t("Nazwa workspace")}><Input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} /></Field>
+                <Field label={t("Referencja sekretu")} hint={t("Opcjonalnie: inna referencja magazynu serwera. Puste pole zachowuje istniejącą lub domyślną konfigurację.")}><Input value={secretRef} onChange={(event) => setSecretRef(event.target.value)} /></Field>
+              </div></details>
+              <p className="text-xs text-muted-foreground">{t("Zaproś bota do kanału w Slacku")}</p>
+            </>}
+            <div className="flex items-center justify-between gap-2"><Label htmlFor="new-connection-discovery">{t("Automatycznie wykrywaj kanały")}</Label><Switch id="new-connection-discovery" checked={automaticDiscovery} onCheckedChange={setAutomaticDiscovery} /></div>
+            {runtime.data?.find((r) => r.platform === configured?.platform)?.botConfigured === false && <Alert><Info /><AlertDescription>{t("Brakuje konfiguracji bota na VPS. Możesz zapisać połączenie i dokończyć konfigurację serwera przed testem i włączeniem integracji.")}</AlertDescription></Alert>}
           </div>
-          <Alert><Info /><AlertDescription>{t("W tym katalogu muszą istnieć pliki")} <code>slack-bot-token</code> {t("i")} <code>slack-signing-secret</code>{t(". Po zapisie uruchom test, pobierz kanały i włącz integrację.")}</AlertDescription></Alert>
           <DialogFooter>
             <DialogClose render={<Button variant="outline" />}>{t("Anuluj")}</DialogClose>
-            <Button disabled={!displayName.trim() || !workspaceName.trim() || !workspaceId.trim() || !secretRef.trim() || actions.configureIntegration.isPending} onClick={async () => {
+            <Button disabled={!displayName.trim() || (configured?.platform === "teams" ? !teamInput.trim() || !defaultCustomer : !workspaceId.trim()) || actions.configureIntegration.isPending} onClick={async () => {
               if (!configured) return
               try {
-                await actions.configureIntegration.mutateAsync({ id: configured.id || undefined, platform: "slack", displayName, workspaceId, workspaceName, secretRef })
-                notify.success(t("Zapisano konfigurację"), "Slack")
+                await actions.configureIntegration.mutateAsync({ id: configured.id || undefined, platform: configured.platform, displayName, workspaceId, workspaceName, secretRef, team: teamInput, defaultCustomerId: defaultCustomer || undefined, automaticDiscovery })
+                notify.success(t("Zapisano konfigurację"), channelLabels[configured.platform])
                 setConfigured(null)
               } catch (error) { notify.error(t("Nie udało się zapisać konfiguracji"), getErrorMessage(error)) }
             }}>{actions.configureIntegration.isPending ? t("Zapisywanie…") : t("Zapisz konfigurację")}</Button>
@@ -565,7 +591,7 @@ function ChannelsPanel({ data, customers, actions }: { data: ManagedChannel[]; c
   }
 
   return (
-    <SettingsCard title={t("Kanały Slack")} description={t("Przypisz dostępne kanały do klientów i określ regułę monitorowania.")}>
+    <SettingsCard title={t("Kanały")} description={t("Przypisz dostępne kanały do klientów i określ regułę monitorowania.")}>
       <Alert>
         <Info />
         <AlertTitle>{t("Wiadomości bez case’a i SLA")}</AlertTitle>
@@ -580,7 +606,7 @@ function ChannelsPanel({ data, customers, actions }: { data: ManagedChannel[]; c
                 <TableCell><div className="flex items-center gap-2"><PlatformIcon channel={channel.platform} /> <span className="text-xs">{channelLabels[channel.platform]}</span></div></TableCell>
                 <TableCell className="font-medium">{channel.channelName} · {channel.active ? t("Aktywny") : t("Nieaktywny")}</TableCell>
                 <TableCell><Select value={channel.customerId ?? "__unmapped__"} onValueChange={(value) => void configure(channel, value === "__unmapped__" ? undefined : String(value), channel.ignored)}><SelectTrigger className="w-52"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__unmapped__">{t("Nie przypisano")}</SelectItem>{customers.filter((customer) => customer.active).map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>)}</SelectContent></Select></TableCell>
-                <TableCell><div className="flex items-center gap-2"><Switch checked={!channel.ignored} onCheckedChange={(checked) => void configure(channel, channel.customerId, !checked)} aria-label={`${channel.channelName}: monitoring`} /><span className={`text-xs ${channel.ignored || !channel.customerId ? "text-warning-foreground" : "text-success"}`}>{!channel.active ? t("Nieaktywny") : channel.ignored ? t("Ignorowany") : !channel.customerId ? t("Nieprzypisany") : t("Monitorowany")}</span></div></TableCell>
+                <TableCell><div className="flex items-center gap-2"><Switch checked={!channel.ignored} onCheckedChange={(checked) => void configure(channel, channel.customerId, !checked)} aria-label={`${channel.channelName}: monitoring`} /><span className={`text-xs ${channel.ignored || !channel.customerId && channel.platform !== "slack" ? "text-warning-foreground" : "text-success"}`}>{!channel.active ? t("Nieaktywny") : channel.ignored ? t("Ignorowany") : !channel.customerId && channel.platform !== "slack" ? t("Nieprzypisany") : t("Monitorowany")}</span></div></TableCell>
                 <TableCell className="font-mono text-xs">{channel.platform === "telegram" ? <Select value={channel.groupingStrategy} onValueChange={(value) => { if (channel.customerId) void actions.configureChannel.mutateAsync({ id: channel.id, customerId: channel.customerId, ignored: channel.ignored, groupingStrategy: value as ChannelGroupingStrategy }).catch((error) => notify.error(t("Nie udało się zapisać grupowania"), getErrorMessage(error))) }}><SelectTrigger aria-label={t("{{value0}}: grupowanie", { value0: channel.channelName })}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="TELEGRAM_TOPIC">{t("Temat forum")}</SelectItem><SelectItem value="TELEGRAM_CHAT_ACTIVE_CASE">{t("Aktywny case na czat")}</SelectItem></SelectContent></Select> : channel.groupingStrategy === "SLACK_ROOT_THREAD" ? t("Root + wątek") : channel.groupingStrategy}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{channel.lastMessageAt ? formatDateTime(channel.lastMessageAt) : t("Brak")}</TableCell>
               </TableRow>

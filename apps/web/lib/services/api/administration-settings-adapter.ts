@@ -1,4 +1,6 @@
-import type { IntegrationResyncView as ApiResyncView, IntegrationResyncSettings as ApiResyncSettings } from "@usi/api-client/generated"
+import type { IntegrationResyncView as ApiResyncView, IntegrationResyncSettings as ApiResyncSettings,
+  ApiConnectionOnboardingControllerView as ApiOnboarding,
+  ApiConnectionOnboardingControllerRuntimeView as ApiRuntimeSetup } from "@usi/api-client/generated"
 import { translate as t } from "@/lib/i18n/catalog"
 import type {
   AdministrationSettings,
@@ -318,7 +320,14 @@ async function listIntegrations(): Promise<ManagedIntegration[]> {
     method: "GET",
     path: "/api/v1/admin/integrations",
   })
-  return integrations.map(mapIntegration)
+  return Promise.all(integrations.map(async (integration) => {
+    const mapped = mapIntegration(integration)
+    if (integration.provider === "TELEGRAM") return mapped
+    const setup = await browserApiTransport.request<ApiOnboarding>({ method: "GET", path: `/api/v1/admin/integrations/${encodeURIComponent(integration.id)}/onboarding` })
+    return { ...mapped, automaticDiscovery: setup.automaticDiscovery, callbackUrl: setup.callbackUrl, connectionState: setup.state,
+      botConfigured: setup.botConfigured, teamId: setup.teamId ?? undefined, defaultCustomerId: setup.defaultCustomerId ?? undefined,
+      lastDiscoveredAt: setup.lastDiscoveredAt ?? undefined, discoveryErrorCode: setup.errorCode ?? undefined, discoveredChannels: setup.discoveredChannels }
+  }))
 }
 
 async function listCustomers(): Promise<ManagedCustomer[]> {
@@ -578,6 +587,12 @@ function mapResyncView(value: ApiResyncView): import("@/lib/domain/administratio
 }
 
 export const apiAdministrationSettingsRepository: AdministrationSettingsRepository = {
+  async getProviderSetup() {
+    const values = await browserApiTransport.request<ApiRuntimeSetup[]>({ method: "GET", path: "/api/v1/admin/integrations/setup" })
+    return values.filter((v) => v.provider === "SLACK" || v.provider === "TEAMS").map((v) => ({ platform: v.provider!.toLowerCase() as "slack" | "teams", callbackUrl: v.callbackUrl ?? "", botConfigured: v.botConfigured, clientId: v.clientId,
+      packageUrl: v.provider === "TEAMS" && v.botConfigured ? "/api/v1/admin/integrations/teams/package" : undefined }))
+  },
+  async setAutomaticDiscovery(id, automatic) { await browserApiTransport.request({ method: "PUT", path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/onboarding`, body: { automaticDiscovery: automatic } }) },
   async getResync(id) { return mapResyncView(await browserApiTransport.request<ApiResyncView>({ method: "GET", path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/resync` })) },
   async saveResync(id, settings) { return mapResyncSettings(await browserApiTransport.request<ApiResyncSettings>({ method: "PUT", path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/resync`, body: settings })) },
   async startResync(id, mode, from) { return browserApiTransport.request({ method: "POST", path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/resync`, body: { mode, from } }) },
@@ -677,20 +692,12 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
   },
 
   async configureIntegration(input) {
-    const body = {
-      provider: apiProvider(input.platform),
-      displayName: input.displayName,
-      workspaceExternalId: input.workspaceId,
-      workspaceName: input.workspaceName,
-      secretRef: input.secretRef,
-    }
-    const integration = await browserApiTransport.request<ApiIntegration>({
-      method: input.id ? "PUT" : "POST",
-      path: input.id
-        ? `/api/v1/admin/integrations/${encodeURIComponent(input.id)}`
-        : "/api/v1/admin/integrations",
-      body,
-    })
+    const provider = input.platform === "teams" ? "teams" : "slack"
+    const body = provider === "teams"
+      ? { displayName: input.displayName, team: input.team ?? input.workspaceId, defaultCustomerId: input.defaultCustomerId, automaticDiscovery: input.automaticDiscovery ?? true }
+      : { displayName: input.displayName, workspaceExternalId: input.workspaceId, workspaceName: input.workspaceName || input.displayName, secretRef: input.secretRef || undefined, automaticDiscovery: input.automaticDiscovery ?? true }
+    const integration = await browserApiTransport.request<ApiIntegration>({ method: input.id ? "PUT" : "POST",
+      path: input.id ? `/api/v1/admin/integrations/${encodeURIComponent(input.id)}/${provider}` : `/api/v1/admin/integrations/${provider}`, body })
     return mapIntegration(integration)
   },
 
@@ -715,11 +722,8 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
   },
 
   async discoverChannels(id) {
-    const channels = await browserApiTransport.request<ApiChannelRecord[]>({
-      method: "POST",
-      path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/slack/discover-channels`,
-    })
-    return channels.map(mapChannel)
+    await browserApiTransport.request({ method: "POST", path: `/api/v1/admin/integrations/${encodeURIComponent(id)}/onboarding/discover` })
+    return (await browserApiTransport.request<ApiChannelRecord[]>({ method: "GET", path: "/api/v1/admin/channels" })).filter((channel) => channel.integrationId === id).map(mapChannel)
   },
 
   async retryTeamsAttachments(id) {

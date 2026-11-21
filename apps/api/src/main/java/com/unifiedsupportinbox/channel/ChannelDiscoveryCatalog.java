@@ -7,4 +7,6 @@ import java.util.UUID;
 public interface ChannelDiscoveryCatalog {
 
     List<ChannelView> replace(UUID integrationId, List<DiscoveredChannel> discoveredChannels);
+    List<ChannelView> replaceClaim(com.unifiedsupportinbox.integration.ProviderConnectionConfiguration.Claim claim,
+            UUID teamId, List<DiscoveredChannel> discoveredChannels);
 }

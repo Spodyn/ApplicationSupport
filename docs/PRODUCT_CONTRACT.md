@@ -296,3 +296,11 @@ Polish/English interface preferences, bounded bulk Claim/Assign/Resolve/Ignore u
 ## Owner-authorized private messaging extension (2026-11-12)
 
 Active users can exchange private one-to-one text messages with other active users in the same deployment. Only the two participants can read the conversation or receive its realtime hints. Administrators have the same participant-only access. Account deactivation preserves history for the other participant. Direct Messages are internal to USI and use no provider channels or Case workflow. See [DIRECT_MESSAGES.md](DIRECT_MESSAGES.md).
+
+## Owner-approved provider onboarding (2026-11-20)
+
+Settings → Integrations supports Slack and Teams create/edit, public callback copy, readiness, test and explicit enable. Provider credentials stay in the server secret store. Automatic channel discovery is on for new connections; existing installations preserve their effective setting and individual channel mappings/ignored choices.
+
+Each instance selects exactly one Teams team. Its Graph GUID (`groupId` from a team link) is the authorization boundary before durable inbound activity insertion. The opaque Bot Framework team ID is resolved to `aadGroupId` using authenticated team details when necessary. Tenant membership alone is insufficient. New installation packages use team scope only and RSC `ChannelMessage.Read.Group` plus `ChannelSettings.Read.Group`. This owner request supersedes the earlier group-chat intake scope for this deployment profile; historical conversation data and the old development package remain available.
+
+Initial and periodic Graph reconciliation plus `channelCreated` hints discover standard channels of that team. New channels inherit the chosen default customer and monitoring; existing channel settings survive discovery. Slack membership discovery supports an unassigned customer. A first message preceding discovery is durably retried through the normal pipeline. See [provider onboarding](PROVIDER_ONBOARDING.md).

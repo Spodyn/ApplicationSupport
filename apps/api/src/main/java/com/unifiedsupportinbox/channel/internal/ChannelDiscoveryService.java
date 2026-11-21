@@ -15,9 +15,20 @@ import org.springframework.transaction.annotation.Transactional;
 class ChannelDiscoveryService implements ChannelDiscovery, ChannelDiscoveryCatalog {
 
     private final ChannelRepository channels;
+    private com.unifiedsupportinbox.integration.ProviderConnectionConfiguration connections;
 
     ChannelDiscoveryService(ChannelRepository channels) {
         this.channels = channels;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void connectionConfiguration(com.unifiedsupportinbox.integration.ProviderConnectionConfiguration connections) {this.connections=connections;}
+
+    @Override @Transactional
+    public List<ChannelView> replaceClaim(com.unifiedsupportinbox.integration.ProviderConnectionConfiguration.Claim claim,
+            UUID teamId,List<DiscoveredChannel> discovered) {
+        connections.lockDiscovery(claim,teamId);
+        return replace(claim.integrationId(),discovered);
     }
 
     @Override

@@ -291,11 +291,21 @@ async function prepareSettingsApi(page: Page, options: { forbidden?: boolean; pr
     createdAt: "2026-10-01T08:00:00Z",
     updatedAt: "2026-10-01T08:00:00Z",
   }
+  let automaticDiscovery = true
 
   await page.route("**/api/v1/admin/**", async (route) => {
     const request = route.request()
     const path = new URL(request.url()).pathname
     const method = request.method()
+
+    if (path === "/api/v1/admin/integrations/setup") {
+      await route.fulfill({json:["SLACK","TEAMS"].map((provider)=>({provider,callbackUrl:`https://instance.example.test/${provider.toLowerCase()}/events`,botConfigured:true,clientId:"33333333-3333-4333-8333-333333333333"}))});return
+    }
+    if (path.endsWith(`/integrations/${integration.id}/onboarding`) || path.endsWith(`/integrations/${integration.id}/onboarding/discover`)) {
+      if(method === "PUT") {automaticDiscovery=request.postDataJSON().automaticDiscovery;writes.push({method,path,body:request.postDataJSON()})}
+      if(method === "POST") writes.push({method,path})
+      await route.fulfill({json:{integrationId:integration.id,automaticDiscovery,state:"READY",botConfigured:true,callbackUrl:`https://instance.example.test/${integration.provider.toLowerCase()}/events`,teamId:"11111111-1111-4111-8111-111111111111",discoveredChannels:0}});return
+    }
 
     if (path === "/api/v1/admin/settings" && method === "GET") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
@@ -384,6 +394,33 @@ const smokeRoutes = [
   { path: "/users", heading: "Użytkownicy" },
   { path: "/settings", heading: "Ustawienia" },
 ] as const
+
+test("Teams onboarding saves team and customer with automatic discovery on, while Slack shows its callback", async ({page}) => {
+  await preparePage(page)
+  const {writes}=await prepareSettingsApi(page)
+  await page.route("**/api/v1/admin/customers",route=>route.fulfill({json:[{id:"018f0000-0000-7000-8000-000000000399",name:"Teams Sandbox",active:true}]}))
+  let saved: Record<string,unknown> | undefined
+  await page.route("**/api/v1/admin/integrations/teams",async route=>{
+    saved=route.request().postDataJSON()
+    await route.fulfill({json:{id:"018f0000-0000-7000-8000-000000000398",provider:"TEAMS",displayName:saved!.displayName,status:"CONFIGURING",health:"UNKNOWN",secretConfigured:false}})
+  })
+  await page.goto("/settings")
+  await page.getByRole("tab",{name:"Integracje",exact:true}).click()
+  await expect(page.getByRole("textbox",{name:"Adres odbioru"})).toHaveValue("https://instance.example.test/slack/events")
+  await expect(page.getByText("Zaproś bota do kanału w Slacku")).toBeVisible()
+  await page.getByRole("switch",{name:"Automatycznie wykrywaj kanały",exact:true}).click()
+  await expect.poll(()=>writes.some(w=>w.method==="PUT" && (w.body as {automaticDiscovery:boolean}).automaticDiscovery===false)).toBe(true)
+  await page.getByRole("button",{name:"Dodaj Teams",exact:true}).click()
+  const dialog=page.getByRole("dialog",{name:"Dodaj Teams",exact:true})
+  await expect(dialog.getByRole("switch",{name:"Automatycznie wykrywaj kanały",exact:true})).toBeChecked()
+  await dialog.getByRole("textbox",{name:"Nazwa połączenia",exact:true}).fill("Staging Teams")
+  await dialog.getByRole("textbox",{name:/^Link do zespołu Teams lub Team ID/}).fill("11111111-1111-4111-8111-111111111111")
+  await dialog.getByRole("combobox",{name:"Domyślny klient",exact:true}).click()
+  await page.getByRole("option",{name:"Teams Sandbox",exact:true}).click()
+  await dialog.getByRole("button",{name:"Zapisz konfigurację",exact:true}).click()
+  await expect(dialog).not.toBeVisible()
+  expect(saved).toEqual({displayName:"Staging Teams",team:"11111111-1111-4111-8111-111111111111",defaultCustomerId:"018f0000-0000-7000-8000-000000000399",automaticDiscovery:true})
+})
 
 for (const route of smokeRoutes) {
   test(`${route.path} ładuje główny widok`, async ({ page }) => {
