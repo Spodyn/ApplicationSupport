@@ -31,6 +31,19 @@ Kanoniczne cookie v1:
 
 Logout natychmiast unieważnia server session. Session fixation protection i rotacja identyfikatora po uwierzytelnieniu są wymagane. Dezaktywacja/wygaśnięcie konta oraz skuteczny password reset unieważniają istniejące sesje zgodnie z kontraktem.
 
+## Informational user presence (USI-76)
+
+The ADMIN user directory derives `presence` from the persisted server-side
+Spring Session principal ID, expiration and a five-minute recent-activity window.
+Only active accounts within their validity window can be shown as `online`.
+Missing, expired or inactive sessions produce the safe `offline` fallback.
+Presence is **not** an authorization, workflow ownership or assignment input,
+and does not trigger database writes on every read.
+
+`activeAssignedCases` is calculated from non-terminal Cases currently owned
+by the user; reassignment and resolution are reflected on the next directory
+query without changing the underlying Case workflow.
+
 ## Password policy
 
 - hashing: Argon2id,
