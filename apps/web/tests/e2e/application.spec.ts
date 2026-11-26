@@ -285,7 +285,6 @@ for (const [kind, warningSeconds] of [["FRT", 225], ["NRT", 450]] as const) {
     const open = Date.parse("2026-11-23T12:00:00Z")
     const iso = (time: number) => new Date(time).toISOString()
     await page.clock.install({ time: observed })
-    await page.clock.pauseAt(observed + 500)
     const deadline: CaseOperationalDeadline = {
       id: caseId, kind, state: "ON_TRACK", startedAt: iso(observed - 60_000),
       observedAt: iso(observed), warningAt: iso(observed + 3_000),
@@ -300,12 +299,14 @@ for (const [kind, warningSeconds] of [["FRT", 225], ["NRT", 450]] as const) {
     await page.goto("/cases")
     const tile = page.locator(`button[data-case-id="${caseId}"]`).locator("[data-sla-countdown]")
     await expect(tile).toContainText(kind)
+    const browserNow = await page.evaluate(() => Date.now())
+    await page.clock.pauseAt(browserNow + 500)
     const before = await tile.textContent()
     await expect(tile).toHaveClass(/text-emerald-400/)
-    await page.clock.runFor(3_000)
+    await page.clock.runFor(5_000)
     await expect(tile).not.toHaveText(before!)
     await expect(tile).toHaveClass(/text-amber-400/)
-    await page.clock.runFor(4_000)
+    await page.clock.runFor(3_000)
     const afterClose = await tile.textContent()
     await page.clock.runFor(3_000)
     await expect(tile).toHaveText(afterClose!)
