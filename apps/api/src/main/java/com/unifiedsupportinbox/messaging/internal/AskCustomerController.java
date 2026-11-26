@@ -29,6 +29,7 @@ class AskCustomerController {
         this.asks = asks;
     }
 
+    @Deprecated
     @PostMapping("/{caseId}/ask-customer")
     ResponseEntity<JsonNode> ask(
             @PathVariable UUID caseId,

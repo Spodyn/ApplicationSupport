@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.messaging.internal;
 
 import com.unifiedsupportinbox.cases.CaseCreationService;
+import com.unifiedsupportinbox.cases.CaseStatus;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.messaging.InboundMessageCommandHandler;
 import com.unifiedsupportinbox.readstate.CustomerMessageUnreadService;
@@ -132,6 +133,13 @@ class InboundRootMessageCommandService implements InboundMessageCommandHandler {
 
         PersistedMessage message = insertedMessages.getFirst();
         UUID messageId = message.id();
+        if (recovery != null && caseResult.status() == CaseStatus.VERIFICATION) {
+            // A recovery transaction can start before the reply was queued and take the
+            // Case lock afterward. Advance the revision in the order intake acquires the lock.
+            jdbc.update("""
+                    UPDATE cases SET version = version + 1, updated_at = statement_timestamp() WHERE id = ?
+                    """, caseResult.caseId());
+        }
         waitingReplies.customerReplied(
                 caseResult.caseId(),
                 messageId,

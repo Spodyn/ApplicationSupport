@@ -61,23 +61,23 @@ The legacy storage and v1 mutation contracts use the following Case statuses.
 
 Core invariants:
 
-- `VERIFICATION` requires an active owner. `WAITING_FOR_CUSTOMER` retains the owner only when entered through a delivered ordinary reply.
-- `NEW` and `PARTIALLY_IGNORED` are unassigned. Waiting entered through Ask Customer is unassigned.
+- `VERIFICATION` requires an active owner. `WAITING_FOR_CUSTOMER` retains the owner after a delivered public reply.
+- `NEW` and `PARTIALLY_IGNORED` are unassigned. Historical waiting rows can be unassigned.
 - `IGNORED` is terminal and has no owner.
 - `RESOLVED` is terminal and preserves the last owner if there was one; a force-resolve from an unassigned state leaves owner `null`.
 - A customer message after terminal closure uses the active generation or creates one linked Case. An explicit administrative undo may reopen `RESOLVED`. Ignore freezes that generation.
 - Workflow state changes are performed through dedicated commands, never a generic `PATCH status`.
 
-The simplified Case projection presents the states `NEW`, `OPEN`, `WAITING_ON_CUSTOMER` and `RESOLVED`. Existing v1 commands and the legacy `status` field retain the operational representation above for compatibility. `VERIFICATION` projects as `OPEN`, `WAITING_FOR_CUSTOMER` as `WAITING_ON_CUSTOMER`, and `PARTIALLY_IGNORED` as `NEW` with its vote score. Terminal Ignore projects as `RESOLVED` and has `closureReason: IGNORED`. Simplified inbox views exclude waiting from Unassigned and provide an Archive filter. Statistics group by the simplified state and preserve distinct resolved and ignored totals.
+The v1 Case projection exposes `NEW`, `OPEN`, `WAITING_ON_CUSTOMER` and `RESOLVED`. Existing v1 commands and the legacy `status` field retain the operational representation above for compatibility. `VERIFICATION` projects as `OPEN`, `WAITING_FOR_CUSTOMER` as `WAITING_ON_CUSTOMER` (displayed as **ASKED** in English and **Oczekuje na klienta** in Polish), and `PARTIALLY_IGNORED` as `NEW` with its vote score. Terminal Ignore projects as `RESOLVED` and has `closureReason: IGNORED`. Simplified inbox views exclude waiting from Unassigned and provide an Archive filter. Statistics group by the simplified state and preserve distinct resolved and ignored totals.
 
 Human-readable Case references are immutable sequential references such as `CASE-00000001`; UUID remains the technical primary identifier.
 
 ## 5. Claim, reply, assignment and resolution
 
 - There is no automatic assignment in v1.
-- A successful Claim moves an eligible unowned active Case to `VERIFICATION` and sets the current user as owner.
-- A normal Reply is available only to the current owner in `VERIFICATION`.
-- A normal Resolve is available only to the current owner in `VERIFICATION`.
+- A successful Claim moves an eligible unowned active Case to `VERIFICATION` and sets the current user as owner. An eligible user can explicitly claim a historical unassigned waiting Case from its detail, which clears its deadline and resumes any waiting pause.
+- Public replies and internal notes are available to the eligible current owner in `VERIFICATION` and `WAITING_FOR_CUSTOMER`.
+- A normal Resolve is available only to the current owner in `VERIFICATION` and `WAITING_FOR_CUSTOMER`.
 - `resolution_category` is optional. If provided in v1 it is a controlled code from `SOLVED`, `NO_ACTION_REQUIRED`, `DUPLICATE`, `OTHER`; it is not free text.
 - `ADMIN + reassign_cases` may assign an eligible user to `NEW` or `PARTIALLY_IGNORED`, or reassign `VERIFICATION`; the target user must be active and may not be a lifetime ignore voter for that Case. Result: `VERIFICATION` with the target owner.
 - Admin unassign moves `VERIFICATION` to `NEW`, clears the owner and retains ownership history in audit.
@@ -97,15 +97,12 @@ Human-readable Case references are immutable sequential references such as `CASE
 - A user whose vote was reset may vote again.
 - **Lifetime restriction:** a user who ever successfully cast an Ignore vote in a Case may never Claim or Reply in that same Case, even after the vote was reset.
 
-## 7. Ask Customer and waiting
+## 7. Public replies and waiting
 
-- Ask Customer is available only to the current owner in `VERIFICATION` and requires an outgoing human support message.
-- The Case remains `VERIFICATION` with the same owner until the provider actually accepts the outgoing Ask message and it becomes `SENT`.
-- On `SENT`: move to `WAITING_FOR_CUSTOMER`, clear owner, set `waiting_until`, and apply the configured waiting SLA pause.
-- Permanent delivery failure leaves the Case in `VERIFICATION` with the same owner. Transient failure follows the normal message retry policy.
-- Default wait is 24 hours. Ask Customer also supports a command override from 1 hour to 30 days.
-- A delivered ordinary public reply enters waiting for 24 hours and retains its owner. Failed or queued sends preserve the state. A reply whose Case version changed or whose customer sent a newer message before acceptance leaves the newer workflow intact.
-- A customer reply or timeout resumes SLA and clears the waiting deadline. Owned waiting returns to `VERIFICATION` with its owner. Unassigned waiting after Ask Customer returns to `NEW`. Timeout emits and audits `WAITING_TIMEOUT`. V1 sends no automatic follow-up message on timeout.
+- Provider-confirmed public delivery enters owned `WAITING_FOR_CUSTOMER` from `VERIFICATION`, starts a 24-hour deadline and applies the configured waiting SLA pause. The transition requires the same Case version and owner, with no intervening customer message.
+- Additional successful replies while already waiting preserve the owner, state and existing deadline. Queued, sending, failed and retrying messages do not change workflow. A stale confirmation still records delivery and leaves newer workflow intact. Recovered customer messages invalidate older pending Case transitions by advancing the Case revision under the intake lock.
+- A customer reply or timeout clears the deadline and resumes the existing SLA timers. Owned waiting returns to `VERIFICATION` (OPEN) with its owner. Historical unassigned waiting returns to `NEW`. Timeout emits and audits `WAITING_TIMEOUT` and sends no automatic follow-up.
+- The deprecated `POST /api/v1/cases/{caseId}/ask-customer` queues a standard public reply using its existing request and idempotency scope. It validates the legacy `waitingMinutes` field for compatibility and applies the ordinary deadline to newly queued replies. Previously queued legacy intents can use their persisted deadlines on successful delivery and retain the current owner.
 
 ## 8. Snooze and read/unread
 
@@ -134,7 +131,7 @@ Read/unread:
 ## 9. Messages and delivery
 
 - Conversation-visible message authorship is `CUSTOMER`, `SUPPORT` or `SYSTEM`.
-- A Case may also contain a text-only internal note. The current owner can add a note in `VERIFICATION` under the existing Reply eligibility rules. An eligible USER or ADMIN with Case read access can read notes, including in terminal Case history.
+- A Case may also contain a text-only internal note. The current owner can add a note in `VERIFICATION` or `WAITING_FOR_CUSTOMER` under the existing Reply eligibility rules. An eligible USER or ADMIN with Case read access can read notes, including in terminal Case history.
 - A note records the authenticated author, their display name at creation and the server timestamp. It is stored within USI and does not enter provider delivery, public previews, customer unread state, waiting transitions or FRT/NRT. The dedicated command uses the standard Case-scoped idempotency window.
 - Claim, resolve, reassign and internal provider events belong in Activity/audit, not fake chat messages.
 - Supported body formats are `PLAIN_TEXT` and `MARKDOWN`. Provider rich content is normalized to safe text/Markdown. Raw executable HTML is never canonical content.
@@ -149,7 +146,7 @@ Read/unread:
 
 ## 10. Attachments
 
-- A public Case reply requires nonblank text, at least one `CLEAN` attachment, or both. Ask Customer requires nonblank text.
+- A public Case reply requires nonblank text, at least one `CLEAN` attachment, or both.
 - Max 25 MiB per file, 10 files and 50 MiB total per logical message. A stricter provider limit wins.
 - Case attachments support PNG, JPEG, GIF, WebP, AVIF, BMP, TIFF, HEIC/HEIF, PDF, plain text/CSV and validated Office OOXML (`docx`, `xlsx`, `pptx`). General archives, active markup and executable formats are blocked.
 - The Case feed can display verified PNG, JPEG, GIF, WebP, AVIF and BMP raster images inline. TIFF and HEIC/HEIF use a download card. The preview and download endpoints require the same Case access and a `CLEAN` scan. Unsent drafts require current Case ownership.

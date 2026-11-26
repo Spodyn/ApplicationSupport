@@ -6,5 +6,9 @@ public enum CaseStatus {
     WAITING_FOR_CUSTOMER,
     PARTIALLY_IGNORED,
     IGNORED,
-    RESOLVED
+    RESOLVED;
+
+    public boolean acceptsOwnerWork() {
+        return this == VERIFICATION || this == WAITING_FOR_CUSTOMER;
+    }
 }

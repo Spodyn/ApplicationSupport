@@ -78,7 +78,7 @@ Wymagane są deterministyczne testy m.in. dla:
 - pełnej transition matrix i owner invariants,
 - 20 równoległych Claim -> dokładnie jeden winner,
 - Ignore weight snapshot/idempotent duplicate/reset/lifetime voter restriction,
-- Ask Customer pozostaje `VERIFICATION` do provider `SENT`,
+- wysłanie publicznej odpowiedzi zachowuje stan do potwierdzenia dostawy, a w ASKED właściciel może dalej odpowiadać i rozwiązać sprawę,
 - permanent Ask delivery failure nie przełącza do WAITING,
 - normal Reply/Resolve tylko current owner,
 - reassign/unassign/force-resolve permissions,

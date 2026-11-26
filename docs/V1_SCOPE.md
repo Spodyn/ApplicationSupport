@@ -22,7 +22,7 @@ E-mail widoczny w historycznych mock fixtures `/cases` nie jest czwartym kanałe
 
 ## Powierzchnie produktu v1
 
-- `/cases`: wspólny inbox, wyszukiwanie/filtry, rozmowa, Claim, Reply, Ignore, Ask Customer, Resolve, Snooze oraz akcje administracyjne zgodne z permission/state projection.
+- `/cases`: wspólny inbox, wyszukiwanie/filtry, rozmowa, Claim, Reply, Ignore, Resolve, Snooze oraz akcje administracyjne zgodne z permission/state projection.
 - `/statistics`: własne statystyki użytkownika; globalne statystyki dla `ADMIN + view_global_statistics`; ADMIN-only zakładka `Aktualna praca` według USI-39.
 - `/users`: administracja użytkownikami dla `ADMIN + manage_users`.
 - `/settings`: ustawienia Ogólne dla ADMIN i pozostałe zakładki według granular permissions.

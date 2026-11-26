@@ -53,7 +53,7 @@ Exactly six statuses exist:
 - `NEW` - active, unassigned work.
 - `PARTIALLY_IGNORED` - unassigned work with Ignore points below threshold.
 - `VERIFICATION` - active work owned by exactly one user.
-- `WAITING_FOR_CUSTOMER` - Ask Customer was successfully accepted by provider; Case is unassigned while waiting.
+- `WAITING_FOR_CUSTOMER` - a public reply was accepted by the provider. The Case retains its owner and shows ASKED in English or Oczekuje na klienta in Polish. Historical records may be unassigned.
 - `IGNORED` - terminal, no owner.
 - `RESOLVED` - terminal, preserving previous owner when one existed.
 
@@ -61,13 +61,13 @@ A later customer message uses the active generation or creates exactly one linke
 
 ## 7. Claim
 
-Claim is explicit; there is no auto-assignment. Successful Claim atomically moves eligible NEW/PARTIALLY_IGNORED work to VERIFICATION, makes the actor the sole owner, deactivates active partial Ignore votes while preserving history, clears stale Snoozes, pauses unclaimed SLA and starts/resumes in-progress SLA.
+Claim is explicit; there is no auto-assignment. Successful Claim atomically moves eligible NEW/PARTIALLY_IGNORED work or historical unassigned waiting work to VERIFICATION, makes the actor the sole owner, deactivates active partial Ignore votes while preserving history, clears stale Snoozes, pauses unclaimed SLA and starts/resumes in-progress SLA.
 
 A user who ever successfully voted Ignore in that Case is permanently ineligible to Claim it.
 
 ## 8. Reply and delivery
 
-Normal Reply is current-owner-only in VERIFICATION. Sending creates one durable logical SUPPORT Message and asynchronous provider-delivery work; provider HTTP never runs in the business DB transaction.
+Public replies and internal notes are available to the eligible current owner in VERIFICATION and WAITING_FOR_CUSTOMER. Sending creates one durable logical SUPPORT Message and asynchronous provider-delivery work; provider HTTP never runs in the business DB transaction.
 
 `SENT` means provider accepted the message. `DELIVERED` is used only when provider has a trustworthy delivery acknowledgement. Transient failures retry the same Message with `Retry-After`, exponential backoff and jitter, max 8 attempts/24h. Permanent failures become `FAILED`. Retry never creates a second logical customer-facing Message.
 
@@ -81,19 +81,15 @@ Each vote stores the effective weight as an immutable snapshot. One active vote 
 
 Below threshold -> PARTIALLY_IGNORED; threshold reached -> terminal IGNORED. New customer message before threshold or Claim by another user deactivates active partial votes but preserves history. A user may vote again after reset, but anyone who ever cast a successful Ignore vote in the Case remains permanently blocked from Claim and Reply in that Case.
 
-## 10. Ask Customer
+## 10. Waiting for the customer
 
-Ask Customer is current-owner-only from VERIFICATION and requires an outgoing human support Message.
+A current public reply moves OPEN to ASKED after successful provider delivery and keeps the owner. Additional replies in ASKED preserve the existing 24-hour waiting deadline. A failed, queued, retrying or stale send leaves workflow intact.
 
-The Case **stays VERIFICATION with the same owner while delivery is queued/retried**. Only when provider accepts the Ask Message (`SENT`) does USI atomically move it to WAITING_FOR_CUSTOMER, clear owner and set `waiting_until`.
-
-Permanent delivery failure leaves the Case with the owner in VERIFICATION. Default wait is 24 hours; allowed override is 1 hour to 30 days.
-
-Customer reply before timeout returns Case to NEW, marks it unread for eligible users, wakes Snoozes and resumes applicable timers with accumulated time preserved. Timeout also returns to NEW and records `WAITING_TIMEOUT`; v1 does not send an automatic follow-up message.
+Customer reply returns an owned Case to OPEN with the same owner, marks it unread for eligible users, wakes Snoozes and resumes applicable timers. Timeout also returns it to OPEN and records `WAITING_TIMEOUT`. A customer reply or timeout returns historical unassigned waiting to NEW. See the [legacy API compatibility contract](PRODUCT_CONTRACT.md#7-public-replies-and-waiting).
 
 ## 11. Resolve, force-resolve and assignment
 
-Normal Resolve is current-owner-only from VERIFICATION. Resolution category is optional; if supplied it is one of `SOLVED`, `NO_ACTION_REQUIRED`, `DUPLICATE`, `OTHER` and is not free text.
+Normal Resolve is current-owner-only from VERIFICATION or WAITING_FOR_CUSTOMER. Resolution category is optional; if supplied it is one of `SOLVED`, `NO_ACTION_REQUIRED`, `DUPLICATE`, `OTHER` and is not free text.
 
 Resolution ends SLA timers, clears Snoozes and records activity/audit. `ADMIN + force_resolve` may resolve any nonterminal Case. If the Case was unowned, the administrator does not become owner; force-resolve is tagged `forced=true` for analytics/audit.
 
@@ -124,7 +120,7 @@ Conversation-visible authorship is CUSTOMER, SUPPORT or SYSTEM only when genuine
 Body formats are safe PLAIN_TEXT/Markdown; raw executable provider HTML is never canonical.
 
 A public Case reply can contain text, CLEAN attachments, or both. An empty
-reply is rejected. Ask Customer still requires text. Clipboard images and
+reply is rejected. Clipboard images and
 selected files share the same draft queue and limits. The owner can retry a
 technical scan failure while the upload is still unassociated.
 

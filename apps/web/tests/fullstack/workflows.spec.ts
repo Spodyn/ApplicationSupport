@@ -483,11 +483,22 @@ test('internal Case notes stay in USI with independent drafts, realtime and publ
     await page.getByRole('button', {name: 'Wyślij', exact: true}).click()
     await expect.poll(observed).toHaveLength(1)
     await expect.poll(async () => (await detail()).workflowStatus).toBe('WAITING_ON_CUSTOMER')
+    const waiting = await detail()
+    expect((await command(other, endpoint, {body: 'Non-owner attempt while waiting'})).status()).toBe(403)
+    await noteMode.click()
+    const waitingNote = 'Internal note while waiting for the customer'
+    await noteDraft.fill(waitingNote)
+    await page.getByRole('button', {name: 'Zapisz notatkę'}).click()
+    await expect(rendered(page).getByText(waitingNote, {exact: true})).toBeVisible()
+    expect(await detail()).toMatchObject({
+      workflowStatus: 'WAITING_ON_CUSTOMER', owner: waiting.owner, waitingUntil: waiting.waitingUntil, version: waiting.version,
+    })
+    expect(await observed()).toHaveLength(1)
     await inbound(page, 'Customer follow-up after the public reply', root.ts)
     await expect.poll(async () => (await detail()).workflowStatus).toBe('OPEN')
     await page.goto('/cases?caseId=' + caseId)
     await page.reload()
-    await expect(rendered(page)).toHaveCount(1)
+    await expect(rendered(page)).toHaveCount(2)
     await expect(page.locator('[data-message-kind="support"]').getByText('Public draft retained independently')).toBeVisible()
     await selectLanguage(page, "English", "pl")
     const englishEditor = page.getByRole('group', {name: 'Composer mode'})
@@ -498,7 +509,8 @@ test('internal Case notes stay in USI with independent drafts, realtime and publ
     expect((await command(page, path + '/resolve', {})).status()).toBe(200)
     await expect(englishNoteMode).toBeDisabled()
     expect((await command(page, endpoint, {body: 'Closed Case attempt'})).status()).toBe(409)
-    await expect(rendered(page)).toBeVisible()
+    await expect(rendered(page).getByText(noteText, {exact: true})).toBeVisible()
+    await expect(rendered(page).getByText(waitingNote, {exact: true})).toBeVisible()
   } finally {
     await otherContext.close()
   }
@@ -781,7 +793,7 @@ test('Snooze history is personal and timezone-aware while SLA follows workflow',
     }
 
     expect((await command(a, `${path}/snooze`, {until: new Date(Date.now() + 60 * 60_000).toISOString()})).status()).toBe(200)
-    await inbound(page, 'Customer response to Ask', root.ts)
+    await inbound(page, 'Customer response to the public reply', root.ts)
     await expect.poll(async () => (await activity(a)).map((item: {action: string}) => item.action))
       .toEqual(expect.arrayContaining(['CASE_CUSTOMER_REPLY', 'CASE_SNOOZE_WOKEN']))
     for (const [tab, text] of [[a, 'Klient odpowiedział'], [mirror, 'Customer replied']] as const) {
@@ -793,7 +805,9 @@ test('Snooze history is personal and timezone-aware while SLA follows workflow',
     expect((await activity(a)).find((item: {action: string}) => item.action === 'CASE_CUSTOMER_REPLY'))
       .toMatchObject({actorType: 'PROVIDER', actorLabel: 'Customer'})
 
-    expect((await command(a, `${path}/claim`, undefined)).status()).toBe(200)
+    expect(await (await a.request.get(path)).json()).toMatchObject({
+      workflowStatus: 'OPEN', owner: {id: admin.userId}, waitingUntil: null,
+    })
     expect(await (await a.request.post('/__test/breach', {data: {caseId: id}})).json()).toEqual({changed: 1})
     await a.reload()
     const tile = a.locator('button[data-case-id="' + id + '"]')
@@ -912,8 +926,13 @@ test('Case composer uploads pasted PNG, retries scans and resumes partial Slack 
   const fileOnly = await sendFromComposer()
   await expect(panel.getByRole('link', {name: new RegExp(screenshot)})).toBeVisible()
   expect((await observed()).messages.filter(message => message.clientMessageId === fileOnly)).toHaveLength(0)
-  await inbound(page, 'Customer acknowledgement for the image', root.ts)
+  await expect(panel.getByText('Oczekuje na klienta', {exact: true})).toBeVisible()
   await expect(composer).toBeEnabled()
+  const casePath = `/api/v1/cases/${caseId}`
+  const detail = async () => (await page.request.get(casePath)).json()
+  const waiting = await detail()
+  expect(waiting.waitingUntil).toEqual(expect.any(String))
+  expect(waiting.owner.id).toBe((await (await page.request.get('/api/v1/auth/me')).json()).id)
 
   await picker.setInputFiles({name: 'oversized.txt', mimeType: 'text/plain', buffer: Buffer.alloc(25 * 1024 * 1024 + 1)})
   await expect(panel.getByRole('alert')).toContainText('Pojedynczy plik nie może przekraczać 25 MiB.')
@@ -951,9 +970,12 @@ test('Case composer uploads pasted PNG, retries scans and resumes partial Slack 
     && response.request().method() === 'POST')
   const combined = await sendFromComposer()
   expect(await (await rescan).json()).toMatchObject({attachmentId: quarantined.attachmentId, scanStatus: 'CLEAN'})
+  await composer.fill(`Third consecutive reply ${marker}`)
+  const textOnly = await sendFromComposer()
   const provider = await observed()
-  expect(provider.messages.filter(message => message.clientMessageId === combined)).toEqual([
-    expect.objectContaining({thread: root.ts}),
+  expect(provider.messages.filter(message => [combined, textOnly].includes(message.clientMessageId))).toEqual([
+    expect.objectContaining({clientMessageId: combined, thread: root.ts, channel: fixture.externalChannelId}),
+    expect.objectContaining({clientMessageId: textOnly, thread: root.ts, channel: fixture.externalChannelId}),
   ])
   const received = provider.files.filter(file => file.thread === root.ts)
   expect(received.map(file => file.title).sort()).toEqual([screenshot, scanName, lostName].sort())
@@ -962,6 +984,18 @@ test('Case composer uploads pasted PNG, retries scans and resumes partial Slack 
   expect(history.items.find((item: {id: string}) => item.id === fileOnly)).toMatchObject({body: '', attachments: [{fileName: screenshot}]})
   expect(history.items.find((item: {id: string}) => item.id === combined).attachments)
     .toEqual(expect.arrayContaining([expect.objectContaining({id: quarantined.attachmentId})]))
+  expect(await detail()).toMatchObject({
+    workflowStatus: 'WAITING_ON_CUSTOMER', owner: waiting.owner, waitingUntil: waiting.waitingUntil,
+    availableActions: expect.arrayContaining(['REPLY', 'RESOLVE']),
+  })
+  await selectLanguage(page, 'English', 'pl')
+  const englishPanel = page.getByRole('region', {name: /^Conversation /})
+  await expect(englishPanel.getByText('ASKED', {exact: true})).toBeVisible()
+  await expect(englishPanel.getByRole('button', {name: 'Ask customer', exact: true})).toHaveCount(0)
+  await selectLanguage(page, 'Polski', 'en')
+  await panel.getByRole('button', {name: 'Rozwiąż', exact: true}).click()
+  await page.getByRole('dialog').getByRole('button', {name: 'Zatwierdź', exact: true}).click()
+  await expect.poll(detail).toMatchObject({workflowStatus: 'RESOLVED', owner: waiting.owner, waitingUntil: null})
   await page.goto(`/cases?caseId=${caseId}`)
   await page.reload()
   await expect(panel.getByText(`Text plus files ${marker}`, {exact: true})).toBeVisible()

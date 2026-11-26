@@ -136,6 +136,33 @@ class CaseWorkflowTransactionsIntegrationTests {
     }
 
     @Test
+    void legacyUnassignedWaitingRequiresAnExplicitEligibleClaimAndResumesSla() {
+        UUID caseId = newCase();
+        UUID voter = newActor().id();
+        UUID owner = newActor().id();
+        Instant pausedAt = Instant.now().minusSeconds(120);
+        context.getBean(CaseSlaInitializer.class).initialize(caseId, pausedAt.minusSeconds(60));
+        context.getBean(CaseIgnoreService.class).ignore(caseId, voter, null, "vote-before-legacy-wait", "test");
+        jdbc.update("UPDATE case_ignore_votes SET active = FALSE, deactivated_at = now() WHERE case_id = ?", caseId);
+        jdbc.update("UPDATE cases SET status = 'WAITING_FOR_CUSTOMER', waiting_until = now() + interval '2 hours' WHERE id = ?", caseId);
+        context.getBean(CaseSlaWaitingRecorder.class).pauseForWaiting(caseId, pausedAt);
+
+        var details = context.getBean(CaseDetailService.class);
+        var claims = context.getBean(CaseClaimService.class);
+        assertThat(details.detail(caseId, owner).availableActions()).contains("CLAIM").doesNotContain("REPLY", "RESOLVE", "IGNORE");
+        assertThat(details.detail(caseId, voter).availableActions()).doesNotContain("CLAIM");
+        assertThatThrownBy(() -> claims.claim(caseId, voter, "legacy-voter", "test")).isInstanceOf(ApiProblemException.class);
+        assertThat(jdbc.queryForObject("SELECT owner_user_id FROM cases WHERE id = ?", UUID.class, caseId)).isNull();
+        assertThat(claims.claim(caseId, owner, "legacy-claim", "test").status()).isEqualTo(200);
+        assertThat(details.detail(caseId, owner).availableActions()).contains("REPLY", "RESOLVE").doesNotContain("CLAIM");
+        assertThat(jdbc.queryForObject("""
+                SELECT c.workflow_status = 'OPEN' AND c.owner_user_id = ? AND c.waiting_until IS NULL
+                    AND s.paused_at IS NULL
+                FROM cases c JOIN case_sla s ON s.case_id = c.id WHERE c.id = ?
+                """, Boolean.class, owner, caseId)).isTrue();
+    }
+
+    @Test
     void effectFailureRollsBackWorkflowAndOtherWrites() {
         UUID id = newCase();
         Actor actor = newActor();

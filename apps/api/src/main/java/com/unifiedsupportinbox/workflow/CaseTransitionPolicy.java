@@ -18,9 +18,9 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public final class CaseTransitionPolicy {
-    public enum Action { CLAIM, REPLY, IGNORE, ASK_CUSTOMER, RESOLVE, ASSIGN, REASSIGN, UNASSIGN, FORCE_RESOLVE, SNOOZE, MARK_READ }
+    public enum Action { CLAIM, REPLY, IGNORE, RESOLVE, ASSIGN, REASSIGN, UNASSIGN, FORCE_RESOLVE, SNOOZE, MARK_READ }
     public enum Effect { DEACTIVATE_IGNORE_VOTES, CLEAR_SNOOZES, RECORD_IGNORE_VOTE, QUEUE_SUPPORT_MESSAGE,
-        QUEUE_ASK_MESSAGE, AUDIT, UPDATE_SLA, MARK_ACTOR_READ, SCHEDULE_PERSONAL_REMINDER, CREATE_LINKED_CASE }
+        AUDIT, UPDATE_SLA, MARK_ACTOR_READ, SCHEDULE_PERSONAL_REMINDER, CREATE_LINKED_CASE }
 
     public record State(CaseStatus status, UUID ownerId, Instant waitingUntil) {
         public State {
@@ -80,11 +80,6 @@ public final class CaseTransitionPolicy {
                 requireMessage(input);
                 yield decision(state, Effect.QUEUE_SUPPORT_MESSAGE);
             }
-            case ASK_CUSTOMER -> {
-                requireMessage(input);
-                waitingDuration(input.duration());
-                yield decision(state, Effect.QUEUE_ASK_MESSAGE);
-            }
             case IGNORE -> {
                 if (input.alreadyVoted()) yield decision(state);
                 if (input.activeIgnorePoints() < 0 || input.activeIgnorePoints() >= 2
@@ -116,18 +111,6 @@ public final class CaseTransitionPolicy {
         };
     }
 
-    /** Called only after successful provider acceptance of the persisted Ask message. */
-    public Decision askSent(State state, UUID sendingOwner, Duration duration, Instant sentAt) {
-        if (state.status() != CaseStatus.VERIFICATION || !state.ownerId().equals(sendingOwner)) {
-            throw ApiProblemException.conflict("Ask delivery no longer matches the current Case owner/state.");
-        }
-        Instant deadline = Objects.requireNonNull(sentAt, "sentAt").plus(waitingDuration(duration));
-        return decision(CaseStatus.WAITING_FOR_CUSTOMER, null, deadline, Effect.AUDIT, Effect.UPDATE_SLA);
-    }
-
-    /** A failed/queued/retrying Ask must never change ownership or enter waiting. */
-    public Decision askNotSent(State state) { return decision(state); }
-
     public Decision customerMessage(State state) {
         if (state.terminal()) return decision(state, Effect.CREATE_LINKED_CASE);
         return switch (state.status()) {
@@ -149,10 +132,11 @@ public final class CaseTransitionPolicy {
 
     private boolean allowed(State state, Actor actor, Action action) {
         boolean unclaimed = state.status() == CaseStatus.NEW || state.status() == CaseStatus.PARTIALLY_IGNORED;
-        boolean owner = state.status() == CaseStatus.VERIFICATION && actor.id().equals(state.ownerId());
+        boolean owner = state.status().acceptsOwnerWork() && actor.id().equals(state.ownerId());
         return switch (action) {
-            case CLAIM -> unclaimed && !actor.lifetimeIgnoreVoter();
-            case REPLY, ASK_CUSTOMER -> owner && !actor.lifetimeIgnoreVoter();
+            case CLAIM -> (unclaimed || (state.status() == CaseStatus.WAITING_FOR_CUSTOMER && state.ownerId() == null))
+                    && !actor.lifetimeIgnoreVoter();
+            case REPLY -> owner && !actor.lifetimeIgnoreVoter();
             case IGNORE -> unclaimed;
             case RESOLVE -> owner;
             case ASSIGN -> unclaimed && actor.admin("reassign_cases");
@@ -161,12 +145,6 @@ public final class CaseTransitionPolicy {
             case SNOOZE -> !state.terminal();
             case MARK_READ -> true;
         };
-    }
-
-    private static Duration waitingDuration(Duration duration) {
-        Duration value = duration == null ? Duration.ofHours(24) : duration;
-        requireDuration(value, Duration.ofHours(1), Duration.ofDays(30));
-        return value;
     }
 
     private static void requireDuration(Duration value, Duration min, Duration max) {

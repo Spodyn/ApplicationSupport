@@ -51,7 +51,7 @@ UI może ukrywać niedostępne zakładki/akcje, ale backend ponownie sprawdza ro
 
 Wszystkie ścieżki pod `/api/v1`.
 
-- `/cases/**`: aktywne USER/ADMIN + state/ownership guards.
+- `/cases/**`: aktywne USER/ADMIN + reguły stanu i własności. Uprawniony właściciel może odpowiadać, dodawać notatki i rozwiązać sprawę w OPEN i ASKED. Uprawniony agent może przejąć historyczną sprawę ASKED bez właściciela, zgodnie z ograniczeniem Ignore.
 - `/admin/users/**`: `ADMIN + manage_users`.
 - `/admin/settings/general`: ADMIN.
 - `/admin/sla/**`: `ADMIN + manage_sla`.

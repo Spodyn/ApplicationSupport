@@ -144,7 +144,8 @@ function generatedOperation(route, method, operation, pathItem, imports, inputBl
   if (body) requestFields.push('body: input.body')
 
   const argument = inputType ? `input: ${inputType}` : ''
-  return `  ${operation.operationId}: (${argument}) => transport.request<${responseType}>({ ${requestFields.join(', ')} }),`
+  const deprecation = operation.deprecated ? '  /** @deprecated */\n' : ''
+  return `${deprecation}  ${operation.operationId}: (${argument}) => transport.request<${responseType}>({ ${requestFields.join(', ')} }),`
 }
 
 function generateClient(contract) {

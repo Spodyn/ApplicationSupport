@@ -13,6 +13,8 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.HttpStatus;
@@ -99,11 +101,12 @@ class SupportSendMessageServiceIntegrationTests {
                 messageId)).isEqualTo(1);
     }
 
-    @Test
-    void internalNoteIsIdempotentVisibleToEligibleViewersAndIsolatedFromPublicMessages() {
+    @ParameterizedTest
+    @ValueSource(strings = {"VERIFICATION", "WAITING_FOR_CUSTOMER"})
+    void internalNoteIsIdempotentVisibleToEligibleViewersAndIsolatedFromPublicMessages(String status) {
         UUID owner = createUser("note-owner");
         UUID viewer = createUser("note-viewer");
-        UUID caseId = createCase(owner, "VERIFICATION");
+        UUID caseId = createCase(owner, status);
         var before = jdbc.queryForMap("SELECT status, version, last_activity_at FROM cases WHERE id = ?", caseId);
 
         var created = notes.add(caseId, owner, "note-key", "Internal diagnostics", "corr-note");
@@ -144,7 +147,7 @@ class SupportSendMessageServiceIntegrationTests {
         jdbc.update("UPDATE users SET active = FALSE WHERE id = ?", viewer);
         assertThatThrownBy(() -> history.history(caseId, null, 10, viewer, true))
                 .isInstanceOf(ApiProblemException.class);
-        jdbc.update("UPDATE cases SET status = 'RESOLVED', resolved_at = now() WHERE id = ?", caseId);
+        jdbc.update("UPDATE cases SET status = 'RESOLVED', waiting_until = NULL, resolved_at = now() WHERE id = ?", caseId);
         assertThatThrownBy(() -> notes.add(caseId, owner, "terminal", "Denied", "corr-terminal"))
                 .isInstanceOf(ApiProblemException.class);
         assertThat(history.history(caseId, null, 10, owner, true).items()).hasSize(1);
@@ -267,11 +270,12 @@ class SupportSendMessageServiceIntegrationTests {
                 .isEqualTo(1);
     }
 
-    @Test
-    void nonOwnerCannotSend() {
+    @ParameterizedTest
+    @ValueSource(strings = {"VERIFICATION", "WAITING_FOR_CUSTOMER"})
+    void nonOwnerCannotSend(String status) {
         UUID ownerId = createUser("owner-denied");
         UUID anotherUser = createUser("other-denied");
-        UUID caseId = createCase(ownerId, "VERIFICATION");
+        UUID caseId = createCase(ownerId, status);
 
         assertThatThrownBy(() -> service.send(
                 caseId, anotherUser, "denied-key", "Nope", null, "corr-denied"))
@@ -285,7 +289,7 @@ class SupportSendMessageServiceIntegrationTests {
     }
 
     @Test
-    void ownerCannotSendOutsideVerification() {
+    void ownerCannotSendAfterResolution() {
         UUID ownerId = createUser("owner-resolved");
         UUID caseId = createCase(ownerId, "RESOLVED");
 

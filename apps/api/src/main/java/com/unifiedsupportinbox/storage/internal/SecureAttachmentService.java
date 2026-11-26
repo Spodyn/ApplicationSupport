@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.storage.internal;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.cases.CaseStatus;
 import com.unifiedsupportinbox.storage.AttachmentMetadata;
 import com.unifiedsupportinbox.storage.AttachmentMetadataCatalog;
 import com.unifiedsupportinbox.storage.AttachmentObjectStorage;
@@ -157,11 +158,11 @@ class SecureAttachmentService {
         List<CaseOwner> rows = jdbc.query("SELECT owner_user_id, status FROM cases WHERE id = ?",
                 (rs, rowNum) -> new CaseOwner(
                         rs.getObject("owner_user_id", UUID.class),
-                        rs.getString("status")),
+                        CaseStatus.valueOf(rs.getString("status"))),
                 caseId);
         if (rows.isEmpty()) throw ApiProblemException.notFound("Case was not found.");
         CaseOwner current = rows.getFirst();
-        if (!"VERIFICATION".equals(current.status()) || !userId.equals(current.ownerUserId())) {
+        if (!current.status().acceptsOwnerWork() || !userId.equals(current.ownerUserId())) {
             throw ApiProblemException.accessDenied();
         }
     }
@@ -190,7 +191,7 @@ class SecureAttachmentService {
     record Download(AttachmentMetadata metadata, InputStream content) {
     }
 
-    private record CaseOwner(UUID ownerUserId, String status) {
+    private record CaseOwner(UUID ownerUserId, CaseStatus status) {
     }
 
     private record PendingObject(String storageKey) {

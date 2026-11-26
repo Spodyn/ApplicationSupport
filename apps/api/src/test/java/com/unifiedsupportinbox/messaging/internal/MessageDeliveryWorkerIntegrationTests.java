@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.messaging.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.InboundEventStore;
@@ -10,9 +11,15 @@ import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.DeliveryCommand;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.DeliveryResult;
+import com.unifiedsupportinbox.provider.internal.ConfiguredProviderSecretResolver;
+import com.unifiedsupportinbox.provider.teams.internal.ControlledTeamsConnector;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
+import com.unifiedsupportinbox.workflow.CaseClaimService;
+import com.unifiedsupportinbox.workflow.CaseResolveService;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Optional;
 import java.util.ArrayDeque;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -30,16 +37,21 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Tag("integration")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
 @ActiveProfiles("test")
-@Import(MessageDeliveryWorkerIntegrationTests.FakeProviderConfiguration.class)
+@Import({MessageDeliveryWorkerIntegrationTests.FakeProviderConfiguration.class, ControlledTeamsConnector.Configuration.class})
 class MessageDeliveryWorkerIntegrationTests {
 
     private static final PostgreSQLContainer POSTGRES = TestInfrastructure.postgres();
+    private static final String TEAMS_TENANT = "11111111-1111-4111-8111-111111111112";
+    private static final String TEAMS_BOT = "11111111-1111-4111-8111-111111111113";
 
     @Autowired private JdbcTemplate jdbc;
     @Autowired private SupportSendMessageService send;
@@ -49,6 +61,13 @@ class MessageDeliveryWorkerIntegrationTests {
     @Autowired private InboundEventStore inboundEvents;
     @Autowired private InboundMessageCommandHandler inboundMessages;
     @Autowired private CaseSlaInitializer sla;
+    @Autowired private PlatformTransactionManager transactionManager;
+    @Autowired private CaseClaimService claims;
+    @Autowired private CaseResolveService resolutions;
+    @Autowired private AskCustomerService legacyAsk;
+    @Autowired private ControlledTeamsConnector teams;
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private ConfiguredProviderSecretResolver secrets;
 
     @DynamicPropertySource
     static void infrastructureProperties(DynamicPropertyRegistry registry) {
@@ -66,6 +85,9 @@ class MessageDeliveryWorkerIntegrationTests {
         registry.add("usi.messages.delivery-worker.max-retry-delay", () -> "2s");
         registry.add("usi.messages.delivery-worker.retry-window", () -> "24h");
         registry.add("usi.messages.delivery-worker.max-automatic-attempts", () -> 8);
+        registry.add("usi.providers.teams.outbound.enabled", () -> true);
+        registry.add("usi.providers.teams.client-id", () -> TEAMS_BOT);
+        registry.add("usi.providers.teams.tenant-id", () -> TEAMS_TENANT);
         registry.add("usi.bootstrap-admin.enabled", () -> false);
     }
 
@@ -78,6 +100,7 @@ class MessageDeliveryWorkerIntegrationTests {
     void reset() {
         TestInfrastructure.resetPostgres(POSTGRES);
         provider.reset();
+        teams.reset();
     }
 
     @Test
@@ -91,6 +114,7 @@ class MessageDeliveryWorkerIntegrationTests {
         Instant before = Instant.now();
         assertThat(worker.process(messageId)).isEqualTo(MessageDeliveryWorker.AttemptResult.RETRY_SCHEDULED);
         assertThat(status(messageId)).isEqualTo("QUEUED");
+        assertThat(caseStatus(fixture)).isEqualTo("VERIFICATION");
         assertThat(jdbc.queryForObject(
                 "SELECT error_category FROM delivery_attempts WHERE message_id = ? AND attempt_no = 1",
                 String.class, messageId)).isEqualTo("TRANSIENT");
@@ -120,6 +144,7 @@ class MessageDeliveryWorkerIntegrationTests {
 
         assertThat(worker.process(messageId)).isEqualTo(MessageDeliveryWorker.AttemptResult.FAILED);
         assertThat(status(messageId)).isEqualTo("FAILED");
+        assertThat(caseStatus(fixture)).isEqualTo("VERIFICATION");
         assertThat(jdbc.queryForObject(
                 "SELECT error_category FROM delivery_attempts WHERE message_id = ? AND attempt_no = 1",
                 String.class, messageId)).isEqualTo("PERMANENT");
@@ -222,6 +247,122 @@ class MessageDeliveryWorkerIntegrationTests {
     }
 
     @Test
+    void retryWhileWaitingKeepsTheCurrentOwnerAndDeadline() {
+        Fixture fixture = createFixture("ENABLED");
+        provider.steps(DeliveryResult.sent("first"), DeliveryResult.sent("retried"));
+        assertThat(worker.process(createMessage(fixture, "first"))).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+        var deadline = waitingUntil(fixture);
+        UUID failed = createMessage(fixture, "wait-retry");
+        jdbc.update("UPDATE integrations SET status = 'DISABLED' WHERE id = ?", fixture.integrationId());
+        assertThat(worker.process(failed)).isEqualTo(MessageDeliveryWorker.AttemptResult.FAILED);
+        jdbc.update("UPDATE integrations SET status = 'ENABLED' WHERE id = ?", fixture.integrationId());
+        assertThat(deliveries.retry(failed, fixture.ownerId(), "retry-waiting", "test").status()).isEqualTo(202);
+        assertThat(waitingUntil(fixture)).isNotNull().isEqualTo(deadline);
+        assertThat(worker.process(failed)).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+        assertThat(caseStatus(fixture)).isEqualTo("WAITING_FOR_CUSTOMER");
+        assertThat(caseOwner(fixture)).isEqualTo(fixture.ownerId());
+        assertThat(waitingUntil(fixture)).isEqualTo(deadline);
+    }
+
+    @Test
+    void teamsPostsConsecutiveRepliesToTheSameConversationAndDiscardsStaleWaiting() {
+        Fixture fixture = createFixture("ENABLED", IntegrationProvider.TEAMS);
+        assertThat(claims.claim(fixture.caseId(), fixture.ownerId(), "claim-teams", "teams").status()).isEqualTo(200);
+        when(secrets.resolve("synthetic-teams", "teams-client-secret"))
+                .thenAnswer(ignored -> Optional.of("synthetic-test-credential".getBytes(StandardCharsets.UTF_8)));
+        java.time.OffsetDateTime deadline = null;
+        for (int index = 1; index <= 3; index++) {
+            UUID reply = createMessage(fixture, "teams-" + index);
+            assertThat(worker.process(reply)).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+            var post = teams.posts().get(index - 1);
+            assertThat(post.path()).isEqualTo("/emea/v3/conversations/connector-conversation/activities/thread-delivery");
+            assertThat(post.activity().path("id").asText()).isEqualTo(reply.toString());
+            assertThat(post.activity().path("conversation").path("id").asText()).isEqualTo("connector-conversation");
+            assertThat(post.activity().path("replyToId").asText()).isEqualTo("thread-delivery");
+            assertThat(post.activity().path("text").asText()).isEqualTo("Support reply teams-" + index);
+            assertThat(caseStatus(fixture)).isEqualTo("WAITING_FOR_CUSTOMER");
+            assertThat(caseOwner(fixture)).isEqualTo(fixture.ownerId());
+            if (index == 1) deadline = waitingUntil(fixture);
+            assertThat(waitingUntil(fixture)).isNotNull().isEqualTo(deadline);
+        }
+
+        UUID queuedWhileWaiting = createMessage(fixture, "teams-stale");
+        teams.beforeReceipt(() -> deliverInbound(fixture, IntegrationProvider.TEAMS, "teams-during-send"));
+        assertThat(worker.process(queuedWhileWaiting)).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+        assertThat(caseStatus(fixture)).isEqualTo("VERIFICATION");
+        assertThat(caseOwner(fixture)).isEqualTo(fixture.ownerId());
+        assertThat(waitingUntil(fixture)).isNull();
+
+        teams.beforeReceipt(() -> {});
+        assertThat(worker.process(createMessage(fixture, "teams-final"))).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+        assertThat(resolutions.resolve(fixture.caseId(), fixture.ownerId(), "resolve-teams", null, "teams").status()).isEqualTo(200);
+        assertThat(caseStatus(fixture)).isEqualTo("RESOLVED");
+        assertThat(caseOwner(fixture)).isEqualTo(fixture.ownerId());
+        assertThat(teams.posts()).hasSize(5);
+        assertThat(jdbc.queryForList("SELECT action FROM audit_events WHERE case_id = ? AND action IN ('CASE_REPLY_WAITING', 'CASE_ASK_CUSTOMER')",
+                String.class, fixture.caseId())).containsExactly("CASE_REPLY_WAITING", "CASE_REPLY_WAITING");
+    }
+
+    @Test
+    void deprecatedAskReplaysIdempotentlyAndUsesTheOrdinaryOwnedWaitingDeadline() {
+        Fixture fixture = createFixture("ENABLED");
+        var queued = legacyAsk.ask(fixture.caseId(), fixture.ownerId(), "legacy-key", "Question", null, 60L, "test");
+        assertThat(queued.status()).isEqualTo(202);
+        assertThat(legacyAsk.ask(fixture.caseId(), fixture.ownerId(), "legacy-key", "Question", null, 60L, "test").body())
+                .isEqualTo(queued.body());
+        assertThat(caseStatus(fixture)).isEqualTo("VERIFICATION");
+        UUID id = UUID.fromString(queued.body().path("messageId").asText());
+        provider.steps(DeliveryResult.sent("legacy-alias-reply"));
+        assertThat(worker.process(id)).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+        assertThat(caseStatus(fixture)).isEqualTo("WAITING_FOR_CUSTOMER");
+        assertThat(caseOwner(fixture)).isEqualTo(fixture.ownerId());
+        assertThat(jdbc.queryForObject("""
+                SELECT c.waiting_until = a.finished_at + interval '24 hours'
+                FROM cases c JOIN delivery_attempts a ON a.message_id = ? WHERE c.id = ?
+                """, Boolean.class, id, fixture.caseId())).isTrue();
+    }
+
+    @Test
+    void olderRecoveryTransactionStillFencesADeliveryQueuedBeforeCustomerIntake() {
+        Fixture fixture = createFixture("ENABLED");
+        UUID channel = jdbc.queryForObject("SELECT channel_id FROM cases WHERE id = ?", UUID.class, fixture.caseId());
+        var event = inboundEvents.persistAuthenticated("SLACK", fixture.integrationId(), "event-recovered", "{}", "test");
+        jdbc.update("""
+                WITH run AS (
+                    INSERT INTO integration_resync_runs (integration_id, source, until_at)
+                    VALUES (?, 'manual', CURRENT_TIMESTAMP) RETURNING id
+                ), task AS (
+                    INSERT INTO integration_resync_tasks (run_id, channel_id)
+                    SELECT id, ? FROM run RETURNING id
+                )
+                UPDATE inbound_events SET resync_task_id = (SELECT id FROM task) WHERE id = ?
+                """, fixture.integrationId(), channel, event.id());
+
+        var requiresNew = new TransactionTemplate(transactionManager);
+        requiresNew.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        UUID outgoing = new TransactionTemplate(transactionManager).execute(status -> {
+            // Establish the recovery transaction timestamp before the other transaction queues its reply.
+            jdbc.queryForObject("SELECT transaction_timestamp()", java.time.OffsetDateTime.class);
+            UUID queued = requiresNew.execute(command -> createMessage(fixture, "before-recovery"));
+            var received = inboundMessages.handle(new InboundMessageCommandHandler.Command(
+                    event.id(), fixture.integrationId(), channel, IntegrationProvider.SLACK, "event-recovered",
+                    "C-delivery", "recovered", "thread-delivery", "customer", "Recovered customer message",
+                    InboundMessageCommandHandler.Mutation.CREATE, Instant.now(), "test"));
+            assertThat(received.created()).isTrue();
+            assertThat(jdbc.queryForObject("""
+                    SELECT inbound.created_at < outbound.created_at
+                    FROM messages inbound, messages outbound WHERE inbound.id = ? AND outbound.id = ?
+                    """, Boolean.class, received.messageId(), queued)).isTrue();
+            return queued;
+        });
+        provider.steps(DeliveryResult.sent("confirmed-after-recovery"));
+        assertThat(worker.process(outgoing)).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+        assertThat(caseStatus(fixture)).isEqualTo("VERIFICATION");
+        assertThat(caseOwner(fixture)).isEqualTo(fixture.ownerId());
+        assertThat(waitingUntil(fixture)).isNull();
+    }
+
+    @Test
     void intakeDuringProviderCallPreventsStaleWaitingAndTheNextIntakeOpensNrt() {
         Fixture fixture = createFixture("ENABLED");
         sla.initialize(fixture.caseId(), Instant.now().minusSeconds(120));
@@ -267,10 +408,14 @@ class MessageDeliveryWorkerIntegrationTests {
     }
 
     private UUID deliverInbound(Fixture fixture, String externalMessageId) {
+        return deliverInbound(fixture, IntegrationProvider.SLACK, externalMessageId);
+    }
+
+    private UUID deliverInbound(Fixture fixture, IntegrationProvider provider, String externalMessageId) {
         UUID channel = jdbc.queryForObject("SELECT channel_id FROM cases WHERE id = ?", UUID.class, fixture.caseId());
-        var event = inboundEvents.persistAuthenticated("SLACK", fixture.integrationId(), "event-" + externalMessageId, "{}", "sla-race");
+        var event = inboundEvents.persistAuthenticated(provider.name(), fixture.integrationId(), "event-" + externalMessageId, "{}", "sla-race");
         return inboundMessages.handle(new InboundMessageCommandHandler.Command(
-                event.id(), fixture.integrationId(), channel, IntegrationProvider.SLACK, "event-" + externalMessageId,
+                event.id(), fixture.integrationId(), channel, provider, "event-" + externalMessageId,
                 "C-delivery", externalMessageId, "thread-delivery", "customer", externalMessageId,
                 InboundMessageCommandHandler.Mutation.CREATE, Instant.now(), "sla-race")).messageId();
     }
@@ -287,6 +432,11 @@ class MessageDeliveryWorkerIntegrationTests {
     }
 
     private Fixture createFixture(String integrationStatus) {
+        return createFixture(integrationStatus, IntegrationProvider.SLACK);
+    }
+
+    private Fixture createFixture(String integrationStatus, IntegrationProvider providerType) {
+        boolean isTeams = providerType == IntegrationProvider.TEAMS;
         UUID ownerId = jdbc.queryForObject("""
                 INSERT INTO users (email, display_name, role, active)
                 VALUES (?, 'Delivery owner', 'USER', TRUE)
@@ -300,31 +450,53 @@ class MessageDeliveryWorkerIntegrationTests {
         UUID integrationId = UUID.randomUUID();
         jdbc.update("""
                 INSERT INTO integrations (
-                    id, provider, display_name, status, health, workspace_external_id
-                ) VALUES (?, 'SLACK', 'Delivery Slack', ?, 'HEALTHY', ?)
-                """, integrationId, integrationStatus, "T-" + integrationId);
+                    id, provider, display_name, status, health, workspace_external_id, secret_ref
+                ) VALUES (?, ?, 'Synthetic delivery', ?, 'HEALTHY', ?, ?)
+                """, integrationId, providerType.name(), integrationStatus, isTeams ? TEAMS_TENANT : "T-" + integrationId,
+                isTeams ? "synthetic-teams" : null);
         UUID channelId = UUID.randomUUID();
         jdbc.update("""
                 INSERT INTO channels (
                     id, integration_id, external_channel_id, name, customer_id, ignored,
-                    grouping_strategy, active
-                ) VALUES (?, ?, 'C-delivery', 'delivery', ?, FALSE, 'SLACK_ROOT_THREAD', TRUE)
-                """, channelId, integrationId, customerId);
+                    grouping_strategy, active, metadata_json
+                ) VALUES (?, ?, 'C-delivery', 'delivery', ?, FALSE, ?, TRUE, ?::jsonb)
+                """, channelId, integrationId, customerId, isTeams ? "TEAMS_ROOT_REPLIES" : "SLACK_ROOT_THREAD",
+                isTeams ? "{\"teamsContextType\":\"standardChannel\"}" : "{}");
+        if (isTeams) {
+            jdbc.update("""
+                    INSERT INTO teams_conversation_routes (integration_id, external_channel_id, thread_key,
+                        connector_conversation_id, service_url, bot_id, context_type)
+                    VALUES (?, 'C-delivery', 'thread-delivery', 'connector-conversation',
+                        'https://smba.trafficmanager.net/emea/', ?, 'standardChannel')
+                    """, integrationId, TEAMS_BOT);
+        }
         UUID caseId = jdbc.queryForObject("""
                 INSERT INTO cases (
                     customer_id, integration_id, channel_id, provider,
                     external_conversation_id, external_thread_key, status,
                     owner_user_id, claimed_at
-                ) VALUES (?, ?, ?, 'SLACK', 'C-delivery', 'thread-delivery',
-                          'VERIFICATION', ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, 'C-delivery', 'thread-delivery', ?, ?, ?)
                 RETURNING id
-                """, UUID.class, customerId, integrationId, channelId, ownerId);
+                """, UUID.class, customerId, integrationId, channelId, providerType.name(),
+                isTeams ? "NEW" : "VERIFICATION", isTeams ? null : ownerId, isTeams ? null : java.time.OffsetDateTime.now());
         return new Fixture(ownerId, integrationId, caseId);
     }
 
     private String status(UUID messageId) {
         return jdbc.queryForObject(
                 "SELECT delivery_status FROM messages WHERE id = ?", String.class, messageId);
+    }
+
+    private String caseStatus(Fixture fixture) {
+        return jdbc.queryForObject("SELECT status FROM cases WHERE id = ?", String.class, fixture.caseId());
+    }
+
+    private UUID caseOwner(Fixture fixture) {
+        return jdbc.queryForObject("SELECT owner_user_id FROM cases WHERE id = ?", UUID.class, fixture.caseId());
+    }
+
+    private java.time.OffsetDateTime waitingUntil(Fixture fixture) {
+        return jdbc.queryForObject("SELECT waiting_until FROM cases WHERE id = ?", java.time.OffsetDateTime.class, fixture.caseId());
     }
 
     private int countOutbox(UUID messageId) {
