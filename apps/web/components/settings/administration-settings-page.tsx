@@ -211,9 +211,10 @@ function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActio
   const [form, setForm] = useState(data)
   const example = calculateSlaExample(form)
 
-  const numberFields: { key: keyof Pick<SlaSettings, "firstResponseMinutes" | "nextResponseMinutes" | "unclaimedReminderMinutes" | "inProgressReminderMinutes" | "warningBeforeDeadlineMinutes" | "repeatedBreachMinutes">; label: string; hint: string }[] = [
+  const numberFields: { key: keyof Pick<SlaSettings, "firstResponseMinutes" | "nextResponseMinutes" | "customerWaitingMinutes" | "unclaimedReminderMinutes" | "inProgressReminderMinutes" | "warningBeforeDeadlineMinutes" | "repeatedBreachMinutes">; label: string; hint: string }[] = [
     { key: "firstResponseMinutes", label: t("SLA pierwszej odpowiedzi"), hint: t("Od czasu wiadomości u dostawcy do potwierdzonej odpowiedzi.") },
-    { key: "nextResponseMinutes", label: t("SLA kolejnej odpowiedzi"), hint: t("Od pierwszej nowej wiadomości klienta do potwierdzonej odpowiedzi.") },
+    { key: "nextResponseMinutes", label: t("SLA kolejnej odpowiedzi"), hint: t("Od najnowszej wiadomości klienta do potwierdzonej odpowiedzi.") },
+    { key: "customerWaitingMinutes", label: t("Czas do przypomnienia o kliencie"), hint: t("Minuty od potwierdzonej odpowiedzi do wewnętrznego przypomnienia.") },
     { key: "unclaimedReminderMinutes", label: t("Przypomnienie o nieprzejętym case’ie"), hint: t("Pierwszy alert, gdy case nadal nie ma właściciela.") },
     { key: "inProgressReminderMinutes", label: t("Przypomnienie w trakcie"), hint: t("Alert o zbyt długiej pracy bez aktualizacji.") },
     { key: "warningBeforeDeadlineMinutes", label: t("Próg ostrzeżenia dla starszych spraw"), hint: t("Nowe sprawy mają próg przy 25% pozostałego czasu.") },

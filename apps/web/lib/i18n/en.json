@@ -210,7 +210,15 @@
     "Osiągnięto limit API. Zadanie zostanie automatycznie ponowione.": "API rate limit reached. The job will retry automatically.",
     "Nie można uwierzytelnić integracji. Sprawdź jej poświadczenia.": "The integration could not authenticate. Check its credentials.",
     "API jest chwilowo niedostępne. Zadanie zostanie automatycznie ponowione.": "The API is temporarily unavailable. The job will retry automatically.",
-    "Sprawdź konfigurację integracji i szczegóły błędu.": "Check integration configuration and error details."
+    "Sprawdź konfigurację integracji i szczegóły błędu.": "Check integration configuration and error details.",
+    "Kontakt z klientem": "Customer follow-up",
+    "Czas skontaktować się z klientem": "Customer follow-up is due",
+    "Przekroczony termin odpowiedzi": "Support response is overdue",
+    "Nie udało się pobrać przypomnień.": "Could not load reminders.",
+    "Brak przypomnień.": "No reminders.",
+    "Czas do przypomnienia o kliencie": "Customer follow-up delay",
+    "Minuty od potwierdzonej odpowiedzi do wewnętrznego przypomnienia.": "Minutes from confirmed delivery to an internal reminder.",
+    "Od najnowszej wiadomości klienta do potwierdzonej odpowiedzi.": "From the latest customer message to a confirmed response."
   },
   "auth": {
     "Bezpieczna aktywacja konta": "Secure account activation",

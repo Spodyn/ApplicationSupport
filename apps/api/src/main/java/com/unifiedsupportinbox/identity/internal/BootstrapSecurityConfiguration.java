@@ -107,6 +107,8 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers(HttpMethod.PUT,
                                 "/api/v1/direct-messages/conversations/*/read-position").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/cases").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/notifications/sla-reminders").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/notifications/sla-reminders/read").authenticated()
                         .requestMatchers(HttpMethod.GET,
                                 "/api/v1/cases/*/messages",
                                 "/api/v1/cases/*/attachments/*",

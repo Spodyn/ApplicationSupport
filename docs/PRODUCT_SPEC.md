@@ -83,9 +83,9 @@ Below threshold -> PARTIALLY_IGNORED; threshold reached -> terminal IGNORED. New
 
 ## 10. Waiting for the customer
 
-A current public reply moves OPEN to ASKED after successful provider delivery and keeps the owner. Additional replies in ASKED preserve the existing 24-hour waiting deadline. A failed, queued, retrying or stale send leaves workflow intact.
+A current public reply moves OPEN to ASKED after successful provider delivery and keeps the owner. Additional provider-confirmed replies in ASKED restart the configurable follow-up deadline, default 24 elapsed hours. A failed, queued, retrying or stale send leaves workflow intact.
 
-Customer reply returns an owned Case to OPEN with the same owner, marks it unread for eligible users, wakes Snoozes and resumes applicable timers. Timeout also returns it to OPEN and records `WAITING_TIMEOUT`. A customer reply or timeout returns historical unassigned waiting to NEW. See the [legacy API compatibility contract](PRODUCT_CONTRACT.md#7-public-replies-and-waiting).
+Customer reply returns an owned Case to OPEN with the same owner, marks it unread for eligible users, wakes Snoozes and resumes applicable timers. Expiry creates an internal follow-up reminder while the Case remains ASKED. A customer reply returns historical unassigned waiting to NEW. See the [legacy API compatibility contract](PRODUCT_CONTRACT.md#7-public-replies-and-waiting).
 
 ## 11. Resolve, force-resolve and assignment
 
@@ -136,7 +136,7 @@ Three core measurements use business time:
 
 `pause_waiting=true` by default. A Case snapshots SLA policy plus business-hours schedule/timezone version at creation, so later configuration changes do not retroactively move its deadlines.
 
-FRT starts once at the provider timestamp of the first accepted customer message. Provider-confirmed human Reply or Ask ends the applicable response clock. The first durable customer message after a confirmed response starts NRT. The Case snapshots the policy and business calendar, with default targets 15/30 minutes and a warning at 25% remaining. Resolution ends active cycles, and reopening preserves their history and restarts unclaimed work. Reports retain unclaimed and in-progress data and provide elapsed and working TTR where the calendar is known.
+Historical FRT and NRT preserve their original response-cycle anchors and outcomes. The operational clock starts or restarts on every accepted customer message and uses 15 business minutes for FRT and 30 for NRT by default. Provider-confirmed human delivery switches it to a configurable follow-up clock. The Case snapshots the response policy and business calendar. Response clocks warn with 25% remaining. Overdue responses and due follow-ups create distinct internal reminders. Resolution and Ignore end the active deadline. Reports retain unclaimed and in-progress data and provide elapsed and working TTR where the calendar is known.
 
 ## 17. Business hours and OOO
 

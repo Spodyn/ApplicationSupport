@@ -9,6 +9,7 @@ import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.identity.UserRole;
 import com.unifiedsupportinbox.sla.CaseSlaClaimRecorder;
+import com.unifiedsupportinbox.sla.CaseOperationalDeadlines;
 import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import com.unifiedsupportinbox.readstate.CaseSnoozeWakeService;
 import java.time.OffsetDateTime;
@@ -37,11 +38,12 @@ public class CaseClaimService {
     private final ObjectMapper json;
     private final CaseSlaClaimRecorder sla;
     private final CaseSlaWaitingRecorder waitingSla;
+    private final CaseOperationalDeadlines deadlines;
 
     public CaseClaimService(JdbcTemplate jdbc,
             CaseSnoozeWakeService snoozes, IdempotentCommandExecutor idempotency,
                             AuditEventStore audit, OutboxEventStore outbox, ObjectMapper json,
-                            CaseSlaClaimRecorder sla, CaseSlaWaitingRecorder waitingSla) {
+                            CaseSlaClaimRecorder sla, CaseSlaWaitingRecorder waitingSla, CaseOperationalDeadlines deadlines) {
         this.jdbc = jdbc;
         this.snoozes = snoozes;
         this.idempotency = idempotency;
@@ -50,6 +52,7 @@ public class CaseClaimService {
         this.json = json;
         this.sla = sla;
         this.waitingSla = waitingSla;
+        this.deadlines = deadlines;
     }
 
     public IdempotencyResult claim(UUID caseId, UUID userId, String idempotencyKey, String correlationId) {
@@ -100,7 +103,10 @@ public class CaseClaimService {
                 WHERE case_id = ? AND active
                 """, caseId);
         snoozes.wake(caseId);
-        if (claim.wasWaiting()) waitingSla.resumeAfterWaiting(caseId, claim.claimedAt());
+        if (claim.wasWaiting()) {
+            waitingSla.resumeAfterWaiting(caseId, claim.claimedAt());
+            deadlines.finish(caseId, claim.claimedAt(), false);
+        }
         sla.recordClaim(caseId, claim.claimedAt());
 
         audit.append(actor.role() == UserRole.ADMIN ? AuditActorType.ADMIN : AuditActorType.USER,

@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, request, test, type Page } from '@playwright/test'
 
 type SlackFixture = { channelId: string; externalChannelId: string; workspaceId: string }
 const fixtures = new WeakMap<Page, SlackFixture>()
@@ -140,12 +140,15 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
     responseCycles: [expect.objectContaining({endedAt: null})]})
   expect(Date.parse(opened.sla.firstResponseStartedAt)).toBe(Math.floor(Number(sourceSentAt) * 1000))
   const round = opened.responseCycles[0]
+  const activeRound = opened.operationalDeadline
+  expect(activeRound.kind).toBe('NRT')
   const failure = await command(page, casePath + '/messages', {body: 'test-only-archived'})
   expect(failure.status()).toBe(202)
   const failureId = (await failure.json()).messageId
   await expect.poll(async () => (await (await page.request.get(casePath + '/messages')).json()).items
     .find((item: {id: string}) => item.id === failureId)?.deliveryStatus).toBe('FAILED')
   expect((await readSla()).responseCycles).toEqual([round])
+  expect((await readSla()).operationalDeadline.id).toBe(activeRound.id)
 
   expect((await page.request.post('/api/v1/providers/slack/events', {data: followup.payload, headers: {
     'Content-Type': 'application/json', 'X-Slack-Request-Timestamp': followup.timestamp, 'X-Slack-Signature': followup.signature,
@@ -153,6 +156,7 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   await inbound(page, 'Second message in the same NRT series', first.ts)
   await expect(conversation.getByText('Second message in the same NRT series', {exact: true})).toBeVisible()
   expect((await readSla()).responseCycles).toEqual([round])
+  expect((await readSla()).operationalDeadline.id).not.toBe(activeRound.id)
 
   expect((await command(page, casePath + '/messages', {body: 'Successful NRT reply'})).status()).toBe(202)
   await expect.poll(async () => (await readSla()).responseSla.state).toBe('PAUSED')
@@ -172,6 +176,82 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   expect((await page.request.get('/api/v1/auth/me')).status()).toBe(401)
   await page.reload()
   await expect(page).toHaveURL(/\/login$/)
+})
+
+test('shared countdown changes without requests and follow-up expiry reaches only the owner', async ({page, baseURL}) => {
+  await page.setViewportSize({width: 1440, height: 900})
+  await page.clock.install()
+  const owner = await testAccount(page, 'account')
+  const viewer = await testAccount(page)
+  fixtures.set(page, owner)
+  await login(page, owner.email)
+  const label = 'Operational reminder ' + randomUUID().slice(0, 8)
+  await inbound(page, label)
+  const initialTile = page.getByRole('button').filter({hasText: label})
+  await initialTile.click()
+  const caseId = (await initialTile.getAttribute('data-case-id'))!
+  const tile = page.locator(`button[data-case-id="${caseId}"]`)
+  const path = '/api/v1/cases/' + caseId
+  const detail = async () => (await page.request.get(path)).json()
+  const panel = page.getByRole('region', {name: /^Rozmowa /})
+  const details = page.getByRole('complementary', {name: 'Szczegóły sprawy'})
+  await panel.getByRole('button', {name: 'Przejmij', exact: true}).click()
+  await expect(panel.getByLabel('Treść odpowiedzi')).toBeEnabled()
+  expect((await command(page, path + '/messages', {body: 'Synthetic public reply'})).status()).toBe(202)
+  const badges = [tile, panel, details].map(element => element.locator('[data-sla-countdown]'))
+  for (const badge of badges) await expect(badge).toContainText('Kontakt z klientem')
+  await page.waitForLoadState('networkidle')
+  const requestPaths: string[] = []
+  page.on('request', event => { if (event.url().includes('/api/v1/')) requestPaths.push(event.url()) })
+  const before = await Promise.all(badges.map(badge => badge.textContent()))
+  await page.clock.runFor(2_200)
+  for (const [index, badge] of badges.entries()) await expect(badge).not.toHaveText(before[index]!)
+  expect(requestPaths).toHaveLength(0)
+
+  const reminderPath = '/api/v1/notifications/sla-reminders'
+  const reminders = async (tab: Page) => (await (await tab.request.get(reminderPath)).json()).items
+  expect(await (await page.request.post('/__test/expire-deadline', {data: {caseId}})).json()).toEqual({changed: 1})
+  await expect.poll(async () => (await reminders(page)).filter((item: {caseId: string}) => item.caseId === caseId))
+    .toEqual([expect.objectContaining({kind: 'FOLLOW_UP', unread: true})])
+  await expect(panel.locator('[data-sla-countdown]')).toContainText('Po terminie')
+  const reminder = (await reminders(page)).find((item: {caseId: string}) => item.caseId === caseId)
+  const viewerSession = await request.newContext({baseURL})
+  try {
+    const viewerCsrf = async () => (await viewerSession.storageState()).cookies.find(cookie => cookie.name === 'XSRF-TOKEN')!.value
+    expect((await viewerSession.get('/api/v1/auth/me')).status()).toBe(401)
+    const signedIn = await viewerSession.post('/api/v1/auth/login', {
+      headers: {'X-XSRF-TOKEN': await viewerCsrf()},
+      data: {email: viewer.email, password: 'test-only-fullstack-credential'},
+    })
+    expect(signedIn.status()).toBe(200)
+    const viewerReminders = await viewerSession.get(reminderPath)
+    expect(viewerReminders.status()).toBe(200)
+    expect((await viewerReminders.json()).items.some((item: {caseId: string}) => item.caseId === caseId)).toBe(false)
+    const denied = await viewerSession.post(reminderPath + '/read', {
+      headers: {'X-XSRF-TOKEN': await viewerCsrf()},
+      data: {deadlineId: reminder.id},
+    })
+    expect(denied.status()).toBe(200)
+    expect(await denied.json()).toEqual({updatedCount: 0})
+  } finally {
+    await viewerSession.dispose()
+  }
+  await page.getByRole('button', {name: 'SLA', exact: true}).click()
+  const attention = async () => (await (await page.request.get('/api/v1/cases?quickView=SLA')).json())
+  await expect(tile).toBeVisible()
+  expect((await attention()).items).toEqual(expect.arrayContaining([expect.objectContaining({id: caseId, slaState: 'FOLLOW_UP_DUE'})]))
+  await expect(page.getByLabel('Liczba spraw')).toHaveText(String((await attention()).quickViewCounts.sla))
+  expect(await detail()).toMatchObject({
+    workflowStatus: 'WAITING_ON_CUSTOMER', owner: {id: owner.userId},
+    operationalDeadline: {kind: 'FOLLOW_UP', state: 'FOLLOW_UP_DUE'},
+  })
+  await page.getByRole('button', {name: 'Powiadomienia', exact: true}).click()
+  await page.getByRole('button', {name: /Czas skontaktować się z klientem/}).filter({hasText: (await detail()).reference}).click()
+  await expect.poll(async () => (await reminders(page)).filter((item: {caseId: string}) => item.caseId === caseId))
+    .toEqual([expect.objectContaining({kind: 'FOLLOW_UP', unread: false})])
+  expect((await command(page, path + '/resolve', {})).status()).toBe(200)
+  await expect.poll(detail).toMatchObject({workflowStatus: 'RESOLVED', operationalDeadline: null})
+  await expect(tile).toHaveCount(0)
 })
 
 test('force resolve requires administrator authority and concurrent replies share a linked successor', async ({page, browser, baseURL}) => {
@@ -778,7 +858,7 @@ test('Snooze history is personal and timezone-aware while SLA follows workflow',
     expect((await command(a, `${path}/ask-customer`, {message: 'Please clarify', waitingMinutes: 60})).status()).toBe(202)
     await expect.poll(async () => (await (await a.request.get(path)).json()).status).toBe('WAITING_FOR_CUSTOMER')
     const details = (tab: Page) => tab.getByRole('complementary', {name: /^(Szczegóły sprawy|Case details)$/})
-    await expect(details(a).getByText('SLA · Wstrzymane', {exact: true})).toBeVisible()
+    await expect(details(a).locator('[data-sla-countdown]')).toContainText('Kontakt z klientem')
     const attention = async () => {
       const response=await a.request.get('/api/v1/cases?slaAttention=true')
       expect(response.status()).toBe(200)
@@ -985,9 +1065,10 @@ test('Case composer uploads pasted PNG, retries scans and resumes partial Slack 
   expect(history.items.find((item: {id: string}) => item.id === combined).attachments)
     .toEqual(expect.arrayContaining([expect.objectContaining({id: quarantined.attachmentId})]))
   expect(await detail()).toMatchObject({
-    workflowStatus: 'WAITING_ON_CUSTOMER', owner: waiting.owner, waitingUntil: waiting.waitingUntil,
+    workflowStatus: 'WAITING_ON_CUSTOMER', owner: waiting.owner,
     availableActions: expect.arrayContaining(['REPLY', 'RESOLVE']),
   })
+  expect(Date.parse((await detail()).waitingUntil)).toBeGreaterThan(Date.parse(waiting.waitingUntil))
   await selectLanguage(page, 'English', 'pl')
   const englishPanel = page.getByRole('region', {name: /^Conversation /})
   await expect(englishPanel.getByText('ASKED', {exact: true})).toBeVisible()

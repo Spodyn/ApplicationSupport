@@ -122,14 +122,6 @@ public final class CaseTransitionPolicy {
         };
     }
 
-    public Decision waitingTimeout(State state, Instant now) {
-        if (state.status() != CaseStatus.WAITING_FOR_CUSTOMER || now.isBefore(state.waitingUntil())) {
-            throw ApiProblemException.conflict("The Case waiting deadline is not due.");
-        }
-        return decision(state.ownerId() == null ? CaseStatus.NEW : CaseStatus.VERIFICATION,
-                state.ownerId(), null, Effect.AUDIT, Effect.UPDATE_SLA);
-    }
-
     private boolean allowed(State state, Actor actor, Action action) {
         boolean unclaimed = state.status() == CaseStatus.NEW || state.status() == CaseStatus.PARTIALLY_IGNORED;
         boolean owner = state.status().acceptsOwnerWork() && actor.id().equals(state.ownerId());

@@ -210,7 +210,15 @@
     "Osiągnięto limit API. Zadanie zostanie automatycznie ponowione.": "Osiągnięto limit API. Zadanie zostanie automatycznie ponowione.",
     "Nie można uwierzytelnić integracji. Sprawdź jej poświadczenia.": "Nie można uwierzytelnić integracji. Sprawdź jej poświadczenia.",
     "API jest chwilowo niedostępne. Zadanie zostanie automatycznie ponowione.": "API jest chwilowo niedostępne. Zadanie zostanie automatycznie ponowione.",
-    "Sprawdź konfigurację integracji i szczegóły błędu.": "Sprawdź konfigurację integracji i szczegóły błędu."
+    "Sprawdź konfigurację integracji i szczegóły błędu.": "Sprawdź konfigurację integracji i szczegóły błędu.",
+    "Kontakt z klientem": "Kontakt z klientem",
+    "Czas skontaktować się z klientem": "Czas skontaktować się z klientem",
+    "Przekroczony termin odpowiedzi": "Przekroczony termin odpowiedzi",
+    "Nie udało się pobrać przypomnień.": "Nie udało się pobrać przypomnień.",
+    "Brak przypomnień.": "Brak przypomnień.",
+    "Czas do przypomnienia o kliencie": "Czas do przypomnienia o kliencie",
+    "Minuty od potwierdzonej odpowiedzi do wewnętrznego przypomnienia.": "Minuty od potwierdzonej odpowiedzi do wewnętrznego przypomnienia.",
+    "Od najnowszej wiadomości klienta do potwierdzonej odpowiedzi.": "Od najnowszej wiadomości klienta do potwierdzonej odpowiedzi."
   },
   "auth": {
     "Bezpieczna aktywacja konta": "Bezpieczna aktywacja konta",

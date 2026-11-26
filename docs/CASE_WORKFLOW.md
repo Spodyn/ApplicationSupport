@@ -31,7 +31,7 @@ Frontend mapuje je 1:1 na lower snake case. Unread, Snooze, SLA severity i analy
 | VERIFICATION / WAITING_FOR_CUSTOMER | Reply | eligible current owner | successful delivery enters or keeps owned waiting |
 | unassigned WAITING_FOR_CUSTOMER | Claim | eligible claimant without lifetime Ignore vote | VERIFICATION with claimant as owner |
 | WAITING_FOR_CUSTOMER | customer reply | inbound customer message | VERIFICATION with same owner, or NEW if unassigned |
-| WAITING_FOR_CUSTOMER | timeout | waiting_until reached | VERIFICATION with same owner, or NEW if unassigned, plus `WAITING_TIMEOUT`; no automatic follow-up |
+| WAITING_FOR_CUSTOMER | follow-up expiry | waiting_until reached | WAITING_FOR_CUSTOMER with an internal reminder, retaining the owner |
 | VERIFICATION / WAITING_FOR_CUSTOMER | Resolve | current owner | RESOLVED, owner preserved |
 | any nonterminal | Force Resolve | ADMIN + force_resolve | RESOLVED; existing owner preserved, unowned remains null |
 | NEW/PARTIALLY_IGNORED | Admin assign | ADMIN + reassign_cases, eligible target | VERIFICATION, target owner |
@@ -51,7 +51,7 @@ No generic `PATCH status`.
 
 ## Oczekuje na klienta
 
-Po potwierdzeniu pierwszej odpowiedzi przez dostawcę sprawa przechodzi z OPEN do ASKED i zachowuje właściciela. Kolejne potwierdzone odpowiedzi zachowują bieżący termin oczekiwania. Wysyłka w kolejce, błąd albo ponowienie nie zmieniają stanu sprawy. Obowiązuje [kanoniczny kontrakt zgodności API](PRODUCT_CONTRACT.md#7-public-replies-and-waiting).
+Po potwierdzeniu pierwszej odpowiedzi przez dostawcę sprawa przechodzi z OPEN do ASKED i zachowuje właściciela. Każda kolejna potwierdzona odpowiedź ustala nowy termin wewnętrznego przypomnienia. Po upływie terminu sprawa nadal czeka i zachowuje właściciela. Wysyłka w kolejce, błąd albo ponowienie nie zmieniają stanu sprawy. Obowiązuje [kanoniczny kontrakt zgodności API](PRODUCT_CONTRACT.md#7-public-replies-and-waiting).
 
 ## Resolve category
 

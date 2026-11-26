@@ -96,6 +96,7 @@ export interface InboxCase {
     kind?: "FRT" | "NRT"
     previouslyBreached?: boolean
     remainingBusinessSeconds?: number
+    operational?: import("./operational-sla").OperationalDeadline
   }
   ignoreVotes: {
     current: number

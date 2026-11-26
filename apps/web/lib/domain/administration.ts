@@ -46,6 +46,7 @@ export interface GeneralSettings {
 export interface SlaSettings {
   firstResponseMinutes: number
   nextResponseMinutes: number
+  customerWaitingMinutes: number
   unclaimedReminderMinutes: number
   inProgressReminderMinutes: number
   warningBeforeDeadlineMinutes: number

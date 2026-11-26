@@ -174,21 +174,9 @@ class CaseTransitionPolicyTests {
     }
 
     @Test
-    void timeoutRequiresDueWaitingCaseAndNeverQueuesFollowup() {
-        assertProblem(() -> policy.waitingTimeout(state(WAITING_FOR_CUSTOMER), NOW.minusNanos(1)), ApiProblemCode.CONFLICT);
-        Decision result = policy.waitingTimeout(state(WAITING_FOR_CUSTOMER), NOW);
-        assertThat(result.state()).isEqualTo(state(NEW));
-        assertThat(result.effects()).containsExactlyInAnyOrder(AUDIT, UPDATE_SLA);
-        for (CaseStatus status : CaseStatus.values()) {
-            if (status != WAITING_FOR_CUSTOMER) assertProblem(() -> policy.waitingTimeout(state(status), NOW), ApiProblemCode.CONFLICT);
-        }
-    }
-
-    @Test
     void ownedWaitingReturnsToOpenWithItsOwner() {
         State waiting = new State(WAITING_FOR_CUSTOMER, OWNER, NOW);
         assertThat(policy.customerMessage(waiting).state()).isEqualTo(state(VERIFICATION));
-        assertThat(policy.waitingTimeout(waiting, NOW).state()).isEqualTo(state(VERIFICATION));
         assertThat(policy.availableActions(waiting, ADMIN))
                 .containsExactlyInAnyOrder(REPLY, RESOLVE, FORCE_RESOLVE, SNOOZE, MARK_READ);
         assertThat(policy.availableActions(waiting, TARGET)).doesNotContain(CLAIM, REPLY, RESOLVE);

@@ -90,49 +90,40 @@ class CaseWorkflowTransactionsIntegrationTests {
     }
 
     @Test
-    void expiredWaitingResumesSlaOnceWithoutSendingFollowUp() {
-        UUID due = newCase();
-        UUID future = newCase();
-        Instant pausedAt = Instant.now().minusSeconds(120);
-        context.getBean(CaseSlaInitializer.class).initialize(due, pausedAt.minusSeconds(60));
-        context.getBean(CaseSlaWaitingRecorder.class).pauseForWaiting(due, pausedAt);
-        jdbc.update("UPDATE cases SET status = 'WAITING_FOR_CUSTOMER', waiting_until = now() - interval '1 minute' WHERE id = ?", due);
-        jdbc.update("UPDATE cases SET status = 'WAITING_FOR_CUSTOMER', waiting_until = now() + interval '1 hour' WHERE id = ?", future);
-        assertThat(jdbc.queryForObject("SELECT paused_at IS NOT NULL FROM case_sla WHERE case_id = ?", Boolean.class, due)).isTrue();
-
-        WaitingTimeoutService timeouts = context.getBean(WaitingTimeoutService.class);
-        assertThat(timeouts.processDue(10)).isOne();
-        assertThat(timeouts.processDue(10)).isZero();
-        assertThat(jdbc.queryForObject("""
-                SELECT status = 'NEW' AND waiting_until IS NULL AND owner_user_id IS NULL AND version = 1
-                FROM cases WHERE id = ?
-                """, Boolean.class, due)).isTrue();
-        assertThat(jdbc.queryForObject("SELECT status FROM cases WHERE id = ?", String.class, future))
-                .isEqualTo("WAITING_FOR_CUSTOMER");
-        assertThat(jdbc.queryForObject("SELECT paused_at IS NULL FROM case_sla WHERE case_id = ?", Boolean.class, due)).isTrue();
-        assertThat(jdbc.queryForList("SELECT action FROM audit_events WHERE case_id = ?", String.class, due))
-                .containsExactly("CASE_WAITING_TIMEOUT");
-        assertThat(jdbc.queryForList("SELECT type FROM outbox_events WHERE aggregate_id = ?", String.class, due))
-                .containsExactly("case.updated");
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages WHERE case_id = ?", Integer.class, due)).isZero();
-    }
-
-    @Test
-    void ownedWaitingTimeoutRestoresOpenWorkflowAndKeepsOwner() {
+    void waitingExpiryRemindsTheOwnerWithoutChangingWorkflowOrSendingACustomerMessage() {
         UUID id = newCase();
         UUID owner = newActor().id();
+        UUID other = newActor().id();
+        Instant now = Instant.parse("2026-11-26T12:00:00Z");
+        context.getBean(CaseSlaInitializer.class).initialize(id, now.minusSeconds(180));
+        context.getBean(CaseSlaWaitingRecorder.class).pauseForWaiting(id, now.minusSeconds(120));
         jdbc.update("""
                 UPDATE cases SET status = 'WAITING_FOR_CUSTOMER', owner_user_id = ?, claimed_at = now(),
-                    waiting_until = now() - interval '1 minute'
+                    waiting_until = '2026-11-26T11:59:00Z'
                 WHERE id = ?
                 """, owner, id);
-        assertThat(context.getBean(WaitingTimeoutService.class).processDue(10)).isOne();
+        jdbc.update("""
+                INSERT INTO case_operational_deadlines (case_id, kind, started_at, due_at)
+                VALUES (?, 'FOLLOW_UP', '2026-11-26T11:58:00Z', '2026-11-26T11:59:00Z')
+                """, id);
+
+        Object worker = context.getBean("operationalDeadlineService");
+        assertThat((Integer) org.springframework.test.util.ReflectionTestUtils.invokeMethod(worker, "remindDue", now)).isOne();
+        assertThat((Integer) org.springframework.test.util.ReflectionTestUtils.invokeMethod(worker, "remindDue", now)).isZero();
         assertThat(jdbc.queryForObject("""
-                SELECT workflow_status = 'OPEN' AND owner_user_id = ? AND waiting_until IS NULL
-                FROM cases WHERE id = ?
+                SELECT c.workflow_status = 'WAITING_ON_CUSTOMER' AND c.owner_user_id = ?
+                       AND c.waiting_until IS NOT NULL AND s.paused_at IS NOT NULL
+                FROM cases c JOIN case_sla s ON s.case_id = c.id WHERE c.id = ?
                 """, Boolean.class, owner, id)).isTrue();
-        assertThat(jdbc.queryForList("SELECT action FROM audit_events WHERE case_id = ?", String.class, id))
-                .containsExactly("CASE_WAITING_TIMEOUT");
+        assertThat(jdbc.queryForList("""
+                SELECT r.user_id FROM case_deadline_reminder_recipients r
+                JOIN case_operational_deadlines d ON d.id = r.deadline_id WHERE d.case_id = ?
+                """, UUID.class, id)).containsExactly(owner).doesNotContain(other);
+        assertThat(jdbc.queryForObject("SELECT breached_at FROM case_operational_deadlines WHERE case_id = ?",
+                java.time.OffsetDateTime.class, id)).isNull();
+        assertThat(jdbc.queryForList("SELECT type FROM outbox_events WHERE aggregate_id = ?", String.class, id))
+                .containsExactly("case.sla_changed");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages WHERE case_id = ?", Integer.class, id)).isZero();
     }
 
     @Test

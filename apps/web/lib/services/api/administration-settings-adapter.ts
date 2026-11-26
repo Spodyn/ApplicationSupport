@@ -135,6 +135,7 @@ type ApiSlaPolicy = {
   name: string
   firstResponseMinutes: number
   nextResponseMinutes?: number
+  customerWaitingMinutes?: number
   unclaimedWarningMinutes: number
   unclaimedBreachMinutes: number
   inProgressWarningMinutes: number
@@ -422,6 +423,7 @@ async function saveSlaPolicy(settings: AdministrationSettings["sla"]): Promise<A
       name: current.name,
       firstResponseMinutes: settings.firstResponseMinutes,
       nextResponseMinutes: settings.nextResponseMinutes,
+      customerWaitingMinutes: settings.customerWaitingMinutes,
       unclaimedWarningMinutes: settings.unclaimedReminderMinutes,
       unclaimedBreachMinutes: Math.max(settings.unclaimedReminderMinutes, current.unclaimedBreachMinutes),
       inProgressWarningMinutes: settings.inProgressReminderMinutes,
@@ -627,6 +629,7 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
       sla: {
         firstResponseMinutes: sla.firstResponseMinutes,
         nextResponseMinutes: sla.nextResponseMinutes ?? 30,
+        customerWaitingMinutes: sla.customerWaitingMinutes ?? 1440,
         unclaimedReminderMinutes: sla.unclaimedWarningMinutes,
         inProgressReminderMinutes: sla.inProgressWarningMinutes,
         warningBeforeDeadlineMinutes: organization.warningBeforeDeadlineMinutes,
@@ -668,6 +671,7 @@ export const apiAdministrationSettingsRepository: AdministrationSettingsReposito
       })
       return { ...existing, firstResponseMinutes: saved.firstResponseMinutes,
         nextResponseMinutes: saved.nextResponseMinutes ?? existing.nextResponseMinutes,
+        customerWaitingMinutes: saved.customerWaitingMinutes ?? existing.customerWaitingMinutes,
         unclaimedReminderMinutes: saved.unclaimedWarningMinutes,
         inProgressReminderMinutes: saved.inProgressWarningMinutes,
         repeatedBreachMinutes: saved.inProgressBreachMinutes,
