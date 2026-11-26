@@ -37,7 +37,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 @Tag("integration")
@@ -58,6 +61,7 @@ class MessageDeliveryWorkerIntegrationTests {
     @Autowired private InboundEventStore inboundEvents;
     @Autowired private InboundMessageCommandHandler inboundMessages;
     @Autowired private CaseSlaInitializer sla;
+    @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private CaseClaimService claims;
     @Autowired private CaseResolveService resolutions;
     @Autowired private AskCustomerService legacyAsk;
@@ -316,6 +320,46 @@ class MessageDeliveryWorkerIntegrationTests {
                 SELECT c.waiting_until = a.finished_at + interval '24 hours'
                 FROM cases c JOIN delivery_attempts a ON a.message_id = ? WHERE c.id = ?
                 """, Boolean.class, id, fixture.caseId())).isTrue();
+    }
+
+    @Test
+    void olderRecoveryTransactionStillFencesADeliveryQueuedBeforeCustomerIntake() {
+        Fixture fixture = createFixture("ENABLED");
+        UUID channel = jdbc.queryForObject("SELECT channel_id FROM cases WHERE id = ?", UUID.class, fixture.caseId());
+        var event = inboundEvents.persistAuthenticated("SLACK", fixture.integrationId(), "event-recovered", "{}", "test");
+        jdbc.update("""
+                WITH run AS (
+                    INSERT INTO integration_resync_runs (integration_id, source, until_at)
+                    VALUES (?, 'manual', CURRENT_TIMESTAMP) RETURNING id
+                ), task AS (
+                    INSERT INTO integration_resync_tasks (run_id, channel_id)
+                    SELECT id, ? FROM run RETURNING id
+                )
+                UPDATE inbound_events SET resync_task_id = (SELECT id FROM task) WHERE id = ?
+                """, fixture.integrationId(), channel, event.id());
+
+        var requiresNew = new TransactionTemplate(transactionManager);
+        requiresNew.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        UUID outgoing = new TransactionTemplate(transactionManager).execute(status -> {
+            // Establish the recovery transaction timestamp before the other transaction queues its reply.
+            jdbc.queryForObject("SELECT transaction_timestamp()", java.time.OffsetDateTime.class);
+            UUID queued = requiresNew.execute(command -> createMessage(fixture, "before-recovery"));
+            var received = inboundMessages.handle(new InboundMessageCommandHandler.Command(
+                    event.id(), fixture.integrationId(), channel, IntegrationProvider.SLACK, "event-recovered",
+                    "C-delivery", "recovered", "thread-delivery", "customer", "Recovered customer message",
+                    InboundMessageCommandHandler.Mutation.CREATE, Instant.now(), "test"));
+            assertThat(received.created()).isTrue();
+            assertThat(jdbc.queryForObject("""
+                    SELECT inbound.created_at < outbound.created_at
+                    FROM messages inbound, messages outbound WHERE inbound.id = ? AND outbound.id = ?
+                    """, Boolean.class, received.messageId(), queued)).isTrue();
+            return queued;
+        });
+        provider.steps(DeliveryResult.sent("confirmed-after-recovery"));
+        assertThat(worker.process(outgoing)).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
+        assertThat(caseStatus(fixture)).isEqualTo("VERIFICATION");
+        assertThat(caseOwner(fixture)).isEqualTo(fixture.ownerId());
+        assertThat(waitingUntil(fixture)).isNull();
     }
 
     @Test

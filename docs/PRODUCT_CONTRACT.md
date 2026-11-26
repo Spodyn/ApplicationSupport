@@ -100,7 +100,7 @@ Human-readable Case references are immutable sequential references such as `CASE
 ## 7. Public replies and waiting
 
 - Provider-confirmed public delivery enters owned `WAITING_FOR_CUSTOMER` from `VERIFICATION`, starts a 24-hour deadline and applies the configured waiting SLA pause. The transition requires the same Case version and owner, with no intervening customer message.
-- Additional successful replies while already waiting preserve the owner, state and existing deadline. Queued, sending, failed and retrying messages do not change workflow. A stale confirmation still records delivery and leaves newer workflow intact.
+- Additional successful replies while already waiting preserve the owner, state and existing deadline. Queued, sending, failed and retrying messages do not change workflow. A stale confirmation still records delivery and leaves newer workflow intact. Recovered customer messages invalidate older pending Case transitions by advancing the Case revision under the intake lock.
 - A customer reply or timeout clears the deadline and resumes the existing SLA timers. Owned waiting returns to `VERIFICATION` (OPEN) with its owner. Historical unassigned waiting returns to `NEW`. Timeout emits and audits `WAITING_TIMEOUT` and sends no automatic follow-up.
 - The deprecated `POST /api/v1/cases/{caseId}/ask-customer` queues a standard public reply using its existing request and idempotency scope. It validates the legacy `waitingMinutes` field for compatibility and applies the ordinary deadline to newly queued replies. Previously queued legacy intents can use their persisted deadlines on successful delivery and retain the current owner.
 
