@@ -1,7 +1,7 @@
 import { createHmac, randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { expect, test, type Page } from '@playwright/test'
+import { expect, request, test, type Page } from '@playwright/test'
 
 type SlackFixture = { channelId: string; externalChannelId: string; workspaceId: string }
 const fixtures = new WeakMap<Page, SlackFixture>()
@@ -178,7 +178,7 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   await expect(page).toHaveURL(/\/login$/)
 })
 
-test('shared countdown changes without requests and follow-up expiry reaches only the owner', async ({page, browser, baseURL}) => {
+test('shared countdown changes without requests and follow-up expiry reaches only the owner', async ({page, baseURL}) => {
   await page.setViewportSize({width: 1440, height: 900})
   await page.clock.install()
   const owner = await testAccount(page, 'account')
@@ -213,18 +213,29 @@ test('shared countdown changes without requests and follow-up expiry reaches onl
   expect(await (await page.request.post('/__test/expire-deadline', {data: {caseId}})).json()).toEqual({changed: 1})
   await expect.poll(async () => (await reminders(page)).filter((item: {caseId: string}) => item.caseId === caseId))
     .toEqual([expect.objectContaining({kind: 'FOLLOW_UP', unread: true})])
+  await expect(panel.locator('[data-sla-countdown]')).toContainText('Po terminie')
   const reminder = (await reminders(page)).find((item: {caseId: string}) => item.caseId === caseId)
-  const viewerSession = await browser.newContext({baseURL})
+  const viewerSession = await request.newContext({baseURL})
   try {
-    const other = await viewerSession.newPage()
-    await login(other, viewer.email, true)
-    expect((await reminders(other)).some((item: {caseId: string}) => item.caseId === caseId)).toBe(false)
-    const denied = await command(other, reminderPath + '/read', {deadlineId: reminder.id})
+    const viewerCsrf = async () => (await viewerSession.storageState()).cookies.find(cookie => cookie.name === 'XSRF-TOKEN')!.value
+    expect((await viewerSession.get('/api/v1/auth/me')).status()).toBe(401)
+    const signedIn = await viewerSession.post('/api/v1/auth/login', {
+      headers: {'X-XSRF-TOKEN': await viewerCsrf()},
+      data: {email: viewer.email, password: 'test-only-fullstack-credential'},
+    })
+    expect(signedIn.status()).toBe(200)
+    const viewerReminders = await viewerSession.get(reminderPath)
+    expect(viewerReminders.status()).toBe(200)
+    expect((await viewerReminders.json()).items.some((item: {caseId: string}) => item.caseId === caseId)).toBe(false)
+    const denied = await viewerSession.post(reminderPath + '/read', {
+      headers: {'X-XSRF-TOKEN': await viewerCsrf()},
+      data: {deadlineId: reminder.id},
+    })
+    expect(denied.status()).toBe(200)
     expect(await denied.json()).toEqual({updatedCount: 0})
   } finally {
-    await viewerSession.close()
+    await viewerSession.dispose()
   }
-  await expect(panel.locator('[data-sla-countdown]')).toContainText('Po terminie')
   await page.getByRole('button', {name: 'SLA', exact: true}).click()
   const attention = async () => (await (await page.request.get('/api/v1/cases?quickView=SLA')).json())
   await expect(tile).toBeVisible()
