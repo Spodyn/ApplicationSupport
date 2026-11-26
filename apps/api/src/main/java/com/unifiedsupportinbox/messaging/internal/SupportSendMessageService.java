@@ -5,6 +5,7 @@ import com.unifiedsupportinbox.IdempotencyResponse;
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.IdempotentCommandExecutor;
 import com.unifiedsupportinbox.OutboxEventStore;
+import com.unifiedsupportinbox.cases.CaseStatus;
 import com.unifiedsupportinbox.messaging.MessageBodyFormat;
 import java.util.HashSet;
 import java.util.List;
@@ -94,7 +95,7 @@ class SupportSendMessageService {
                         normalizedCorrelationId));
     }
 
-    private IdempotencyResponse executeSend(
+    IdempotencyResponse executeSend(
             UUID caseId,
             UUID userId,
             String body,
@@ -103,23 +104,27 @@ class SupportSendMessageService {
             String correlationId) {
         requireEligibleUser(userId);
         CaseSendContext context = jdbc.query("""
-                SELECT owner_user_id, status, external_thread_key, version
+                SELECT owner_user_id, status, external_thread_key, version,
+                       EXISTS (SELECT 1 FROM case_ignore_votes WHERE case_id = cases.id AND user_id = ?) AS voted
                 FROM cases
                 WHERE id = ?
                 FOR UPDATE
                 """, (rs, rowNum) -> new CaseSendContext(
                 rs.getObject("owner_user_id", UUID.class),
-                rs.getString("status"),
-                rs.getString("external_thread_key"), rs.getLong("version")), caseId)
+                CaseStatus.valueOf(rs.getString("status")),
+                rs.getString("external_thread_key"), rs.getLong("version"), rs.getBoolean("voted")), userId, caseId)
                 .stream()
                 .findFirst()
                 .orElseThrow(() -> ApiProblemException.notFound("Case was not found."));
 
-        if (!"VERIFICATION".equals(context.status())) {
-            throw ApiProblemException.conflict("Messages can only be sent by the current owner while the Case is in VERIFICATION.");
+        if (!context.status().acceptsOwnerWork() || context.ownerUserId() == null) {
+            throw ApiProblemException.conflict("Messages require an owned Case that is open or waiting for the customer.");
         }
         if (!userId.equals(context.ownerUserId())) {
             throw ApiProblemException.accessDenied();
+        }
+        if (context.lifetimeIgnoreVoter()) {
+            throw ApiProblemException.conflict("A user who has voted Ignore cannot reply to this Case.");
         }
 
         lockAndValidateAttachments(caseId, attachmentIds);
@@ -277,7 +282,8 @@ class SupportSendMessageService {
         return normalized;
     }
 
-    private record CaseSendContext(UUID ownerUserId, String status, String externalThreadKey, long version) {
+    private record CaseSendContext(UUID ownerUserId, CaseStatus status, String externalThreadKey, long version,
+                                   boolean lifetimeIgnoreVoter) {
     }
 
     private record AttachmentCandidate(

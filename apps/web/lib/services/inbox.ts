@@ -11,12 +11,6 @@ export interface InboxIgnoreInput {
   reason?: string
 }
 
-export interface InboxAskInput {
-  message: string
-  waitingMinutes?: number
-  idempotencyKey?: string
-}
-
 export interface InboxResolveInput {
   category?: string
   idempotencyKey?: string
@@ -104,7 +98,6 @@ export interface InboxRepository {
   markAllResolvedRead(): Promise<void>
   claim(caseId: string): Promise<void>
   ignore(caseId: string, input: InboxIgnoreInput): Promise<void>
-  askCustomer(caseId: string, input: InboxAskInput): Promise<void>
   resolve(caseId: string, input: InboxResolveInput): Promise<void>
   snooze(caseId: string, until: string): Promise<void>
   cancelSnooze(caseId: string): Promise<void>
@@ -306,7 +299,8 @@ export const mockInboxRepository: InboxRepository = {
     if (record.owner) {
       throw new InboxConflictError(record.owner)
     }
-    if (!canUseUnassignedActions(caseId)) {
+    const canRecoverWaiting = record.status === "waiting_for_customer" && !record.restrictedUserIds.includes(mockCurrentUser.id)
+    if (!canUseUnassignedActions(caseId) && !canRecoverWaiting) {
       throw new Error(t("Case nie może zostać przejęty w aktualnym stanie."))
     }
     record.owner = mockCurrentUser
@@ -349,41 +343,13 @@ export const mockInboxRepository: InboxRepository = {
     )
   },
 
-  async askCustomer(caseId, input) {
-    await wait(undefined, 260)
-    const record = getRecord(caseId)
-    if (
-      record.status !== "verification" ||
-      record.owner?.id !== mockCurrentUser.id
-    ) {
-      throw new Error(t("Nie możesz dopytać klienta w aktualnym stanie case’u."))
-    }
-    if (!input.message.trim()) {
-      throw new Error(t("Wiadomość do klienta nie może być pusta."))
-    }
-    appendSupportMessage(caseId, { body: input.message })
-    record.owner = undefined
-    record.status = "waiting_for_customer"
-    record.waitingUntil = new Date(Date.now() + 24 * 60 * 60_000).toISOString()
-    if (getCurrentAdministrationSettingsSnapshot().sla.pauseWhileWaiting) {
-      record.sla = { state: "paused", dueAt: undefined }
-    }
-    appendSystemEvent(
-      caseId,
-      t("Case oczekuje na odpowiedź klienta przez 24 godziny i został zwolniony z przypisania"),
-    )
-  },
-
   async resolve(caseId, input) {
     await wait(undefined, 260)
     const record = getRecord(caseId)
     if (record.status === "resolved" || record.status === "ignored") {
       throw new Error(t("Case ma już status końcowy."))
     }
-    if (record.status === "waiting_for_customer") {
-      throw new Error(t("Case oczekujący na klienta jest tylko do odczytu."))
-    }
-    if (record.status !== "verification") {
+    if (record.status !== "verification" && record.status !== "waiting_for_customer") {
       throw new Error(t("Case nie może zostać rozwiązany w aktualnym stanie."))
     }
     if (record.owner?.id !== mockCurrentUser.id) {
@@ -462,9 +428,7 @@ export const mockInboxRepository: InboxRepository = {
     const record = getRecord(caseId)
     if (
       record.owner?.id !== mockCurrentUser.id ||
-      record.status === "waiting_for_customer" ||
-      record.status === "resolved" ||
-      record.status === "ignored" ||
+      (record.status !== "verification" && record.status !== "waiting_for_customer") ||
       record.restrictedUserIds.includes(mockCurrentUser.id)
     ) {
       throw new Error(t("Odpowiadanie jest niedostępne w aktualnym stanie case’u."))
@@ -473,10 +437,15 @@ export const mockInboxRepository: InboxRepository = {
       throw new Error(t("Symulowany błąd dostarczenia wiadomości."))
     }
     if (!input.body.trim() && !input.attachments?.length) throw new Error(t("Wiadomość nie może być pusta."))
-    return appendSupportMessage(caseId, {
-      body: input.body,
-      attachments: input.attachments,
-    })
+    const message = appendSupportMessage(caseId, { body: input.body, attachments: input.attachments })
+    if (record.status === "verification") {
+      record.status = "waiting_for_customer"
+      record.waitingUntil = new Date(Date.now() + 24 * 60 * 60_000).toISOString()
+      if (getCurrentAdministrationSettingsSnapshot().sla.pauseWhileWaiting) {
+        record.sla = { state: "paused", dueAt: undefined }
+      }
+    }
+    return message
   },
 
   async uploadAttachment(_caseId, file) {

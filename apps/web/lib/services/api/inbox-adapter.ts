@@ -297,13 +297,6 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
         body: { reason: input.reason ?? null },
       })
     },
-    async askCustomer(caseId, input) {
-      await client.askCustomer({
-        caseId,
-        "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
-        body: { message: input.message, waitingMinutes: input.waitingMinutes, bodyFormat: "PLAIN_TEXT" },
-      })
-    },
     async resolve(caseId, input) {
       await client.resolveCase({
         caseId,

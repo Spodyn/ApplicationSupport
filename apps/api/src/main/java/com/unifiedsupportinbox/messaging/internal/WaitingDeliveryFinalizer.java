@@ -46,15 +46,13 @@ class WaitingDeliveryFinalizer {
         Long waitingSeconds = message.askWaitingSeconds();
         Long replyVersion = message.replyWaitCaseVersion();
         if (waitingSeconds == null && replyVersion == null) return false;
-        boolean ask = waitingSeconds != null;
-        Instant waitingUntil = sentAt.plusSeconds(ask ? waitingSeconds : REPLY_WAIT_SECONDS);
-        UUID retainedOwner = ask ? null : message.authorUserId();
-        String action = ask ? "ASK_CUSTOMER" : "REPLY_WAITING";
-        // MessageDeliveryService holds the shared Case row lock with intake.
+        Instant waitingUntil = sentAt.plusSeconds(waitingSeconds == null ? REPLY_WAIT_SECONDS : waitingSeconds);
+        UUID owner = message.authorUserId();
+        // The Case row lock serializes this update with intake. A further success
+        // while already waiting needs no transition or deadline reset.
         Transition transition = jdbc.query("""
                 UPDATE cases
                 SET status = 'WAITING_FOR_CUSTOMER',
-                    owner_user_id = ?,
                     waiting_until = ?,
                     updated_at = statement_timestamp(),
                     last_activity_at = statement_timestamp(),
@@ -62,7 +60,7 @@ class WaitingDeliveryFinalizer {
                 WHERE id = ?
                   AND status = 'VERIFICATION'
                   AND owner_user_id = ?
-                  AND (?::bigint IS NULL OR version = ?::bigint)
+                  AND (version = ?::bigint OR (?::bigint IS NULL AND updated_at <= ?::timestamptz))
                   AND NOT EXISTS (
                       SELECT 1 FROM messages inbound
                       WHERE inbound.case_id = cases.id AND inbound.inbound
@@ -70,8 +68,9 @@ class WaitingDeliveryFinalizer {
                   )
                 RETURNING version
                 """, (rs, rowNum) -> new Transition(rs.getLong("version")),
-                retainedOwner, OffsetDateTime.ofInstant(waitingUntil, ZoneOffset.UTC),
-                message.caseId(), message.authorUserId(), replyVersion, replyVersion,
+                OffsetDateTime.ofInstant(waitingUntil, ZoneOffset.UTC),
+                message.caseId(), owner, replyVersion, replyVersion,
+                OffsetDateTime.ofInstant(message.createdAt(), ZoneOffset.UTC),
                 OffsetDateTime.ofInstant(message.createdAt(), ZoneOffset.UTC)).stream().findFirst().orElse(null);
 
         if (transition == null) {
@@ -83,19 +82,19 @@ class WaitingDeliveryFinalizer {
         UserRole role = jdbc.queryForObject(
                 "SELECT role FROM users WHERE id = ?",
                 (rs, rowNum) -> UserRole.valueOf(rs.getString("role")),
-                message.authorUserId());
+                owner);
 
         Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("action", action);
-        if (retainedOwner != null) metadata.put("ownerUserId", retainedOwner.toString());
+        metadata.put("action", "REPLY_WAITING");
+        metadata.put("ownerUserId", owner.toString());
         metadata.put("status", "WAITING_FOR_CUSTOMER");
         metadata.put("messageId", message.messageId().toString());
         metadata.put("waitingUntil", waitingUntil.toString());
         metadata.put("version", transition.version());
         audit.append(
                 role == UserRole.ADMIN ? AuditActorType.ADMIN : AuditActorType.USER,
-                message.authorUserId(),
-                "CASE_" + action,
+                owner,
+                "CASE_REPLY_WAITING",
                 "CASE",
                 message.caseId(),
                 message.caseId(),
@@ -105,7 +104,7 @@ class WaitingDeliveryFinalizer {
                 CASE_UPDATED,
                 "case",
                 message.caseId(),
-                payload(message.caseId(), message.messageId(), waitingUntil, retainedOwner, transition.version()),
+                payload(message.caseId(), message.messageId(), waitingUntil, owner, transition.version()),
                 message.correlationId());
         return true;
     }
@@ -114,8 +113,7 @@ class WaitingDeliveryFinalizer {
         ObjectNode payload = json.createObjectNode();
         payload.put("caseId", caseId.toString());
         payload.put("status", "WAITING_FOR_CUSTOMER");
-        if (owner == null) payload.putNull("ownerUserId");
-        else payload.put("ownerUserId", owner.toString());
+        payload.put("ownerUserId", owner.toString());
         payload.put("messageId", messageId.toString());
         payload.put("waitingUntil", waitingUntil.toString());
         payload.put("version", version);

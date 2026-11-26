@@ -130,7 +130,7 @@
       "feature": "Claim and ownership concurrency",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Exactly one concurrent winner; owner/state authoritative",
+      "expected": "Exactly one concurrent winner; owner/state authoritative; eligible explicit claim recovers historical unassigned waiting",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseClaimServiceIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
@@ -141,22 +141,24 @@
     },
     {
       "id": "REPLY",
-      "feature": "Reply/Ask Customer",
+      "feature": "Consecutive public replies in OPEN and ASKED",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Owner-only commands; owned and unassigned waiting after delivery; failed or stale sends preserve state",
+      "expected": "Owner replies with text or CLEAN files while waiting; provider-confirmed delivery retains owner; failures and stale confirmations preserve workflow; legacy Ask forwards to the same send path",
       "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/SupportSendMessageServiceIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "HTTP envelope and live real-stack reply now added"
+      "gap": "Slack browser workflow and Teams Connector HTTP use controlled hosts; live tenant acceptance is separate"
     },
     {
       "id": "RESOLVE",
       "feature": "Resolve/admin reassign/force resolve",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Ownership or ADMIN+exact permission; controlled optional category; no-op same-owner Reassign under Case lock",
+      "expected": "Ownership or ADMIN+exact permission; controlled optional category; no-op same-owner Reassign under Case lock; normal owner resolution in OPEN and ASKED",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"

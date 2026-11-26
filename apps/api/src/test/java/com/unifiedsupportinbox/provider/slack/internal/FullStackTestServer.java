@@ -175,7 +175,7 @@ public final class FullStackTestServer {
                 } else {
                     String ts = "1790000000." + String.format("%06d", DELIVERED.size() + 1);
                     DELIVERED.add(Map.of("clientMessageId", body.path("client_msg_id").asText(),
-                            "thread", body.path("thread_ts").asText(), "ts", ts));
+                            "thread", body.path("thread_ts").asText(), "channel", body.path("channel").asText(), "ts", ts));
                     response = Map.of("ok", true, "ts", ts);
                 }
             } else if (path.equals("/auth.test")) response = Map.of("ok", true, "team_id", "TTESTFULL", "team", "Synthetic workspace");

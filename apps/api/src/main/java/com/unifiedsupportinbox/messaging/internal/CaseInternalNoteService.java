@@ -62,8 +62,8 @@ class CaseInternalNoteService {
                 SELECT EXISTS (SELECT 1 FROM case_ignore_votes WHERE case_id = ? AND user_id = ?)
                 """, Boolean.class, caseId, actorId));
         var actor = new CaseTransitionPolicy.Actor(actorId, true, author.role(), Set.of(), voted);
-        if (state.status() != CaseStatus.VERIFICATION) {
-            throw ApiProblemException.conflict("Internal notes can only be added while the Case is in VERIFICATION.");
+        if (!state.status().acceptsOwnerWork() || state.ownerId() == null) {
+            throw ApiProblemException.conflict("Internal notes require an owned Case that is open or waiting for the customer.");
         }
         if (!policy.availableActions(state, actor).contains(CaseTransitionPolicy.Action.REPLY)) {
             throw ApiProblemException.accessDenied();

@@ -6,7 +6,6 @@ import { useRealtimeCase } from "@/lib/realtime/realtime-context"
 import { serviceRegistry } from "./registry"
 import { collectMatchingCaseIds } from "./bulk-selection"
 import type {
-  InboxAskInput,
   InboxIgnoreInput,
   InboxListQuery,
   InboxResolveInput,
@@ -227,11 +226,6 @@ export function useInboxWorkflow(caseId?: string) {
       serviceRegistry.inbox.ignore(requireCaseId(), input),
     onSuccess: invalidateConversation,
   })
-  const askCustomer = useMutation({
-    mutationFn: (input: InboxAskInput) =>
-      serviceRegistry.inbox.askCustomer(requireCaseId(), input),
-    onSuccess: invalidateConversation,
-  })
   const resolve = useMutation({
     mutationFn: (input: InboxResolveInput) =>
       serviceRegistry.inbox.resolve(requireCaseId(), input),
@@ -277,7 +271,7 @@ export function useInboxWorkflow(caseId?: string) {
     onSuccess: invalidateConversation,
   })
 
-  return { claim, ignore, askCustomer, resolve, snooze, cancelSnooze, assign, unassign, forceResolve, sendMessage, retryMessage, addInternalNote, reopen }
+  return { claim, ignore, resolve, snooze, cancelSnooze, assign, unassign, forceResolve, sendMessage, retryMessage, addInternalNote, reopen }
 }
 
 export function useMarkAllResolvedRead() {
