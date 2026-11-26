@@ -164,6 +164,8 @@ Events are at-least-once and duplicate/out-of-order safe. Personal unread/Snooze
 
 Every active USER can see own statistics. Team/global statistics require `ADMIN + view_global_statistics`.
 
+Statistics uses the reporting timezone and one measured first-response outcome for the FRT KPI, historical chart, and customer attainment. The response SLA summary separates recorded Case-level response breaches and the NRT subset from currently overdue support responses and customer follow-ups due. User first-response results are attributed to the confirmed reply author. See [metric definitions](PRODUCT_CONTRACT.md#response-sla-on-the-statistics-dashboard).
+
 Created, resolved and ignored metrics remain distinct; IGNORED does not inflate resolution rate. Duration APIs expose count, average, p50, p90 and p95. Default range is 30 days, interactive max 366 days. No-data is null/empty rather than fake zero/success.
 
 Inside `/statistics`, ADMIN has **Aktualna praca**, backed by `GET /api/v1/admin/current-cases`. It includes all nonterminal statuses and read access requires ADMIN only, not `view_global_statistics`. Reassign/unassign and force-resolve remain separately permission-gated.
