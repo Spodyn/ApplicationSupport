@@ -99,10 +99,11 @@ Human-readable Case references are immutable sequential references such as `CASE
 
 ## 7. Public replies and waiting
 
-- Provider-confirmed public delivery enters owned `WAITING_FOR_CUSTOMER` from `VERIFICATION`, starts a 24-hour deadline and applies the configured waiting SLA pause. The transition requires the same Case version and owner, with no intervening customer message.
-- Additional successful replies while already waiting preserve the owner, state and existing deadline. Queued, sending, failed and retrying messages do not change workflow. A stale confirmation still records delivery and leaves newer workflow intact. Recovered customer messages invalidate older pending Case transitions by advancing the Case revision under the intake lock.
-- A customer reply or timeout clears the deadline and resumes the existing SLA timers. Owned waiting returns to `VERIFICATION` (OPEN) with its owner. Historical unassigned waiting returns to `NEW`. Timeout emits and audits `WAITING_TIMEOUT` and sends no automatic follow-up.
-- The deprecated `POST /api/v1/cases/{caseId}/ask-customer` queues a standard public reply using its existing request and idempotency scope. It validates the legacy `waitingMinutes` field for compatibility and applies the ordinary deadline to newly queued replies. Previously queued legacy intents can use their persisted deadlines on successful delivery and retain the current owner.
+- Provider-confirmed public delivery enters owned WAITING_FOR_CUSTOMER from VERIFICATION. The Case version, ownership and intervening customer activity determine whether confirmation is current.
+- A current confirmation begins or restarts the customer-follow-up deadline, default 24 elapsed hours. Further successful replies preserve the status and owner. Queued messages, failures and stale confirmations leave the active deadline intact.
+- A new durable customer message replaces the follow-up deadline with a support-response deadline. Owned waiting returns to OPEN with its owner. Historical unassigned waiting returns to NEW. The existing pause and resume bookkeeping continues to feed historical measures.
+- Follow-up expiry generates an internal reminder and leaves the Case waiting. An eligible agent can still explicitly claim historical unassigned waiting.
+- The deprecated POST /api/v1/cases/{caseId}/ask-customer queues a public reply using its compatibility request and idempotency scope. New replies use the configured waiting duration. Previously queued legacy intents can retain their persisted duration.
 
 ## 8. Snooze and read/unread
 
@@ -163,7 +164,7 @@ Read/unread:
 - Every active USER and ADMIN can view every Case in the deployment. Ownership limits actions, not read access.
 - Search v1 covers Case reference, Customer name, Channel name, provider conversation/thread identifiers and display labels.
 - Full-text search over all message bodies is outside v1.
-- Default ordering prioritizes: SLA breached > SLA warning > unread NEW > remaining active work. Within a bucket use nearest active SLA deadline, then `last_activity_at DESC`, then `id` as deterministic tie-breaker.
+- Default ordering prioritizes: SLA breached > SLA warning > unread NEW > remaining active work. Follow-ups due share the warning priority and use a distinct badge. Within a bucket use nearest active operational deadline, then `last_activity_at DESC`, then `id` as deterministic tie-breaker.
 
 ## 12. SLA and business time
 
@@ -180,15 +181,17 @@ Rules:
 
 - One active SLA policy per deployment, configured by `ADMIN + manage_sla`.
 - A Case snapshots the SLA policy and business-hours schedule/timezone version at creation. Later configuration changes apply prospectively and do not rewrite historic Case deadlines.
-- FRT starts once at the provider timestamp of the first accepted customer message. Both response clocks end on provider-confirmed human public Reply or Ask. Pending or failed delivery, OOO and internal notes leave the response clock open.
-- A new NRT starts with the first durable new customer message after a confirmed human reply, using USI's serialized acceptance order. Additional messages in the series, retries and edits preserve that deadline. A confirmed reply ends the cycle. Resolution or Ignore ends any active cycle and preserves its result.
-- The queue, SLA filter, count and Case panel use active FRT or NRT. Priority is breached, warning, other active by deadline, waiting and then terminal. A pending response is breached at the deadline; a response confirmed by that instant meets it.
+- Historical FRT starts at the original provider timestamp and completes with the first provider-confirmed human reply. Historical NRT starts with the first durable customer message in each response cycle. Those anchors, completions, terminal outcomes and recorded breaches remain intact.
+- The operational FRT starts with the first customer message. Every subsequent durable customer message resets the operational deadline, using FRT until the first human response and NRT thereafter. The first FRT uses the provider timestamp, bounded by durable intake. Subsequent starts use durable intake order and time. Recovered messages use durable ingestion time throughout.
+- Successful, current provider delivery starts a wall-clock customer follow-up. The active SLA policy configures its elapsed minutes. Response deadlines use the Case policy and business calendar snapshot, including holidays and split overnight hours. Warnings start with 25% of the business target remaining.
+- The inbox, SLA filter, count, conversation and details use the operational deadline. Due support responses are breaches. Due customer follow-ups appear in attention with their own state and never create a support breach. The server supplies the observation instant, signed remaining time and clipped UTC business windows for a shared client countdown.
+- Each expired operational deadline generates one durable internal reminder per recipient. Route to the active eligible owner, or to eligible support users when the Case has no eligible owner. Delivery to the inbox notification bell uses authenticated, account-scoped reads. Public Case messages are never generated by deadline expiry.
 - TTR reports elapsed time from Case creation to resolution and business working time minus accepted waiting pauses and closed periods between resolution and reopening. Historical records without a verifiable calendar preserve wall time and return an unknown working time.
 - Unclaimed accumulates business time while active and unowned in `NEW`/`PARTIALLY_IGNORED`; Claim pauses it; later unassign/return from waiting resumes the accumulated time.
 - In-progress accumulates business time in `VERIFICATION`; reassign does not reset it; unassign/WAITING pauses; later Claim resumes accumulated time.
-- Completed response cycles and historical breaches are preserved; a new NRT starts with a new deadline. Legacy aging metrics keep their existing reporting and notifications.
+- Operational deadline history retains earlier breaches when another message restarts the active countdown. Legacy aging metrics keep their existing reporting and notifications.
 - Terminal states end active SLA timers.
-- Waiting has a paused presentation and terminal Cases have neutral presentation. Prior breaches remain visible in historical details and reports.
+- Terminal Cases have a neutral presentation. Prior breaches remain visible in historical details and reports.
 
 ## 13. Business hours and Out of Office
 
@@ -254,7 +257,7 @@ Slack and Teams integrations offer opt-in recovery in Settings → Integrations.
 
 Both modes scan active monitored contexts under existing access/mapping rules, including replies sent inside the requested window to older roots. Older roots may be read as context without creating out-of-window business Messages. Results enter the existing Case/unread/attachment pipeline as pages arrive. Provider identity is identical to live intake: a concurrent webhook, rescan or restarted task creates one Message, one Case association and one applicable SLA effect. Already received normal Messages retain provenance and SLA.
 
-Persist `manual|automatic` recovery source, original provider sent time and durable addition time. Display the orange “Pominięta wiadomość · odzyskana przez resync” label. For both modes, new applicable FRT/NRT clocks start at durable insertion into the Case, using existing business hours and cycle rules. Running/completed cycles are never reset by duplicates. Original sent time remains the conversation timestamp.
+Persist `manual|automatic` recovery source, original provider sent time and durable addition time. Display the orange “Pominięta wiadomość · odzyskana przez resync” label. For both modes, new applicable FRT/NRT clocks start at durable insertion into the Case, using existing business hours and cycle rules. Duplicate imports preserve active deadlines and historical cycles. Original sent time remains the conversation timestamp.
 
 Backend scheduling/checkpoints survive restarts. An overdue schedule computes the current configured window; an in-flight run resumes its captured range, then the overdue current-window run may start. Per-channel progress includes scanned/added/pending counts and sanitized reasons for incomplete recovery. API permission failures are visible, never silently reported as complete. No production/sandbox credentials or permission grants are authorized by this product change.
 

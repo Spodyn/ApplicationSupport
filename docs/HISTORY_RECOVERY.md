@@ -133,3 +133,5 @@ CI gates weakened. The full integration count above predates the two added
 all-history streaming cases; final focused coverage verifies both of them.
 GitHub's exact-HEAD workflow remains the integration authority; this local report
 is not a claim that unrun infrastructure/CI or live-provider acceptance passed.
+
+For per-message operational SLA, a new recovered customer message starts or restarts the active response deadline at durable ingestion. Original provider timestamps and historical FRT/NRT cycles retain their existing meaning. Replaying the same event cannot establish another deadline.

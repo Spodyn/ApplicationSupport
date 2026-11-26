@@ -77,6 +77,9 @@ public final class FullStackTestServer {
                         """, UUID.class, fixtureIntegration, externalChannel);
                 response = Map.of("email", email, "displayName", name, "userId", user, "channelId", channel,
                         "externalChannelId", externalChannel, "workspaceId", "TTESTFULL");
+            } else if (path.equals("/expire-deadline") && exchange.getRequestMethod().equals("POST")) {
+                UUID caseId = UUID.fromString(JSON.readTree(exchange.getRequestBody()).path("caseId").asText());
+                response = Map.of("changed", expireDeadline(caseId));
             } else if (path.equals("/breach") && exchange.getRequestMethod().equals("POST")) {
                 UUID caseId = UUID.fromString(JSON.readTree(exchange.getRequestBody()).path("caseId").asText());
                 int changed = fixtureDatabase.update("""
@@ -91,6 +94,7 @@ public final class FullStackTestServer {
                             due_at = now() - interval '10 minutes'
                         WHERE case_id = ? AND ended_at IS NULL
                         """, caseId);
+                expireDeadline(caseId);
                 response = Map.of("changed", changed);
             } else if (path.equals("/observed")) response = Map.of("messages", DELIVERED, "files", SHARED_FILES);
             else if (path.equals("/files.getUploadURLExternal")) {
@@ -216,6 +220,7 @@ public final class FullStackTestServer {
                     "--usi.providers.slack.outbound.enabled=true", "--usi.outbox.relay-enabled=true", "--usi.outbox.poll-interval=100ms",
                     "--usi.slack.inbound-worker.enabled=true", "--usi.slack.inbound-worker.poll-interval=100ms",
                     "--usi.messages.delivery-worker.enabled=true", "--usi.messages.delivery-worker.poll-interval=100ms",
+                    "--usi.cases.waiting-timeout.poll-interval=1s",
                     "--usi.realtime.case-lifecycle-worker.enabled=true", "--usi.realtime.message-created-worker.enabled=true",
                     "--usi.readstate.case-created-worker.enabled=true", "--usi.realtime.heartbeat=1s"));
             var context = new SpringApplicationBuilder(UsiApiApplication.class, ProviderBoundary.class)
@@ -260,6 +265,16 @@ public final class FullStackTestServer {
             provider.stop(0); minio.stop(); rabbit.stop(); postgres.stop();
             throw failure;
         }
+    }
+
+    private static int expireDeadline(UUID caseId) {
+        return fixtureDatabase.update("""
+                UPDATE case_operational_deadlines
+                SET started_at = LEAST(started_at, now() - interval '2 minutes'),
+                    warning_at = CASE WHEN warning_at IS NULL THEN NULL ELSE now() - interval '2 minutes' END,
+                    due_at = now() - interval '1 minute'
+                WHERE case_id = ? AND ended_at IS NULL
+                """, caseId);
     }
 
     private static final Map<String, String> FIXTURE_MIME_TYPES = Map.ofEntries(

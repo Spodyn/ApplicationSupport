@@ -77,6 +77,9 @@ export function RealtimeProvider({ children, accountId }: { children: ReactNode;
         // REST/DB remains the source of truth. Invalidation avoids overwriting a local pending
         // workflow mutation while still making changes from another browser visible promptly.
         void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() })
+        if (event.eventType === "case.sla_changed") {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.slaReminders(accountId) })
+        }
         const caseId = typeof event.payload.caseId === "string" ? event.payload.caseId : null
         if (caseId && UUID_PATTERN.test(caseId)) {
           void queryClient.invalidateQueries({ queryKey: queryKeys.inboxCase(caseId) })

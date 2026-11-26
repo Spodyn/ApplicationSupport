@@ -73,6 +73,17 @@ export interface InboxPage<T> {
   items: T[]
   nextCursor?: string
   quickViewCounts?: Record<InboxQuickView, number>
+  attentionRefreshInMs?: number
+}
+
+export interface InboxSlaReminder {
+  id: string
+  caseId: string
+  reference: string
+  channel: InboxCase["platform"]
+  kind: "FRT" | "NRT" | "FOLLOW_UP"
+  remindedAt: string
+  unread: boolean
 }
 
 export interface InboxBulkInput {
@@ -88,6 +99,8 @@ export interface InboxBulkResult {
 }
 
 export interface InboxRepository {
+  listSlaReminders(): Promise<{ items: InboxSlaReminder[]; unreadCount: number }>
+  markSlaRemindersRead(deadlineId?: string): Promise<void>
   bulk(input: InboxBulkInput): Promise<InboxBulkResult[]>
   list(cursor?: string, query?: InboxListQuery): Promise<InboxPage<InboxCase>>
   getFilterOptions(): Promise<InboxFilterOptions>
@@ -211,6 +224,8 @@ function matchesQuickView(item: InboxCase, view: Exclude<InboxQuickView, "all">)
 }
 
 export const mockInboxRepository: InboxRepository = {
+  async listSlaReminders() { return { items: [], unreadCount: 0 } },
+  async markSlaRemindersRead() {},
   async bulk() { throw new Error(t("Bulk operations require the API.")) },
   async list(_cursor, query) {
     const cases = mockInboxCaseRecords.map(

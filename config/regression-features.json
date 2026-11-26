@@ -193,7 +193,7 @@
       "feature": "FRT, NRT, TTR and SLA queue",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Provider timestamp FRT, first durable follow-up NRT, per-case calendar snapshots, business warning thresholds, waiting pause and TTR, history after resolution and reopen, consistent queue ranking/filter/counts",
+      "expected": "Per-message operational FRT/NRT and follow-up clocks, calendar snapshots and live countdown; owner-scoped deduplicated reminders; immutable historical breach and response-cycle anchors",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
@@ -204,7 +204,9 @@
         "apps/web/tests/fullstack/workflows.spec.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
-        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java"
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+        "apps/web/tests/unit/operational-sla.test.ts"
       ],
       "gap": "Production SLO/load evidence is not a unit-test pass"
     },

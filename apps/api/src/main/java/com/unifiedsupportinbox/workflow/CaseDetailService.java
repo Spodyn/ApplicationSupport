@@ -50,7 +50,12 @@ class CaseDetailService {
                        sla.in_progress_started_at, sla.in_progress_warning_at, sla.in_progress_breach_at,
                        sla.paused_at, sla.total_paused_seconds, sla.state AS sla_state, sla.unclaimed_completed_at, sla.unclaimed_outcome,
                        response.state AS response_state, response.kind AS response_kind, response.warning_at AS response_warning_at,
-                       response.due_at AS response_due_at, response.historically_breached, response.last_response_sender,
+                       response.due_at AS response_due_at, (response.historically_breached OR EXISTS (
+                           SELECT 1 FROM case_operational_deadlines h WHERE h.case_id = c.id AND h.breached_at IS NOT NULL
+                       )) AS historically_breached, response.last_response_sender,
+                       op.id AS operational_id, op.kind AS operational_kind, op.state AS operational_state,
+                       op.started_at AS operational_started_at, op.warning_at AS operational_warning_at,
+                       op.due_at AS operational_due_at, op.schedule::text AS operational_schedule,
                        sla.response_schedule::text, statement_timestamp() AS response_observed_at,
                        sla.response_policy_version, resolution.wall_seconds, resolution.working_seconds, history.cycles::text AS response_history
                 FROM cases c
@@ -63,6 +68,7 @@ class CaseDetailService {
                 LEFT JOIN case_snoozes snoozes ON snoozes.case_id = c.id AND snoozes.user_id = ? AND snoozes.until_at > CURRENT_TIMESTAMP
                 LEFT JOIN case_sla sla ON sla.case_id = c.id
                 JOIN case_response_sla_projection response ON response.case_id = c.id
+                LEFT JOIN case_operational_deadline_projection op ON op.case_id = c.id
                 LEFT JOIN case_resolution_times resolution ON resolution.case_id = c.id AND resolution.ended_at = c.resolved_at
                 LEFT JOIN LATERAL (
                     SELECT COALESCE(jsonb_agg(jsonb_build_object(
@@ -96,7 +102,7 @@ class CaseDetailService {
                     sla(rs), rs.getInt("ignore_score"), availableActions(status, actor, actions),
                     instant(rs, "claimed_at"), instant(rs, "waiting_until"), instant(rs, "resolved_at"), instant(rs, "ignored_at"),
                     enumValue(rs, "resolution_category"), instant(rs, "created_at"), instant(rs, "updated_at"),
-                    instant(rs, "last_activity_at"), rs.getLong("version"), CaseResponseSla.read(rs, json),
+                    instant(rs, "last_activity_at"), rs.getLong("version"), CaseResponseSla.read(rs, json), CaseOperationalDeadline.read(rs, json),
                     rs.getObject("response_policy_version", Long.class), json.readValue(rs.getString("response_history"), RESPONSE_HISTORY),
                     rs.getObject("wall_seconds", Long.class), rs.getObject("working_seconds", Long.class));
         }, userId, userId, caseId).stream().findFirst().orElseThrow(() -> ApiProblemException.notFound("Case was not found."));
@@ -160,6 +166,7 @@ class CaseDetailService {
             Integration integration, RelatedCase relatedCase, PersonalState personalState, Sla sla, int ignoreScore,
             List<String> availableActions, Instant claimedAt, Instant waitingUntil, Instant resolvedAt, Instant ignoredAt,
             CaseResolutionCategory resolutionCategory, Instant createdAt, Instant updatedAt, Instant lastActivityAt, long version, CaseResponseSla responseSla,
+            CaseOperationalDeadline operationalDeadline,
             Long responsePolicyVersion, List<ResponseCycle> responseCycles, Long resolutionWallSeconds, Long resolutionWorkingSeconds) {}
     record ResponseCycle(UUID id, Instant startedAt, Instant warningAt, Instant dueAt, Instant endedAt,
                          String outcome, boolean breached) {}

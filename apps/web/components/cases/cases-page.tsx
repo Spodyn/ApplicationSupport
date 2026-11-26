@@ -29,12 +29,15 @@ import {
 import type { InboxActivity, InboxCase, InboxMessage, InboxWorkflowStatus } from "@/lib/domain/inbox"
 import { inboxStatusLabels, inboxWorkflowStatusLabels } from "@/lib/domain/inbox"
 import { deliveryStatusLabels } from "@/lib/domain/labels"
+import { formatDeadlineDuration, operationalClock } from "@/lib/domain/operational-sla"
+import { useSlaClock } from "@/lib/domain/use-sla-clock"
 import { MAX_BULK_SELECTION } from "@/lib/services/bulk-selection"
 import type { InboxListQuery, InboxQuickView } from "@/lib/services/inbox"
 import { useSelectMatchingCases, useCurrentUser, useInboxActivity, useInboxAssignees, useInboxCase, useInboxCases, useInboxFilterOptions, useInboxMessages, useInboxWorkflow, useMarkAllResolvedRead, useMarkInboxCaseRead } from "@/lib/services/queries"
 import type { InboxSendInput } from "@/lib/services/inbox"
 import { cn } from "@/lib/utils"
 import { useShell } from "@/components/layout/shell-context"
+import { NotificationBell } from "@/components/layout/notification-bell"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { BulkCaseToolbar } from "./bulk-case-toolbar"
@@ -85,17 +88,21 @@ function timeLabel(value: string): string {
   return new Intl.DateTimeFormat(locale(), { dateStyle: "short", timeStyle: "short" }).format(new Date(value))
 }
 
-function toPresentation(record: InboxCase, t: ReturnType<typeof useT>): CasePresentation {
+function toPresentation(record: InboxCase, t: ReturnType<typeof useT>, now: number): CasePresentation {
   const statusTone = record.status === "resolved" || record.status === "ignored" ? "gray" : record.status === "new" ? "green" : record.status === "verification" ? "purple" : record.status === "waiting_for_customer" ? "blue" : "red"
   const terminal = record.status === "resolved" || record.status === "ignored"
-  const paused = record.sla.state === "paused"
-  const slaTone = terminal || paused || record.sla.state === "unknown" ? "gray" : record.sla.state === "breached" ? "red" : record.sla.state === "at_risk" ? "amber" : "green"
-  const dueAt = record.sla.dueAt
-  const remaining = record.sla.remainingBusinessSeconds ?? (dueAt ? (Date.parse(dueAt) - Date.now()) / 1000 : 0)
-  const overdue = record.sla.state === "breached"
-  const clock = record.sla.kind ?? "SLA"
-  const countdown = new Intl.NumberFormat(locale(), { style: "unit", unit: "minute", unitDisplay: "short" })
-    .format(Math.ceil(Math.max(0, overdue ? -remaining : remaining) / 60))
+  const operational = record.sla.operational
+  const reading = operational ? operationalClock(operational, now) : undefined
+  const followUp = operational?.kind === "FOLLOW_UP"
+  const paused = !operational && record.sla.state === "paused"
+  const overdue = reading?.overdue ?? record.sla.state === "breached"
+  const warning = reading?.warning ?? record.sla.state === "at_risk"
+  const dueAt = operational ? new Date(operational.dueAt).toISOString() : record.sla.dueAt
+  const remaining = record.sla.remainingBusinessSeconds ?? 0
+  const clock = followUp ? t("Kontakt z klientem") : operational?.kind ?? record.sla.kind ?? "SLA"
+  const countdown = formatDeadlineDuration(reading?.seconds ?? Math.ceil(Math.max(0, overdue ? -remaining : remaining)), locale())
+  const slaTone = terminal || paused || !dueAt ? "gray" : overdue ? followUp ? "amber" : "red"
+    : warning ? "amber" : followUp ? "gray" : "green"
   const company = record.customer.id === "unassigned" ? record.sourceChannel : record.customer.name
   const bodyPreview = record.lastMessagePreview.trim()
   const preview = bodyPreview
@@ -199,9 +206,12 @@ export function CasesPage({
   const detailQuery = useInboxCase(selectedId)
   const messagesQuery = useInboxMessages(selectedId)
   const workflow = useInboxWorkflow(selectedId)
-  const presentations = useMemo(() => records.map((record) => toPresentation(record, t)), [records, t])
-  const selectedPresentation = presentations.find((item) => item.id === selectedId)
-    ?? (detailQuery.data ? toPresentation(detailQuery.data, t) : undefined)
+  const now = useSlaClock(Boolean(detailQuery.data?.sla.operational || records.some((record) => record.sla.operational)))
+  const presentations = useMemo(() => records.map((record) => toPresentation(record, t, now)), [records, t, now])
+  const detail = detailQuery.data
+  const listed = presentations.find((item) => item.id === selectedId)
+  const detailIsCurrent = detail && (!listed || detailQuery.dataUpdatedAt >= casesQuery.dataUpdatedAt)
+  const selectedPresentation = detailIsCurrent ? toPresentation(detail, t, now) : listed
   const messages = useMemo(() => {
     const seen = new Set<string>()
     return (messagesQuery.data?.pages.flatMap((page) => page.items) ?? [])
@@ -210,6 +220,13 @@ export function CasesPage({
   const latestMessageId = messages.findLast((message) => message.kind !== "internal_note")?.id
 
   const counts = casesQuery.data?.pages[0]?.quickViewCounts
+  const attentionRefresh = casesQuery.data?.pages[0]?.attentionRefreshInMs
+  const { refetch: refreshQueue, dataUpdatedAt: queueUpdatedAt } = casesQuery
+  useEffect(() => {
+    if (attentionRefresh === undefined || attentionRefresh > 15_000) return
+    const timer = window.setTimeout(() => void refreshQueue({ cancelRefetch: false }), Math.max(2_000, attentionRefresh))
+    return () => window.clearTimeout(timer)
+  }, [attentionRefresh, queueUpdatedAt, refreshQueue])
   const activity = useInboxActivity(detailsOpen ? selectedId : undefined)
   const activityItems = activity.data?.pages.flatMap((page) => page.items) ?? []
 
@@ -297,6 +314,7 @@ export function CasesPage({
             </Button>
             <h1 className="text-[21px] font-bold tracking-[-0.02em]">{t("Czaty")}</h1>
             <span aria-label={t("Liczba spraw")} className="rounded-full bg-[#151f2e] px-2 py-0.5 text-[12px] font-semibold text-[#d8dce4]">{counts?.[quickFilter] ?? "—"}</span>
+            <NotificationBell onSelect={(caseId) => { setSelectedCaseId(caseId); setMobileConversationOpen(true) }} />
             <Button
               type="button"
               size="sm"
@@ -563,7 +581,7 @@ function SlaBadge({ tone, children, title }: { tone: CasePresentation["slaTone"]
     green: "bg-emerald-500/[0.09] text-emerald-400",
     gray: "bg-slate-500/10 text-slate-300",
   }
-  return <span title={title} className={cn("shrink-0 rounded-[6px] px-2 py-[5px] text-[11px] font-medium leading-none", colors[tone])}>{children}</span>
+  return <span data-sla-countdown title={title} className={cn("shrink-0 rounded-[6px] px-2 py-[5px] text-[11px] font-medium leading-none tabular-nums", colors[tone])}>{children}</span>
 }
 
 function ConversationPanel({
@@ -725,6 +743,7 @@ function ConversationPanel({
             </div>
           </div>
           <StatusBadge tone={item.statusTone}>{item.status}</StatusBadge>
+          {item.slaTitle && <SlaBadge tone={item.slaTone} title={item.slaTitle}>{item.sla}</SlaBadge>}
           <Button ref={detailsToggleRef} type="button" variant="outline" size="icon-sm" onClick={onToggleDetails}
             className="shrink-0 border-white/10 bg-[#111a28]" aria-label={t("Szczegóły sprawy")}
             aria-expanded={detailsOpen} aria-controls={detailsOpen ? "case-details" : undefined}><PanelRight /></Button>

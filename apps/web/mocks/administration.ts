@@ -100,6 +100,7 @@ export const mockAdministrationSettings: AdministrationSettings = {
   sla: {
     firstResponseMinutes: 15,
     nextResponseMinutes: 30,
+    customerWaitingMinutes: 1440,
     unclaimedReminderMinutes: 15,
     inProgressReminderMinutes: 120,
     warningBeforeDeadlineMinutes: 15,

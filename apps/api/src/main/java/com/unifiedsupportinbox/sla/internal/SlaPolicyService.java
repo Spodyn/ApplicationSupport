@@ -22,7 +22,7 @@ class SlaPolicyService {
         SlaPolicyView updated = policies.update(current.id(), input.version(), name,
                 input.firstResponseMinutes(), input.unclaimedWarningMinutes(), input.unclaimedBreachMinutes(),
                 input.inProgressWarningMinutes(), input.inProgressBreachMinutes(), input.pauseWaiting(),
-                input.nextResponseMinutes())
+                input.nextResponseMinutes(), input.customerWaitingMinutes())
                 .orElseThrow(() -> ApiProblemException.conflict("SLA policy changed since it was loaded."));
         audit.append(AuditActors.type(actor), AuditActors.userId(actor), "SLA_POLICY_UPDATED", "SLA_POLICY",
                 updated.id(), null, Map.of("version", updated.version(), "pauseWaiting", updated.pauseWaiting()));
@@ -31,6 +31,10 @@ class SlaPolicyService {
 
     private static void validate(UpdateInput value) {
         Integer nextMinutes = value.nextResponseMinutes();
+        Integer waitingMinutes = value.customerWaitingMinutes();
+        if (waitingMinutes != null && (waitingMinutes < 1 || waitingMinutes > 43200)) {
+            throw ApiProblemException.validationFailed("Customer waiting must be between 1 and 43200 minutes.");
+        }
         if (value.firstResponseMinutes() < 1
                 || (nextMinutes != null && (nextMinutes < 1 || nextMinutes > 10080))
                 || value.unclaimedWarningMinutes() < 1 || value.inProgressWarningMinutes() < 1
@@ -43,5 +47,5 @@ class SlaPolicyService {
 
     private static String text(String value) { if (value == null || value.isBlank() || value.length()>160) throw ApiProblemException.validationFailed("SLA policy name is required."); return value.strip(); }
     private static void require(Authentication a) { if (a == null || !a.isAuthenticated() || a.getAuthorities().stream().noneMatch(x -> MANAGE_SLA.equals(x.getAuthority()))) throw ApiProblemException.accessDenied(); }
-    record UpdateInput(String name, long firstResponseMinutes, long unclaimedWarningMinutes, long unclaimedBreachMinutes, long inProgressWarningMinutes, long inProgressBreachMinutes, boolean pauseWaiting, Long version, Integer nextResponseMinutes) { }
+    record UpdateInput(String name, long firstResponseMinutes, long unclaimedWarningMinutes, long unclaimedBreachMinutes, long inProgressWarningMinutes, long inProgressBreachMinutes, boolean pauseWaiting, Long version, Integer nextResponseMinutes, Integer customerWaitingMinutes) { }
 }

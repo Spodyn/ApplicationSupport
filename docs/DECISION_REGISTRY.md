@@ -32,7 +32,7 @@ This is the human-readable index. `decision-registry.yaml` is the machine-readab
 | DEC-IGNORE-002 | weight | immutable vote snapshot; default1/temp2 | USI-36 |
 | DEC-IGNORE-003 | lifetime | voter can never Claim/Reply same Case | USI-36 |
 | DEC-ASK-001 | legacy Ask Customer | Superseded by DEC-CASE-CONSECUTIVE-REPLIES-001 | USI-37, E09 |
-| DEC-ASK-002 | waiting | 24h default; timeout restores OPEN for owned Cases or NEW for historical unassigned Cases; no automatic follow-up | USI-37 / E09, DEC-CASE-CONSECUTIVE-REPLIES-001 |
+| DEC-ASK-002 | waiting | Superseded by DEC-OPERATIONAL-SLA-001 | USI-37 / E09 |
 | DEC-RESOLVE-001 | normal resolve | current owner from VERIFICATION | USI-35 |
 | DEC-RESOLVE-002 | force resolve | ADMIN+force_resolve, any nonterminal | USI-35 |
 | DEC-SNOOZE-001 | snooze | per-user, any visible nonterminal, 5m-30d | USI-37 / E09 |
@@ -95,7 +95,8 @@ The grouped owner requests of 2026-11-10 and 2026-11-12 define the interface and
 - DEC-CASE-WORKFLOW-PROJECTION-001: four workflow labels with separate Ignore votes and terminal reason. The unassigned work queue excludes waiting, and Archive is an explicit history filter. Existing v1 writes remain compatible. See [Product Contract](PRODUCT_CONTRACT.md#4-canonical-case-state-machine).
 
 - DEC-CASE-WORKFLOW-COMMANDS-001: administrative undo applies to ordinary and forced resolution. Public replies enter owned waiting after delivery. The shared provider-context lock protects active generation uniqueness.
-- DEC-CASE-CONSECUTIVE-REPLIES-001 supersedes DEC-ASK-001. The owner can reply, add notes and resolve in OPEN and ASKED. Provider-confirmed public replies retain ownership. Further replies retain the waiting deadline. An eligible agent can explicitly claim historical unassigned waiting. The legacy Ask endpoint is deprecated.
+- DEC-OPERATIONAL-SLA-001: each accepted public message establishes an operational deadline. Historical FRT, NRT, TTR and breach records retain their original rules. Waiting expiry creates an internal follow-up reminder.
+- DEC-CASE-CONSECUTIVE-REPLIES-001 supersedes DEC-ASK-001. The owner can reply, add notes and resolve in OPEN and ASKED. Provider-confirmed public replies retain ownership. Further replies retain ownership and follow DEC-OPERATIONAL-SLA-001 for their deadline. An eligible agent can explicitly claim historical unassigned waiting. The legacy Ask endpoint is deprecated.
 
 - TECH-TEAMS-SELECTED-FILES-001 (owner approval, 2026-11-19): the sandbox bot receives Graph application `Sites.Selected` and `write` only on USISandbox. A separate transient administrator session assigns the site grant; the bot receives no tenant-wide file access. See [Integration attachment boundaries](INTEGRATIONS.md#teams-attachment-transfer-owner-approved-2026-11-19).
 

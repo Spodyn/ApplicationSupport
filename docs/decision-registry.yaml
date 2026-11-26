@@ -501,10 +501,27 @@ decisions:
       waiting_projection: WAITING_ON_CUSTOMER
       eligible_owner_actions_in_open_and_waiting: [REPLY, ADD_INTERNAL_NOTE, RESOLVE]
       wait_entry: current_provider_confirmed_public_reply
-      consecutive_replies_keep: [state, owner, waiting_until]
+      consecutive_replies_keep: [state, owner]
       historical_unassigned_waiting_recovery: eligible_explicit_claim
       deprecated_ask_endpoint: ordinary_public_reply_with_legacy_request_and_idempotency
-      timeout_policy: unchanged
+      waiting_deadline_policy: DEC-OPERATIONAL-SLA-001
+
+  - id: DEC-OPERATIONAL-SLA-001
+    area: operational_sla
+    status: owner_approved
+    source: [OWNER_REQUEST_2026_11_26_PER_MESSAGE_SLA]
+    decision:
+      customer_message: restart_operational_FRT_or_NRT
+      response_defaults_business_minutes: {FRT: 15, NRT: 30}
+      response_warning_remaining_percent: 25
+      confirmed_current_support_message: restart_follow_up
+      default_follow_up_elapsed_minutes: 1440
+      expired_follow_up: internal_reminder_keep_state_and_owner
+      historical_reporting: preserve_original_anchors_outcomes_and_breaches
+      terminal: no_active_deadline
+      recovered_message_anchor: durable_ingestion
+      clock: server_intervals_shared_client_clock
+      automatic_customer_message: false
 
   - id: DEC-PROVIDER-DELETED-CONTENT-001
     area: provider_message_deletion

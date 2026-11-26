@@ -6,6 +6,8 @@ import static org.mockito.Mockito.when;
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.InboundEventStore;
 import com.unifiedsupportinbox.messaging.InboundMessageCommandHandler;
+import com.unifiedsupportinbox.sla.CaseOperationalDeadlines;
+import com.unifiedsupportinbox.sla.CaseResponseCycles;
 import com.unifiedsupportinbox.sla.CaseSlaInitializer;
 import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider;
@@ -61,6 +63,8 @@ class MessageDeliveryWorkerIntegrationTests {
     @Autowired private InboundEventStore inboundEvents;
     @Autowired private InboundMessageCommandHandler inboundMessages;
     @Autowired private CaseSlaInitializer sla;
+    @Autowired private CaseResponseCycles responseCycles;
+    @Autowired private CaseOperationalDeadlines operationalDeadlines;
     @Autowired private PlatformTransactionManager transactionManager;
     @Autowired private CaseClaimService claims;
     @Autowired private CaseResolveService resolutions;
@@ -247,11 +251,12 @@ class MessageDeliveryWorkerIntegrationTests {
     }
 
     @Test
-    void retryWhileWaitingKeepsTheCurrentOwnerAndDeadline() {
+    void onlySuccessfulRetryWhileWaitingRestartsTheDeadlineAndKeepsTheOwner() {
         Fixture fixture = createFixture("ENABLED");
         provider.steps(DeliveryResult.sent("first"), DeliveryResult.sent("retried"));
         assertThat(worker.process(createMessage(fixture, "first"))).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
         var deadline = waitingUntil(fixture);
+        jdbc.update("UPDATE sla_policies SET customer_waiting_minutes = 1500 WHERE active");
         UUID failed = createMessage(fixture, "wait-retry");
         jdbc.update("UPDATE integrations SET status = 'DISABLED' WHERE id = ?", fixture.integrationId());
         assertThat(worker.process(failed)).isEqualTo(MessageDeliveryWorker.AttemptResult.FAILED);
@@ -261,7 +266,72 @@ class MessageDeliveryWorkerIntegrationTests {
         assertThat(worker.process(failed)).isEqualTo(MessageDeliveryWorker.AttemptResult.SENT);
         assertThat(caseStatus(fixture)).isEqualTo("WAITING_FOR_CUSTOMER");
         assertThat(caseOwner(fixture)).isEqualTo(fixture.ownerId());
-        assertThat(waitingUntil(fixture)).isEqualTo(deadline);
+        assertThat(waitingUntil(fixture)).isAfter(deadline);
+        assertThat(jdbc.queryForObject("""
+                SELECT c.waiting_until = a.finished_at + interval '1500 minutes'
+                FROM cases c JOIN delivery_attempts a ON a.message_id = ? AND a.error_category IS NULL
+                WHERE c.id = ?
+                """, Boolean.class, failed, fixture.caseId())).isTrue();
+    }
+
+    @Test
+    void activeFRTAndNRTRestartWhileHistoricalBreachAndCycleAnchorsRemain() {
+        Fixture fixture = createFixture("ENABLED");
+        UUID caseId = fixture.caseId();
+        Instant first = Instant.parse("2026-03-09T09:00:00Z");
+        sla.initialize(caseId, first, first);
+        UUID firstMessage = UUID.randomUUID();
+        responseCycles.customerMessage(caseId, firstMessage, first);
+        assertDeadline(caseId, firstMessage, "FRT", first, first.plusSeconds(675), first.plusSeconds(900));
+
+        UUID lateCustomer = UUID.randomUUID();
+        Instant restarted = first.plusSeconds(901);
+        responseCycles.customerMessage(caseId, lateCustomer, restarted);
+        responseCycles.customerMessage(caseId, lateCustomer, restarted.plusSeconds(10));
+        assertDeadline(caseId, lateCustomer, "FRT", restarted, restarted.plusSeconds(675), restarted.plusSeconds(900));
+        assertThat(jdbc.queryForObject("""
+                SELECT breached_at = due_at AND reminded_at IS NOT NULL
+                FROM case_operational_deadlines WHERE message_id = ?
+                """, Boolean.class, firstMessage)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT first_response_due_at FROM case_sla WHERE case_id = ?",
+                java.time.OffsetDateTime.class, caseId).toInstant()).isEqualTo(first.plusSeconds(900));
+
+        UUID outgoing = UUID.randomUUID();
+        Instant sentAt = restarted.plusSeconds(5);
+        new TransactionTemplate(transactionManager).executeWithoutResult(status -> {
+            jdbc.update("""
+                    UPDATE cases SET status = 'WAITING_FOR_CUSTOMER', waiting_until = ?
+                    WHERE id = ?
+                    """, sentAt.plusSeconds(86_400).atOffset(java.time.ZoneOffset.UTC), caseId);
+            operationalDeadlines.followUp(caseId, outgoing, sentAt, sentAt.plusSeconds(86_400));
+            responseCycles.humanResponse(caseId, outgoing, sentAt);
+        });
+        assertDeadline(caseId, outgoing, "FOLLOW_UP", sentAt, null, sentAt.plusSeconds(86_400));
+
+        jdbc.update("UPDATE cases SET status = 'VERIFICATION', waiting_until = NULL WHERE id = ?", caseId);
+        Instant nextAt = sentAt.plusSeconds(5);
+        UUID nextCustomer = UUID.randomUUID();
+        responseCycles.customerMessage(caseId, nextCustomer, nextAt);
+        UUID latestCustomer = UUID.randomUUID();
+        Instant latestAt = nextAt.plusSeconds(8);
+        responseCycles.customerMessage(caseId, latestCustomer, latestAt);
+        responseCycles.systemResponse(caseId);
+        assertDeadline(caseId, latestCustomer, "NRT", latestAt, latestAt.plusSeconds(1_350), latestAt.plusSeconds(1_800));
+        assertThat(jdbc.queryForObject("SELECT opening_message_id FROM case_next_response_cycles WHERE case_id = ?",
+                UUID.class, caseId)).isEqualTo(nextCustomer);
+        assertThat(resolutions.resolve(caseId, fixture.ownerId(), "deadline-terminal", null, "test").status()).isEqualTo(200);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM case_operational_deadline_projection WHERE case_id = ?",
+                Integer.class, caseId)).isZero();
+    }
+
+    private void assertDeadline(UUID caseId, UUID messageId, String kind, Instant start, Instant warning, Instant due) {
+        assertThat(jdbc.queryForObject("""
+                SELECT message_id = ? AND kind = ? AND started_at = ?
+                    AND warning_at IS NOT DISTINCT FROM ?::timestamptz AND due_at = ?
+                FROM case_operational_deadline_projection WHERE case_id = ?
+                """, Boolean.class, messageId, kind, start.atOffset(java.time.ZoneOffset.UTC),
+                warning == null ? null : warning.atOffset(java.time.ZoneOffset.UTC),
+                due.atOffset(java.time.ZoneOffset.UTC), caseId)).isTrue();
     }
 
     @Test
@@ -282,8 +352,10 @@ class MessageDeliveryWorkerIntegrationTests {
             assertThat(post.activity().path("text").asText()).isEqualTo("Support reply teams-" + index);
             assertThat(caseStatus(fixture)).isEqualTo("WAITING_FOR_CUSTOMER");
             assertThat(caseOwner(fixture)).isEqualTo(fixture.ownerId());
-            if (index == 1) deadline = waitingUntil(fixture);
-            assertThat(waitingUntil(fixture)).isNotNull().isEqualTo(deadline);
+            var nextDeadline = waitingUntil(fixture);
+            assertThat(nextDeadline).isNotNull();
+            if (deadline != null) assertThat(nextDeadline).isAfter(deadline);
+            deadline = nextDeadline;
         }
 
         UUID queuedWhileWaiting = createMessage(fixture, "teams-stale");
