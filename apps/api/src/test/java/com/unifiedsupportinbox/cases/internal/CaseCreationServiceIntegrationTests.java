@@ -194,7 +194,8 @@ class CaseCreationServiceIntegrationTests {
         assertRejected(wrongIntegration, Reason.INTEGRATION_MISMATCH);
 
         assertThat(jdbc.queryForObject("SELECT count(*) FROM cases", Integer.class)).isZero();
-        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events", Integer.class)).isZero();
+        assertThat(jdbc.queryForList("SELECT type FROM outbox_events", String.class))
+                .allMatch(type -> type.startsWith("application."));
     }
 
     @Test
@@ -287,10 +288,12 @@ class CaseCreationServiceIntegrationTests {
     }
 
     private static void assertRejected(Command command, Reason expected) {
+        int eventsBefore = jdbc.queryForObject("SELECT count(*) FROM outbox_events", Integer.class);
         assertThatThrownBy(() -> service.create(command))
                 .isInstanceOfSatisfying(
                         CaseCreationRejectedException.class,
                         failure -> assertThat(failure.reason()).isEqualTo(expected));
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events", Integer.class)).isEqualTo(eventsBefore);
     }
 
     private static Command command(Fixture fixture, String conversation, String thread) {

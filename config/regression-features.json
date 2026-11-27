@@ -258,13 +258,14 @@
       "feature": "Statistics/admin views",
       "status": "PARTIALLY_IMPLEMENTED",
       "risk": "MEDIUM",
-      "expected": "Self/admin boundaries; organization reporting dates; shared first-response outcomes across chart and filtered cohorts; separate historical, active support and follow-up counts",
+      "expected": "Self/admin boundaries; organization reporting dates; shared first-response outcomes across chart and filtered cohorts; separate historical, active support and follow-up counts; bounded cold query plan with unchanged FRT/NRT/follow-up facts and owner visibility",
       "tests": [
         "apps/web/tests/unit/analytics-workflow.test.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/AnalyticsContractDocumentationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/StatisticsOverviewServiceTests.java",
-        "apps/web/tests/fullstack/workflows.spec.ts"
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/analytics/AnalyticsRecordsIntegrationTests.java"
       ],
       "gap": "Historical per-user features in unmerged PRs are not claimed implemented"
     },
@@ -302,12 +303,14 @@
       "feature": "WebSocket/STOMP",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Session/origin required; no client SEND; bounded destinations; revocation blocks outbound",
+      "expected": "Authenticated scoped hints after commit; application-wide query mapping and reconnect; coalesced bursts; preserved drafts; no client SEND or private broadcasts; serialized in-flight refetch and dirty initial-load recovery; selected Case survives queue reorder and reload",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/RealtimeWebSocketIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/AuthenticatedWebSocketHandshakeInterceptorTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/SessionBoundWebSocketHandlerDecoratorTests.java",
         "apps/web/tests/unit/realtime-stomp-client.test.ts",
+        "apps/web/tests/unit/realtime-query-invalidation.test.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/ApplicationRealtimeListenerTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
       "gap": "Real-stack CONNECT/MESSAGE/reload plus backend security tests"

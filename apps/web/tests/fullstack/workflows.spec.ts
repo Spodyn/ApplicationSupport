@@ -87,6 +87,96 @@ async function inbound(page: Page, text: string | undefined, thread?: string,
   return {ts, payload, timestamp, signature}
 }
 
+async function closeFixtureCases(page: Page) {
+  const fixture = fixtures.get(page)
+  if (!fixture) return
+  const response = await page.request.get('/api/v1/cases', {params: {search: fixture.externalChannelId}})
+  expect(response.status()).toBe(200)
+  for (const item of (await response.json()).items) {
+    if (item.channelId === fixture.channelId && item.workflowStatus !== 'RESOLVED') {
+      expect((await command(page, '/api/v1/admin/cases/' + item.id + '/force-resolve', {resolutionCategory: 'OTHER'})).status()).toBe(200)
+    }
+  }
+}
+
+test('selected Case survives reload when another active conversation moves ahead of it', async ({page}) => {
+  await login(page, undefined, true)
+  try {
+    const wanted = 'Selected conversation ' + randomUUID().slice(0, 8)
+    await inbound(page, wanted)
+    const tile = page.getByRole('button').filter({hasText: wanted})
+    await tile.click()
+    const item = (await (await page.request.get('/api/v1/cases')).json()).items.find((value: {lastMessagePreview: string}) => value.lastMessagePreview === wanted)
+    const other = 'Other active conversation ' + randomUUID().slice(0, 8)
+    await inbound(page, other)
+    await expect(page.getByRole('button').filter({hasText: other})).toBeVisible()
+    await expect(page.getByRole('paragraph').filter({hasText: wanted})).toBeVisible()
+    await page.reload()
+    await expect(page.getByRole('paragraph').filter({hasText: wanted})).toBeVisible()
+    await expect(page).toHaveURL(new RegExp('caseId=' + item.id))
+  } finally { await closeFixtureCases(page) }
+})
+
+test('application hints update a second administrator within two seconds without losing a reply draft', async ({page, browser, baseURL}) => {
+  await login(page, undefined, true)
+  const viewer = await testAccount(page, 'account')
+  const context = await browser.newContext({baseURL})
+  const second = await context.newPage()
+  await second.addInitScript(() => {
+    const NativeSocket = window.WebSocket
+    let disconnect: (() => void) | undefined
+    window.WebSocket = class extends NativeSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols)
+        if (new URL(url).pathname === '/ws') disconnect = () => this.close()
+      }
+    }
+    Object.assign(window, {disconnectApplicationSocket: () => disconnect?.()})
+  })
+  const frames: string[] = []
+  second.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))
+  try {
+    await login(second, viewer.email, true)
+    await second.goto('/settings')
+    await second.getByRole('tab', {name: 'Customers', exact: true}).click()
+    await expect.poll(() => frames.some(frame => frame.includes('CONNECTED'))).toBe(true)
+    const label = 'Realtime customer ' + randomUUID().slice(0, 8)
+    const created = await command(page, '/api/v1/admin/customers', {name: label})
+    expect(created.status()).toBe(201)
+    await expect(second.getByText(label, {exact: true})).toBeVisible({timeout: 2000})
+    expect(frames.some(frame => frame.includes('application.settings_changed'))).toBe(true)
+    const connections = frames.filter(frame => frame.startsWith('CONNECTED')).length
+    await second.evaluate(() => (window as Window & {disconnectApplicationSocket?: () => void}).disconnectApplicationSocket?.())
+    const missed = label + ' while disconnected'
+    expect((await command(page, '/api/v1/admin/customers', {name: missed})).status()).toBe(201)
+    await expect.poll(() => frames.filter(frame => frame.startsWith('CONNECTED')).length).toBeGreaterThan(connections)
+    await expect(second.getByText(missed, {exact: true})).toBeVisible()
+
+    const message = 'Realtime intake ' + randomUUID().slice(0, 8)
+    await second.goto('/statistics')
+    const responses: string[] = []
+    second.on('response', response => {
+      if (response.url().endsWith('/api/v1/statistics/records')) responses.push(response.url())
+    })
+    await expect(second.getByRole('heading', {name: 'Statistics', exact: true})).toBeVisible()
+    const previous = responses.length
+    await inbound(page, message)
+    await expect.poll(() => responses.length, {timeout: 2000}).toBeGreaterThan(previous)
+    await page.getByRole('button').filter({hasText: message}).click()
+    const panel = page.getByRole('region', {name: /^Conversation /})
+    await panel.getByRole('button', {name: 'Claim', exact: true}).click()
+    await panel.getByRole('textbox', {name: 'Reply text'}).fill('Draft survives background updates')
+    await command(second, '/api/v1/admin/customers', {name: label + ' second'})
+    await expect(panel.getByRole('textbox', {name: 'Reply text'})).toHaveValue('Draft survives background updates')
+    const selected = (await page.request.get('/api/v1/cases')).json()
+    const caseId = (await selected).items.find((item: {lastMessagePreview: string}) => item.lastMessagePreview === message).id
+    expect((await command(page, '/api/v1/cases/' + caseId + '/resolve', {})).status()).toBe(200)
+  } finally {
+    await closeFixtureCases(page)
+    await context.close()
+  }
+})
+
 test('discovery rename updates a mapped Case title through realtime and keeps the customer', async ({page}) => {
   const frames: string[] = []
   page.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))

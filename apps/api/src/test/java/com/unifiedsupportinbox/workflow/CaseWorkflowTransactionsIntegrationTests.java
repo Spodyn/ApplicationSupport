@@ -61,6 +61,25 @@ class CaseWorkflowTransactionsIntegrationTests {
     }
 
     @Test
+    void applicationHintsCommitWithChangesAndDisappearOnRollback() {
+        var transaction = new org.springframework.transaction.support.TransactionTemplate(
+                context.getBean(org.springframework.transaction.PlatformTransactionManager.class));
+        String name = "Realtime " + UUID.randomUUID();
+        Integer before = jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE type = 'application.settings_changed'", Integer.class);
+        transaction.executeWithoutResult(tx -> {
+            jdbc.update("INSERT INTO customers(name) VALUES (?)", name);
+            tx.setRollbackOnly();
+        });
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE type = 'application.settings_changed'", Integer.class))
+                .isEqualTo(before);
+        jdbc.update("INSERT INTO customers(name) VALUES (?)", name);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE type = 'application.settings_changed'", Integer.class))
+                .isEqualTo(before + 1);
+        assertThat(jdbc.queryForList("SELECT payload_json::text FROM outbox_events WHERE type = 'application.settings_changed'", String.class))
+                .allMatch("{}"::equals);
+    }
+
+    @Test
     void persistsPolicyDecisionAndReturnsAuthoritativeAvailability() {
         UUID id = newCase();
         Actor actor = newActor();

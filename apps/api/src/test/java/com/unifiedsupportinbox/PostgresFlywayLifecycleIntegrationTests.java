@@ -45,7 +45,7 @@ class PostgresFlywayLifecycleIntegrationTests {
             statement.executeUpdate("INSERT INTO integrations(provider,display_name,status,health) VALUES ('SLACK','Existing integration','ENABLED','HEALTHY')");
         }
         Flyway current=Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).load();
-        assertThat(current.migrate().migrationsExecuted).isEqualTo(3);current.validate();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(4);current.validate();
         assertThat(current.info().pending()).isEmpty();
         assertThat(queryInt("SELECT count(*) FROM integrations")).isEqualTo(1);
         assertThat(queryInt("SELECT count(*) FROM integration_resync_settings WHERE enabled OR automatic")).isZero();
@@ -63,7 +63,7 @@ class PostgresFlywayLifecycleIntegrationTests {
             statement.executeUpdate("INSERT INTO channels(integration_id,external_channel_id,name,customer_id,ignored,active,grouping_strategy,metadata_json) SELECT i.id,'legacy','Legacy',c.id,TRUE,TRUE,'TEAMS_ROOT_REPLIES','{\"teamsTeamId\":\"11111111-1111-4111-8111-111111111111\"}'::jsonb FROM integrations i CROSS JOIN customers c WHERE i.provider='TEAMS'");
         }
         var current=Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).load();
-        assertThat(current.migrate().migrationsExecuted).isEqualTo(2);current.validate();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(3);current.validate();
         assertThat(queryString("SELECT secret_ref FROM integrations WHERE provider='TEAMS'")).isEqualTo("legacy/retained");
         assertThat(queryInt("SELECT count(*) FROM channels WHERE ignored AND active AND customer_id IS NOT NULL")).isEqualTo(1);
         assertThat(queryInt("SELECT count(*) FROM integration_connection_settings WHERE automatic_discovery IS NULL")).isEqualTo(2);
@@ -105,7 +105,7 @@ class PostgresFlywayLifecycleIntegrationTests {
         }
         var current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .load();
-        assertThat(current.migrate().migrationsExecuted).isOne();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(2);
         current.validate();
         assertThat(queryInt("SELECT count(*) FROM case_operational_deadlines")).isEqualTo(2);
         assertThat(queryInt("SELECT count(*) FROM case_operational_deadlines WHERE kind = 'FRT' AND due_at = '2026-11-26T09:15:00Z'")).isOne();

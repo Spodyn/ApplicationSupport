@@ -306,6 +306,7 @@ export function useAdministrationUsers(query?: AdministrationUserQuery) {
   return useQuery({
     queryKey: queryKeys.administrationUsers(query),
     queryFn: () => serviceRegistry.administrationUsers.list(query),
+    refetchInterval: 30_000,
   })
 }
 
