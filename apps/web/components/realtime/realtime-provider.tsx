@@ -29,6 +29,7 @@ export function RealtimeProvider({ children, accountId }: { children: ReactNode;
       setState(nextState)
       if (nextState === "disconnected" && connectedOnce) {
         resyncAfterReconnect = true
+        invalidation.enqueue([["current-user"]])
       }
       if (nextState === "connected") {
         if (resyncAfterReconnect) {
