@@ -129,10 +129,10 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   expect((await command(page, `/api/v1/admin/channels/${fixture.channelId}`, {customerId, groupingStrategy: 'SLACK_ROOT_THREAD'}, 'PATCH')).status()).toBe(200)
   const sourceSentAt = ((Date.now() - 120_000) / 1000).toFixed(6)
   const first = await inbound(page, `Synthetic request ${marker}`, undefined, {ts: sourceSentAt})
-  const option = page.getByRole('button').filter({hasText: `Synthetic request ${marker}`})
-  await expect(option).toContainText(`Synthetic request ${marker}`)
+  await expect(page.getByRole('button').filter({hasText: `Synthetic request ${marker}`})).toContainText(`Synthetic request ${marker}`)
   const list = await (await page.request.get('/api/v1/cases')).json()
   const caseId = list.items.find((item: {lastMessagePreview: string}) => item.lastMessagePreview === `Synthetic request ${marker}`).id
+  const option = page.locator(`button[data-case-id="${caseId}"]`)
   await option.click()
   const conversation = page.getByRole('region', {name: `Rozmowa Regression ${marker}`})
   await conversation.getByRole('button', {name: 'Przejmij', exact: true}).click()

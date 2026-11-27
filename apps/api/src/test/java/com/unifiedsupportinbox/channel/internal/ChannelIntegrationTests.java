@@ -78,7 +78,7 @@ class ChannelIntegrationTests {
     void discoveryRenameRefreshesExistingCasesWithoutChangingProviderIdentityOrMapping() {
         for (String provider : java.util.List.of("SLACK", "TEAMS")) {
             UUID integration = createIntegration(provider, "Provider integration");
-            UUID customer = createCustomer("Different customer");
+            UUID customer = createCustomer("Different " + provider + " customer");
             var strategy = provider.equals("SLACK") ? ChannelGroupingStrategy.SLACK_ROOT_THREAD : ChannelGroupingStrategy.TEAMS_ROOT_REPLIES;
             var channel = discovery.upsert(new DiscoveredChannel(integration, "source-id", "old-name", strategy, true, null, "{}"));
             jdbc.update("UPDATE channels SET customer_id = ? WHERE id = ?", customer, channel.id());
