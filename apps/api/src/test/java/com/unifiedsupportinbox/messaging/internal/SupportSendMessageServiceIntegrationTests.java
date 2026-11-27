@@ -107,6 +107,7 @@ class SupportSendMessageServiceIntegrationTests {
         UUID owner = createUser("note-owner");
         UUID viewer = createUser("note-viewer");
         UUID caseId = createCase(owner, status);
+        jdbc.update("DELETE FROM outbox_events WHERE aggregate_type = 'application'");
         var before = jdbc.queryForMap("SELECT status, version, last_activity_at FROM cases WHERE id = ?", caseId);
 
         var created = notes.add(caseId, owner, "note-key", "Internal diagnostics", "corr-note");

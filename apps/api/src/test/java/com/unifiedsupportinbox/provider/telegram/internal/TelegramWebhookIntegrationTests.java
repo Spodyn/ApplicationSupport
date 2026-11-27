@@ -84,6 +84,7 @@ class TelegramWebhookIntegrationTests {
         jdbc.update("DELETE FROM inbound_events");
         jdbc.update("DELETE FROM channels");
         jdbc.update("DELETE FROM integrations");
+        jdbc.update("DELETE FROM outbox_events");
         clearSecretRoot();
     }
 
@@ -91,6 +92,7 @@ class TelegramWebhookIntegrationTests {
     void validWebhookIsDurableBeforeAcknowledgement() throws Exception {
         UUID integrationId = createTelegramIntegration();
         writeWebhookSecret();
+        jdbc.update("DELETE FROM outbox_events WHERE aggregate_type = 'application'");
 
         HttpResponse<String> response = post("{\"update_id\":12345,\"message\":{\"message_id\":1}}", webhookSecret());
 
@@ -114,6 +116,7 @@ class TelegramWebhookIntegrationTests {
     void duplicateUpdatesAreIdempotentAndReserveOnlyOneAsyncWake() throws Exception {
         createTelegramIntegration();
         writeWebhookSecret();
+        jdbc.update("DELETE FROM outbox_events WHERE aggregate_type = 'application'");
         String body = "{\"update_id\":34567,\"message\":{\"message_id\":1}}";
 
         HttpResponse<String> first = post(body, webhookSecret());
@@ -129,6 +132,7 @@ class TelegramWebhookIntegrationTests {
     void invalidSecretAndMalformedPayloadAreRejectedWithoutPersistence() throws Exception {
         createTelegramIntegration();
         writeWebhookSecret();
+        jdbc.update("DELETE FROM outbox_events WHERE aggregate_type = 'application'");
 
         HttpResponse<String> invalidSecret = post("{\"update_id\":45678}", "wrong-secret");
         HttpResponse<String> malformedPayload = post("not-json", webhookSecret());
@@ -146,6 +150,7 @@ class TelegramWebhookIntegrationTests {
     void acknowledgementStaysBelowTelegramRetryWindowWithoutBusinessProcessing() throws Exception {
         createTelegramIntegration();
         writeWebhookSecret();
+        jdbc.update("DELETE FROM outbox_events WHERE aggregate_type = 'application'");
         post("{\"update_id\":56788,\"message\":{\"message_id\":1}}", webhookSecret());
 
         long started = System.nanoTime();
