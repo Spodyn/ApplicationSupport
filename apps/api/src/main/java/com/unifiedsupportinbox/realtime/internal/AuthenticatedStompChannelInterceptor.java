@@ -49,7 +49,8 @@ final class AuthenticatedStompChannelInterceptor implements ChannelInterceptor {
             throw new AccessDeniedException("Subscription destination is required.");
         }
         if (CASES_DESTINATION.equals(destination) || PERSONAL_DESTINATION.equals(destination)
-                || "/user/queue/direct-messages".equals(destination)) {
+                || "/user/queue/direct-messages".equals(destination)
+                || "/user/queue/application".equals(destination)) {
             return;
         }
         if (destination.startsWith(CASE_DESTINATION_PREFIX)

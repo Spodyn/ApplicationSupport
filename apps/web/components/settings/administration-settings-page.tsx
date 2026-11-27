@@ -190,7 +190,7 @@ type SettingsActions = ReturnType<typeof useAdministrationSettingsActions>
 
 function GeneralPanel({ data, actions }: { data: GeneralSettings; actions: SettingsActions }) {
   const t = useT()
-  const [form, setForm] = useState(data)
+  const [form, setForm] = useSettingsForm(data)
 
   return (
     <SettingsCard title={t("Ogólne")} description={t("Podstawowe zachowanie i wygląd skrzynki.")}>
@@ -208,12 +208,13 @@ function GeneralPanel({ data, actions }: { data: GeneralSettings; actions: Setti
 
 function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActions }) {
   const t = useT()
-  const [form, setForm] = useState(data)
+  const [form, setForm] = useSettingsForm(data)
   const example = calculateSlaExample(form)
 
-  const numberFields: { key: keyof Pick<SlaSettings, "firstResponseMinutes" | "nextResponseMinutes" | "unclaimedReminderMinutes" | "inProgressReminderMinutes" | "warningBeforeDeadlineMinutes" | "repeatedBreachMinutes">; label: string; hint: string }[] = [
+  const numberFields: { key: keyof Pick<SlaSettings, "firstResponseMinutes" | "nextResponseMinutes" | "customerWaitingMinutes" | "unclaimedReminderMinutes" | "inProgressReminderMinutes" | "warningBeforeDeadlineMinutes" | "repeatedBreachMinutes">; label: string; hint: string }[] = [
     { key: "firstResponseMinutes", label: t("SLA pierwszej odpowiedzi"), hint: t("Od czasu wiadomości u dostawcy do potwierdzonej odpowiedzi.") },
-    { key: "nextResponseMinutes", label: t("SLA kolejnej odpowiedzi"), hint: t("Od pierwszej nowej wiadomości klienta do potwierdzonej odpowiedzi.") },
+    { key: "nextResponseMinutes", label: t("SLA kolejnej odpowiedzi"), hint: t("Od najnowszej wiadomości klienta do potwierdzonej odpowiedzi.") },
+    { key: "customerWaitingMinutes", label: t("Czas do przypomnienia o kliencie"), hint: t("Minuty od potwierdzonej odpowiedzi do wewnętrznego przypomnienia.") },
     { key: "unclaimedReminderMinutes", label: t("Przypomnienie o nieprzejętym case’ie"), hint: t("Pierwszy alert, gdy case nadal nie ma właściciela.") },
     { key: "inProgressReminderMinutes", label: t("Przypomnienie w trakcie"), hint: t("Alert o zbyt długiej pracy bez aktualizacji.") },
     { key: "warningBeforeDeadlineMinutes", label: t("Próg ostrzeżenia dla starszych spraw"), hint: t("Nowe sprawy mają próg przy 25% pozostałego czasu.") },
@@ -253,7 +254,7 @@ function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActio
 
 function SchedulePanel({ data, actions }: { data: WorkScheduleSettings; actions: SettingsActions }) {
   const t = useT()
-  const [form, setForm] = useState(data)
+  const [form, setForm] = useSettingsForm(data)
   const [exceptionOpen, setExceptionOpen] = useState(false)
   const [exception, setException] = useState<Omit<ScheduleException, "id">>({ date: "", name: "", closed: true })
 
@@ -322,7 +323,7 @@ const placeholders = ["customer_name", "next_opening_date", "next_opening_time",
 
 function OutOfOfficePanel({ data, actions }: { data: OutOfOfficeSettings; actions: SettingsActions }) {
   const t = useT()
-  const [form, setForm] = useState(data)
+  const [form, setForm] = useSettingsForm(data)
   const preview = (form.template === data.template && data.previewMessage ? data.previewMessage : form.template)
     .replaceAll("{{customer_name}}", "Joanno")
     .replaceAll("{{next_opening_date}}", t("4 sierpnia 2026"))
@@ -736,7 +737,7 @@ function NotificationsPanel({ data, deliveries, integrations, actions }: { data:
 
 function PermissionsPanel({ data, actions }: { data: RolePermissions[]; actions: SettingsActions }) {
   const t = useT()
-  const [form, setForm] = useState(data)
+  const [form, setForm] = useSettingsForm(data)
 
   const toggle = (role: RolePermissions["role"], permission: AdministrationPermission, checked: boolean) => {
     setForm((current) => current.map((item) => item.role !== role ? item : {
@@ -862,4 +863,17 @@ function addBusinessMinutes(start: Date, amount: number) {
 
 function getErrorMessage(error: unknown) {
   return userError(error)
+}
+
+// Refetches refresh untouched forms while preserving edits in progress.
+function useSettingsForm<T>(data: T) {
+  const [state, setState] = useState({ source: data, form: data })
+  if (state.source !== data) {
+    const untouched = JSON.stringify(state.form) === JSON.stringify(state.source)
+    setState({ source: data, form: untouched ? data : state.form })
+  }
+  const setForm = (action: T | ((previous: T) => T)) => setState(current => ({
+    ...current, form: typeof action === "function" ? (action as (previous: T) => T)(current.form) : action,
+  }))
+  return [state.form, setForm] as const
 }

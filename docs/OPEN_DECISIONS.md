@@ -32,7 +32,7 @@ Backendowy user ID jest kanoniczną tożsamością; `User` i `AdministrationUser
 `AnalyticsStatusDimension` może być pochodną kategorią raportową, ale nie jest `CaseStatus`. Workflow ma dokładnie sześć zamrożonych statusów.
 
 ### Workflow na ekranie czatów
-USI-113: Claim, Ignore, Ask Customer, Resolve, Snooze i akcje admina są podłączane do realnego API; action availability pochodzi z backendu, UI obsługuje pending i stabilne błędy 401/403/409/provider failure/retry i nie implementuje drugiej maszyny stanów. Akceptowany design pozostaje baseline.
+USI-113: Claim, Ignore, Reply, Resolve, Snooze i akcje admina są podłączane do realnego API; action availability pochodzi z backendu, UI obsługuje pending i stabilne błędy 401/403/409/provider failure/retry i nie implementuje drugiej maszyny stanów. Akceptowany design pozostaje baseline.
 
 ## Kiedy wolno dodać nową otwartą decyzję
 

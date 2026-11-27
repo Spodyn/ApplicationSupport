@@ -123,32 +123,16 @@ decisions:
 
   - id: DEC-ASK-001
     area: ask_customer
-    status: frozen
+    status: superseded
     source: [USI-37, E09]
-    decision:
-      actor: current_owner
-      allowed_from: [VERIFICATION]
-      outgoing_human_message_required: true
-      transition_to_waiting_when: provider_delivery_SENT
-      before_sent_status: VERIFICATION
-      before_sent_owner: unchanged
-      after_sent_status: WAITING_FOR_CUSTOMER
-      after_sent_owner: null
-      permanent_delivery_failure_status: VERIFICATION
-      permanent_delivery_failure_owner: unchanged
-      default_wait_hours: 24
-      min_wait_hours: 1
-      max_wait_days: 30
-      customer_reply_to: NEW
-      timeout_to: NEW
-      timeout_automatic_followup_v1: false
+    superseded_by: DEC-CASE-CONSECUTIVE-REPLIES-001
 
   - id: DEC-RESOLVE-001
     area: resolve
     status: frozen
     source: [USI-35, E09]
     decision:
-      normal: {actor: current_owner, from: [VERIFICATION], to: RESOLVED}
+      normal: {actor: current_owner, from: [VERIFICATION, WAITING_FOR_CUSTOMER], to: RESOLVED}
       force: {actor: ADMIN_PLUS_force_resolve, from: [NEW, VERIFICATION, WAITING_FOR_CUSTOMER, PARTIALLY_IGNORED], to: RESOLVED}
       category: {required: false, free_text: false, values: [SOLVED, NO_ACTION_REQUIRED, DUPLICATE, OTHER]}
       resolved_preserves_previous_owner_if_any: true
@@ -209,7 +193,6 @@ decisions:
     source: [E08, E20, OWNER_REQUEST_CASE_ATTACHMENT_PREVIEWS]
     decision:
       public_reply_content: nonblank_text_or_clean_attachment
-      ask_customer_requires_text: true
       max_file_mib: 25
       max_files_per_message: 10
       max_total_mib_per_message: 50
@@ -235,8 +218,8 @@ decisions:
     status: owner_approved
     source: [E13, OWNER_REQUEST_2026_11_15_RESPONSE_SLA_APPROVAL]
     decision:
-      first_response: {default_business_minutes: 15, starts_at: first_customer_provider_timestamp, completes_at: human_support_or_ask_provider_confirmed}
-      next_response: {default_business_minutes: 30, starts_at: first_durable_new_customer_message_after_human_response, completes_at: human_support_or_ask_provider_confirmed}
+      first_response: {default_business_minutes: 15, starts_at: first_customer_provider_timestamp, completes_at: human_support_provider_confirmed}
+      next_response: {default_business_minutes: 30, starts_at: first_durable_new_customer_message_after_human_response, completes_at: human_support_provider_confirmed}
       response_warning_remaining_percent: 25
       resolution_time: [wall_elapsed, business_work_excluding_wait_and_closed_intervals]
       preserve_legacy_aging_metrics: true
@@ -505,10 +488,40 @@ decisions:
       ordinary_reply_enters_waiting: after_successful_delivery
       ordinary_waiting_retains_owner: true
       ordinary_waiting_default_hours: 24
-      ask_waiting_releases_owner: true
       owned_waiting_exit: OPEN_with_owner
       unassigned_waiting_exit: NEW
       customer_contact_after_terminal: linked_successor
+
+  - id: DEC-CASE-CONSECUTIVE-REPLIES-001
+    area: case_workflow_commands
+    status: owner_approved
+    source: [OWNER_REQUEST_2026_11_26_CONSECUTIVE_REPLIES]
+    decision:
+      waiting_label: {en: ASKED, pl: Oczekuje na klienta}
+      waiting_projection: WAITING_ON_CUSTOMER
+      eligible_owner_actions_in_open_and_waiting: [REPLY, ADD_INTERNAL_NOTE, RESOLVE]
+      wait_entry: current_provider_confirmed_public_reply
+      consecutive_replies_keep: [state, owner]
+      historical_unassigned_waiting_recovery: eligible_explicit_claim
+      deprecated_ask_endpoint: ordinary_public_reply_with_legacy_request_and_idempotency
+      waiting_deadline_policy: DEC-OPERATIONAL-SLA-001
+
+  - id: DEC-OPERATIONAL-SLA-001
+    area: operational_sla
+    status: owner_approved
+    source: [OWNER_REQUEST_2026_11_26_PER_MESSAGE_SLA]
+    decision:
+      customer_message: restart_operational_FRT_or_NRT
+      response_defaults_business_minutes: {FRT: 15, NRT: 30}
+      response_warning_remaining_percent: 25
+      confirmed_current_support_message: restart_follow_up
+      default_follow_up_elapsed_minutes: 1440
+      expired_follow_up: internal_reminder_keep_state_and_owner
+      historical_reporting: preserve_original_anchors_outcomes_and_breaches
+      terminal: no_active_deadline
+      recovered_message_anchor: durable_ingestion
+      clock: server_intervals_shared_client_clock
+      automatic_customer_message: false
 
   - id: DEC-PROVIDER-DELETED-CONTENT-001
     area: provider_message_deletion
@@ -530,6 +543,10 @@ decisions:
   - id: DEC-PROVIDER-ADMIN-ONBOARDING-001
     source: [OWNER_REQUEST_2026_11_20_PROVIDER_ADMIN_ONBOARDING]
     rule: Administrators configure Slack and Teams connections in Settings using server-only credential references and instance-specific callbacks. New connections enable automatic channel discovery; existing settings and channel mappings/ignored flags survive upgrades. One Teams team per instance is selected by canonical Graph groupId, verified against authenticated bot team identity before activity persistence. New team-only installation packages request ChannelMessage.Read.Group and ChannelSettings.Read.Group; tenant-only or group-chat events cannot satisfy the selected-team boundary. Historical records and the earlier development package remain intact. Initial, lifecycle-triggered and periodic reconciliation discover only selected standard channels and assign the default customer to new channels. Durable retries preserve first-message intake and discovery ownership across restarts.
+
+  - id: DEC-CASE-SOURCE-TITLE-001
+    source: [OWNER_REQUEST_2026_11_27_CASE_CHANNEL_TITLE]
+    rule: Case card primary titles always use the provider channel, topic or conversation name independently of customer mapping. Localize the genuinely missing-name fallback. Preserve customer details, search, analytics and provider identities. Discovery renames emit durable Case refresh hints through the existing realtime pipeline.
 
 technical_resolutions:
   - id: TECH-TEAMS-SELECTED-FILES-001

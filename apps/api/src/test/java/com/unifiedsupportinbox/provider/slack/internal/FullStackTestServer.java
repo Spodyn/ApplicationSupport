@@ -38,6 +38,7 @@ public final class FullStackTestServer {
     private static JdbcTemplate fixtureDatabase;
     private static PasswordEncoder fixtureEncoder;
     private static UUID fixtureIntegration;
+    private static com.unifiedsupportinbox.channel.ChannelDiscovery fixtureDiscovery;
     private static final List<String> PERMISSIONS = List.of("manage_users", "manage_integrations", "manage_sla", "manage_schedule",
             "manage_notifications", "view_global_statistics", "reassign_cases", "force_resolve", "view_audit");
 
@@ -77,6 +78,18 @@ public final class FullStackTestServer {
                         """, UUID.class, fixtureIntegration, externalChannel);
                 response = Map.of("email", email, "displayName", name, "userId", user, "channelId", channel,
                         "externalChannelId", externalChannel, "workspaceId", "TTESTFULL");
+            } else if (path.equals("/rename-channel") && exchange.getRequestMethod().equals("POST")) {
+                var input = JSON.readTree(exchange.getRequestBody());
+                UUID channelId = UUID.fromString(input.path("channelId").asText());
+                var channel = fixtureDatabase.queryForMap("SELECT integration_id, external_channel_id, grouping_strategy FROM channels WHERE id = ?", channelId);
+                var renamed = fixtureDiscovery.upsert(new com.unifiedsupportinbox.channel.DiscoveredChannel(
+                        (UUID) channel.get("integration_id"), (String) channel.get("external_channel_id"),
+                        input.path("name").asText(), com.unifiedsupportinbox.channel.ChannelGroupingStrategy.valueOf((String) channel.get("grouping_strategy")),
+                        true, null, "{}"));
+                response = Map.of("id", renamed.id(), "name", renamed.name());
+            } else if (path.equals("/expire-deadline") && exchange.getRequestMethod().equals("POST")) {
+                UUID caseId = UUID.fromString(JSON.readTree(exchange.getRequestBody()).path("caseId").asText());
+                response = Map.of("changed", expireDeadline(caseId));
             } else if (path.equals("/breach") && exchange.getRequestMethod().equals("POST")) {
                 UUID caseId = UUID.fromString(JSON.readTree(exchange.getRequestBody()).path("caseId").asText());
                 int changed = fixtureDatabase.update("""
@@ -91,6 +104,7 @@ public final class FullStackTestServer {
                             due_at = now() - interval '10 minutes'
                         WHERE case_id = ? AND ended_at IS NULL
                         """, caseId);
+                expireDeadline(caseId);
                 response = Map.of("changed", changed);
             } else if (path.equals("/observed")) response = Map.of("messages", DELIVERED, "files", SHARED_FILES);
             else if (path.equals("/files.getUploadURLExternal")) {
@@ -175,7 +189,7 @@ public final class FullStackTestServer {
                 } else {
                     String ts = "1790000000." + String.format("%06d", DELIVERED.size() + 1);
                     DELIVERED.add(Map.of("clientMessageId", body.path("client_msg_id").asText(),
-                            "thread", body.path("thread_ts").asText(), "ts", ts));
+                            "thread", body.path("thread_ts").asText(), "channel", body.path("channel").asText(), "ts", ts));
                     response = Map.of("ok", true, "ts", ts);
                 }
             } else if (path.equals("/auth.test")) response = Map.of("ok", true, "team_id", "TTESTFULL", "team", "Synthetic workspace");
@@ -216,6 +230,7 @@ public final class FullStackTestServer {
                     "--usi.providers.slack.outbound.enabled=true", "--usi.outbox.relay-enabled=true", "--usi.outbox.poll-interval=100ms",
                     "--usi.slack.inbound-worker.enabled=true", "--usi.slack.inbound-worker.poll-interval=100ms",
                     "--usi.messages.delivery-worker.enabled=true", "--usi.messages.delivery-worker.poll-interval=100ms",
+                    "--usi.cases.waiting-timeout.poll-interval=1s",
                     "--usi.realtime.case-lifecycle-worker.enabled=true", "--usi.realtime.message-created-worker.enabled=true",
                     "--usi.readstate.case-created-worker.enabled=true", "--usi.realtime.heartbeat=1s"));
             var context = new SpringApplicationBuilder(UsiApiApplication.class, ProviderBoundary.class)
@@ -246,6 +261,7 @@ public final class FullStackTestServer {
                     VALUES (?, 'CTESTFULL', 'synthetic-support', 'SLACK_ROOT_THREAD') RETURNING id
                     """, UUID.class, integration);
             fixtureDatabase = jdbc;
+            fixtureDiscovery = context.getBean(com.unifiedsupportinbox.channel.ChannelDiscovery.class);
             fixtureEncoder = context.getBean(PasswordEncoder.class);
             fixtureIntegration = integration;
             var s3 = context.getBean(S3Client.class);
@@ -260,6 +276,16 @@ public final class FullStackTestServer {
             provider.stop(0); minio.stop(); rabbit.stop(); postgres.stop();
             throw failure;
         }
+    }
+
+    private static int expireDeadline(UUID caseId) {
+        return fixtureDatabase.update("""
+                UPDATE case_operational_deadlines
+                SET started_at = LEAST(started_at, now() - interval '2 minutes'),
+                    warning_at = CASE WHEN warning_at IS NULL THEN NULL ELSE now() - interval '2 minutes' END,
+                    due_at = now() - interval '1 minute'
+                WHERE case_id = ? AND ended_at IS NULL
+                """, caseId);
     }
 
     private static final Map<String, String> FIXTURE_MIME_TYPES = Map.ofEntries(

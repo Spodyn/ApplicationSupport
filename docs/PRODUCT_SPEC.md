@@ -53,7 +53,7 @@ Exactly six statuses exist:
 - `NEW` - active, unassigned work.
 - `PARTIALLY_IGNORED` - unassigned work with Ignore points below threshold.
 - `VERIFICATION` - active work owned by exactly one user.
-- `WAITING_FOR_CUSTOMER` - Ask Customer was successfully accepted by provider; Case is unassigned while waiting.
+- `WAITING_FOR_CUSTOMER` - a public reply was accepted by the provider. The Case retains its owner and shows ASKED in English or Oczekuje na klienta in Polish. Historical records may be unassigned.
 - `IGNORED` - terminal, no owner.
 - `RESOLVED` - terminal, preserving previous owner when one existed.
 
@@ -61,13 +61,13 @@ A later customer message uses the active generation or creates exactly one linke
 
 ## 7. Claim
 
-Claim is explicit; there is no auto-assignment. Successful Claim atomically moves eligible NEW/PARTIALLY_IGNORED work to VERIFICATION, makes the actor the sole owner, deactivates active partial Ignore votes while preserving history, clears stale Snoozes, pauses unclaimed SLA and starts/resumes in-progress SLA.
+Claim is explicit; there is no auto-assignment. Successful Claim atomically moves eligible NEW/PARTIALLY_IGNORED work or historical unassigned waiting work to VERIFICATION, makes the actor the sole owner, deactivates active partial Ignore votes while preserving history, clears stale Snoozes, pauses unclaimed SLA and starts/resumes in-progress SLA.
 
 A user who ever successfully voted Ignore in that Case is permanently ineligible to Claim it.
 
 ## 8. Reply and delivery
 
-Normal Reply is current-owner-only in VERIFICATION. Sending creates one durable logical SUPPORT Message and asynchronous provider-delivery work; provider HTTP never runs in the business DB transaction.
+Public replies and internal notes are available to the eligible current owner in VERIFICATION and WAITING_FOR_CUSTOMER. Sending creates one durable logical SUPPORT Message and asynchronous provider-delivery work; provider HTTP never runs in the business DB transaction.
 
 `SENT` means provider accepted the message. `DELIVERED` is used only when provider has a trustworthy delivery acknowledgement. Transient failures retry the same Message with `Retry-After`, exponential backoff and jitter, max 8 attempts/24h. Permanent failures become `FAILED`. Retry never creates a second logical customer-facing Message.
 
@@ -81,19 +81,15 @@ Each vote stores the effective weight as an immutable snapshot. One active vote 
 
 Below threshold -> PARTIALLY_IGNORED; threshold reached -> terminal IGNORED. New customer message before threshold or Claim by another user deactivates active partial votes but preserves history. A user may vote again after reset, but anyone who ever cast a successful Ignore vote in the Case remains permanently blocked from Claim and Reply in that Case.
 
-## 10. Ask Customer
+## 10. Waiting for the customer
 
-Ask Customer is current-owner-only from VERIFICATION and requires an outgoing human support Message.
+A current public reply moves OPEN to ASKED after successful provider delivery and keeps the owner. Additional provider-confirmed replies in ASKED restart the configurable follow-up deadline, default 24 elapsed hours. A failed, queued, retrying or stale send leaves workflow intact.
 
-The Case **stays VERIFICATION with the same owner while delivery is queued/retried**. Only when provider accepts the Ask Message (`SENT`) does USI atomically move it to WAITING_FOR_CUSTOMER, clear owner and set `waiting_until`.
-
-Permanent delivery failure leaves the Case with the owner in VERIFICATION. Default wait is 24 hours; allowed override is 1 hour to 30 days.
-
-Customer reply before timeout returns Case to NEW, marks it unread for eligible users, wakes Snoozes and resumes applicable timers with accumulated time preserved. Timeout also returns to NEW and records `WAITING_TIMEOUT`; v1 does not send an automatic follow-up message.
+Customer reply returns an owned Case to OPEN with the same owner, marks it unread for eligible users, wakes Snoozes and resumes applicable timers. Expiry creates an internal follow-up reminder while the Case remains ASKED. A customer reply returns historical unassigned waiting to NEW. See the [legacy API compatibility contract](PRODUCT_CONTRACT.md#7-public-replies-and-waiting).
 
 ## 11. Resolve, force-resolve and assignment
 
-Normal Resolve is current-owner-only from VERIFICATION. Resolution category is optional; if supplied it is one of `SOLVED`, `NO_ACTION_REQUIRED`, `DUPLICATE`, `OTHER` and is not free text.
+Normal Resolve is current-owner-only from VERIFICATION or WAITING_FOR_CUSTOMER. Resolution category is optional; if supplied it is one of `SOLVED`, `NO_ACTION_REQUIRED`, `DUPLICATE`, `OTHER` and is not free text.
 
 Resolution ends SLA timers, clears Snoozes and records activity/audit. `ADMIN + force_resolve` may resolve any nonterminal Case. If the Case was unowned, the administrator does not become owner; force-resolve is tagged `forced=true` for analytics/audit.
 
@@ -124,7 +120,7 @@ Conversation-visible authorship is CUSTOMER, SUPPORT or SYSTEM only when genuine
 Body formats are safe PLAIN_TEXT/Markdown; raw executable provider HTML is never canonical.
 
 A public Case reply can contain text, CLEAN attachments, or both. An empty
-reply is rejected. Ask Customer still requires text. Clipboard images and
+reply is rejected. Clipboard images and
 selected files share the same draft queue and limits. The owner can retry a
 technical scan failure while the upload is still unassociated.
 
@@ -140,7 +136,7 @@ Three core measurements use business time:
 
 `pause_waiting=true` by default. A Case snapshots SLA policy plus business-hours schedule/timezone version at creation, so later configuration changes do not retroactively move its deadlines.
 
-FRT starts once at the provider timestamp of the first accepted customer message. Provider-confirmed human Reply or Ask ends the applicable response clock. The first durable customer message after a confirmed response starts NRT. The Case snapshots the policy and business calendar, with default targets 15/30 minutes and a warning at 25% remaining. Resolution ends active cycles, and reopening preserves their history and restarts unclaimed work. Reports retain unclaimed and in-progress data and provide elapsed and working TTR where the calendar is known.
+Historical FRT and NRT preserve their original response-cycle anchors and outcomes. The operational clock starts or restarts on every accepted customer message and uses 15 business minutes for FRT and 30 for NRT by default. Provider-confirmed human delivery switches it to a configurable follow-up clock. The Case snapshots the response policy and business calendar. Response clocks warn with 25% remaining. Overdue responses and due follow-ups create distinct internal reminders. Resolution and Ignore end the active deadline. Reports retain unclaimed and in-progress data and provide elapsed and working TTR where the calendar is known.
 
 ## 17. Business hours and OOO
 
@@ -167,6 +163,8 @@ Events are at-least-once and duplicate/out-of-order safe. Personal unread/Snooze
 ## 20. Statistics and admin current work
 
 Every active USER can see own statistics. Team/global statistics require `ADMIN + view_global_statistics`.
+
+Statistics uses the reporting timezone and one measured first-response outcome for the FRT KPI, historical chart, and customer attainment. The response SLA summary separates recorded Case-level response breaches and the NRT subset from currently overdue support responses and customer follow-ups due. User first-response results are attributed to the confirmed reply author. See [metric definitions](PRODUCT_CONTRACT.md#response-sla-on-the-statistics-dashboard).
 
 Created, resolved and ignored metrics remain distinct; IGNORED does not inflate resolution rate. Duration APIs expose count, average, p50, p90 and p95. Default range is 30 days, interactive max 366 days. No-data is null/empty rather than fake zero/success.
 
@@ -218,3 +216,7 @@ Settings → Integrations provides optional Slack/Teams history recovery with in
 ## Provider onboarding owner extension (2026-11-20)
 
 The Integrations panel configures Slack and Teams using instance callbacks and server-held secrets, with readiness and per-connection automatic discovery. Teams selects one team and a default customer; standard channels are discovered automatically. The selected Graph team identity is checked before inbound storage. Existing channel mappings and monitoring choices are preserved. See [Product Contract](PRODUCT_CONTRACT.md#owner-approved-provider-onboarding-2026-11-20) and [provider onboarding](PROVIDER_ONBOARDING.md).
+
+## Case inbox source titles (owner request, 2026-11-27)
+
+Case card primary titles use the actual provider channel, topic or conversation name for mapped and unmapped Cases. Slack channel names have one leading `#`. A genuinely missing name uses the localized “Channel name unavailable” / “Nazwa kanału niedostępna” fallback. Long names keep the existing truncation and expose the full title. Customer mappings remain visible in Case details and retain existing search and analytics semantics. Discovery renames retain channel/provider/Case identity and publish durable Case refresh hints through the existing outbox and authenticated realtime transport.

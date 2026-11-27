@@ -9,6 +9,8 @@ import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.identity.UserRole;
 import com.unifiedsupportinbox.sla.CaseSlaClaimRecorder;
+import com.unifiedsupportinbox.sla.CaseOperationalDeadlines;
+import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import com.unifiedsupportinbox.readstate.CaseSnoozeWakeService;
 import java.time.OffsetDateTime;
 import java.util.Map;
@@ -35,11 +37,13 @@ public class CaseClaimService {
     private final OutboxEventStore outbox;
     private final ObjectMapper json;
     private final CaseSlaClaimRecorder sla;
+    private final CaseSlaWaitingRecorder waitingSla;
+    private final CaseOperationalDeadlines deadlines;
 
     public CaseClaimService(JdbcTemplate jdbc,
             CaseSnoozeWakeService snoozes, IdempotentCommandExecutor idempotency,
                             AuditEventStore audit, OutboxEventStore outbox, ObjectMapper json,
-                            CaseSlaClaimRecorder sla) {
+                            CaseSlaClaimRecorder sla, CaseSlaWaitingRecorder waitingSla, CaseOperationalDeadlines deadlines) {
         this.jdbc = jdbc;
         this.snoozes = snoozes;
         this.idempotency = idempotency;
@@ -47,6 +51,8 @@ public class CaseClaimService {
         this.outbox = outbox;
         this.json = json;
         this.sla = sla;
+        this.waitingSla = waitingSla;
+        this.deadlines = deadlines;
     }
 
     public IdempotencyResult claim(UUID caseId, UUID userId, String idempotencyKey, String correlationId) {
@@ -68,13 +74,22 @@ public class CaseClaimService {
         }
 
         Claim claim = jdbc.query("""
-                UPDATE cases
+                WITH candidate AS (
+                    SELECT id, status FROM cases
+                    WHERE id = ? AND owner_user_id IS NULL
+                      AND status IN ('NEW', 'PARTIALLY_IGNORED', 'WAITING_FOR_CUSTOMER')
+                    FOR UPDATE
+                )
+                UPDATE cases c
                 SET owner_user_id = ?, status = 'VERIFICATION', claimed_at = statement_timestamp(),
+                    waiting_until = NULL,
                     updated_at = statement_timestamp(), last_activity_at = statement_timestamp(), version = version + 1
-                WHERE id = ? AND owner_user_id IS NULL AND status IN ('NEW', 'PARTIALLY_IGNORED')
-                RETURNING version, claimed_at
+                FROM candidate
+                WHERE c.id = candidate.id
+                RETURNING c.version, c.claimed_at, candidate.status AS previous_status
                 """, (rs, rowNum) -> new Claim(rs.getLong("version"),
-                        rs.getObject("claimed_at", OffsetDateTime.class).toInstant()), userId, caseId)
+                        rs.getObject("claimed_at", OffsetDateTime.class).toInstant(),
+                        "WAITING_FOR_CUSTOMER".equals(rs.getString("previous_status"))), caseId, userId)
                 .stream().findFirst().orElse(null);
         if (claim == null) {
             if (jdbc.queryForObject("SELECT count(*) FROM cases WHERE id = ?", Integer.class, caseId) == 0) {
@@ -88,11 +103,15 @@ public class CaseClaimService {
                 WHERE case_id = ? AND active
                 """, caseId);
         snoozes.wake(caseId);
+        if (claim.wasWaiting()) {
+            waitingSla.resumeAfterWaiting(caseId, claim.claimedAt());
+            deadlines.finish(caseId, claim.claimedAt(), false);
+        }
         sla.recordClaim(caseId, claim.claimedAt());
 
         audit.append(actor.role() == UserRole.ADMIN ? AuditActorType.ADMIN : AuditActorType.USER,
                 userId, "CASE_CLAIM", "CASE", caseId, caseId,
-                Map.of("action", "CLAIM", "previousStatus", "UNOWNED", "status", "VERIFICATION",
+                Map.of("action", "CLAIM", "previousStatus", claim.wasWaiting() ? "WAITING_FOR_CUSTOMER" : "UNOWNED", "status", "VERIFICATION",
                         "ownerUserId", userId.toString(), "version", claim.version()));
         outbox.append(OUTBOX_TYPE, "case", caseId, payload(caseId, userId, claim.version()), correlationId);
 
@@ -134,5 +153,5 @@ public class CaseClaimService {
     }
 
     private record Actor(boolean eligible, UserRole role, boolean lifetimeIgnoreVoter) {}
-    private record Claim(long version, java.time.Instant claimedAt) {}
+    private record Claim(long version, java.time.Instant claimedAt, boolean wasWaiting) {}
 }

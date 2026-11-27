@@ -29,12 +29,15 @@ import {
 import type { InboxActivity, InboxCase, InboxMessage, InboxWorkflowStatus } from "@/lib/domain/inbox"
 import { inboxStatusLabels, inboxWorkflowStatusLabels } from "@/lib/domain/inbox"
 import { deliveryStatusLabels } from "@/lib/domain/labels"
+import { formatDeadlineDuration, operationalClock } from "@/lib/domain/operational-sla"
+import { useSlaClock } from "@/lib/domain/use-sla-clock"
 import { MAX_BULK_SELECTION } from "@/lib/services/bulk-selection"
 import type { InboxListQuery, InboxQuickView } from "@/lib/services/inbox"
 import { useSelectMatchingCases, useCurrentUser, useInboxActivity, useInboxAssignees, useInboxCase, useInboxCases, useInboxFilterOptions, useInboxMessages, useInboxWorkflow, useMarkAllResolvedRead, useMarkInboxCaseRead } from "@/lib/services/queries"
 import type { InboxSendInput } from "@/lib/services/inbox"
 import { cn } from "@/lib/utils"
 import { useShell } from "@/components/layout/shell-context"
+import { NotificationBell } from "@/components/layout/notification-bell"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet"
 import { BulkCaseToolbar } from "./bulk-case-toolbar"
@@ -85,17 +88,21 @@ function timeLabel(value: string): string {
   return new Intl.DateTimeFormat(locale(), { dateStyle: "short", timeStyle: "short" }).format(new Date(value))
 }
 
-function toPresentation(record: InboxCase, t: ReturnType<typeof useT>): CasePresentation {
+function toPresentation(record: InboxCase, t: ReturnType<typeof useT>, now: number): CasePresentation {
   const statusTone = record.status === "resolved" || record.status === "ignored" ? "gray" : record.status === "new" ? "green" : record.status === "verification" ? "purple" : record.status === "waiting_for_customer" ? "blue" : "red"
   const terminal = record.status === "resolved" || record.status === "ignored"
-  const paused = record.sla.state === "paused"
-  const slaTone = terminal || paused || record.sla.state === "unknown" ? "gray" : record.sla.state === "breached" ? "red" : record.sla.state === "at_risk" ? "amber" : "green"
-  const dueAt = record.sla.dueAt
-  const remaining = record.sla.remainingBusinessSeconds ?? (dueAt ? (Date.parse(dueAt) - Date.now()) / 1000 : 0)
-  const overdue = record.sla.state === "breached"
-  const clock = record.sla.kind ?? "SLA"
-  const countdown = new Intl.NumberFormat(locale(), { style: "unit", unit: "minute", unitDisplay: "short" })
-    .format(Math.ceil(Math.max(0, overdue ? -remaining : remaining) / 60))
+  const operational = record.sla.operational
+  const reading = operational ? operationalClock(operational, now) : undefined
+  const followUp = operational?.kind === "FOLLOW_UP"
+  const paused = !operational && record.sla.state === "paused"
+  const overdue = reading?.overdue ?? record.sla.state === "breached"
+  const warning = reading?.warning ?? record.sla.state === "at_risk"
+  const dueAt = operational ? new Date(operational.dueAt).toISOString() : record.sla.dueAt
+  const remaining = record.sla.remainingBusinessSeconds ?? 0
+  const clock = followUp ? t("Kontakt z klientem") : operational?.kind ?? record.sla.kind ?? "SLA"
+  const countdown = formatDeadlineDuration(reading?.seconds ?? Math.ceil(Math.max(0, overdue ? -remaining : remaining)), locale())
+  const slaTone = terminal || paused || !dueAt ? "gray" : overdue ? followUp ? "amber" : "red"
+    : warning ? "amber" : followUp ? "gray" : "green"
   const company = record.customer.id === "unassigned" ? record.sourceChannel : record.customer.name
   const bodyPreview = record.lastMessagePreview.trim()
   const preview = bodyPreview
@@ -112,7 +119,7 @@ function toPresentation(record: InboxCase, t: ReturnType<typeof useT>): CasePres
     preview,
     time: record.lastMessageAt ?? (record.lastMessageId || bodyPreview ? record.createdAt : undefined),
     platform: record.platform === "slack" ? "Slack" : record.platform === "teams" ? "Teams" : "Telegram",
-    source: record.sourceChannel,
+    source: record.sourceChannel?.trim() || t("Nazwa kanału niedostępna"),
     status: t(record.workflowStatus ? inboxWorkflowStatusLabels[record.workflowStatus] : inboxStatusLabels[record.status]),
     statusTone,
     sla: paused && !terminal ? `SLA · ${t("Wstrzymane")}` : dueAt && !terminal
@@ -199,9 +206,12 @@ export function CasesPage({
   const detailQuery = useInboxCase(selectedId)
   const messagesQuery = useInboxMessages(selectedId)
   const workflow = useInboxWorkflow(selectedId)
-  const presentations = useMemo(() => records.map((record) => toPresentation(record, t)), [records, t])
-  const selectedPresentation = presentations.find((item) => item.id === selectedId)
-    ?? (detailQuery.data ? toPresentation(detailQuery.data, t) : undefined)
+  const now = useSlaClock(Boolean(detailQuery.data?.sla.operational || records.some((record) => record.sla.operational)))
+  const presentations = useMemo(() => records.map((record) => toPresentation(record, t, now)), [records, t, now])
+  const detail = detailQuery.data
+  const listed = presentations.find((item) => item.id === selectedId)
+  const detailIsCurrent = detail && (!listed || detailQuery.dataUpdatedAt >= casesQuery.dataUpdatedAt)
+  const selectedPresentation = detailIsCurrent ? toPresentation(detail, t, now) : listed
   const messages = useMemo(() => {
     const seen = new Set<string>()
     return (messagesQuery.data?.pages.flatMap((page) => page.items) ?? [])
@@ -210,6 +220,13 @@ export function CasesPage({
   const latestMessageId = messages.findLast((message) => message.kind !== "internal_note")?.id
 
   const counts = casesQuery.data?.pages[0]?.quickViewCounts
+  const attentionRefresh = casesQuery.data?.pages[0]?.attentionRefreshInMs
+  const { refetch: refreshQueue, dataUpdatedAt: queueUpdatedAt } = casesQuery
+  useEffect(() => {
+    if (attentionRefresh === undefined || attentionRefresh > 15_000) return
+    const timer = window.setTimeout(() => void refreshQueue({ cancelRefetch: false }), Math.max(2_000, attentionRefresh))
+    return () => window.clearTimeout(timer)
+  }, [attentionRefresh, queueUpdatedAt, refreshQueue])
   const activity = useInboxActivity(detailsOpen ? selectedId : undefined)
   const activityItems = activity.data?.pages.flatMap((page) => page.items) ?? []
 
@@ -255,6 +272,7 @@ export function CasesPage({
   const selectCase = (item: CasePresentation, trigger: HTMLButtonElement) => {
     lastCardRef.current = trigger
     setSelectedCaseId(item.id)
+    router.replace("?caseId=" + encodeURIComponent(item.id), { scroll: false })
     setMobileConversationOpen(true)
     if (!window.matchMedia("(min-width: 768px)").matches) {
       requestAnimationFrame(() => conversationTitleRef.current?.focus())
@@ -297,6 +315,7 @@ export function CasesPage({
             </Button>
             <h1 className="text-[21px] font-bold tracking-[-0.02em]">{t("Czaty")}</h1>
             <span aria-label={t("Liczba spraw")} className="rounded-full bg-[#151f2e] px-2 py-0.5 text-[12px] font-semibold text-[#d8dce4]">{counts?.[quickFilter] ?? "—"}</span>
+            <NotificationBell onSelect={(caseId) => { setSelectedCaseId(caseId); setMobileConversationOpen(true) }} />
             <Button
               type="button"
               size="sm"
@@ -526,7 +545,7 @@ function CaseListItem({
           <span className="grid size-6 shrink-0 place-items-center rounded bg-white/[0.05]" role="img" aria-label={item.platform}>
             {item.platform === "Slack" ? <SlackMark /> : item.platform === "Teams" ? <UsersRound className="size-3.5 text-violet-300" /> : <Send className="size-3.5 text-sky-300" />}
           </span>
-          <span className={cn("truncate text-sm", unread ? "font-bold text-white" : "text-[#eff0f4]")} title={item.company}>{item.company}</span>
+          <span className={cn("truncate text-sm", unread ? "font-bold text-white" : "text-[#eff0f4]")} title={item.source}>{item.source}</span>
           {item.time && <time dateTime={item.time} className="ml-auto shrink-0 text-[10px] tabular-nums text-[#9ba5b5]">{timeLabel(item.time)}</time>}
           {unread && <span className="size-2 shrink-0 rounded-full bg-[#7650ff]" aria-label={t("Nieodczytane")} />}
         </span>
@@ -563,7 +582,7 @@ function SlaBadge({ tone, children, title }: { tone: CasePresentation["slaTone"]
     green: "bg-emerald-500/[0.09] text-emerald-400",
     gray: "bg-slate-500/10 text-slate-300",
   }
-  return <span title={title} className={cn("shrink-0 rounded-[6px] px-2 py-[5px] text-[11px] font-medium leading-none", colors[tone])}>{children}</span>
+  return <span data-sla-countdown title={title} className={cn("shrink-0 rounded-[6px] px-2 py-[5px] text-[11px] font-medium leading-none tabular-nums", colors[tone])}>{children}</span>
 }
 
 function ConversationPanel({
@@ -594,10 +613,9 @@ function ConversationPanel({
   const noteKey = useRef<string | null>(null)
   const [files, setFiles] = useState<File[]>([])
   const [sendError, setSendError] = useState<Error | null>(null)
-  const [actionDialog, setActionDialog] = useState<"ask" | "ignore" | "resolve" | "snooze" | "reopen" | "admin" | null>(null)
+  const [actionDialog, setActionDialog] = useState<"ignore" | "resolve" | "snooze" | "reopen" | "admin" | null>(null)
   const [actionText, setActionText] = useState("")
   const [resolutionCategory, setResolutionCategory] = useState("")
-  const [waitingMinutes, setWaitingMinutes] = useState(24 * 60)
   const [snoozeUntil, setSnoozeUntil] = useState(() => localDateTime(new Date(Date.now() + 60 * 60_000)))
   const [assigneeId, setAssigneeId] = useState("")
   const [actionError, setActionError] = useState<Error | null>(null)
@@ -607,7 +625,6 @@ function ConversationPanel({
   const workflowActionKey = useRef<string | null>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
-  const canAsk = Boolean(record?.availableActions?.includes("ASK_CUSTOMER"))
   const canIgnore = Boolean(record?.availableActions?.includes("IGNORE"))
   const canResolve = Boolean(record?.availableActions?.includes("RESOLVE"))
   const canReopen = Boolean(record?.availableActions?.includes("REOPEN"))
@@ -618,8 +635,7 @@ function ConversationPanel({
   const canManageIntegrations = currentUser?.role === "admin" && currentUser.effectivePermissions.includes("manage_integrations")
   const availableAssignees = (assignees.data ?? []).filter((agent) => agent.eligible && agent.id !== record?.owner?.id)
   const validAssignee = availableAssignees.some((agent) => agent.id === assigneeId)
-  const actionPending = workflow.askCustomer.isPending
-    || workflow.ignore.isPending
+  const actionPending = workflow.ignore.isPending
     || workflow.resolve.isPending
     || workflow.snooze.isPending
     || workflow.assign.isPending
@@ -675,10 +691,7 @@ function ConversationPanel({
     if (actionPending) return
     setActionError(null)
     try {
-      if (actionDialog === "ask") {
-        workflowActionKey.current ??= crypto.randomUUID()
-        await workflow.askCustomer.mutateAsync({ message: actionText, waitingMinutes, idempotencyKey: workflowActionKey.current })
-      } else if (actionDialog === "ignore") {
+      if (actionDialog === "ignore") {
         await workflow.ignore.mutateAsync({ reason: actionText.trim() || undefined })
       } else if (actionDialog === "resolve") {
         workflowActionKey.current ??= crypto.randomUUID()
@@ -731,6 +744,7 @@ function ConversationPanel({
             </div>
           </div>
           <StatusBadge tone={item.statusTone}>{item.status}</StatusBadge>
+          {item.slaTitle && <SlaBadge tone={item.slaTone} title={item.slaTitle}>{item.sla}</SlaBadge>}
           <Button ref={detailsToggleRef} type="button" variant="outline" size="icon-sm" onClick={onToggleDetails}
             className="shrink-0 border-white/10 bg-[#111a28]" aria-label={t("Szczegóły sprawy")}
             aria-expanded={detailsOpen} aria-controls={detailsOpen ? "case-details" : undefined}><PanelRight /></Button>
@@ -739,7 +753,6 @@ function ConversationPanel({
             <button type="button" onClick={() => workflow.claim.mutate()} disabled={!canClaim || workflow.claim.isPending} aria-busy={workflow.claim.isPending} className="flex h-8 items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-2.5 text-[11px] text-[#d8dce4] disabled:cursor-not-allowed disabled:opacity-50"><UserRound className="size-[17px]" />{workflow.claim.isPending ? t("Przejmowanie…") : t("Przejmij")}</button>
             <button type="button" onClick={() => record?.snoozedForCurrentUserUntil ? workflow.cancelSnooze.mutate() : setActionDialog("snooze")} disabled={workflow.cancelSnooze.isPending || (!record?.snoozedForCurrentUserUntil && !canSnooze)} className="flex h-8 items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-2.5 text-[11px] text-[#d8dce4] disabled:opacity-50"><AlarmClock className="size-[17px]" />{record?.snoozedForCurrentUserUntil ? t("Anuluj odłożenie") : t("Odłóż")}</button>
             <button type="button" onClick={() => setActionDialog("ignore")} disabled={!canIgnore} className="flex h-8 items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-2.5 text-[11px] text-[#d8dce4] disabled:opacity-50"><ThumbsDown className="size-[17px]" /> {t("Ignoruj")} {record ? `${record.ignoreVotes.current}/2` : ""}</button>
-            <button type="button" onClick={() => setActionDialog("ask")} disabled={!canAsk} className="flex h-8 items-center rounded-[9px] border border-white/[0.07] bg-[#111a28] px-2.5 text-[11px] text-[#d8dce4] disabled:opacity-50">{t("Dopytaj")}</button>
             <button type="button" onClick={() => setActionDialog("resolve")} disabled={!canResolve} className="flex h-8 items-center gap-2 rounded-[9px] border border-white/[0.07] bg-[#111a28] px-2.5 text-[11px] text-[#d8dce4] disabled:opacity-50"><Check className="size-[17px]" /> {t("Rozwiąż")}</button>
             {canReopen && <button type="button" onClick={() => setActionDialog("reopen")}
               className="flex h-8 items-center rounded-[9px] border border-violet-500/20 bg-violet-950/30 px-2.5 text-[11px] text-violet-200">
@@ -852,15 +865,14 @@ function ConversationPanel({
         <p id="composer-help" className="mt-1 text-[11px] text-[#9aa5b6]">{t(noteMode ? "Enter zapisuje · Shift+Enter dodaje nowy wiersz" : "Enter wysyła · Shift+Enter dodaje nowy wiersz")}</p>
         {(noteMode ? noteError : sendError) && <p role="alert" className="mt-2 text-sm text-red-400">{userError(noteMode ? noteError : sendError)}</p>}
       </div>
-      {actionDialog && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111b29] p-5 shadow-2xl"><h3 className="text-lg font-semibold text-white">{actionDialog === "ask" ? t("Dopytaj klienta") : actionDialog === "ignore" ? t("Głos ignorowania") : actionDialog === "resolve" ? t("Rozwiąż sprawę") : actionDialog === "snooze" ? t("Odłóż sprawę") : actionDialog === "reopen" ? t("Cofnij rozwiązanie") : t("Administracja sprawą")}</h3>
+      {actionDialog && <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-md rounded-xl border border-white/10 bg-[#111b29] p-5 shadow-2xl"><h3 className="text-lg font-semibold text-white">{actionDialog === "ignore" ? t("Głos ignorowania") : actionDialog === "resolve" ? t("Rozwiąż sprawę") : actionDialog === "snooze" ? t("Odłóż sprawę") : actionDialog === "reopen" ? t("Cofnij rozwiązanie") : t("Administracja sprawą")}</h3>
         {actionDialog === "reopen" && <p className="mt-3 text-sm text-[#cbd3df]">{t("Sprawa wróci do kolejki. Jeśli ten wątek ma już aktywną sprawę, otworzy się ona.")}</p>}
-        {actionDialog === "ask" && <><textarea autoFocus value={actionText} onChange={(event) => setActionText(event.target.value)} className="mt-4 h-28 w-full rounded-lg border border-white/10 bg-[#08111f] p-3 text-sm" placeholder={t("Pytanie do klienta")} /><label className="mt-3 block text-xs text-[#aeb8c8]">{t("Czas oczekiwania")}<select value={waitingMinutes} onChange={(event) => setWaitingMinutes(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-white/10 bg-[#08111f] p-2"><option value={60}>{t("1 godzina")}</option><option value={24 * 60}>{t("24 godziny")}</option><option value={3 * 24 * 60}>{t("3 dni")}</option><option value={7 * 24 * 60}>{t("7 dni")}</option></select></label></>}
         {actionDialog === "ignore" && <textarea autoFocus value={actionText} onChange={(event) => setActionText(event.target.value)} className="mt-4 h-24 w-full rounded-lg border border-white/10 bg-[#08111f] p-3 text-sm" placeholder={t("Powód (opcjonalnie)")} />}
         {(actionDialog === "resolve" || actionDialog === "admin") && <label className="mt-4 block text-xs text-[#aeb8c8]">{t("Kategoria rozwiązania")}<select value={resolutionCategory} onChange={(event) => setResolutionCategory(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[#08111f] p-2"><option value="">{t("Bez kategorii")}</option><option value="SOLVED">{t("Rozwiązane")}</option><option value="NO_ACTION_REQUIRED">{t("Brak wymaganej akcji")}</option><option value="DUPLICATE">{t("Duplikat")}</option><option value="OTHER">{t("Inne")}</option></select></label>}
         {actionDialog === "snooze" && <><div className="mt-4 flex gap-2">{[["1h", 60], [t("Jutro"), 24 * 60], [t("Tydzień"), 7 * 24 * 60]].map(([label, minutes]) => <button key={String(label)} type="button" onClick={() => setSnoozeUntil(localDateTime(new Date(Date.now() + Number(minutes) * 60_000)))} className="rounded-md border border-white/10 px-3 py-1.5 text-xs">{label}</button>)}</div><input aria-label={t("Data i godzina zakończenia odłożenia")} type="datetime-local" value={snoozeUntil} onChange={(event) => setSnoozeUntil(event.target.value)} className="mt-3 w-full rounded-lg border border-white/10 bg-[#08111f] p-2 text-sm" /></>}
         {actionDialog === "admin" && <label className="mt-4 block text-xs text-[#aeb8c8]">{t("Agent")}<select value={validAssignee ? assigneeId : ""} onChange={(event) => setAssigneeId(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[#08111f] p-2"><option value="">{t("Wybierz agenta")}</option>{availableAssignees.map((agent) => <option key={agent.id} value={agent.id}>{agent.displayName}{agent.ignoreWeight === 2 ? t(" · głos ignorowania ×2") : ""}</option>)}</select></label>}
         {actionError && <p role="alert" className="mt-3 text-sm text-red-400">{userError(actionError)}</p>}
-        <div data-case-action-region aria-busy={actionPending} className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => { setActionDialog(null); setActionError(null); workflowActionKey.current = null }} disabled={actionPending} className="rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-50">{t("Anuluj")}</button>{actionDialog === "admin" ? <>{record?.availableActions?.includes("ASSIGN") && <button type="button" onClick={() => void performAdminAction("assign")} disabled={actionPending || !validAssignee} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz")}</button>}{record?.availableActions?.includes("REASSIGN") && <button type="button" onClick={() => void performAdminAction("reassign")} disabled={actionPending || !validAssignee} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz ponownie")}</button>}{record?.availableActions?.includes("UNASSIGN") && <button type="button" onClick={() => void performAdminAction("unassign")} disabled={actionPending} className="rounded-lg border border-amber-400/30 px-4 py-2 text-sm text-amber-200 disabled:opacity-50">{t("Cofnij przypisanie")}</button>}{record?.availableActions?.includes("FORCE_RESOLVE") && <button type="button" onClick={() => void performAdminAction("forceResolve")} disabled={actionPending} className="rounded-lg bg-red-700 px-4 py-2 text-sm disabled:opacity-50">{t("Wymuś rozwiązanie")}</button>}</> : <button type="button" onClick={() => void performAction()} disabled={actionPending || (actionDialog === "ask" && !actionText.trim())} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{actionPending ? t("Zapisywanie…") : actionDialog === "reopen" ? t("Cofnij rozwiązanie") : t("Zatwierdź")}</button>}</div>
+        <div data-case-action-region aria-busy={actionPending} className="mt-5 flex flex-wrap justify-end gap-2"><button type="button" onClick={() => { setActionDialog(null); setActionError(null); workflowActionKey.current = null }} disabled={actionPending} className="rounded-lg border border-white/10 px-4 py-2 text-sm disabled:opacity-50">{t("Anuluj")}</button>{actionDialog === "admin" ? <>{record?.availableActions?.includes("ASSIGN") && <button type="button" onClick={() => void performAdminAction("assign")} disabled={actionPending || !validAssignee} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz")}</button>}{record?.availableActions?.includes("REASSIGN") && <button type="button" onClick={() => void performAdminAction("reassign")} disabled={actionPending || !validAssignee} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{t("Przypisz ponownie")}</button>}{record?.availableActions?.includes("UNASSIGN") && <button type="button" onClick={() => void performAdminAction("unassign")} disabled={actionPending} className="rounded-lg border border-amber-400/30 px-4 py-2 text-sm text-amber-200 disabled:opacity-50">{t("Cofnij przypisanie")}</button>}{record?.availableActions?.includes("FORCE_RESOLVE") && <button type="button" onClick={() => void performAdminAction("forceResolve")} disabled={actionPending} className="rounded-lg bg-red-700 px-4 py-2 text-sm disabled:opacity-50">{t("Wymuś rozwiązanie")}</button>}</> : <button type="button" onClick={() => void performAction()} disabled={actionPending} className="rounded-lg bg-violet-700 px-4 py-2 text-sm disabled:opacity-50">{actionPending ? t("Zapisywanie…") : actionDialog === "reopen" ? t("Cofnij rozwiązanie") : t("Zatwierdź")}</button>}</div>
       </div></div>}
     </section>
   )
@@ -900,6 +912,8 @@ function CaseDetails({ item, record, activity, items }: {
           <dd className="mt-1">{record.ignoreVotes.current} / {record.ignoreVotes.required}</dd>
         </div>}
         {record?.integration && <div>
+          <dt className="text-xs text-[#aeb8c8]">{t("Klient")}</dt>
+          <dd className="mt-1 mb-3">{record.customer.name}</dd>
           <dt className="text-xs text-[#aeb8c8]">{t("Integracja")}</dt>
           <dd className="mt-1">{record.integration.name}{record.integration.workspace && <><br />{record.integration.workspace}</>}</dd>
           <dd className="mt-1 text-xs text-[#aeb8c8]">{item.source} · {record.integration.externalChannelId}</dd>

@@ -237,3 +237,5 @@ Use Settings → Integrations → Message recovery (resync). Enable and save bef
 ## Admin provider onboarding
 
 Use [PROVIDER_ONBOARDING.md](PROVIDER_ONBOARDING.md) for per-instance bot setup, protected secret filenames, Teams RSC consent and acceptance. Automatic channel reconciliation is a PostgreSQL-backed worker; restarting the API does not reset due requests or provider cooldowns. Check Settings → Integrations for last/next discovery, discovered count and sanitized failure reason. Manual refresh is queued and respects Retry-After. No provider HTTP request holds a database transaction.
+
+The operational SLA reminder worker claims bounded deadline batches under Case row locks. Response breaches and customer follow-ups appear in the authenticated inbox bell. Each deadline is checkpointed once and recipients are persisted with their read status. The follow-up duration in SLA policy applies to future provider confirmations. The existing waiting scheduler enablement and poll-interval keys control this worker during upgrades.

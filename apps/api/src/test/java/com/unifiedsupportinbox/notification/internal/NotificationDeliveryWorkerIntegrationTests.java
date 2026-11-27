@@ -139,14 +139,14 @@ class NotificationDeliveryWorkerIntegrationTests {
         assertThat(count("outbox_events")).isEqualTo(1);
 
         amqpAdmin.removeBinding(deliveryBinding);
-        OutboxRelay.BatchResult failedPublish = outboxRelay.publishDueBatch();
+        OutboxRelay.BatchResult failedPublish = publishNotificationBatch();
         assertThat(failedPublish.published()).isZero();
         assertThat(failedPublish.retryScheduled()).isEqualTo(1);
         assertThat(singleString("SELECT status FROM outbox_events")).isEqualTo("PENDING");
 
         amqpAdmin.declareBinding(deliveryBinding);
         makeOutboxDue();
-        assertThat(outboxRelay.publishDueBatch().published()).isEqualTo(1);
+        assertThat(publishNotificationBatch().published()).isEqualTo(1);
         consumeWake(first.id());
 
         gateway.steps(FakeGateway.Step.success());
@@ -177,7 +177,7 @@ class NotificationDeliveryWorkerIntegrationTests {
 
         makeDeliveryDue(delivery.id());
         assertThat(deliveries.redispatchDue()).isEqualTo(1);
-        assertThat(outboxRelay.publishDueBatch().published()).isEqualTo(1);
+        assertThat(publishNotificationBatch().published()).isEqualTo(1);
         consumeWake(delivery.id());
         assertThat(worker.process(delivery.id())).isEqualTo(NotificationDeliveryWorker.AttemptResult.SENT);
         DeliveryRecord sent = repository.findById(delivery.id()).orElseThrow();
@@ -224,7 +224,7 @@ class NotificationDeliveryWorkerIntegrationTests {
         expireLease(delivery.id());
 
         assertThat(deliveries.redispatchDue()).isEqualTo(1);
-        assertThat(outboxRelay.publishDueBatch().published()).isEqualTo(1);
+        assertThat(publishNotificationBatch().published()).isEqualTo(1);
         consumeWake(delivery.id());
         gateway.steps(FakeGateway.Step.success());
         assertThat(worker.process(delivery.id())).isEqualTo(NotificationDeliveryWorker.AttemptResult.SENT);
@@ -245,7 +245,7 @@ class NotificationDeliveryWorkerIntegrationTests {
 
         makeDeliveryDue(delivery.id());
         assertThat(deliveries.redispatchDue()).isEqualTo(1);
-        assertThat(outboxRelay.publishDueBatch().published()).isEqualTo(1);
+        assertThat(publishNotificationBatch().published()).isEqualTo(1);
         consumeWake(delivery.id());
         assertThat(worker.process(delivery.id())).isEqualTo(NotificationDeliveryWorker.AttemptResult.SENT);
 
@@ -272,7 +272,7 @@ class NotificationDeliveryWorkerIntegrationTests {
         assertThat(replayed.attempts()).isZero();
 
         gateway.steps(FakeGateway.Step.success());
-        assertThat(outboxRelay.publishDueBatch().published()).isEqualTo(1);
+        assertThat(publishNotificationBatch().published()).isEqualTo(1);
         consumeWake(delivery.id());
         assertThat(worker.process(delivery.id())).isEqualTo(NotificationDeliveryWorker.AttemptResult.SENT);
         assertThat(repository.findById(delivery.id()).orElseThrow().replayCount()).isEqualTo(1);
@@ -294,7 +294,7 @@ class NotificationDeliveryWorkerIntegrationTests {
             } else {
                 makeDeliveryDue(delivery.id());
                 assertThat(deliveries.redispatchDue()).isEqualTo(1);
-                assertThat(outboxRelay.publishDueBatch().published()).isEqualTo(1);
+                assertThat(publishNotificationBatch().published()).isEqualTo(1);
                 consumeWake(delivery.id());
             }
             NotificationDeliveryWorker.AttemptResult result = worker.process(delivery.id());
@@ -372,12 +372,19 @@ class NotificationDeliveryWorkerIntegrationTests {
                 severity,
                 "{\"message\":\"safe test notification\"}",
                 "corr-" + intentKey));
+        // These tests isolate notification delivery wakes from configuration projection hints.
+        jdbc.update("DELETE FROM outbox_events WHERE aggregate_type = 'application'");
         assertThat(created).hasSize(1);
         return created.getFirst();
     }
 
+    private OutboxRelay.BatchResult publishNotificationBatch() {
+        jdbc.update("DELETE FROM outbox_events WHERE aggregate_type = 'application'");
+        return outboxRelay.publishDueBatch();
+    }
+
     private void publishWake(UUID deliveryId) {
-        assertThat(outboxRelay.publishDueBatch().published()).isEqualTo(1);
+        assertThat(publishNotificationBatch().published()).isEqualTo(1);
         consumeWake(deliveryId);
     }
 

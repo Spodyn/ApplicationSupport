@@ -6,28 +6,19 @@
 ## 1. State diagram
 
 ```text
-                         +-------------------------+
-                         |                         |
-                         v                         |
-NEW --Claim----------> VERIFICATION --Ask SENT--> WAITING_FOR_CUSTOMER
- |                       |   |                       |        |
- |                       |   +--Resolve----------> RESOLVED  |
- |                       |                           ^        |
- |                       +--Admin unassign--> NEW    |        |
- |                                                   |        |
- +--Ignore (<2)--> PARTIALLY_IGNORED                 |        |
- |                   |       |                       |        |
- |                   |       +--Claim----------> VERIFICATION|
- |                   |                               |        |
- |                   +--Ignore (>=2)--> IGNORED      |        |
- |                                                   |        |
- +--Ignore (>=2)----------------------> IGNORED      |        |
-                                                     |        |
-ADMIN + force_resolve from any nonterminal ----------+        |
-                                                              |
-WAITING customer reply / timeout ---------------------------> NEW
-
-RESOLVED / IGNORED + later customer message -> new linked NEW Case
+NEW / PARTIALLY_IGNORED -- eligible Claim --> VERIFICATION (OPEN)
+NEW -- Ignore (<2) --> PARTIALLY_IGNORED -- Ignore (>=2) --> IGNORED
+NEW -- Ignore (>=2) --> IGNORED
+VERIFICATION -- provider-confirmed Reply --> WAITING_FOR_CUSTOMER (ASKED)
+Owned WAITING_FOR_CUSTOMER -- further successful Reply --> WAITING_FOR_CUSTOMER with a restarted follow-up clock
+Owned WAITING_FOR_CUSTOMER -- customer reply --> VERIFICATION
+Historical unassigned WAITING_FOR_CUSTOMER -- eligible Claim --> VERIFICATION
+Historical unassigned WAITING_FOR_CUSTOMER -- customer reply --> NEW
+WAITING_FOR_CUSTOMER -- follow-up deadline --> WAITING_FOR_CUSTOMER with internal reminder
+VERIFICATION / owned WAITING_FOR_CUSTOMER -- owner Resolve --> RESOLVED
+VERIFICATION -- admin Unassign --> NEW
+Any nonterminal -- admin Force Resolve --> RESOLVED
+RESOLVED / IGNORED + later customer message --> active or new linked NEW Case
 ```
 
 ## 2. Status invariants
@@ -37,7 +28,7 @@ RESOLVED / IGNORED + later customer message -> new linked NEW Case
 | `NEW` | none | no | no | Active unclaimed work |
 | `PARTIALLY_IGNORED` | none | no | no | Ignore points below threshold |
 | `VERIFICATION` | exactly one | no | current owner only | Active owned work |
-| `WAITING_FOR_CUSTOMER` | retained after Reply, none after Ask Customer | no | no normal Reply | Wait starts after successful delivery |
+| `WAITING_FOR_CUSTOMER` | retained after Reply, null for historical rows | no | current owner only | Wait starts after successful delivery |
 | `IGNORED` | none | yes | no | Never reopened |
 | `RESOLVED` | historical last owner or null | yes | no | Explicit administrative undo only |
 
@@ -45,11 +36,10 @@ RESOLVED / IGNORED + later customer message -> new linked NEW Case
 
 | Action | Actor / permission | Allowed from | Preconditions | Result | Owner after | Primary side effects |
 |---|---|---|---|---|---|---|
-| Claim | active USER/ADMIN | `NEW`, `PARTIALLY_IGNORED` | target remains unowned; actor is not lifetime ignore voter | `VERIFICATION` | actor | deactivate active partial ignore votes; clear stale snoozes; audit Claim; start/resume in-progress, pause unclaimed |
-| Reply | current owner | `VERIFICATION` | actor has not ever voted Ignore in this Case | waits after successful delivery if the Case has not moved on | unchanged | durable SUPPORT Message + outbox, default wait of 24 hours, first-response completion, SLA pause |
+| Claim | active USER/ADMIN | `NEW`, `PARTIALLY_IGNORED`, historical unassigned `WAITING_FOR_CUSTOMER` | target remains unowned; actor is not lifetime ignore voter | `VERIFICATION` | actor | deactivate active partial ignore votes; clear stale snoozes; audit Claim; start/resume in-progress, pause unclaimed |
+| Reply | current owner | `VERIFICATION`, `WAITING_FOR_CUSTOMER` | actor has not ever voted Ignore in this Case | waits after successful delivery if the Case has not moved on | unchanged | durable SUPPORT Message + outbox, configured follow-up clock starts or restarts; legacy SLA pause on entry, first-response completion |
 | Ignore | eligible viewer | `NEW`, `PARTIALLY_IGNORED` | effective weight calculated by backend | partial or `IGNORED` | none | store immutable vote snapshot; update points; actor becomes lifetime-ineligible for Claim/Reply |
-| Ask Customer | current owner | `VERIFICATION` | outgoing human support message required | remains `VERIFICATION` until provider `SENT`; then `WAITING_FOR_CUSTOMER` | owner until `SENT`, then null | set waiting deadline after `SENT`; waiting SLA pause if policy; delivery failure keeps ownership |
-| Resolve | current owner | `VERIFICATION` | optional controlled resolution category | `RESOLVED` | preserves owner | end SLA timers; clear snoozes; audit resolution |
+| Resolve | current owner | `VERIFICATION`, `WAITING_FOR_CUSTOMER` | optional controlled resolution category | `RESOLVED` | preserves owner | end SLA timers; clear snoozes; audit resolution |
 | Admin assign | `ADMIN + reassign_cases` | `NEW`, `PARTIALLY_IGNORED` | target active/eligible/not lifetime ignore voter | `VERIFICATION` | target | audit assignment; not counted as Claim metric |
 | Admin reassign | `ADMIN + reassign_cases` | `VERIFICATION` | target active/eligible/not lifetime ignore voter | `VERIFICATION` | target | in-progress time continues; audit change |
 | Admin unassign | `ADMIN + reassign_cases` | `VERIFICATION` | none | `NEW` | null | preserve elapsed SLA; audit; unclaimed resumes |
@@ -81,23 +71,13 @@ Reset behavior:
 - an old voter may vote again after reset;
 - lifetime Claim/Reply prohibition remains forever for that Case.
 
-## 5. Ask Customer lifecycle
+## 5. Public replies and waiting
 
-### 5.1 Start
+1. The eligible owner queues a public reply with text, CLEAN attachments, or both. The Case retains its state and owner while delivery is pending or retrying.
+2. Provider acceptance moves OPEN to ASKED only when the Case version, owner and customer activity still permit it. The transition sets the waiting deadline and applies the existing SLA pause policy.
+3. A further current successful reply while ASKED restarts the follow-up deadline and retains ownership. Permanent failure records Message FAILED and leaves the workflow state intact.
 
-1. Current owner chooses Ask Customer in `VERIFICATION`.
-2. The command durably creates the outgoing human support Message and provider-delivery work.
-3. Case remains `VERIFICATION`; owner remains unchanged while the Message is queued/sending/retrying.
-4. When provider returns successful acceptance and Message becomes `SENT`, the Case atomically becomes `WAITING_FOR_CUSTOMER`, owner becomes null and `waiting_until` is established.
-
-This ordering prevents a Case from appearing to wait for a customer who never received the question.
-
-### 5.2 Failure
-
-- Transient provider failure -> retry same Message under common retry policy.
-- Permanent provider failure -> Message `FAILED`; Case remains `VERIFICATION` with the original owner.
-
-### 5.3 Customer reply
+### 5.1 Customer reply
 
 Customer inbound while waiting:
 
@@ -108,15 +88,9 @@ Customer inbound while waiting:
 - ends personal snoozes;
 - resumes applicable SLA timers with preserved accumulated business time.
 
-### 5.4 Timeout
+### 5.2 Follow-up expiry
 
-At `waiting_until`:
-
-- return to `VERIFICATION` with retained owner for owned waiting, or `NEW` for unassigned waiting;
-- clear waiting deadline;
-- write system/audit `WAITING_TIMEOUT`;
-- resume applicable SLA timers with preserved accumulated time;
-- do **not** send automatic follow-up in v1.
+At the follow-up deadline, the Case retains its status, owner, and deadline. The deadline can generate one internal reminder per eligible recipient. A subsequent customer message switches to the operational response clock. A subsequent successful public reply establishes its own follow-up deadline.
 
 ## 6. Terminal Case and linked successor
 
@@ -151,10 +125,10 @@ Read acknowledgement affects only the current user.
 |---|---|---|---|
 | `NEW` / `PARTIALLY_IGNORED` | running until completed | running | paused |
 | `VERIFICATION` | running until first human `SENT` | paused | running |
-| `WAITING_FOR_CUSTOMER` | if not already completed, policy semantics remain; Ask `SENT` can complete it | active-unowned semantics preserved but waiting is not counted as active unclaimed work | paused; waiting pause policy applies |
+| `WAITING_FOR_CUSTOMER` | if not already completed, policy semantics remain; provider acceptance of a human reply can complete it | active-unowned semantics preserved but waiting is not counted as active unclaimed work | paused; waiting pause policy applies |
 | `RESOLVED` / `IGNORED` | stopped | stopped | stopped |
 
-The table above describes legacy aging metrics. The inbox uses FRT once, followed by one NRT for each new series after a confirmed human response. While waiting, the queue has no active response deadline. Terminal cases remain neutral and historical breaches remain visible. Timers preserve accumulated business time across pause/resume. Reassign never resets in-progress time. A Reassign to the current owner has no workflow, audit or notification effect, and bulk assignment reports that item as skipped.
+The table above describes legacy aging metrics. The inbox uses the latest message’s operational FRT or NRT deadline, or a separate follow-up deadline. Historical response metrics keep their original FRT and NRT anchors. Terminal cases remain neutral and historical breaches remain visible. Timers preserve accumulated business time across pause/resume. Reassign never resets in-progress time. A Reassign to the current owner has no workflow, audit or notification effect, and bulk assignment reports that item as skipped.
 
 ## 9. Concurrency requirements
 

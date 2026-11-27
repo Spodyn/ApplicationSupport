@@ -44,6 +44,7 @@ function commonCase(input: {
   slaState: string | null
   slaDueAt: string | null
   responseSla?: CaseListItem["responseSla"]
+  operationalDeadline?: CaseListItem["operationalDeadline"]
   ignoreScore: number
   waitingUntil: string | null
   createdAt: string
@@ -55,12 +56,15 @@ function commonCase(input: {
   lastMessageId?: string | null
   availableActions?: string[]
 }): InboxCase {
+  const deadline = input.operationalDeadline
+  const channelName = input.channelName?.trim() ?? ""
   return {
     id: input.id,
     reference: input.reference,
     subject: input.subject,
     platform: mapApiChannel(input.provider),
-    sourceChannel: input.provider === "SLACK" ? `#${input.channelName}` : input.channelName,
+    sourceChannel: input.provider === "SLACK" && channelName && !channelName.startsWith("#")
+      ? `#${channelName}` : channelName,
     customer: { id: !input.customerId || input.customerId === "00000000-0000-0000-0000-000000000000" ? "unassigned" : input.customerId, name: input.customerName, contactName: input.customerName },
     status: input.status.toLowerCase() as InboxCase["status"],
     workflowStatus: input.workflowStatus,
@@ -82,6 +86,15 @@ function commonCase(input: {
       kind: input.responseSla?.kind ?? undefined,
       previouslyBreached: input.responseSla?.historicallyBreached,
       remainingBusinessSeconds: input.responseSla?.remainingBusinessSeconds ?? undefined,
+      operational: deadline ? {
+        id: deadline.id, kind: deadline.kind, state: deadline.state, dueAt: Date.parse(deadline.dueAt),
+        warningAt: deadline.warningAt === null ? null : Date.parse(deadline.warningAt),
+        observedAt: Date.parse(deadline.observedAt), receivedAt: performance.now(),
+        clockValidUntil: Date.parse(deadline.clockValidUntil), remainingMillis: deadline.remainingMillis,
+        businessIntervals: deadline.businessIntervals?.map((range) => ({
+          start: Date.parse(range.start), end: Date.parse(range.end),
+        })) ?? null,
+      } : undefined,
     },
     ignoreVotes: { current: input.ignoreScore, required: 2, voters: [] },
     metadata: { priority: "Nieustalony", category: "", product: "", environment: "", tags: [] },
@@ -122,6 +135,7 @@ export function mapCaseDetail(detail: CaseDetail): InboxCase {
       ownerUserId: detail.owner.id,
       ownerDisplayName: detail.owner.displayName,
       responseSla: detail.responseSla,
+      operationalDeadline: detail.operationalDeadline,
       slaState: detail.sla?.state ?? null,
       slaDueAt: detail.sla?.firstResponseDueAt ?? null,
       ignoreScore: detail.ignoreScore,
@@ -240,7 +254,21 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
         ownerId: query.ownerId,
         search: query.search,
       })
-      return { items: page.items.map(mapCaseListItem), nextCursor: page.nextCursor ?? undefined, quickViewCounts: page.quickViewCounts }
+      return {
+        items: page.items.map(mapCaseListItem), nextCursor: page.nextCursor ?? undefined, quickViewCounts: page.quickViewCounts,
+        attentionRefreshInMs: page.nextAttentionAt && page.observedAt
+          ? Date.parse(page.nextAttentionAt) - Date.parse(page.observedAt) : undefined,
+      }
+    },
+    async listSlaReminders() {
+      const page = await client.listOperationalSlaReminders()
+      return { unreadCount: page.unreadCount, items: page.items.map((item) => ({
+        id: item.id, caseId: item.caseId, reference: item.reference, kind: item.kind,
+        channel: mapApiChannel(item.provider), remindedAt: item.remindedAt, unread: item.unread,
+      })) }
+    },
+    async markSlaRemindersRead(deadlineId) {
+      await client.readOperationalSlaReminders({ body: { deadlineId } })
     },
     async getFilterOptions() {
       const options = await client.getCaseFilterOptions()
@@ -295,13 +323,6 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
         caseId,
         "Idempotency-Key": crypto.randomUUID(),
         body: { reason: input.reason ?? null },
-      })
-    },
-    async askCustomer(caseId, input) {
-      await client.askCustomer({
-        caseId,
-        "Idempotency-Key": input.idempotencyKey ?? crypto.randomUUID(),
-        body: { message: input.message, waitingMinutes: input.waitingMinutes, bodyFormat: "PLAIN_TEXT" },
       })
     },
     async resolve(caseId, input) {

@@ -6,7 +6,6 @@ import { useRealtimeCase } from "@/lib/realtime/realtime-context"
 import { serviceRegistry } from "./registry"
 import { collectMatchingCaseIds } from "./bulk-selection"
 import type {
-  InboxAskInput,
   InboxIgnoreInput,
   InboxListQuery,
   InboxResolveInput,
@@ -49,6 +48,9 @@ export const queryKeys = {
   inboxActivity: (caseId: string) => ["support-inbox", "activity", caseId] as const,
   inboxAssignees: (caseId: string) => ["support-inbox", "assignees", caseId] as const,
   inboxFilterOptions: () => ["support-inbox", "filter-options"] as const,
+  slaReminders: (accountId?: string) => accountId
+    ? ["support-inbox", "sla-reminders", accountId] as const
+    : ["support-inbox", "sla-reminders"] as const,
   administrationUsers: (query?: AdministrationUserQuery) =>
     ["administration", "users", query ?? {}] as const,
   currentAdministrationUser: () => ["administration", "current-user"] as const,
@@ -149,6 +151,22 @@ export function useInboxFilterOptions() {
   })
 }
 
+export function useSlaReminders() {
+  const accountId = useCurrentUser().data?.id
+  const queryClient = useQueryClient()
+  const reminders = useQuery({
+    queryKey: queryKeys.slaReminders(accountId),
+    queryFn: () => serviceRegistry.inbox.listSlaReminders(),
+    enabled: Boolean(accountId),
+    refetchInterval: 15_000,
+  })
+  const markRead = useMutation({
+    mutationFn: (deadlineId?: string) => serviceRegistry.inbox.markSlaRemindersRead(deadlineId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.slaReminders(accountId) }),
+  })
+  return { reminders, markRead }
+}
+
 export function useInboxActivity(caseId?: string) {
   return useInfiniteQuery({
     queryKey: queryKeys.inboxActivity(caseId ?? ""),
@@ -171,7 +189,7 @@ export function useInboxCase(caseId?: string) {
   return useQuery({
     queryKey: queryKeys.inboxCase(caseId ?? ""),
     queryFn: () => serviceRegistry.inbox.getCase(caseId ?? ""),
-    refetchInterval: (query) => query.state.data?.sla.dueAt ? 15_000 : false,
+    refetchInterval: (query) => query.state.data?.sla.operational || query.state.data?.sla.dueAt ? 15_000 : false,
     enabled: Boolean(caseId),
   })
 }
@@ -227,11 +245,6 @@ export function useInboxWorkflow(caseId?: string) {
       serviceRegistry.inbox.ignore(requireCaseId(), input),
     onSuccess: invalidateConversation,
   })
-  const askCustomer = useMutation({
-    mutationFn: (input: InboxAskInput) =>
-      serviceRegistry.inbox.askCustomer(requireCaseId(), input),
-    onSuccess: invalidateConversation,
-  })
   const resolve = useMutation({
     mutationFn: (input: InboxResolveInput) =>
       serviceRegistry.inbox.resolve(requireCaseId(), input),
@@ -277,7 +290,7 @@ export function useInboxWorkflow(caseId?: string) {
     onSuccess: invalidateConversation,
   })
 
-  return { claim, ignore, askCustomer, resolve, snooze, cancelSnooze, assign, unassign, forceResolve, sendMessage, retryMessage, addInternalNote, reopen }
+  return { claim, ignore, resolve, snooze, cancelSnooze, assign, unassign, forceResolve, sendMessage, retryMessage, addInternalNote, reopen }
 }
 
 export function useMarkAllResolvedRead() {
@@ -293,6 +306,7 @@ export function useAdministrationUsers(query?: AdministrationUserQuery) {
   return useQuery({
     queryKey: queryKeys.administrationUsers(query),
     queryFn: () => serviceRegistry.administrationUsers.list(query),
+    refetchInterval: 30_000,
   })
 }
 

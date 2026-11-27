@@ -4,6 +4,7 @@ import com.unifiedsupportinbox.OutboxEventStore;
 import com.unifiedsupportinbox.audit.AuditActorType;
 import com.unifiedsupportinbox.audit.AuditEventStore;
 import com.unifiedsupportinbox.identity.UserRole;
+import com.unifiedsupportinbox.sla.CaseOperationalDeadlines;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -23,55 +24,56 @@ import tools.jackson.databind.node.ObjectNode;
 @Service
 class WaitingDeliveryFinalizer {
 
-    private static final long REPLY_WAIT_SECONDS = 24 * 60 * 60;
     private static final String CASE_UPDATED = "case.updated";
 
     private final JdbcTemplate jdbc;
     private final AuditEventStore audit;
     private final OutboxEventStore outbox;
     private final ObjectMapper json;
+    private final CaseOperationalDeadlines deadlines;
 
     WaitingDeliveryFinalizer(
             JdbcTemplate jdbc,
             AuditEventStore audit,
             OutboxEventStore outbox,
-            ObjectMapper json) {
+            ObjectMapper json, CaseOperationalDeadlines deadlines) {
         this.jdbc = jdbc;
         this.audit = audit;
         this.outbox = outbox;
         this.json = json;
+        this.deadlines = deadlines;
     }
 
     boolean finalizeWaiting(MessageDeliveryRepository.DeliveryMessageRecord message, Instant sentAt) {
         Long waitingSeconds = message.askWaitingSeconds();
         Long replyVersion = message.replyWaitCaseVersion();
         if (waitingSeconds == null && replyVersion == null) return false;
-        boolean ask = waitingSeconds != null;
-        Instant waitingUntil = sentAt.plusSeconds(ask ? waitingSeconds : REPLY_WAIT_SECONDS);
-        UUID retainedOwner = ask ? null : message.authorUserId();
-        String action = ask ? "ASK_CUSTOMER" : "REPLY_WAITING";
-        // MessageDeliveryService holds the shared Case row lock with intake.
+        Instant waitingUntil = sentAt.plusSeconds(waitingSeconds == null ? 60L * deadlines.customerWaitingMinutes() : waitingSeconds);
+        UUID owner = message.authorUserId();
+        // Replies queued together in OPEN may share the version before the first
+        // acceptance. A customer reply or ownership change advances past that version.
         Transition transition = jdbc.query("""
                 UPDATE cases
                 SET status = 'WAITING_FOR_CUSTOMER',
-                    owner_user_id = ?,
                     waiting_until = ?,
                     updated_at = statement_timestamp(),
                     last_activity_at = statement_timestamp(),
-                    version = version + 1
+                    version = CASE WHEN status = 'VERIFICATION' THEN version + 1 ELSE version END
                 WHERE id = ?
-                  AND status = 'VERIFICATION'
                   AND owner_user_id = ?
-                  AND (?::bigint IS NULL OR version = ?::bigint)
+                  AND ((status = 'VERIFICATION' AND
+                        (version = ?::bigint OR (?::bigint IS NULL AND updated_at <= ?::timestamptz)))
+                       OR (status = 'WAITING_FOR_CUSTOMER' AND version IN (?::bigint, ?::bigint + 1)))
                   AND NOT EXISTS (
                       SELECT 1 FROM messages inbound
                       WHERE inbound.case_id = cases.id AND inbound.inbound
                         AND inbound.created_at >= ?::timestamptz
                   )
-                RETURNING version
-                """, (rs, rowNum) -> new Transition(rs.getLong("version")),
-                retainedOwner, OffsetDateTime.ofInstant(waitingUntil, ZoneOffset.UTC),
-                message.caseId(), message.authorUserId(), replyVersion, replyVersion,
+                RETURNING new.version, old.status = 'VERIFICATION' AS entered
+                """, (rs, rowNum) -> new Transition(rs.getLong("version"), rs.getBoolean("entered")),
+                OffsetDateTime.ofInstant(waitingUntil, ZoneOffset.UTC),
+                message.caseId(), owner, replyVersion, replyVersion,
+                OffsetDateTime.ofInstant(message.createdAt(), ZoneOffset.UTC), replyVersion, replyVersion,
                 OffsetDateTime.ofInstant(message.createdAt(), ZoneOffset.UTC)).stream().findFirst().orElse(null);
 
         if (transition == null) {
@@ -79,23 +81,25 @@ class WaitingDeliveryFinalizer {
             // retry the provider post if an admin/state race made WAITING inapplicable.
             return false;
         }
+        deadlines.followUp(message.caseId(), message.messageId(), sentAt, waitingUntil);
+        if (!transition.entered()) return false;
 
         UserRole role = jdbc.queryForObject(
                 "SELECT role FROM users WHERE id = ?",
                 (rs, rowNum) -> UserRole.valueOf(rs.getString("role")),
-                message.authorUserId());
+                owner);
 
         Map<String, Object> metadata = new LinkedHashMap<>();
-        metadata.put("action", action);
-        if (retainedOwner != null) metadata.put("ownerUserId", retainedOwner.toString());
+        metadata.put("action", "REPLY_WAITING");
+        metadata.put("ownerUserId", owner.toString());
         metadata.put("status", "WAITING_FOR_CUSTOMER");
         metadata.put("messageId", message.messageId().toString());
         metadata.put("waitingUntil", waitingUntil.toString());
         metadata.put("version", transition.version());
         audit.append(
                 role == UserRole.ADMIN ? AuditActorType.ADMIN : AuditActorType.USER,
-                message.authorUserId(),
-                "CASE_" + action,
+                owner,
+                "CASE_REPLY_WAITING",
                 "CASE",
                 message.caseId(),
                 message.caseId(),
@@ -105,7 +109,7 @@ class WaitingDeliveryFinalizer {
                 CASE_UPDATED,
                 "case",
                 message.caseId(),
-                payload(message.caseId(), message.messageId(), waitingUntil, retainedOwner, transition.version()),
+                payload(message.caseId(), message.messageId(), waitingUntil, owner, transition.version()),
                 message.correlationId());
         return true;
     }
@@ -114,13 +118,12 @@ class WaitingDeliveryFinalizer {
         ObjectNode payload = json.createObjectNode();
         payload.put("caseId", caseId.toString());
         payload.put("status", "WAITING_FOR_CUSTOMER");
-        if (owner == null) payload.putNull("ownerUserId");
-        else payload.put("ownerUserId", owner.toString());
+        payload.put("ownerUserId", owner.toString());
         payload.put("messageId", messageId.toString());
         payload.put("waitingUntil", waitingUntil.toString());
         payload.put("version", version);
         return payload.toString();
     }
 
-    private record Transition(long version) {}
+    private record Transition(long version, boolean entered) {}
 }

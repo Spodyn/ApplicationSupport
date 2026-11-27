@@ -60,6 +60,13 @@ test('removed operations are breaking', () => {
   assert.match(findBreakingChanges(base, next).join('\n'), /operation removed/)
 })
 
+test('deprecated operations remain compatible and are annotated in the client', () => {
+  const next = structuredClone(base)
+  next.paths['/api/v1/examples'].get.deprecated = true
+  assert.deepEqual(findBreakingChanges(base, next), [])
+  assert.match(generatedFiles(next).get('client.gen.ts'), /\/\*\* @deprecated \*\/\n  listExamples:/)
+})
+
 test('generated client carries operation inputs and response types', () => {
   const client = generatedFiles(base).get('client.gen.ts')
   assert.match(client, /export interface ListExamplesInput/)

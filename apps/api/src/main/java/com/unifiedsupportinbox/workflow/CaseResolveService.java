@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.workflow;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.cases.CaseStatus;
 import com.unifiedsupportinbox.sla.CaseResponseCycles;
 import com.unifiedsupportinbox.IdempotencyResponse;
 import com.unifiedsupportinbox.IdempotencyResult;
@@ -93,7 +94,7 @@ public class CaseResolveService {
                 caseId).stream().findFirst()
                 .orElseThrow(() -> ApiProblemException.notFound("Case was not found."));
 
-        if (!"VERIFICATION".equals(snapshot.status())) {
+        if (!CaseStatus.valueOf(snapshot.status()).acceptsOwnerWork() || snapshot.ownerUserId() == null) {
             throw ApiProblemException.conflict("The Case cannot be resolved in its current state.");
         }
         if (!userId.equals(snapshot.ownerUserId())) {
@@ -109,7 +110,7 @@ public class CaseResolveService {
                     updated_at = statement_timestamp(),
                     last_activity_at = statement_timestamp(),
                     version = version + 1
-                WHERE id = ? AND version = ? AND status = 'VERIFICATION' AND owner_user_id = ?
+                WHERE id = ? AND version = ? AND status = ? AND owner_user_id = ?
                 RETURNING version, resolved_at
                 """, (rs, rowNum) -> new Resolved(
                     rs.getLong("version"),
@@ -117,6 +118,7 @@ public class CaseResolveService {
                 category == null ? null : category.name(),
                 caseId,
                 snapshot.version(),
+                snapshot.status(),
                 userId).stream().findFirst()
                 .orElseThrow(() -> ApiProblemException.conflict("The Case changed before it could be resolved."));
 

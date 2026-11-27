@@ -34,18 +34,20 @@ class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder, CaseSl
     private final BusinessHoursScheduleCatalog schedules;
     private final NotificationDeliveryQueue notifications;
     private final ObjectMapper json;
+    private final OperationalDeadlineService operational;
     private final BusinessTimeCalculator businessTime = new BusinessTimeCalculator();
 
     CaseSlaService(
             JdbcTemplate jdbc,
             SlaPolicyRepository policies,
             BusinessHoursScheduleCatalog schedules,
-            NotificationDeliveryQueue notifications, ObjectMapper json) {
+            NotificationDeliveryQueue notifications, ObjectMapper json, OperationalDeadlineService operational) {
         this.jdbc = jdbc;
         this.policies = policies;
         this.schedules = schedules;
         this.notifications = notifications;
         this.json = json;
+        this.operational = operational;
     }
 
     @Override @Transactional
@@ -60,11 +62,12 @@ class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder, CaseSl
         jdbc.update("""
                 INSERT INTO case_sla (case_id, policy_id, first_response_started_at, first_response_due_at,
                     unclaimed_started_at, unclaimed_warning_at, unclaimed_breach_at, first_response_warning_at,
-                    response_schedule, next_response_minutes, response_policy_version, response_pause_waiting)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?) ON CONFLICT (case_id) DO NOTHING
+                    response_schedule, next_response_minutes, response_policy_version, response_pause_waiting,
+                    operational_first_response_minutes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?, ?) ON CONFLICT (case_id) DO NOTHING
                 """, caseId, policy.id(), at(customerSentAt), at(first.due()), startedAt,
                 at(unclaimedWarning), at(unclaimedBreach), at(first.warning()), json.writeValueAsString(schedule),
-                policy.nextResponseMinutes(), policy.version(), policy.pauseWaiting());
+                policy.nextResponseMinutes(), policy.version(), policy.pauseWaiting(), policy.firstResponseMinutes());
     }
 
     private BusinessHoursScheduleView activeSchedule() {
@@ -90,6 +93,7 @@ class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder, CaseSl
     public void customerMessage(UUID caseId, UUID messageId, Instant receivedAt) {
         // The intake command holds the Case row through this write. A response that
         // finishes concurrently observes either the entire inbound event or none of it.
+        operational.customerMessage(caseId, messageId, receivedAt);
         jdbc.update("UPDATE case_sla SET last_response_sender = 'CUSTOMER' WHERE case_id = ?", caseId);
         ResponseSnapshot snapshot = jdbc.query("""
                 SELECT s.response_schedule::text, s.next_response_minutes
@@ -153,6 +157,7 @@ class CaseSlaService implements CaseSlaInitializer, CaseSlaClaimRecorder, CaseSl
                 instant(rs.getObject("paused_at", OffsetDateTime.class)), rs.getLong("total_paused_seconds"),
                 rs.getLong("resolved_pause_seconds")), caseId).stream().findFirst().orElse(null);
         if (terminal == null) return;
+        operational.finish(caseId, terminal.ended(), false);
         OffsetDateTime ended = at(terminal.ended());
         jdbc.update("""
                 UPDATE case_sla SET first_response_stopped_at = ?, first_response_breached_at =

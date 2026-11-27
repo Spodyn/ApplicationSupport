@@ -80,10 +80,15 @@ class CaseListService {
                            latest.sent_at AS last_message_at, latest.author AS last_message_author,
                            latest.kind AS last_message_kind, latest_file.original_filename AS last_message_file,
                            reads.last_read_message_id, snoozes.until_at AS snoozed_until,
-                           response.state AS sla_state, response.due_at AS sla_due_at,
+                           COALESCE(op.state, response.state) AS sla_state, COALESCE(op.due_at, response.due_at) AS sla_due_at,
                            response.state AS response_state, response.kind AS response_kind,
                            response.warning_at AS response_warning_at, response.due_at AS response_due_at,
-                           response.historically_breached, response.last_response_sender,
+                           (response.historically_breached OR EXISTS (
+                           SELECT 1 FROM case_operational_deadlines h WHERE h.case_id = c.id AND h.breached_at IS NOT NULL
+                       )) AS historically_breached, response.last_response_sender,
+                           op.id AS operational_id, op.kind AS operational_kind, op.state AS operational_state,
+                       op.started_at AS operational_started_at, op.warning_at AS operational_warning_at,
+                       op.due_at AS operational_due_at, op.schedule::text AS operational_schedule,
                            COALESCE(votes.points, 0) AS ignore_score,
                            EXISTS (
                                SELECT 1 FROM messages inbound
@@ -101,6 +106,7 @@ class CaseListService {
                     LEFT JOIN case_read_states reads ON reads.case_id = c.id AND reads.user_id = ?
                     LEFT JOIN case_snoozes snoozes ON snoozes.case_id = c.id AND snoozes.user_id = ? AND snoozes.until_at > CURRENT_TIMESTAMP
                     JOIN case_response_sla_projection response ON response.case_id = c.id
+                    LEFT JOIN case_operational_deadline_projection op ON op.case_id = c.id
                     LEFT JOIN LATERAL (
                         SELECT m.id, m.body, m.deleted_at, m.kind,
                                COALESCE(m.provider_created_at, m.created_at) AS sent_at,
@@ -133,8 +139,6 @@ class CaseListService {
                       AND (?::boolean = FALSE OR (owner_user_id IS NULL
                            AND (?::boolean = FALSE OR workflow_status IN ('NEW', 'OPEN'))))
                       AND (?::boolean = FALSE OR unread)
-                      AND (?::boolean = FALSE OR (status NOT IN ('IGNORED', 'RESOLVED', 'WAITING_FOR_CUSTOMER')
-                          AND sla_state IN ('WARNING', 'BREACHED')))
                       AND (?::varchar IS NULL OR status = ?::varchar)
                       AND (?::varchar IS NULL OR workflow_status = ?::varchar)
                       AND (?::varchar = 'ALL'
@@ -157,24 +161,28 @@ class CaseListService {
                            workflow_status <> 'RESOLVED' AND owner_user_id IS NULL
                                AND (?::boolean = FALSE OR workflow_status IN ('NEW', 'OPEN')) AS quick_unassigned,
                            status NOT IN ('IGNORED', 'RESOLVED') AND owner_user_id = ?::uuid AS quick_mine,
-                           status NOT IN ('IGNORED', 'RESOLVED', 'WAITING_FOR_CUSTOMER')
-                               AND sla_state IN ('WARNING', 'BREACHED') AS quick_sla
+                           sla_state IN ('WARNING', 'BREACHED', 'FOLLOW_UP_DUE') AS quick_sla,
+                           ?::boolean AS attention_only
                     FROM filtered
                 ), totals AS (
-                    SELECT count(*) AS all_count, count(*) FILTER (WHERE quick_unassigned) AS unassigned_count,
-                           count(*) FILTER (WHERE quick_mine) AS mine_count,
-                           count(*) FILTER (WHERE quick_sla) AS sla_count
+                    SELECT count(*) FILTER (WHERE NOT attention_only OR quick_sla) AS all_count,
+                           count(*) FILTER (WHERE quick_unassigned AND (NOT attention_only OR quick_sla)) AS unassigned_count,
+                           count(*) FILTER (WHERE quick_mine AND (NOT attention_only OR quick_sla)) AS mine_count,
+                           count(*) FILTER (WHERE quick_sla) AS sla_count,
+                           min(CASE WHEN sla_state = 'ON_TRACK'
+                                    THEN COALESCE(operational_warning_at, response_warning_at, sla_due_at)
+                                    WHEN sla_state = 'WARNING' THEN sla_due_at END) AS next_attention_at
                     FROM views
                 ), ranked AS (
                     SELECT views.*,
                            CASE WHEN workflow_status = 'RESOLVED' THEN 4
-                                WHEN workflow_status = 'WAITING_ON_CUSTOMER' THEN 3
                                 WHEN sla_state = 'BREACHED' THEN 0
-                                WHEN sla_state = 'WARNING' THEN 1
+                                WHEN sla_state IN ('WARNING', 'FOLLOW_UP_DUE') THEN 1
+                                WHEN workflow_status = 'WAITING_ON_CUSTOMER' THEN 3
                                 ELSE 2 END AS sort_bucket,
                            COALESCE(sla_due_at, 'infinity'::timestamptz) AS sort_due
                     FROM views
-                    WHERE CASE ?::varchar
+                    WHERE (NOT attention_only OR quick_sla) AND CASE ?::varchar
                         WHEN 'UNASSIGNED' THEN quick_unassigned
                         WHEN 'MINE' THEN quick_mine
                         WHEN 'SLA' THEN quick_sla
@@ -203,12 +211,12 @@ class CaseListService {
                 """, (rs, ignored) -> new PageRow(
                         rs.getObject("id") == null ? null : item(rs),
                         new QuickViewCounts(rs.getLong("unassigned_count"), rs.getLong("mine_count"),
-                                rs.getLong("sla_count"), rs.getLong("all_count"))), userId, userId,
+                                rs.getLong("sla_count"), rs.getLong("all_count")),
+                        instant(rs, "next_attention_at"), instant(rs, "response_observed_at")), userId, userId,
                 view == CaseListView.SNOOZED,
                 applied.mine(), userId,
                 applied.unassigned(), applied.actionableQueue(),
                 applied.unread(),
-                applied.slaAttention(),
                 applied.status() == null ? null : applied.status().name(),
                 applied.status() == null ? null : applied.status().name(),
                 applied.workflowStatus() == null ? null : applied.workflowStatus().name(),
@@ -221,7 +229,7 @@ class CaseListService {
                 applied.search(), searchPattern(applied.search()), searchPattern(applied.search()),
                 searchPattern(applied.search()), searchPattern(applied.search()), searchPattern(applied.search()),
                 searchPattern(applied.search()), searchPattern(applied.search()),
-                applied.actionableQueue(), userId, quickView.name(),
+                applied.actionableQueue(), userId, applied.slaAttention(), quickView.name(),
                 position == null ? null : position.id(),
                 position == null ? null : OffsetDateTime.ofInstant(position.sortValue(), java.time.ZoneOffset.UTC),
                 position == null ? null : position.id(), limit + 1);
@@ -234,7 +242,7 @@ class CaseListService {
                         new CursorPosition(page.getLast().lastActivityAt(), page.getLast().id()),
                         scope(userId, view, applied, quickView))
                 : null;
-        return new CaseListPage(page, next, rows.getFirst().counts());
+        return new CaseListPage(page, next, rows.getFirst().counts(), rows.getFirst().nextAttentionAt(), rows.getFirst().observedAt());
     }
 
     private void requireEligibleUser(UUID userId) {
@@ -284,7 +292,7 @@ class CaseListService {
                 rs.getString("last_message_kind"), rs.getString("last_message_file"),
                 rs.getBoolean("unread"), instant(rs, "snoozed_until"), rs.getString("sla_state"),
                 instant(rs, "sla_due_at"), rs.getInt("ignore_score"), instant(rs, "waiting_until"),
-                instant(rs, "created_at"), instant(rs, "updated_at"), instant(rs, "last_activity_at"), CaseResponseSla.read(rs, json));
+                instant(rs, "created_at"), instant(rs, "updated_at"), instant(rs, "last_activity_at"), CaseResponseSla.read(rs, json), CaseOperationalDeadline.read(rs, json));
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {
@@ -304,8 +312,9 @@ class CaseListService {
     enum QuickView { UNASSIGNED, MINE, SLA, ALL }
 
     record QuickViewCounts(long unassigned, long mine, long sla, long all) {}
-    record CaseListPage(List<CaseListItem> items, String nextCursor, QuickViewCounts quickViewCounts) {}
-    private record PageRow(CaseListItem item, QuickViewCounts counts) {}
+    record CaseListPage(List<CaseListItem> items, String nextCursor, QuickViewCounts quickViewCounts,
+                        Instant nextAttentionAt, Instant observedAt) {}
+    private record PageRow(CaseListItem item, QuickViewCounts counts, Instant nextAttentionAt, Instant observedAt) {}
 
     record CaseListItem(UUID id, String reference, CaseStatus status, CaseWorkflowStatus workflowStatus, String closureReason,
             UUID customerId, String customerName, UUID channelId, String channelName,
@@ -314,5 +323,6 @@ class CaseListService {
             Instant lastMessageAt, String lastMessageAuthor, String lastMessageKind, String lastMessageFile,
             boolean unreadForCurrentUser,
             Instant snoozedUntil, String slaState, Instant slaDueAt, int ignoreScore,
-            Instant waitingUntil, Instant createdAt, Instant updatedAt, Instant lastActivityAt, CaseResponseSla responseSla) {}
+            Instant waitingUntil, Instant createdAt, Instant updatedAt, Instant lastActivityAt, CaseResponseSla responseSla,
+            CaseOperationalDeadline operationalDeadline) {}
 }

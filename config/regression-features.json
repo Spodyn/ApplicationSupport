@@ -64,13 +64,15 @@
       "feature": "Slack discovery/mapping",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Complete membership snapshot; inactive disappearance; customer/grouping configuration",
+      "expected": "Complete membership snapshot; inactive disappearance; customer/grouping configuration; source-name Case titles independent of customer mapping; durable rename refresh without identity changes",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/channel/internal/ChannelIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackChannelDiscoveryServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackIgnoredChannelIntegrationTests.java",
         "apps/web/tests/unit/api-channel-adapter.test.ts",
-        "apps/web/tests/fullstack/workflows.spec.ts"
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/web/tests/unit/inbox-api-adapter.test.ts",
+        "apps/web/tests/e2e/application.spec.ts"
       ],
       "gap": "Live private/Connect membership acceptance external"
     },
@@ -130,7 +132,7 @@
       "feature": "Claim and ownership concurrency",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Exactly one concurrent winner; owner/state authoritative",
+      "expected": "Exactly one concurrent winner; owner/state authoritative; eligible explicit claim recovers historical unassigned waiting",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseClaimServiceIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
@@ -141,22 +143,24 @@
     },
     {
       "id": "REPLY",
-      "feature": "Reply/Ask Customer",
+      "feature": "Consecutive public replies in OPEN and ASKED",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Owner-only commands; owned and unassigned waiting after delivery; failed or stale sends preserve state",
+      "expected": "Owner replies with text or CLEAN files while waiting; provider-confirmed delivery retains owner; failures and stale confirmations preserve workflow; legacy Ask forwards to the same send path",
       "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/SupportSendMessageServiceIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "HTTP envelope and live real-stack reply now added"
+      "gap": "Slack browser workflow and Teams Connector HTTP use controlled hosts; live tenant acceptance is separate"
     },
     {
       "id": "RESOLVE",
       "feature": "Resolve/admin reassign/force resolve",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Ownership or ADMIN+exact permission; controlled optional category; no-op same-owner Reassign under Case lock",
+      "expected": "Ownership or ADMIN+exact permission; controlled optional category; no-op same-owner Reassign under Case lock; normal owner resolution in OPEN and ASKED",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
@@ -191,18 +195,21 @@
       "feature": "FRT, NRT, TTR and SLA queue",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Provider timestamp FRT, first durable follow-up NRT, per-case calendar snapshots, business warning thresholds, waiting pause and TTR, history after resolution and reopen, consistent queue ranking/filter/counts",
+      "expected": "FRT/NRT run in business windows, pause at closure, warn at 25%, and reset on separate accepted customer messages; support and follow-up expiry create deduplicated internal reminders without counting follow-up as a support breach",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseCreationServiceIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/sla/BusinessTimeCalculatorTests.java",
         "apps/web/tests/unit/sla.test.ts",
+        "apps/web/tests/e2e/application.spec.ts",
         "apps/web/tests/unit/analytics-workflow.test.ts",
         "apps/web/tests/fullstack/workflows.spec.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
-        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java"
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+        "apps/web/tests/unit/operational-sla.test.ts"
       ],
       "gap": "Production SLO/load evidence is not a unit-test pass"
     },
@@ -251,12 +258,14 @@
       "feature": "Statistics/admin views",
       "status": "PARTIALLY_IMPLEMENTED",
       "risk": "MEDIUM",
-      "expected": "Self/admin boundaries; UTC/bounded ranges; status is a projection",
+      "expected": "Self/admin boundaries; organization reporting dates; shared first-response outcomes across chart and filtered cohorts; separate historical, active support and follow-up counts; bounded cold query plan with unchanged FRT/NRT/follow-up facts and owner visibility",
       "tests": [
         "apps/web/tests/unit/analytics-workflow.test.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/AnalyticsContractDocumentationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
-        "apps/api/src/test/java/com/unifiedsupportinbox/analytics/StatisticsOverviewServiceTests.java"
+        "apps/api/src/test/java/com/unifiedsupportinbox/analytics/StatisticsOverviewServiceTests.java",
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/analytics/AnalyticsRecordsIntegrationTests.java"
       ],
       "gap": "Historical per-user features in unmerged PRs are not claimed implemented"
     },
@@ -294,12 +303,14 @@
       "feature": "WebSocket/STOMP",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Session/origin required; no client SEND; bounded destinations; revocation blocks outbound",
+      "expected": "Authenticated scoped hints after commit; application-wide query mapping and reconnect; coalesced bursts; preserved drafts; no client SEND or private broadcasts; serialized in-flight refetch and dirty initial-load recovery; selected Case survives queue reorder and reload",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/RealtimeWebSocketIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/AuthenticatedWebSocketHandshakeInterceptorTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/SessionBoundWebSocketHandlerDecoratorTests.java",
         "apps/web/tests/unit/realtime-stomp-client.test.ts",
+        "apps/web/tests/unit/realtime-query-invalidation.test.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/ApplicationRealtimeListenerTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
       "gap": "Real-stack CONNECT/MESSAGE/reload plus backend security tests"

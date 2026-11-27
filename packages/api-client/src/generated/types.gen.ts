@@ -53,6 +53,7 @@ export type ApiAnalyticsRecordsControllerDashboardFacts = {
   "users"?: Array<ApiAnalyticsRecordsControllerUserOption>
   "generatedAt"?: string
   "global": boolean
+  "reportingTimezone"?: string
 }
 
 export type ApiAnalyticsRecordsControllerFact = {
@@ -86,6 +87,13 @@ export type ApiAnalyticsRecordsControllerFact = {
   "resolutionWorkingSeconds"?: number | null
   "firstResponseStartedAt"?: string | null
   "firstResponseStoppedAt"?: string | null
+  "historicalSupportBreach"?: boolean
+  "historicalNextResponseBreach"?: boolean
+  "operationalDeadlineKind"?: "FRT" | "NRT" | "FOLLOW_UP" | null
+  "operationalDeadlineState"?: "ON_TRACK" | "WARNING" | "BREACHED" | "FOLLOW_UP_DUE" | null
+  "firstResponderId"?: string | null
+  "firstResponderName"?: string | null
+  "firstResponseOutcome"?: "met" | "breached" | "pending" | "unmeasured"
 }
 
 export type ApiAnalyticsRecordsControllerUserOption = {
@@ -415,6 +423,7 @@ export type ApiSlaPolicyServiceUpdateInput = {
   "pauseWaiting": boolean
   "version"?: number
   "nextResponseMinutes"?: number
+  "customerWaitingMinutes"?: number
 }
 
 export type ApiSlaPolicyView = {
@@ -429,6 +438,7 @@ export type ApiSlaPolicyView = {
   "version": number
   "updatedAt"?: string
   "nextResponseMinutes"?: number
+  "customerWaitingMinutes"?: number
 }
 
 export type ApiStatisticsOverviewServiceDay = {
@@ -512,6 +522,11 @@ export type AttachmentUploadResponse = {
 
 export type BatchReadResponse = {
   "updatedCount": number
+}
+
+export type BusinessClockInterval = {
+  "start": string
+  "end": string
 }
 
 export type CancelSnoozeResponse = {
@@ -614,6 +629,7 @@ export type CaseDetail = {
   "responseCycles"?: Array<CaseResponseCycle>
   "resolutionWallSeconds"?: number | null
   "resolutionWorkingSeconds"?: number | null
+  "operationalDeadline"?: CaseOperationalDeadline | null
 }
 
 export type CaseFilterOption = {
@@ -674,12 +690,15 @@ export type CaseListItem = {
   "workflowStatus"?: CaseWorkflowStatus
   "closureReason"?: "IGNORED" | null
   "responseSla"?: CaseResponseSla
+  "operationalDeadline"?: CaseOperationalDeadline | null
 }
 
 export type CaseListPage = {
   "items": Array<CaseListItem>
   "nextCursor": string | null
   "quickViewCounts"?: CaseQuickViewCounts
+  "nextAttentionAt"?: string | null
+  "observedAt"?: string
 }
 
 export type CaseMessage = {
@@ -704,6 +723,19 @@ export type CaseMessage = {
 export type CaseMessagePage = {
   "items": Array<CaseMessage>
   "nextCursor": string | null
+}
+
+export type CaseOperationalDeadline = {
+  "id": string
+  "kind": "FRT" | "NRT" | "FOLLOW_UP"
+  "state": "ON_TRACK" | "WARNING" | "BREACHED" | "FOLLOW_UP_DUE"
+  "startedAt": string
+  "warningAt": string | null
+  "dueAt": string
+  "observedAt": string
+  "clockValidUntil": string
+  "remainingMillis": number
+  "businessIntervals": Array<BusinessClockInterval> | null
 }
 
 export type CaseOwner = {
@@ -1009,6 +1041,10 @@ export type LoginRequest = {
   "password": string
 }
 
+export type MarkOperationalSlaReminderRead = {
+  "deadlineId"?: string | null
+}
+
 export type MessageAttachment = {
   "id": string
   "fileName": string
@@ -1025,6 +1061,26 @@ export type MessageAttachment = {
 export type MessageBodyFormat = "PLAIN_TEXT" | "MARKDOWN"
 
 export type MessageDeliveryStatus = "QUEUED" | "SENDING" | "SENT" | "DELIVERED" | "FAILED"
+
+export type OperationalSlaReminder = {
+  "id": string
+  "caseId": string
+  "reference": string
+  "provider": Channel
+  "kind": "FRT" | "NRT" | "FOLLOW_UP"
+  "dueAt": string
+  "remindedAt": string
+  "unread": boolean
+}
+
+export type OperationalSlaReminderPage = {
+  "items": Array<OperationalSlaReminder>
+  "unreadCount": number
+}
+
+export type OperationalSlaReminderReadResult = {
+  "updatedCount": number
+}
 
 export type PermissionCode = "manage_users" | "manage_integrations" | "manage_sla" | "manage_schedule" | "manage_notifications" | "view_global_statistics" | "reassign_cases" | "force_resolve" | "view_audit"
 

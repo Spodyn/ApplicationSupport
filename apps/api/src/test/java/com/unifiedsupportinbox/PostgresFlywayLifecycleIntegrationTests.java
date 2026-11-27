@@ -45,7 +45,7 @@ class PostgresFlywayLifecycleIntegrationTests {
             statement.executeUpdate("INSERT INTO integrations(provider,display_name,status,health) VALUES ('SLACK','Existing integration','ENABLED','HEALTHY')");
         }
         Flyway current=Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).load();
-        assertThat(current.migrate().migrationsExecuted).isEqualTo(2);current.validate();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(4);current.validate();
         assertThat(current.info().pending()).isEmpty();
         assertThat(queryInt("SELECT count(*) FROM integrations")).isEqualTo(1);
         assertThat(queryInt("SELECT count(*) FROM integration_resync_settings WHERE enabled OR automatic")).isZero();
@@ -63,11 +63,55 @@ class PostgresFlywayLifecycleIntegrationTests {
             statement.executeUpdate("INSERT INTO channels(integration_id,external_channel_id,name,customer_id,ignored,active,grouping_strategy,metadata_json) SELECT i.id,'legacy','Legacy',c.id,TRUE,TRUE,'TEAMS_ROOT_REPLIES','{\"teamsTeamId\":\"11111111-1111-4111-8111-111111111111\"}'::jsonb FROM integrations i CROSS JOIN customers c WHERE i.provider='TEAMS'");
         }
         var current=Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).load();
-        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);current.validate();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(3);current.validate();
         assertThat(queryString("SELECT secret_ref FROM integrations WHERE provider='TEAMS'")).isEqualTo("legacy/retained");
         assertThat(queryInt("SELECT count(*) FROM channels WHERE ignored AND active AND customer_id IS NOT NULL")).isEqualTo(1);
         assertThat(queryInt("SELECT count(*) FROM integration_connection_settings WHERE automatic_discovery IS NULL")).isEqualTo(2);
         assertThat(queryString("SELECT team_id::text FROM teams_instance_binding")).isEqualTo("11111111-1111-4111-8111-111111111111");
+    }
+
+    @Test
+    void upgradesV55AndSeedsOnlyCurrentDeadlinesWithoutRewritingSlaHistory() throws SQLException {
+        cleanDatabase();
+        var configuration = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
+        configuration.target("55").load().migrate();
+        try (var connection = connection(); var statement = connection.createStatement()) {
+            statement.executeUpdate("""
+                    INSERT INTO integrations(provider, display_name, status, health)
+                    VALUES ('SLACK', 'Existing integration', 'ENABLED', 'HEALTHY')
+                    """);
+            statement.executeUpdate("""
+                    INSERT INTO channels(integration_id, external_channel_id, name, grouping_strategy)
+                    SELECT id, 'C-backfill', 'Backfill', 'SLACK_ROOT_THREAD' FROM integrations
+                    """);
+            statement.executeUpdate("""
+                    INSERT INTO cases(integration_id, channel_id, provider, external_conversation_id, external_thread_key,
+                        status, waiting_until, resolved_at)
+                    SELECT c.integration_id, c.id, 'SLACK', 'C-backfill', states.status, states.status, states.waiting, states.resolved
+                    FROM channels c CROSS JOIN (VALUES
+                        ('NEW', NULL::timestamptz, NULL::timestamptz),
+                        ('WAITING_FOR_CUSTOMER', '2026-11-26T12:00:00Z'::timestamptz, NULL::timestamptz),
+                        ('RESOLVED', NULL::timestamptz, '2026-11-26T11:00:00Z'::timestamptz)
+                    ) states(status, waiting, resolved)
+                    """);
+            statement.executeUpdate("""
+                    INSERT INTO case_sla(case_id, policy_id, first_response_started_at, first_response_due_at,
+                        unclaimed_started_at, unclaimed_warning_at, unclaimed_breach_at, first_response_breached_at)
+                    SELECT c.id, p.id, '2026-11-26T09:00:00Z', '2026-11-26T09:15:00Z',
+                        '2026-11-26T09:00:00Z', '2026-11-26T09:05:00Z', '2026-11-26T09:15:00Z',
+                        '2026-11-26T09:15:00Z'
+                    FROM cases c CROSS JOIN sla_policies p WHERE p.active
+                    """);
+        }
+        var current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
+                .load();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(2);
+        current.validate();
+        assertThat(queryInt("SELECT count(*) FROM case_operational_deadlines")).isEqualTo(2);
+        assertThat(queryInt("SELECT count(*) FROM case_operational_deadlines WHERE kind = 'FRT' AND due_at = '2026-11-26T09:15:00Z'")).isOne();
+        assertThat(queryInt("SELECT count(*) FROM case_operational_deadlines WHERE kind = 'FOLLOW_UP' AND due_at = '2026-11-26T12:00:00Z'")).isOne();
+        assertThat(queryInt("SELECT count(*) FROM case_sla WHERE first_response_breached_at = first_response_due_at")).isEqualTo(3);
+        assertThat(queryInt("SELECT customer_waiting_minutes FROM sla_policies WHERE active")).isEqualTo(1440);
     }
 
     @Test

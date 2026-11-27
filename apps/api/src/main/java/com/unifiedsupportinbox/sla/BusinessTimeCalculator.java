@@ -61,6 +61,23 @@ public final class BusinessTimeCalculator {
         return opening(schedule, at).nextOpening();
     }
 
+    /** UTC intervals, clipped to the requested live-clock horizon. */
+    public List<Window> intervals(BusinessHoursScheduleView schedule, Instant from, Instant to) {
+        ZoneId zone = ZoneId.of(schedule.timezone());
+        LocalDate date = from.atZone(zone).toLocalDate();
+        LocalDate last = to.atZone(zone).toLocalDate();
+        List<Window> result = new ArrayList<>();
+        while (!date.isAfter(last)) {
+            for (Window window : windows(schedule, date, zone)) {
+                Instant start = window.start().isAfter(from) ? window.start() : from;
+                Instant end = window.end().isBefore(to) ? window.end() : to;
+                if (start.isBefore(end)) result.add(new Window(start, end));
+            }
+            date = date.plusDays(1);
+        }
+        return List.copyOf(result);
+    }
+
     /** Reports the current state without inventing an opening for broken/legacy schedules. */
     public Opening opening(BusinessHoursScheduleView schedule, Instant at) {
         Objects.requireNonNull(schedule, "schedule");
@@ -99,7 +116,7 @@ public final class BusinessTimeCalculator {
     }
 
     private record TimeRange(LocalTime start, LocalTime end) {}
-    private record Window(Instant start, Instant end) {}
+    public record Window(Instant start, Instant end) {}
 
     /** A null nextOpening is the explicit NO_FUTURE_OPENING configuration-fault result. */
     public record Opening(boolean open, Instant currentOpening, Instant nextOpening) {}

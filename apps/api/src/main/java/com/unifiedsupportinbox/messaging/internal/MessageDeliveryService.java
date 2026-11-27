@@ -1,6 +1,7 @@
 package com.unifiedsupportinbox.messaging.internal;
 
 import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.cases.CaseStatus;
 import com.unifiedsupportinbox.IdempotencyResponse;
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.IdempotentCommandExecutor;
@@ -204,7 +205,7 @@ class MessageDeliveryService {
         if (message.deliveryStatus() != MessageDeliveryStatus.FAILED) {
             throw ApiProblemException.conflict("Only failed messages can be retried manually.");
         }
-        if (!"VERIFICATION".equals(message.caseStatus()) || !userId.equals(message.caseOwnerUserId())) {
+        if (!CaseStatus.valueOf(message.caseStatus()).acceptsOwnerWork() || !userId.equals(message.caseOwnerUserId())) {
             throw ApiProblemException.accessDenied();
         }
         DeliveryAttemptRecord latest = message.latestAttempt();

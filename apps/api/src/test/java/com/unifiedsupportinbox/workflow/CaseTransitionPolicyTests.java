@@ -36,8 +36,8 @@ class CaseTransitionPolicyTests {
         return Stream.of(
                 Arguments.of(NEW, Set.of(CLAIM, IGNORE, ASSIGN, FORCE_RESOLVE, SNOOZE, MARK_READ)),
                 Arguments.of(PARTIALLY_IGNORED, Set.of(CLAIM, IGNORE, ASSIGN, FORCE_RESOLVE, SNOOZE, MARK_READ)),
-                Arguments.of(VERIFICATION, Set.of(REPLY, ASK_CUSTOMER, RESOLVE, REASSIGN, UNASSIGN, FORCE_RESOLVE, SNOOZE, MARK_READ)),
-                Arguments.of(WAITING_FOR_CUSTOMER, Set.of(FORCE_RESOLVE, SNOOZE, MARK_READ)),
+                Arguments.of(VERIFICATION, Set.of(REPLY, RESOLVE, REASSIGN, UNASSIGN, FORCE_RESOLVE, SNOOZE, MARK_READ)),
+                Arguments.of(WAITING_FOR_CUSTOMER, Set.of(CLAIM, FORCE_RESOLVE, SNOOZE, MARK_READ)),
                 Arguments.of(IGNORED, Set.of(MARK_READ)),
                 Arguments.of(RESOLVED, Set.of(MARK_READ)))
                 .flatMap(row -> Stream.of(Action.values()).map(action ->
@@ -88,9 +88,9 @@ class CaseTransitionPolicyTests {
     }
 
     @Test
-    void anotherUserOrAdminCannotReplyAskOrNormallyResolve() {
+    void anotherUserOrAdminCannotReplyOrNormallyResolve() {
         for (Actor actor : Set.of(TARGET, actor(OTHER, UserRole.ADMIN, ADMIN.permissions(), false))) {
-            for (Action action : Set.of(REPLY, ASK_CUSTOMER, RESOLVE)) {
+            for (Action action : Set.of(REPLY, RESOLVE)) {
                 assertThat(policy.availableActions(state(VERIFICATION), actor)).doesNotContain(action);
                 assertProblem(() -> policy.decide(state(VERIFICATION), actor, action, VALID), ApiProblemCode.CONFLICT);
             }
@@ -98,16 +98,18 @@ class CaseTransitionPolicyTests {
     }
 
     @Test
-    void lifetimeVotersCannotClaimReplyOrAskEvenAfterVoteReset() {
+    void lifetimeVotersCannotClaimOrReplyEvenAfterVoteReset() {
         Actor formerVoter = actor(OWNER, UserRole.USER, Set.of(), true);
         for (CaseStatus status : Set.of(NEW, PARTIALLY_IGNORED)) {
             assertProblem(() -> policy.decide(state(status), formerVoter, CLAIM, VALID), ApiProblemCode.CONFLICT);
             // A prior reset permits a new Ignore vote, but not Claim/Reply.
             assertThat(policy.decide(state(status), formerVoter, IGNORE, VALID).effects()).contains(RECORD_IGNORE_VOTE);
         }
-        for (Action action : Set.of(REPLY, ASK_CUSTOMER)) {
-            assertProblem(() -> policy.decide(state(VERIFICATION), formerVoter, action, VALID), ApiProblemCode.CONFLICT);
+        State ownedWaiting = new State(WAITING_FOR_CUSTOMER, OWNER, NOW);
+        for (State owned : Set.of(state(VERIFICATION), ownedWaiting)) {
+            assertProblem(() -> policy.decide(owned, formerVoter, REPLY, VALID), ApiProblemCode.CONFLICT);
         }
+        assertProblem(() -> policy.decide(state(WAITING_FOR_CUSTOMER), formerVoter, CLAIM, VALID), ApiProblemCode.CONFLICT);
     }
 
     @Test
@@ -146,32 +148,10 @@ class CaseTransitionPolicyTests {
     }
 
     @Test
-    void asksWaitForProviderSuccessAndDefaultToTwentyFourHours() {
-        State owned = state(VERIFICATION);
-        assertThat(policy.decide(owned, USER, ASK_CUSTOMER, VALID))
-                .isEqualTo(new Decision(owned, Set.of(QUEUE_ASK_MESSAGE)));
-        assertThat(policy.askNotSent(owned)).isEqualTo(new Decision(owned, Set.of()));
-        assertThat(policy.askSent(owned, OWNER, null, NOW).state())
-                .isEqualTo(new State(WAITING_FOR_CUSTOMER, null, NOW.plus(Duration.ofHours(24))));
-        assertThat(policy.askSent(owned, OWNER, Duration.ofHours(1), NOW).state().waitingUntil())
-                .isEqualTo(NOW.plus(Duration.ofHours(1)));
-        assertThat(policy.askSent(owned, OWNER, Duration.ofDays(30), NOW).state().waitingUntil())
-                .isEqualTo(NOW.plus(Duration.ofDays(30)));
-        assertProblem(() -> policy.askSent(owned, OTHER, null, NOW), ApiProblemCode.CONFLICT);
-        for (CaseStatus status : CaseStatus.values()) {
-            if (status != VERIFICATION) assertProblem(() -> policy.askSent(state(status), OWNER, null, NOW), ApiProblemCode.CONFLICT);
-        }
-    }
-
-    @Test
-    void askAndReplyRequireMessageAndAskDurationIsBounded() {
-        for (Action action : Set.of(REPLY, ASK_CUSTOMER)) {
-            assertProblem(() -> policy.decide(state(VERIFICATION), USER, action, Input.empty()), ApiProblemCode.VALIDATION_FAILED);
-        }
-        for (Duration duration : new Duration[] {Duration.ZERO, Duration.ofMinutes(59), Duration.ofDays(30).plusSeconds(1)}) {
-            Input input = new Input(null, 0, 1, false, true, duration);
-            assertProblem(() -> policy.decide(state(VERIFICATION), USER, ASK_CUSTOMER, input), ApiProblemCode.VALIDATION_FAILED);
-            assertProblem(() -> policy.askSent(state(VERIFICATION), OWNER, duration, NOW), ApiProblemCode.VALIDATION_FAILED);
+    void replyRequiresContentAndOnlyQueuesFromEitherOwnedState() {
+        for (State owned : Set.of(state(VERIFICATION), new State(WAITING_FOR_CUSTOMER, OWNER, NOW))) {
+            assertProblem(() -> policy.decide(owned, USER, REPLY, Input.empty()), ApiProblemCode.VALIDATION_FAILED);
+            assertThat(policy.decide(owned, USER, REPLY, VALID)).isEqualTo(new Decision(owned, Set.of(QUEUE_SUPPORT_MESSAGE)));
         }
     }
 
@@ -194,22 +174,13 @@ class CaseTransitionPolicyTests {
     }
 
     @Test
-    void timeoutRequiresDueWaitingCaseAndNeverQueuesFollowup() {
-        assertProblem(() -> policy.waitingTimeout(state(WAITING_FOR_CUSTOMER), NOW.minusNanos(1)), ApiProblemCode.CONFLICT);
-        Decision result = policy.waitingTimeout(state(WAITING_FOR_CUSTOMER), NOW);
-        assertThat(result.state()).isEqualTo(state(NEW));
-        assertThat(result.effects()).containsExactlyInAnyOrder(AUDIT, UPDATE_SLA);
-        for (CaseStatus status : CaseStatus.values()) {
-            if (status != WAITING_FOR_CUSTOMER) assertProblem(() -> policy.waitingTimeout(state(status), NOW), ApiProblemCode.CONFLICT);
-        }
-    }
-
-    @Test
     void ownedWaitingReturnsToOpenWithItsOwner() {
         State waiting = new State(WAITING_FOR_CUSTOMER, OWNER, NOW);
         assertThat(policy.customerMessage(waiting).state()).isEqualTo(state(VERIFICATION));
-        assertThat(policy.waitingTimeout(waiting, NOW).state()).isEqualTo(state(VERIFICATION));
-        assertThat(policy.availableActions(waiting, ADMIN)).doesNotContain(REPLY, ASK_CUSTOMER, RESOLVE);
+        assertThat(policy.availableActions(waiting, ADMIN))
+                .containsExactlyInAnyOrder(REPLY, RESOLVE, FORCE_RESOLVE, SNOOZE, MARK_READ);
+        assertThat(policy.availableActions(waiting, TARGET)).doesNotContain(CLAIM, REPLY, RESOLVE);
+        assertThat(policy.decide(waiting, USER, RESOLVE, VALID).state()).isEqualTo(state(RESOLVED));
     }
 
     @Test

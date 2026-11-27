@@ -8,17 +8,21 @@ import type { Channel, User } from "./shared"
 export type AnalyticsStatusDimension = string
 
 export type AnalyticsSlaState = "met" | "warning" | "breached"
+export type FirstResponseOutcome = "met" | "breached" | "pending" | "unmeasured"
+export type AnalyticsDeadlineState = "ON_TRACK" | "WARNING" | "BREACHED" | "FOLLOW_UP_DUE"
+export type AnalyticsDatePreset = "today" | "yesterday" | "7days" | "30days" | "90days" | "this_month" | "previous_month"
 export type AnalyticsResolutionReason = "resolved" | "not_applicable" | "spam"
 
 export interface AnalyticsFilters {
   dateFrom: string
   dateTo: string
+  datePreset?: AnalyticsDatePreset
   userId?: string
   customerId?: string
   platform?: Channel
   sourceChannel?: string
   status?: AnalyticsStatusDimension
-  slaState?: AnalyticsSlaState
+  firstResponseOutcome?: FirstResponseOutcome
   priority?: string
   tag?: string
   team?: string
@@ -56,6 +60,13 @@ export interface AnalyticsRecord {
   resolutionReason?: AnalyticsResolutionReason
   slaState: AnalyticsSlaState
   slaDeadlineAt?: string
+  historicalSupportBreach?: boolean
+  historicalNextResponseBreach?: boolean
+  operationalDeadlineKind?: "FRT" | "NRT" | "FOLLOW_UP" | null
+  operationalDeadlineState?: AnalyticsDeadlineState | null
+  firstResponderId?: string | null
+  firstResponderName?: string | null
+  firstResponseOutcome?: FirstResponseOutcome
   excludedFromUserPerformance?: boolean
 }
 
@@ -67,7 +78,8 @@ export interface AnalyticsKpis {
   backlog: number
   slaFirstResponsePercentage: number | null
   breachedSla: number
-  warningSla: number
+  historicalSupportBreachedCases: number
+  nextResponseBreachedCases: number
   averageClaimMinutes: number | null
   averageFirstResponseMinutes: number | null
   averageResolutionMinutes: number | null
@@ -86,7 +98,7 @@ export interface AnalyticsTimePoint {
 export interface AnalyticsSlaTimePoint {
   date: string
   met: number
-  warning: number
+  pending: number
   breached: number
 }
 
@@ -153,13 +165,15 @@ export interface AnalyticsComparison {
 export interface AnalyticsResult {
   filters: AnalyticsFilters
   lastUpdatedAt: string
+  reportingTimezone: string
+  reportingDate: string
   comparison?: AnalyticsComparison
   kpis: AnalyticsKpis
   timeSeries: AnalyticsTimePoint[]
   slaTimeSeries: AnalyticsSlaTimePoint[]
   sourceDistribution: DistributionPoint<Channel>[]
   statusDistribution: DistributionPoint[]
-  slaDistribution: DistributionPoint<AnalyticsSlaState>[]
+  slaAttention: { overdueSupportResponses: number; dueCustomerFollowUps: number }
   backlogAgeDistribution: BacklogAgePoint[]
   clientPerformance: ClientPerformance[]
   heatmap: HeatmapPoint[]
@@ -175,13 +189,14 @@ export interface AnalyticsResult {
     statusLabel: string
     userName?: string
     createdAt: string
-    slaState: AnalyticsSlaState
+    operationalDeadlineKind?: AnalyticsRecord["operationalDeadlineKind"]
+    operationalDeadlineState?: AnalyticsDeadlineState | null
   }[]
   options: {
     users: Pick<User, "id" | "fullName">[]
     customers: { id: string; name: string }[]
     channels: { value: string; label: string; platform: Channel }[]
     statuses: { value: AnalyticsStatusDimension; label: string }[]
-    slaStates: { value: AnalyticsSlaState; label: string }[]
+    firstResponseOutcomes: { value: FirstResponseOutcome; label: string }[]
   }
 }

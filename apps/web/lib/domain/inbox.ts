@@ -96,6 +96,7 @@ export interface InboxCase {
     kind?: "FRT" | "NRT"
     previouslyBreached?: boolean
     remainingBusinessSeconds?: number
+    operational?: import("./operational-sla").OperationalDeadline
   }
   ignoreVotes: {
     current: number
@@ -157,7 +158,7 @@ export interface InboxMessage {
 export const inboxStatusLabels: Record<InboxStatus, string> = {
   new: "Nowe",
   verification: "W trakcie weryfikacji",
-  waiting_for_customer: "Dopytane",
+  waiting_for_customer: "Oczekuje na klienta",
   partially_ignored: "Częściowo zignorowane",
   ignored: "Zignorowane",
   resolved: "Rozwiązane",

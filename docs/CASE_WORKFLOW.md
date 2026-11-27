@@ -1,6 +1,6 @@
 # Kanoniczna maszyna stanów Case
 
-**Stan: 24 sierpnia 2026 - FROZEN.** Ten dokument konsoliduje USI-35/36/37 oraz późniejsze E09 overrides. Szczegółowa macierz znajduje się także w `WORKFLOW_MATRIX.md`.
+**Stan: 26 listopada 2026 - aktualizacja decyzji Product Ownera.** Ten dokument konsoliduje USI-35/36/37 oraz późniejsze E09 overrides. Szczegółowa macierz znajduje się także w `WORKFLOW_MATRIX.md`.
 
 ## Statusy
 
@@ -15,7 +15,7 @@ Frontend mapuje je 1:1 na lower snake case. Unread, Snooze, SLA severity i analy
 | NEW | null |
 | PARTIALLY_IGNORED | null |
 | VERIFICATION | dokładnie jeden aktywny owner |
-| WAITING_FOR_CUSTOMER | null |
+| WAITING_FOR_CUSTOMER | dotychczasowy owner, historyczne sprawy mogą być bez ownera |
 | IGNORED | null |
 | RESOLVED | zachowuje ostatniego ownera, jeśli istniał; inaczej null |
 
@@ -28,11 +28,11 @@ Frontend mapuje je 1:1 na lower snake case. Unread, Snooze, SLA severity i analy
 | PARTIALLY_IGNORED | Claim | eligible non-voter claimant | VERIFICATION; active partial votes deactivated |
 | NEW/PARTIALLY_IGNORED | Ignore | backend-calculated vote | PARTIALLY_IGNORED below2; IGNORED at >=2 |
 | PARTIALLY_IGNORED | customer message | before threshold | reset active votes -> NEW |
-| VERIFICATION | Reply | current owner only | VERIFICATION |
-| VERIFICATION | Ask Customer | current owner + outgoing Ask | stays VERIFICATION/owned until Message `SENT`; then WAITING_FOR_CUSTOMER, owner null, waiting_until set |
-| WAITING_FOR_CUSTOMER | customer reply | inbound customer message | NEW |
-| WAITING_FOR_CUSTOMER | timeout | waiting_until reached | NEW + `WAITING_TIMEOUT`; no automatic follow-up |
-| VERIFICATION | Resolve | current owner | RESOLVED, owner preserved |
+| VERIFICATION / WAITING_FOR_CUSTOMER | Reply | eligible current owner | successful delivery enters or keeps owned waiting |
+| unassigned WAITING_FOR_CUSTOMER | Claim | eligible claimant without lifetime Ignore vote | VERIFICATION with claimant as owner |
+| WAITING_FOR_CUSTOMER | customer reply | inbound customer message | VERIFICATION with same owner, or NEW if unassigned |
+| WAITING_FOR_CUSTOMER | follow-up expiry | waiting_until reached | WAITING_FOR_CUSTOMER with an internal reminder, retaining the owner |
+| VERIFICATION / WAITING_FOR_CUSTOMER | Resolve | current owner | RESOLVED, owner preserved |
 | any nonterminal | Force Resolve | ADMIN + force_resolve | RESOLVED; existing owner preserved, unowned remains null |
 | NEW/PARTIALLY_IGNORED | Admin assign | ADMIN + reassign_cases, eligible target | VERIFICATION, target owner |
 | VERIFICATION | Admin reassign | ADMIN + reassign_cases, eligible target | VERIFICATION, target owner |
@@ -49,12 +49,9 @@ No generic `PATCH status`.
 - Reset deactivates votes but preserves history; same user may vote again later.
 - Lifetime invariant: anyone who ever successfully cast Ignore in a Case may never Claim or Reply in that Case.
 
-## Ask Customer
+## Oczekuje na klienta
 
-- Default wait24h; override1h-30d.
-- Local queued/PENDING message is not enough: transition occurs only after provider acceptance `SENT`.
-- Permanent delivery failure keeps Case in VERIFICATION with same owner.
-- Timeout returns to NEW and audits `WAITING_TIMEOUT`; v1 sends no automatic follow-up.
+Po potwierdzeniu pierwszej odpowiedzi przez dostawcę sprawa przechodzi z OPEN do ASKED i zachowuje właściciela. Każda kolejna potwierdzona odpowiedź ustala nowy termin wewnętrznego przypomnienia. Po upływie terminu sprawa nadal czeka i zachowuje właściciela. Wysyłka w kolejce, błąd albo ponowienie nie zmieniają stanu sprawy. Obowiązuje [kanoniczny kontrakt zgodności API](PRODUCT_CONTRACT.md#7-public-replies-and-waiting).
 
 ## Resolve category
 
