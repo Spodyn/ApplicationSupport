@@ -62,6 +62,7 @@ class ApplicationRealtimeListener {
                 case "application.settings_changed" -> Map.of();
                 case "application.directory_changed" -> Map.of();
                 case "application.identity_changed" -> Map.of("userId", UUID.fromString(source.path("userId").asText()).toString());
+                case "application.reminders_changed" -> Map.of("userId", UUID.fromString(source.path("userId").asText()).toString());
                 case "application.case_changed" -> Map.of("caseId", UUID.fromString(source.path("caseId").asText()).toString());
                 default -> throw new IllegalArgumentException("Unsupported scope");
             };
@@ -78,6 +79,7 @@ class ApplicationRealtimeListener {
         for (var recipient : recipients) {
             boolean self = recipient.id().equals(affected);
             boolean admin = recipient.role().equals("ADMIN");
+            if (type.equals("application.reminders_changed") && !self) continue;
             String deliveredType = type;
             Map<String, Object> deliveredPayload = payload;
             if (type.equals("application.settings_changed") && !admin) {

@@ -14,6 +14,7 @@ Application projections also use `/user/queue/application`, resolved from the au
 | `application.catalog_changed` | Case list, filter catalog, authorized statistics |
 | `application.directory_changed` | Users, Direct Message recipients, owner filters/assignees, statistics |
 | `application.identity_changed` | All authenticated active query scopes |
+| `application.reminders_changed` | Affected user's reminder indicators |
 | `application.case_changed` | Matching messages/detail/activity, Case list/reminders, statistics, workload |
 
 The frontend batches duplicate keys in fixed 100 ms windows. Reconnect and unknown/future envelopes reconcile active inbox, Direct Message, recipient, identity, administrative and statistics scopes. Cached data remains visible during refetch. Invalidation does not replace form state or selections. Bounded fallback polling includes 30-second user-directory refresh for presence aging without a database write.

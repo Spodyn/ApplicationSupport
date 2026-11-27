@@ -20,6 +20,8 @@ it("maps administrative, conversation, personal, statistics and workload depende
     .not.toContainEqual(["analytics"])
   expect(realtimeQueryScopes("/user/queue/direct-messages", hint("direct_message.changed"), "owner"))
     .toEqual([["direct-messages", "owner"]])
+  expect(realtimeQueryScopes("/user/queue/application", hint("application.reminders_changed"), "owner"))
+    .toEqual([["support-inbox", "sla-reminders", "owner"]])
   expect(realtimeQueryScopes("/user/queue/application", {}, "owner")).toBe(reconciliationScopes)
   expect(realtimeQueryScopes("/user/queue/application", {...hint("case.created"), version: 9}, "owner"))
     .toBe(reconciliationScopes)

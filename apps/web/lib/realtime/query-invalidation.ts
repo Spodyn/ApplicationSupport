@@ -12,6 +12,8 @@ export function realtimeQueryScopes(destination: string, body: unknown, accountI
   if (!event || event.version !== 1) return reconciliationScopes
   if (destination === "/user/queue/application") {
     switch (event.eventType) {
+      case "application.reminders_changed":
+        return [["support-inbox", "sla-reminders", accountId]]
       case "application.catalog_changed":
         return [["support-inbox", "filter-options"], ["support-inbox", "cases"], ["analytics"]]
       case "application.settings_changed":

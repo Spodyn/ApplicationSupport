@@ -9,7 +9,7 @@ DECLARE
 BEGIN
     IF TG_OP = 'UPDATE' AND NEW IS NOT DISTINCT FROM OLD THEN RETURN NEW; END IF;
     row_data := CASE WHEN TG_OP = 'DELETE' THEN to_jsonb(OLD) ELSE to_jsonb(NEW) END;
-    IF scope = 'identity' THEN
+    IF scope IN ('identity', 'reminders') THEN
         entity := COALESCE((row_data->>'user_id')::uuid, (row_data->>'id')::uuid);
         body := jsonb_build_object('userId', entity);
     ELSIF scope = 'case' THEN
@@ -58,3 +58,5 @@ CREATE TRIGGER application_attachments AFTER INSERT OR UPDATE OR DELETE ON attac
 FOR EACH ROW EXECUTE FUNCTION application_realtime_hint('case');
 CREATE TRIGGER application_sla AFTER UPDATE ON case_sla
 FOR EACH ROW EXECUTE FUNCTION application_realtime_hint('case');
+CREATE TRIGGER application_reminder_read AFTER INSERT OR UPDATE ON case_deadline_reminder_recipients
+FOR EACH ROW EXECUTE FUNCTION application_realtime_hint('reminders');
