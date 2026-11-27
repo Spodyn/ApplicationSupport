@@ -75,6 +75,7 @@ import { ALL_VALUE, FilterBar } from "@/components/design-system/filter-bar"
 import { notify } from "@/components/design-system/notify"
 import { DashboardPageSkeleton } from "@/components/design-system/page-skeletons"
 import type {
+  AnalyticsDatePreset,
   AnalyticsFilters,
   AnalyticsKpis,
   AnalyticsResult,
@@ -87,20 +88,11 @@ import type {
 import { channelLabels } from "@/lib/domain/labels"
 import type { Channel } from "@/lib/domain/shared"
 import { formatDuration, formatNumber, formatPercent } from "@/lib/format"
+import { analyticsPresetRange, reportingDate } from "@/lib/services/analytics"
 import { useAnalytics } from "@/lib/services/queries"
 import { cn } from "@/lib/utils"
 
-type DatePreset =
-  | "today"
-  | "yesterday"
-  | "7days"
-  | "30days"
-  | "90days"
-  | "this_month"
-  | "previous_month"
-  | "custom"
-
-const analyticsToday = new Date().toISOString().slice(0, 10)
+type DatePreset = AnalyticsDatePreset | "custom"
 const chartTooltipStyle = {
   backgroundColor: "var(--popover)",
   border: "1px solid var(--border)",
@@ -120,7 +112,6 @@ const statusColors: Record<string, string> = {
 }
 const slaColors = {
   met: "var(--success)",
-  warning: "var(--warning)",
   breached: "var(--destructive)",
 }
 
@@ -130,8 +121,9 @@ const metricDefinitions = {
   ignored: "Case’y zignorowane w wybranym okresie; nie są liczone jako rozwiązane.",
   claimed: "Case’y przejęte przez użytkownika w wybranym okresie.",
   backlog: "Liczba nierozwiązanych case’ów aktywnych na koniec analizowanego okresu.",
-  sla: "Odsetek case’ów, w których pierwsza odpowiedź wsparcia została wysłana przed terminem SLA.",
-  breached: "Liczba case’ów utworzonych w okresie, dla których SLA pierwszej odpowiedzi zostało przekroczone.",
+  sla: "Odsetek spraw z pierwszą odpowiedzią w terminie wśród spraw z rozstrzygniętym wynikiem SLA pierwszej odpowiedzi.",
+  userSla: "Odsetek terminowych pierwszych odpowiedzi wysłanych przez tego użytkownika w sprawach z wybranego okresu.",
+  breached: "Sprawy utworzone w wybranym okresie, w których przekroczono pierwotny termin pierwszej odpowiedzi.",
   claim: "Średni czas od utworzenia case’a do przypisania pierwszego właściciela.",
   response: "Średni czas od utworzenia case’a do pierwszej wiadomości wysłanej przez wsparcie.",
   median: "Połowa pierwszych odpowiedzi została wysłana w czasie równym lub krótszym od tej wartości.",
@@ -152,17 +144,16 @@ const presets: [DatePreset, string][] = [
 
 export default function StatisticsRoute() {
   const t = useT()
-  const initialRange = getPresetRange("7days")
   const [preset, setPreset] = useState<DatePreset>("7days")
-  const [customFrom, setCustomFrom] = useState(initialRange.from)
-  const [customTo, setCustomTo] = useState(initialRange.to)
+  const [customFrom, setCustomFrom] = useState("")
+  const [customTo, setCustomTo] = useState("")
   const [comparePrevious, setComparePrevious] = useState(true)
   const [user, setUser] = useState(ALL_VALUE)
   const [customer, setCustomer] = useState(ALL_VALUE)
   const [platform, setPlatform] = useState(ALL_VALUE)
   const [sourceChannel, setSourceChannel] = useState(ALL_VALUE)
   const [status, setStatus] = useState(ALL_VALUE)
-  const [slaState, setSlaState] = useState(ALL_VALUE)
+  const [slaOutcome, setSlaOutcome] = useState(ALL_VALUE)
   const [clock, setClock] = useState(() => Date.now())
 
   useEffect(() => {
@@ -170,26 +161,25 @@ export default function StatisticsRoute() {
     return () => window.clearInterval(timer)
   }, [])
 
-  const dateRange = useMemo(
-    () => preset === "custom" ? { from: customFrom, to: customTo } : getPresetRange(preset),
-    [customFrom, customTo, preset],
-  )
   const filters = useMemo<AnalyticsFilters>(
     () => ({
-      dateFrom: dateRange.from,
-      dateTo: dateRange.to,
+      dateFrom: preset === "custom" ? customFrom : "",
+      dateTo: preset === "custom" ? customTo : "",
+      datePreset: preset === "custom" ? undefined : preset,
       userId: user === ALL_VALUE ? undefined : user,
       customerId: customer === ALL_VALUE ? undefined : customer,
       platform: platform === ALL_VALUE ? undefined : (platform as Channel),
       sourceChannel: sourceChannel === ALL_VALUE ? undefined : sourceChannel,
       status: status === ALL_VALUE ? undefined : status,
-      slaState: slaState === ALL_VALUE ? undefined : slaState as AnalyticsFilters["slaState"],
+      firstResponseOutcome: slaOutcome === ALL_VALUE ? undefined : slaOutcome as AnalyticsFilters["firstResponseOutcome"],
       comparePrevious,
     }),
-    [comparePrevious, customer, dateRange.from, dateRange.to, platform, slaState, sourceChannel, status, user],
+    [comparePrevious, customer, customFrom, customTo, platform, preset, slaOutcome, sourceChannel, status, user],
   )
   const analyticsQuery = useAnalytics(filters)
   const analytics = analyticsQuery.data
+  const today = analytics?.reportingDate ?? reportingDate(clock, "UTC")
+  const dateRange = preset === "custom" ? { from: customFrom, to: customTo } : analyticsPresetRange(preset, today)
   const updatedSecondsAgo = analyticsQuery.dataUpdatedAt
     ? Math.max(0, Math.floor((clock - analyticsQuery.dataUpdatedAt) / 1_000))
     : 0
@@ -202,10 +192,10 @@ export default function StatisticsRoute() {
     setPlatform(ALL_VALUE)
     setSourceChannel(ALL_VALUE)
     setStatus(ALL_VALUE)
-    setSlaState(ALL_VALUE)
+    setSlaOutcome(ALL_VALUE)
   }
 
-  const filtersChanged = preset !== "7days" || !comparePrevious || [user, customer, platform, sourceChannel, status, slaState].some((value) => value !== ALL_VALUE)
+  const filtersChanged = preset !== "7days" || !comparePrevious || [user, customer, platform, sourceChannel, status, slaOutcome].some((value) => value !== ALL_VALUE)
 
   return (
     <TooltipProvider>
@@ -238,7 +228,13 @@ export default function StatisticsRoute() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="mr-1 text-xs font-medium text-muted-foreground">{t("Zakres czasu")}</span>
                 {presets.map(([value, label]) => (
-                  <Button key={value} size="sm" variant={preset === value ? "default" : "outline"} onClick={() => setPreset(value)}>{t(label)}</Button>
+                  <Button key={value} size="sm" variant={preset === value ? "default" : "outline"} onClick={() => {
+                    if (value === "custom" && !customFrom) {
+                      setCustomFrom(dateRange.from)
+                      setCustomTo(dateRange.to)
+                    }
+                    setPreset(value)
+                  }}>{t(label)}</Button>
                 ))}
                 <label className="ml-auto flex items-center gap-2.5 rounded-lg border bg-muted/20 px-3 py-2 text-xs font-medium">
                   <Switch checked={comparePrevious} onCheckedChange={setComparePrevious} aria-label={t("Porównaj z poprzednim okresem")} />
@@ -251,9 +247,10 @@ export default function StatisticsRoute() {
                     {t("Data od")} <Input
                       type="date"
                       value={customFrom}
-                      max={analyticsToday}
+                      max={today}
                       onChange={(event) => {
                         const value = event.target.value
+                        if (!value) return
                         setCustomFrom(value)
                         if (value > customTo) setCustomTo(value)
                       }}
@@ -265,9 +262,10 @@ export default function StatisticsRoute() {
                       type="date"
                       value={customTo}
                       min={customFrom}
-                      max={analyticsToday}
+                      max={today}
                       onChange={(event) => {
                         const value = event.target.value
+                        if (!value) return
                         setCustomTo(value)
                         if (value < customFrom) setCustomFrom(value)
                       }}
@@ -279,15 +277,15 @@ export default function StatisticsRoute() {
               )}
 
               <FilterBar className="border-t pt-3">
-                <DashboardFilterSelect value={user} onChange={setUser} label={t("Użytkownik")} allLabel={t("Wszyscy użytkownicy")} options={(analytics?.options.users ?? []).map((item) => ({ value: item.id, label: item.fullName }))} />
+                <DashboardFilterSelect value={user} onChange={setUser} label={t("Właściciel sprawy")} allLabel={t("Wszyscy właściciele")} options={(analytics?.options.users ?? []).map((item) => ({ value: item.id, label: item.fullName }))} />
                 <DashboardFilterSelect value={customer} onChange={setCustomer} label={t("Klient")} allLabel={t("Wszyscy klienci")} options={(analytics?.options.customers ?? []).map((item) => ({ value: item.id, label: item.name }))} />
                 <DashboardFilterSelect value={platform} onChange={(value) => { setPlatform(value); setSourceChannel(ALL_VALUE) }} label={t("Platforma")} allLabel={t("Wszystkie platformy")} options={(Object.entries(channelLabels) as [Channel, string][]).map(([value, label]) => ({ value, label }))} />
                 <DashboardFilterSelect value={sourceChannel} onChange={setSourceChannel} label={t("Kanał")} allLabel={t("Wszystkie kanały")} options={(analytics?.options.channels ?? []).filter((item) => platform === ALL_VALUE || item.platform === platform).map((item) => ({ value: item.value, label: item.label }))} />
                 <DashboardFilterSelect value={status} onChange={setStatus} label={t("Status")} allLabel={t("Wszystkie statusy")} options={(analytics?.options.statuses ?? []).map((item) => ({ ...item, label: t(item.label) }))} />
-                <DashboardFilterSelect value={slaState} onChange={setSlaState} label="SLA" allLabel={t("Wszystkie SLA")} options={(analytics?.options.slaStates ?? []).map((item) => ({ value: item.value, label: t(item.label) }))} />
+                <DashboardFilterSelect value={slaOutcome} onChange={setSlaOutcome} label={t("Wynik SLA pierwszej odpowiedzi")} allLabel={t("Wszystkie wyniki SLA pierwszej odpowiedzi")} options={(analytics?.options.firstResponseOutcomes ?? []).map((item) => ({ value: item.value, label: t(item.label) }))} />
                 <Button variant="outline" size="sm" onClick={() => notify.info(t("Więcej filtrów"), t("Struktura obsługuje już priority, tag i team; ich UI zostanie dodane wraz z backendem."))}><Filter /> {t("Więcej filtrów")}</Button>
                 {filtersChanged && <Button variant="ghost" size="sm" onClick={resetFilters}>{t("Wyczyść filtry")}</Button>}
-                <Badge variant="secondary" className="sm:ml-auto">{formatRange(dateRange.from, dateRange.to)}</Badge>
+                <Badge variant="secondary" className="sm:ml-auto">{formatRange(dateRange.from, dateRange.to)}{analytics && ` · ${analytics.reportingTimezone}`}</Badge>
               </FilterBar>
             </CardContent>
           </Card>
@@ -327,8 +325,7 @@ function AnalyticsDashboard({ data, preset }: { data: AnalyticsResult; preset: D
     { metricKey: "claimed", label: t("Przejęte"), value: formatNumber(data.kpis.claimed), icon: Inbox, tone: "info", definition: t(metricDefinitions.claimed) },
     { metricKey: "backlog", label: t("Aktualny backlog"), value: formatNumber(data.kpis.backlog), icon: Activity, tone: "info", definition: t(metricDefinitions.backlog), lowerIsBetter: true },
     { metricKey: "slaFirstResponsePercentage", label: t("SLA – pierwsza odpowiedź"), value: formatMaybePercent(data.kpis.slaFirstResponsePercentage), icon: Gauge, tone: "success", definition: t(metricDefinitions.sla), percentagePoints: true },
-    { metricKey: "breachedSla", label: t("Przekroczone SLA"), value: formatNumber(data.kpis.breachedSla), icon: AlertTriangle, tone: "danger", definition: t(metricDefinitions.breached), lowerIsBetter: true },
-    { metricKey: "warningSla", label: t("Ostrzeżenia SLA"), value: formatNumber(data.kpis.warningSla), icon: AlertTriangle, tone: "warning", definition: t(metricDefinitions.breached), lowerIsBetter: true },
+    { metricKey: "breachedSla", label: t("Przekroczony SLA pierwszej odpowiedzi"), value: formatNumber(data.kpis.breachedSla), icon: AlertTriangle, tone: "danger", definition: t(metricDefinitions.breached), lowerIsBetter: true },
     { metricKey: "averageClaimMinutes", label: t("Śr. czas przejęcia"), value: formatMaybeDuration(data.kpis.averageClaimMinutes), icon: Clock3, tone: "warning", definition: t(metricDefinitions.claim), lowerIsBetter: true },
     { metricKey: "averageFirstResponseMinutes", label: t("Śr. pierwsza odpowiedź"), value: formatMaybeDuration(data.kpis.averageFirstResponseMinutes), icon: TimerReset, tone: "teams", definition: t(metricDefinitions.response), lowerIsBetter: true },
     { metricKey: "averageResolutionMinutes", label: t("Śr. całkowity czas rozwiązania"), value: formatMaybeDuration(data.kpis.averageResolutionMinutes), icon: CheckCircle2, tone: "neutral", definition: t(metricDefinitions.resolution), lowerIsBetter: true },
@@ -366,7 +363,7 @@ function AnalyticsDashboard({ data, preset }: { data: AnalyticsResult; preset: D
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title={t("SLA – pierwsza odpowiedź w czasie")} description={t("Proporcje spełnionych, zagrożonych i przekroczonych terminów.")} height={310}>
+        <ChartCard title={t("SLA – pierwsza odpowiedź w czasie")} description={t("Rozstrzygnięte wyniki SLA pierwszej odpowiedzi według daty utworzenia sprawy.")} height={310}>
           <ResponsiveContainer key={locale()} width="100%" height="100%" minWidth={0}>
             <BarChart data={data.slaTimeSeries} stackOffset="expand" margin={{ top: 8, right: 8, bottom: 0, left: -12 }} accessibilityLayer>
               <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
@@ -374,9 +371,8 @@ function AnalyticsDashboard({ data, preset }: { data: AnalyticsResult; preset: D
               <YAxis tickFormatter={(value: number) => `${Math.round(value * 100)}%`} tick={axisTick} tickLine={false} axisLine={false} width={42} />
               <RechartsTooltip contentStyle={chartTooltipStyle} labelFormatter={formatLongDate} />
               <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-              <Bar dataKey="met" name="Spełnione" stackId="sla" fill={slaColors.met} isAnimationActive={false} />
-              <Bar dataKey="warning" name="Zagrożone" stackId="sla" fill={slaColors.warning} isAnimationActive={false} />
-              <Bar dataKey="breached" name="Przekroczone" stackId="sla" fill={slaColors.breached} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+              <Bar dataKey="met" name={t("W terminie")} stackId="sla" fill={slaColors.met} isAnimationActive={false} />
+              <Bar dataKey="breached" name={t("Przekroczony termin")} stackId="sla" fill={slaColors.breached} radius={[3, 3, 0, 0]} isAnimationActive={false} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -385,7 +381,7 @@ function AnalyticsDashboard({ data, preset }: { data: AnalyticsResult; preset: D
       <section className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3">
         <DistributionCard title={t("Źródła case’ów")} description={t("Udział platform w utworzonych sprawach.")} data={data.sourceDistribution} colors={data.sourceDistribution.map((item) => platformColors[item.state])} onSelect={(value) => drillDown(t("Platforma: {{value0}}", { value0: value }))} />
         <DistributionCard title={t("Statusy case’ów")} description={t("Dynamiczny rozkład statusów biznesowych.")} data={data.statusDistribution} colors={data.statusDistribution.map((item) => statusColors[item.state.toLowerCase()] ?? "var(--muted-foreground)")} onSelect={(value) => drillDown(t("Status: {{value0}}", { value0: value }))} />
-        <DistributionCard title={t("SLA – podsumowanie")} description={t("Stan SLA pierwszej odpowiedzi.")} data={data.slaDistribution} colors={data.slaDistribution.map((item) => slaColors[item.state])} onSelect={(value) => drillDown(t("SLA: {{value0}}", { value0: value }))} className="lg:col-span-2 2xl:col-span-1" />
+        <ResponseSlaSummary data={data} />
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[minmax(340px,0.72fr)_minmax(0,1.45fr)]">
@@ -417,6 +413,35 @@ function AnalyticsDashboard({ data, preset }: { data: AnalyticsResult; preset: D
   )
 }
 
+function ResponseSlaSummary({ data }: { data: AnalyticsResult }) {
+  const t = useT()
+  const metrics = [
+    { label: "Sprawy z historycznym naruszeniem SLA odpowiedzi", value: data.kpis.historicalSupportBreachedCases, previous: data.comparison?.kpis.historicalSupportBreachedCases, definition: "Każda sprawa z co najmniej jednym zapisanym naruszeniem SLA pierwszej lub kolejnej odpowiedzi jest liczona raz." },
+    { label: "Sprawy z naruszeniem SLA kolejnej odpowiedzi", value: data.kpis.nextResponseBreachedCases, previous: data.comparison?.kpis.nextResponseBreachedCases, definition: "Sprawy z zapisanym naruszeniem SLA kolejnej odpowiedzi. Wielokrotne naruszenia w tej samej sprawie są liczone raz." },
+    { label: "Bieżące odpowiedzi wsparcia po terminie", value: data.slaAttention.overdueSupportResponses, definition: "Aktywne terminy pierwszej lub kolejnej odpowiedzi, które minęły do chwili odświeżenia danych." },
+    { label: "Sprawy wymagające kontaktu z klientem", value: data.slaAttention.dueCustomerFollowUps, definition: "Aktywne terminy kontaktu z klientem, które minęły do chwili odświeżenia danych i nie są naruszeniami SLA odpowiedzi wsparcia." },
+  ]
+  return (
+    <Card className="lg:col-span-2 2xl:col-span-1">
+      <CardHeader><CardTitle>{t("SLA odpowiedzi i kontakt z klientem")}</CardTitle>
+        <CardDescription>{t("Sprawy utworzone w wybranym okresie, z uwzględnieniem aktywnych filtrów.")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="divide-y">
+          {metrics.map(({ label, value, previous, definition }) => (
+            <div className="flex items-center justify-between gap-3 py-3" key={label}>
+              <dt><MetricLabel label={t(label)} definition={definition} /></dt>
+              <dd className="text-right font-semibold tabular-nums">{formatNumber(value)}
+                {previous !== undefined && <div className="text-xs font-normal text-muted-foreground">{t("Poprzedni okres: {{value0}}", { value0: formatNumber(previous) })}</div>}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
+  )
+}
+
 function CurrentWorkTable({ data }: { data: NonNullable<AnalyticsResult["currentWork"]> }) {
   const t = useT()
   return (
@@ -430,7 +455,13 @@ function CurrentWorkTable({ data }: { data: NonNullable<AnalyticsResult["current
           <TableCell>{channelLabels[item.platform]} · {item.sourceChannel}</TableCell>
           <TableCell><Badge variant="secondary">{t(item.statusLabel)}</Badge></TableCell>
           <TableCell>{item.userName ?? t("Nieprzypisany")}</TableCell>
-          <TableCell><Badge variant={item.slaState === "breached" ? "destructive" : "secondary"}>{item.slaState === "met" ? t("W normie") : item.slaState === "warning" ? t("Zagrożone") : t("Przekroczone")}</Badge></TableCell>
+          <TableCell>{item.operationalDeadlineState ? (
+            <Badge variant={item.operationalDeadlineState === "BREACHED" ? "destructive" : "secondary"}>
+              {item.operationalDeadlineKind === "FOLLOW_UP"
+                ? t(item.operationalDeadlineState === "FOLLOW_UP_DUE" ? "Kontakt z klientem wymagany" : "Oczekuje na klienta")
+                : `${item.operationalDeadlineKind} · ${t(item.operationalDeadlineState === "BREACHED" ? "Po terminie" : item.operationalDeadlineState === "WARNING" ? "Zagrożone" : "W normie")}`}
+            </Badge>
+          ) : "—"}</TableCell>
           <TableCell className="text-xs text-muted-foreground">{new Intl.DateTimeFormat(locale(), { dateStyle: "short", timeStyle: "short" }).format(new Date(item.createdAt))}</TableCell>
         </TableRow>)}</TableBody>
       </Table></div></CardContent>
@@ -579,7 +610,7 @@ function ClientPerformanceTable({ data, onSelect }: { data: ClientPerformance[];
       <CardContent>
         <div className="overflow-x-auto rounded-lg border">
           <Table>
-            <TableHeader><TableRow className="bg-muted/40"><TableHead>{t("Klient")}</TableHead><TableHead className="text-center">{t("Utworzone")}</TableHead><TableHead className="text-center">{t("Rozwiązane")}</TableHead><TableHead className="text-center">{t("Nie dotyczy")}</TableHead><TableHead className="text-center">Spam</TableHead><TableHead className="text-right">SLA</TableHead><TableHead className="text-right">{t("Śr. odpowiedź")}</TableHead><TableHead className="text-right">{t("Śr. rozwiązanie")}</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow className="bg-muted/40"><TableHead>{t("Klient")}</TableHead><TableHead className="text-center">{t("Utworzone")}</TableHead><TableHead className="text-center">{t("Rozwiązane")}</TableHead><TableHead className="text-center">{t("Nie dotyczy")}</TableHead><TableHead className="text-center">Spam</TableHead><TableHead className="text-right"><MetricLabel label={t("SLA – pierwsza odpowiedź")} definition={metricDefinitions.sla} /></TableHead><TableHead className="text-right">{t("Śr. odpowiedź")}</TableHead><TableHead className="text-right">{t("Śr. rozwiązanie")}</TableHead></TableRow></TableHeader>
             <TableBody>
               {data.slice(0, 6).map((item) => (
                 <TableRow key={item.customerId} className="cursor-pointer" onClick={() => onSelect(item.customerName)}>
@@ -672,7 +703,7 @@ function PerformanceTable({ data }: { data: UserPerformance[] }) {
                 <SortableHead label={t("Mediana odpowiedzi")} sortKey="medianResponseMinutes" sort={sort} onSort={setSorting} align="right" definition={metricDefinitions.median} />
                 <SortableHead label={t("P90 odpowiedzi")} sortKey="p90ResponseMinutes" sort={sort} onSort={setSorting} align="right" definition={metricDefinitions.p90} />
                 <SortableHead label={t("Śr. rozwiązanie")} sortKey="averageResolutionMinutes" sort={sort} onSort={setSorting} align="right" definition={metricDefinitions.resolution} />
-                <SortableHead label="SLA" sortKey="slaPercentage" sort={sort} onSort={setSorting} align="right" definition={metricDefinitions.sla} />
+                <SortableHead label={t("SLA – pierwsza odpowiedź")} sortKey="slaPercentage" sort={sort} onSort={setSorting} align="right" definition={metricDefinitions.userSla} />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -739,27 +770,6 @@ function formatMaybeDuration(value: number | null) {
 
 function formatMaybePercent(value: number | null) {
   return value === null ? "—" : formatPercent(value)
-}
-
-function getPresetRange(preset: Exclude<DatePreset, "custom">) {
-  const end = new Date(`${analyticsToday}T12:00:00.000Z`)
-  if (preset === "yesterday") {
-    end.setUTCDate(end.getUTCDate() - 1)
-    const date = end.toISOString().slice(0, 10)
-    return { from: date, to: date }
-  }
-  if (preset === "this_month") return { from: `${analyticsToday.slice(0, 8)}01`, to: analyticsToday }
-  if (preset === "previous_month") {
-    const firstCurrent = new Date(`${analyticsToday.slice(0, 8)}01T12:00:00.000Z`)
-    const lastPrevious = new Date(firstCurrent)
-    lastPrevious.setUTCDate(0)
-    const firstPrevious = new Date(Date.UTC(lastPrevious.getUTCFullYear(), lastPrevious.getUTCMonth(), 1, 12))
-    return { from: firstPrevious.toISOString().slice(0, 10), to: lastPrevious.toISOString().slice(0, 10) }
-  }
-  const days = preset === "today" ? 1 : preset === "7days" ? 7 : preset === "30days" ? 30 : 90
-  const start = new Date(end)
-  start.setUTCDate(start.getUTCDate() - (days - 1))
-  return { from: start.toISOString().slice(0, 10), to: analyticsToday }
 }
 
 function getComparisonLabel(preset: DatePreset, range?: string) {

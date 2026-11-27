@@ -232,6 +232,13 @@ Rules:
 - Statistics default range: last 30 days; maximum interactive range: 366 days.
 - No-data results are null/empty, never synthetic 0ms or 100%.
 
+### Response SLA on the Statistics dashboard
+
+- The first-response chart, breach count, and customer attainment use the same Case-creation cohort and original FRT deadlines. A successful first reply at or before its deadline is on time. A late reply, an unanswered original deadline that has elapsed, or closure without a reply at or after the deadline is a missed deadline. Pending deadlines, unresolved measurement data, and closure before the deadline are excluded from the attainment denominator.
+- Historical response breaches count unique Cases with recorded FRT or NRT breaches, including operational support breaches preserved after a deadline restart. Cases with a recorded NRT breach are a subset and count once even across several cycles. Legacy unclaimed/in-progress classifications are not response outcomes.
+- Currently overdue support responses and customer follow-ups due show separate active Case counts at the latest server observation. Both respect the selected Case-creation cohort and filters. Only historical cohort metrics are compared to the preceding range of the same length. Customer follow-ups never count as support breaches.
+- Dashboard reporting dates use the organization's active IANA timezone. Presets and comparison ranges use reporting dates, and SLA calculations continue to honor each Case's original policy snapshot. The owner filter selects the current Case owner; user first-response results are attributed to the confirmed reply author within the visible cohort. Unanswered Cases and replies without an identifiable author are not attributed to an individual.
+
 Admin current work:
 
 - Lives in `/statistics` as ADMIN-only tab/section **Aktualna praca**; no separate top-level `/current-cases` navigation item.

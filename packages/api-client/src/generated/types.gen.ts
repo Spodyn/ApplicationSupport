@@ -53,6 +53,7 @@ export type ApiAnalyticsRecordsControllerDashboardFacts = {
   "users"?: Array<ApiAnalyticsRecordsControllerUserOption>
   "generatedAt"?: string
   "global": boolean
+  "reportingTimezone"?: string
 }
 
 export type ApiAnalyticsRecordsControllerFact = {
@@ -86,6 +87,13 @@ export type ApiAnalyticsRecordsControllerFact = {
   "resolutionWorkingSeconds"?: number | null
   "firstResponseStartedAt"?: string | null
   "firstResponseStoppedAt"?: string | null
+  "historicalSupportBreach"?: boolean
+  "historicalNextResponseBreach"?: boolean
+  "operationalDeadlineKind"?: "FRT" | "NRT" | "FOLLOW_UP" | null
+  "operationalDeadlineState"?: "ON_TRACK" | "WARNING" | "BREACHED" | "FOLLOW_UP_DUE" | null
+  "firstResponderId"?: string | null
+  "firstResponderName"?: string | null
+  "firstResponseOutcome"?: "met" | "breached" | "pending" | "unmeasured"
 }
 
 export type ApiAnalyticsRecordsControllerUserOption = {

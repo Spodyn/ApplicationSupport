@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import type { CaseOperationalDeadline } from "@usi/api-client/generated"
 
 const localOrigin = "http://127.0.0.1:3100"
 
@@ -36,7 +37,10 @@ const inboundMessage = {
   }>,
 }
 
-async function preparePage(page: Page, initiallyAuthenticated = true, options: { incomingBody?: string; customerName?: string; sendGate?: Promise<void>; english?: boolean; fileName?: string; caseActions?: boolean; recoverySource?: "manual" | "automatic" } = {}) {
+async function preparePage(page: Page, initiallyAuthenticated = true, options: {
+  incomingBody?: string; customerName?: string; sendGate?: Promise<void>; english?: boolean; fileName?: string;
+  caseActions?: boolean; recoverySource?: "manual" | "automatic"; operationalDeadline?: CaseOperationalDeadline;
+} = {}) {
   const incomingMessage = { ...inboundMessage, recoverySource: options.recoverySource, body: options.incomingBody ?? inboundMessage.body }
   const attachmentName = options.fileName ?? "evidence.txt"
   const listItem = { ...caseListItem, customerName: options.customerName ?? caseListItem.customerName }
@@ -144,7 +148,7 @@ async function preparePage(page: Page, initiallyAuthenticated = true, options: {
         items: [{ ...listItem, status: claimed ? "VERIFICATION" : "NEW",
           ownerUserId: claimed ? authenticatedSession.id : null,
           ownerDisplayName: claimed ? authenticatedSession.displayName : null,
-          unreadForCurrentUser: !read }], nextCursor: null,
+          unreadForCurrentUser: !read, operationalDeadline: options.operationalDeadline }], nextCursor: null,
       }) })
       return
     }
@@ -158,7 +162,8 @@ async function preparePage(page: Page, initiallyAuthenticated = true, options: {
         relatedCase: { id: null, reference: null }, personalState: { lastReadMessageId: read ? inboundMessageId : null, lastReadAt: null, snoozedUntil: null },
         sla: null, ignoreScore: 0, availableActions: claimed ? ["REPLY", "MARK_READ", ...(options.caseActions ? ["RESOLVE", "REASSIGN"] : [])] : ["CLAIM", "MARK_READ"],
         claimedAt: null, waitingUntil: null, resolvedAt: null, ignoredAt: null, resolutionCategory: null,
-        createdAt: listItem.createdAt, updatedAt: listItem.updatedAt, lastActivityAt: listItem.lastActivityAt, version: claimed ? 2 : 1,
+        createdAt: listItem.createdAt, updatedAt: listItem.updatedAt, lastActivityAt: listItem.lastActivityAt,
+        version: claimed ? 2 : 1, operationalDeadline: options.operationalDeadline,
       }) })
       return
     }
@@ -272,6 +277,40 @@ async function preparePage(page: Page, initiallyAuthenticated = true, options: {
   })
 
   return { externalRequests, sends, uploads, retries, historyBefore, supportMessages }
+}
+
+for (const [kind, warningSeconds] of [["FRT", 225], ["NRT", 450]] as const) {
+  test(`${kind} countdown ticks to the warning and pauses outside business hours`, async ({ page }) => {
+    const observed = Date.parse("2026-11-23T10:59:54Z")
+    const open = Date.parse("2026-11-23T12:00:00Z")
+    const iso = (time: number) => new Date(time).toISOString()
+    await page.clock.install({ time: observed })
+    const deadline: CaseOperationalDeadline = {
+      id: caseId, kind, state: "ON_TRACK", startedAt: iso(observed - 60_000),
+      observedAt: iso(observed), warningAt: iso(observed + 3_000),
+      dueAt: iso(open + (warningSeconds - 3) * 1_000), clockValidUntil: iso(open + 3_600_000),
+      remainingMillis: (warningSeconds + 3) * 1_000,
+      businessIntervals: [
+        { start: iso(observed), end: iso(observed + 6_000) },
+        { start: iso(open), end: iso(open + 3_600_000) },
+      ],
+    }
+    await preparePage(page, true, { english: true, operationalDeadline: deadline })
+    await page.goto("/cases")
+    const tile = page.locator(`button[data-case-id="${caseId}"]`).locator("[data-sla-countdown]")
+    await expect(tile).toContainText(kind)
+    const browserNow = await page.evaluate(() => Date.now())
+    await page.clock.pauseAt(browserNow + 500)
+    const before = await tile.textContent()
+    await expect(tile).toHaveClass(/text-emerald-400/)
+    await page.clock.runFor(5_000)
+    await expect(tile).not.toHaveText(before!)
+    await expect(tile).toHaveClass(/text-amber-400/)
+    await page.clock.runFor(3_000)
+    const afterClose = await tile.textContent()
+    await page.clock.runFor(3_000)
+    await expect(tile).toHaveText(afterClose!)
+  })
 }
 
 async function prepareSettingsApi(page: Page, options: { forbidden?: boolean; provider?: "SLACK" | "TEAMS" } = {}) {

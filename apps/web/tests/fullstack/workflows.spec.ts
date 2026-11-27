@@ -156,7 +156,19 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   await inbound(page, 'Second message in the same NRT series', first.ts)
   await expect(conversation.getByText('Second message in the same NRT series', {exact: true})).toBeVisible()
   expect((await readSla()).responseCycles).toEqual([round])
-  expect((await readSla()).operationalDeadline.id).not.toBe(activeRound.id)
+  const restarted = (await readSla()).operationalDeadline
+  expect(restarted.id).not.toBe(activeRound.id)
+  expect(Date.parse(restarted.dueAt)).toBeGreaterThanOrEqual(Date.parse(activeRound.dueAt))
+  expect(await (await page.request.post('/__test/expire-deadline', {data: {caseId}})).json()).toEqual({changed: 1})
+  await expect.poll(async () => (await readSla()).operationalDeadline.state).toBe('BREACHED')
+  await expect.poll(async () => (await (await page.request.get('/api/v1/notifications/sla-reminders')).json()).items
+    .filter((item: {id: string}) => item.id === restarted.id))
+    .toEqual([expect.objectContaining({kind: 'NRT', unread: true})])
+  const breached = await (await page.request.get('/api/v1/statistics/records')).json()
+  expect(breached.records.find((record: {id: string}) => record.id === caseId)).toMatchObject({
+    historicalSupportBreach: true, historicalNextResponseBreach: true,
+    operationalDeadlineKind: 'NRT', operationalDeadlineState: 'BREACHED',
+  })
 
   expect((await command(page, casePath + '/messages', {body: 'Successful NRT reply'})).status()).toBe(202)
   await expect.poll(async () => (await readSla()).responseSla.state).toBe('PAUSED')
@@ -210,10 +222,43 @@ test('shared countdown changes without requests and follow-up expiry reaches onl
 
   const reminderPath = '/api/v1/notifications/sla-reminders'
   const reminders = async (tab: Page) => (await (await tab.request.get(reminderPath)).json()).items
+  const reference = (await detail()).reference
+  const notificationMenu = page.getByRole('button', {name: 'Powiadomienia', exact: true})
+  const followUpNotification = page.getByRole('button', {name: /Czas skontaktować się z klientem/}).filter({hasText: reference})
+  const statsPage = await page.context().newPage()
+  await statsPage.goto('/statistics')
+  await statsPage.getByRole('combobox', {name: 'Właściciel sprawy', exact: true}).click()
+  await statsPage.getByRole('option', {name: owner.displayName, exact: true}).click()
+  const statistic = (label: string) => statsPage.locator('dl > div')
+    .filter({has: statsPage.getByText(label, {exact: true})}).locator('dd')
+  const historicalLabel = 'Sprawy z historycznym naruszeniem SLA odpowiedzi'
+  const followsLabel = 'Sprawy wymagające kontaktu z klientem'
+  await expect(statistic(followsLabel)).toHaveText('0')
+  await expect(statistic(historicalLabel)).toHaveText(/^0/)
+  const statisticsFact = async () => (await (await statsPage.request.get('/api/v1/statistics/records')).json()).records
+    .find((item: {id: string}) => item.id === caseId)
+  const beforeExpiry = await statisticsFact()
+  expect(beforeExpiry).toMatchObject({
+    firstResponderId: owner.userId, historicalSupportBreach: false, historicalNextResponseBreach: false,
+    firstResponseOutcome: 'met', operationalDeadlineKind: 'FOLLOW_UP', operationalDeadlineState: 'ON_TRACK',
+  })
+  await notificationMenu.click()
+  await expect(followUpNotification).toHaveCount(0)
   expect(await (await page.request.post('/__test/expire-deadline', {data: {caseId}})).json()).toEqual({changed: 1})
+  await expect(followUpNotification).toBeVisible()
   await expect.poll(async () => (await reminders(page)).filter((item: {caseId: string}) => item.caseId === caseId))
     .toEqual([expect.objectContaining({kind: 'FOLLOW_UP', unread: true})])
   await expect(panel.locator('[data-sla-countdown]')).toContainText('Po terminie')
+  await expect(statistic(followsLabel)).toHaveText('1')
+  await expect(statistic(historicalLabel)).toHaveText(/^0/)
+  expect(await statisticsFact()).toEqual({...beforeExpiry, operationalDeadlineState: 'FOLLOW_UP_DUE'})
+  await selectLanguage(statsPage, "English", "pl")
+  await expect(statistic('Customer follow-ups due')).toHaveText('1')
+  await expect(statistic('Cases with historical response breaches')).toHaveText(/^0/)
+  await expect(statsPage.getByRole('button', {name: 'Definition: Missed first-response deadlines', exact: true})).toBeVisible()
+  await selectLanguage(statsPage, "Polski", "en")
+  await statsPage.close()
+  await notificationMenu.click()
   const reminder = (await reminders(page)).find((item: {caseId: string}) => item.caseId === caseId)
   const viewerSession = await request.newContext({baseURL})
   try {
@@ -245,8 +290,8 @@ test('shared countdown changes without requests and follow-up expiry reaches onl
     workflowStatus: 'WAITING_ON_CUSTOMER', owner: {id: owner.userId},
     operationalDeadline: {kind: 'FOLLOW_UP', state: 'FOLLOW_UP_DUE'},
   })
-  await page.getByRole('button', {name: 'Powiadomienia', exact: true}).click()
-  await page.getByRole('button', {name: /Czas skontaktować się z klientem/}).filter({hasText: (await detail()).reference}).click()
+  await notificationMenu.click()
+  await followUpNotification.click()
   await expect.poll(async () => (await reminders(page)).filter((item: {caseId: string}) => item.caseId === caseId))
     .toEqual([expect.objectContaining({kind: 'FOLLOW_UP', unread: false})])
   expect((await command(page, path + '/resolve', {})).status()).toBe(200)

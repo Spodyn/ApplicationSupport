@@ -19,8 +19,12 @@ import org.springframework.web.bind.annotation.RestController;
 class AnalyticsRecordsController {
 
     private final JdbcTemplate jdbc;
+    private final StatisticsOverviewRepository statistics;
 
-    AnalyticsRecordsController(JdbcTemplate jdbc) { this.jdbc = jdbc; }
+    AnalyticsRecordsController(JdbcTemplate jdbc, StatisticsOverviewRepository statistics) {
+        this.jdbc = jdbc;
+        this.statistics = statistics;
+    }
 
     @GetMapping("/records")
     DashboardFacts records(Authentication authentication) {
@@ -33,6 +37,8 @@ class AnalyticsRecordsController {
         }
         boolean global = authentication.getAuthorities().stream()
                 .anyMatch(value -> "view_global_statistics".equals(value.getAuthority()));
+        String timezone = statistics.activeTimezone();
+        Instant observedAt = jdbc.queryForObject("SELECT statement_timestamp()", OffsetDateTime.class).toInstant();
         List<Fact> facts = jdbc.query("""
                 SELECT c.id, c.reference, c.created_at, c.claimed_at,
                        COALESCE(c.resolved_at, c.ignored_at) AS completed_at,
@@ -45,7 +51,34 @@ class AnalyticsRecordsController {
                        COALESCE(c.customer_id, '00000000-0000-0000-0000-000000000000'::uuid) AS customer_id, COALESCE(customer.name, 'Nie przypisano') AS customer_name, c.provider,
                        channel.name AS channel_name, c.status, c.workflow_status, c.resolution_category,
                        sla.first_response_completed_at, sla.first_response_due_at, sla.first_response_started_at, sla.first_response_stopped_at,
+                       CASE
+                           WHEN sla.first_response_due_at IS NULL THEN 'unmeasured'
+                           WHEN sla.first_response_completed_at <= sla.first_response_due_at THEN 'met'
+                           WHEN sla.first_response_completed_at > sla.first_response_due_at
+                             OR sla.first_response_stopped_at >= sla.first_response_due_at THEN 'breached'
+                           WHEN sla.first_response_stopped_at IS NOT NULL OR c.workflow_status = 'RESOLVED' THEN 'unmeasured'
+                           WHEN business.observed_at >= sla.first_response_due_at THEN 'breached'
+                           ELSE 'pending'
+                       END AS first_response_outcome,
                        CASE WHEN response.historically_breached THEN 'BREACHED' ELSE sla.state END AS sla_state,
+                       response.historically_breached OR COALESCE(history.breached, FALSE) AS historical_support_breach,
+                       COALESCE(history.next_response_breached, FALSE) OR EXISTS (
+                           SELECT 1 FROM case_next_response_cycles n
+                           WHERE n.case_id = c.id AND (n.ended_at > n.due_at
+                               OR (n.ended_at = n.due_at AND n.outcome <> 'RESPONDED'))
+                       ) AS historical_next_response_breach,
+                       active.kind AS operational_kind,
+                       CASE
+                           WHEN active.kind = 'FOLLOW_UP' AND active.due_at <= business.observed_at THEN 'FOLLOW_UP_DUE'
+                           WHEN active.kind = 'FOLLOW_UP' THEN 'ON_TRACK'
+                           WHEN active.due_at <= business.observed_at THEN 'BREACHED'
+                           WHEN active.warning_at <= business.observed_at THEN 'WARNING'
+                           WHEN active.id IS NOT NULL THEN 'ON_TRACK'
+                       END AS operational_state,
+                       CASE WHEN business.global_access OR responder.user_id = business.viewer_id
+                            THEN responder.user_id END AS first_responder_id,
+                       CASE WHEN business.global_access OR responder.user_id = business.viewer_id
+                            THEN responder.display_name END AS first_responder_name,
                        resolution.wall_seconds, resolution.working_seconds,
                        COALESCE(c.status = 'RESOLVED' AND (
                            SELECT a.action = 'CASE_FORCE_RESOLVE' FROM audit_events a
@@ -58,18 +91,35 @@ class AnalyticsRecordsController {
                 LEFT JOIN users u ON u.id = c.owner_user_id
                 LEFT JOIN case_sla sla ON sla.case_id = c.id
                 JOIN case_response_sla_projection response ON response.case_id = c.id
+                LEFT JOIN case_operational_deadline_projection active ON active.case_id = c.id
+                LEFT JOIN LATERAL (
+                    SELECT TRUE AS breached, bool_or(d.kind = 'NRT') AS next_response_breached
+                    FROM case_operational_deadlines d
+                    WHERE d.case_id = c.id AND d.kind IN ('FRT', 'NRT') AND d.breached_at IS NOT NULL
+                    HAVING count(*) > 0
+                ) history ON TRUE
+                LEFT JOIN LATERAL (
+                    SELECT m.author_user_id AS user_id, sender.display_name
+                    FROM messages m
+                    JOIN delivery_attempts a ON a.message_id = m.id
+                    JOIN users sender ON sender.id = m.author_user_id
+                    WHERE m.case_id = c.id AND m.kind = 'SUPPORT' AND NOT m.inbound
+                      AND a.finished_at = sla.first_response_completed_at AND a.error_category IS NULL
+                    ORDER BY m.id
+                    LIMIT 1
+                ) responder ON TRUE
                 LEFT JOIN case_resolution_times resolution ON resolution.case_id = c.id AND resolution.ended_at = c.resolved_at
-                CROSS JOIN business_hours business
-                WHERE (? OR c.owner_user_id = ?)
-                  AND business.active = TRUE
+                CROSS JOIN (SELECT ?::text AS timezone_id, ?::timestamptz AS observed_at,
+                                   ?::boolean AS global_access, ?::uuid AS viewer_id) business
+                WHERE business.global_access OR c.owner_user_id = business.viewer_id
                 ORDER BY c.created_at, c.id
-                """, this::mapFact, global, currentUser);
+                """, this::mapFact, timezone, observedAt.atOffset(java.time.ZoneOffset.UTC), global, currentUser);
         List<UserOption> users = global
                 ? jdbc.query("SELECT id, display_name FROM users WHERE active = TRUE ORDER BY display_name",
                         (rs, row) -> new UserOption(rs.getObject("id", UUID.class), rs.getString("display_name")))
                 : jdbc.query("SELECT id, display_name FROM users WHERE id = ?",
                         (rs, row) -> new UserOption(rs.getObject("id", UUID.class), rs.getString("display_name")), currentUser);
-        return new DashboardFacts(facts, users, Instant.now(), global);
+        return new DashboardFacts(facts, users, observedAt, global, timezone);
     }
 
     private Fact mapFact(ResultSet rs, int row) throws SQLException {
@@ -91,7 +141,11 @@ class AnalyticsRecordsController {
                 statusLabel(status), rs.getString("workflow_status"), "medium", List.of(), resolution, slaState,
                 instant(rs, "first_response_due_at"), rs.getBoolean("force_resolved"),
                 rs.getObject("wall_seconds", Long.class), rs.getObject("working_seconds", Long.class),
-                instant(rs, "first_response_started_at"), instant(rs, "first_response_stopped_at"));
+                instant(rs, "first_response_started_at"), instant(rs, "first_response_stopped_at"),
+                rs.getBoolean("historical_support_breach"), rs.getBoolean("historical_next_response_breach"),
+                rs.getString("operational_kind"), rs.getString("operational_state"),
+                rs.getObject("first_responder_id", UUID.class), rs.getString("first_responder_name"),
+                rs.getString("first_response_outcome"));
     }
 
     private static String resolution(String status, String category) {
@@ -117,12 +171,16 @@ class AnalyticsRecordsController {
         return value == null ? null : value.toInstant();
     }
 
-    record DashboardFacts(List<Fact> records, List<UserOption> users, Instant generatedAt, boolean global) { }
+    record DashboardFacts(List<Fact> records, List<UserOption> users, Instant generatedAt, boolean global,
+                          String reportingTimezone) { }
     record UserOption(UUID id, String fullName) { }
     record Fact(UUID id, String reference, Instant createdAt, String createdDate, String claimedDate, String resolvedDate,
                 int createdDayIndex, int createdHour, Instant claimedAt, Instant firstResponseAt, Instant resolvedAt,
                 UUID userId, String userName, UUID customerId, String customerName, String platform,
                 String sourceChannel, String status, String statusLabel, String workflowStatus, String priority, List<String> tags,
                 String resolutionReason, String slaState, Instant slaDeadlineAt,
-                boolean excludedFromUserPerformance, Long resolutionWallSeconds, Long resolutionWorkingSeconds, Instant firstResponseStartedAt, Instant firstResponseStoppedAt) { }
+                boolean excludedFromUserPerformance, Long resolutionWallSeconds, Long resolutionWorkingSeconds,
+                Instant firstResponseStartedAt, Instant firstResponseStoppedAt, boolean historicalSupportBreach,
+                boolean historicalNextResponseBreach, String operationalDeadlineKind, String operationalDeadlineState,
+                UUID firstResponderId, String firstResponderName, String firstResponseOutcome) { }
 }
