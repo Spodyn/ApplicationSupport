@@ -18,28 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/statistics")
 class AnalyticsRecordsController {
 
-    private final JdbcTemplate jdbc;
-    private final StatisticsOverviewRepository statistics;
-
-    AnalyticsRecordsController(JdbcTemplate jdbc, StatisticsOverviewRepository statistics) {
-        this.jdbc = jdbc;
-        this.statistics = statistics;
-    }
-
-    @GetMapping("/records")
-    DashboardFacts records(Authentication authentication) {
-        if (authentication == null || !authentication.isAuthenticated()) throw ApiProblemException.authenticationRequired();
-        UUID currentUser;
-        try {
-            currentUser = UUID.fromString(authentication.getName());
-        } catch (IllegalArgumentException exception) {
-            throw ApiProblemException.authenticationRequired();
-        }
-        boolean global = authentication.getAuthorities().stream()
-                .anyMatch(value -> "view_global_statistics".equals(value.getAuthority()));
-        String timezone = statistics.activeTimezone();
-        Instant observedAt = jdbc.queryForObject("SELECT statement_timestamp()", OffsetDateTime.class).toInstant();
-        List<Fact> facts = jdbc.query("""
+    static final String RECORDS_SQL = """
                 SELECT c.id, c.reference, c.created_at, c.claimed_at,
                        COALESCE(c.resolved_at, c.ignored_at) AS completed_at,
                        (c.created_at AT TIME ZONE business.timezone_id)::date::text AS created_date,
@@ -90,7 +69,12 @@ class AnalyticsRecordsController {
                 JOIN channels channel ON channel.id = c.channel_id
                 LEFT JOIN users u ON u.id = c.owner_user_id
                 LEFT JOIN case_sla sla ON sla.case_id = c.id
-                JOIN case_response_sla_projection response ON response.case_id = c.id
+                -- The projection is one row per Case. A bounded lookup prevents cold-catalog
+                -- estimates for its singleton settings join multiplying the whole dashboard plan.
+                JOIN LATERAL (
+                    SELECT p.historically_breached FROM case_response_sla_projection p
+                    WHERE p.case_id = c.id LIMIT 1
+                ) response ON TRUE
                 LEFT JOIN case_operational_deadline_projection active ON active.case_id = c.id
                 LEFT JOIN LATERAL (
                     SELECT TRUE AS breached, bool_or(d.kind = 'NRT') AS next_response_breached
@@ -113,7 +97,30 @@ class AnalyticsRecordsController {
                                    ?::boolean AS global_access, ?::uuid AS viewer_id) business
                 WHERE business.global_access OR c.owner_user_id = business.viewer_id
                 ORDER BY c.created_at, c.id
-                """, this::mapFact, timezone, observedAt.atOffset(java.time.ZoneOffset.UTC), global, currentUser);
+                """;
+
+    private final JdbcTemplate jdbc;
+    private final StatisticsOverviewRepository statistics;
+
+    AnalyticsRecordsController(JdbcTemplate jdbc, StatisticsOverviewRepository statistics) {
+        this.jdbc = jdbc;
+        this.statistics = statistics;
+    }
+
+    @GetMapping("/records")
+    DashboardFacts records(Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) throw ApiProblemException.authenticationRequired();
+        UUID currentUser;
+        try {
+            currentUser = UUID.fromString(authentication.getName());
+        } catch (IllegalArgumentException exception) {
+            throw ApiProblemException.authenticationRequired();
+        }
+        boolean global = authentication.getAuthorities().stream()
+                .anyMatch(value -> "view_global_statistics".equals(value.getAuthority()));
+        String timezone = statistics.activeTimezone();
+        Instant observedAt = jdbc.queryForObject("SELECT statement_timestamp()", OffsetDateTime.class).toInstant();
+        List<Fact> facts = jdbc.query(RECORDS_SQL, this::mapFact, timezone, observedAt.atOffset(java.time.ZoneOffset.UTC), global, currentUser);
         List<UserOption> users = global
                 ? jdbc.query("SELECT id, display_name FROM users WHERE active = TRUE ORDER BY display_name",
                         (rs, row) -> new UserOption(rs.getObject("id", UUID.class), rs.getString("display_name")))

@@ -272,6 +272,7 @@ export function CasesPage({
   const selectCase = (item: CasePresentation, trigger: HTMLButtonElement) => {
     lastCardRef.current = trigger
     setSelectedCaseId(item.id)
+    router.replace("?caseId=" + encodeURIComponent(item.id), { scroll: false })
     setMobileConversationOpen(true)
     if (!window.matchMedia("(min-width: 768px)").matches) {
       requestAnimationFrame(() => conversationTitleRef.current?.focus())

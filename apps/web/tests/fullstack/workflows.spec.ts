@@ -87,6 +87,36 @@ async function inbound(page: Page, text: string | undefined, thread?: string,
   return {ts, payload, timestamp, signature}
 }
 
+async function closeFixtureCases(page: Page) {
+  const fixture = fixtures.get(page)
+  if (!fixture) return
+  const response = await page.request.get('/api/v1/cases', {params: {search: fixture.externalChannelId}})
+  expect(response.status()).toBe(200)
+  for (const item of (await response.json()).items) {
+    if (item.channelId === fixture.channelId && item.workflowStatus !== 'RESOLVED') {
+      expect((await command(page, '/api/v1/admin/cases/' + item.id + '/force-resolve', {resolutionCategory: 'OTHER'})).status()).toBe(200)
+    }
+  }
+}
+
+test('selected Case survives reload when another active conversation moves ahead of it', async ({page}) => {
+  await login(page, undefined, true)
+  try {
+    const wanted = 'Selected conversation ' + randomUUID().slice(0, 8)
+    await inbound(page, wanted)
+    const tile = page.getByRole('button').filter({hasText: wanted})
+    await tile.click()
+    const item = (await (await page.request.get('/api/v1/cases')).json()).items.find((value: {lastMessagePreview: string}) => value.lastMessagePreview === wanted)
+    const other = 'Other active conversation ' + randomUUID().slice(0, 8)
+    await inbound(page, other)
+    await expect(page.getByRole('button').filter({hasText: other})).toBeVisible()
+    await expect(page.getByRole('paragraph').filter({hasText: wanted})).toBeVisible()
+    await page.reload()
+    await expect(page.getByRole('paragraph').filter({hasText: wanted})).toBeVisible()
+    await expect(page).toHaveURL(new RegExp('caseId=' + item.id))
+  } finally { await closeFixtureCases(page) }
+})
+
 test('application hints update a second administrator within two seconds without losing a reply draft', async ({page, browser, baseURL}) => {
   await login(page, undefined, true)
   const viewer = await testAccount(page, 'account')
@@ -142,6 +172,7 @@ test('application hints update a second administrator within two seconds without
     const caseId = (await selected).items.find((item: {lastMessagePreview: string}) => item.lastMessagePreview === message).id
     expect((await command(page, '/api/v1/cases/' + caseId + '/resolve', {})).status()).toBe(200)
   } finally {
+    await closeFixtureCases(page)
     await context.close()
   }
 })

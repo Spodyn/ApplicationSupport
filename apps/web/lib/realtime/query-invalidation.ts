@@ -1,4 +1,4 @@
-import type { QueryClient, QueryKey } from "@tanstack/react-query"
+import type { Query, QueryClient, QueryKey } from "@tanstack/react-query"
 import { parseRealtimeEventEnvelope } from "./event-envelope"
 
 export const reconciliationScopes = [
@@ -50,26 +50,43 @@ export function realtimeQueryScopes(destination: string, body: unknown, accountI
   return scopes
 }
 
-/** Fixed batches bound latency even under continuous traffic. A dirty in-flight query refetches again. */
+/** Fixed batches bound latency. In-flight snapshots finish before one dirty follow-up. */
 export function coalescedInvalidation(client: QueryClient, delay = 100) {
   const pending = new Map<string, QueryKey>()
+  const flights = new Map<string, {dirty: boolean}>()
   let timer: ReturnType<typeof setTimeout> | undefined
   let disposed = false
+  const enqueue = (keys: readonly QueryKey[]) => {
+    if (disposed) return
+    for (const key of keys) pending.set(JSON.stringify(key), key)
+    if (timer === undefined) timer = setTimeout(flush, delay)
+  }
   const flush = () => {
     timer = undefined
     const keys = [...pending.values()]
     pending.clear()
+    const queries = new Map<string, Query>()
     for (const queryKey of keys) {
-      void client.invalidateQueries({ queryKey }).then(() => {
-        if (!disposed && pending.size && timer === undefined) timer = setTimeout(flush, delay)
-      })
+      // Mark inactive caches stale as well, without cancelling overlapping requests.
+      void client.invalidateQueries({queryKey, refetchType: "none"})
+      for (const query of client.getQueryCache().findAll({queryKey})) {
+        if (query.isActive()) queries.set(query.queryHash, query)
+      }
+    }
+    for (const [hash, query] of queries) {
+      const current = flights.get(hash)
+      if (current) { current.dirty = true; continue }
+      const flight = {dirty: query.state.fetchStatus === "fetching"}
+      flights.set(hash, flight)
+      void client.refetchQueries({queryKey: query.queryKey, exact: true, type: "active"}, {cancelRefetch: false})
+        .finally(() => {
+          flights.delete(hash)
+          if (!disposed && flight.dirty) enqueue([query.queryKey])
+        })
     }
   }
   return {
-    enqueue(keys: readonly QueryKey[]) {
-      for (const key of keys) pending.set(JSON.stringify(key), key)
-      if (timer === undefined) timer = setTimeout(flush, delay)
-    },
+    enqueue,
     dispose() { disposed = true; clearTimeout(timer); pending.clear() },
   }
 }

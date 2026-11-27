@@ -17,7 +17,7 @@ Application projections also use `/user/queue/application`, resolved from the au
 | `application.reminders_changed` | Affected user's reminder indicators |
 | `application.case_changed` | Matching messages/detail/activity, Case list/reminders, statistics, workload |
 
-The frontend batches duplicate keys in fixed 100 ms windows. Reconnect and unknown/future envelopes reconcile active inbox, Direct Message, recipient, identity, administrative and statistics scopes. Cached data remains visible during refetch. Invalidation does not replace form state or selections. Bounded fallback polling includes 30-second user-directory refresh for presence aging without a database write.
+The frontend batches duplicate keys in fixed 100 ms windows. Overlapping prefixes resolve to one request per active query. An in-flight snapshot is never cancelled by another hint; dirty snapshots get one follow-up after completion, including hints arriving during the initial load. Disposal prevents deferred follow-ups. Reconnect and unknown/future envelopes reconcile active inbox, Direct Message, recipient, identity, administrative and statistics scopes. Cached data remains visible during refetch. Invalidation does not replace form state or selections. Bounded fallback polling includes 30-second user-directory refresh for presence aging without a database write.
 
 Every `MESSAGE` body is a JSON object with `eventType`, integer `version`, `entityId`, ISO-8601 `occurredAt`, `correlationId`, and a minimal object `payload`. Unknown event types, future versions, duplicates, or malformed bodies require a safe targeted refetch rather than an error or local state mutation.
 

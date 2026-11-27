@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest"
-import { QueryClient } from "@tanstack/react-query"
+import { QueryClient, QueryObserver } from "@tanstack/react-query"
 import { coalescedInvalidation, realtimeQueryScopes, reconciliationScopes } from "@/lib/realtime/query-invalidation"
 
 const caseId = "018f0000-0000-7000-8000-000000000201"
@@ -41,4 +41,70 @@ it("coalesces duplicate and out-of-order bursts and disposes pending work", asyn
   batch.dispose()
   await vi.advanceTimersByTimeAsync(100)
   expect(invalidate).toHaveBeenCalledTimes(5)
+})
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>(done => { resolve = done })
+  return { promise, resolve }
+}
+
+it("refetches a snapshot dirtied by an event during its initial request", async () => {
+  vi.useFakeTimers()
+  const initial = deferred<number>()
+  const queryFn = vi.fn().mockImplementationOnce(() => initial.promise).mockResolvedValue(2)
+  const client = new QueryClient({defaultOptions: {queries: {retry: false}}})
+  const observer = new QueryObserver(client, {queryKey: ["analytics", "initial"], queryFn})
+  const unsubscribe = observer.subscribe(() => {})
+  const batch = coalescedInvalidation(client)
+  try {
+    batch.enqueue([["analytics"]])
+    await vi.advanceTimersByTimeAsync(100)
+    initial.resolve(1)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(queryFn).toHaveBeenCalledTimes(2)
+    expect(observer.getCurrentResult().data).toBe(2)
+  } finally { batch.dispose(); unsubscribe(); client.clear() }
+})
+
+it("lets a slow refetch finish and performs one follow-up for overlapping event bursts", async () => {
+  vi.useFakeTimers()
+  const first = deferred<number>()
+  const queryFn = vi.fn().mockImplementationOnce(() => first.promise).mockResolvedValue(2)
+  const client = new QueryClient({defaultOptions: {queries: {retry: false}}})
+  client.setQueryData(["analytics", "slow"], 0)
+  const observer = new QueryObserver(client, {queryKey: ["analytics", "slow"], queryFn, staleTime: Infinity})
+  const unsubscribe = observer.subscribe(() => {})
+  const batch = coalescedInvalidation(client)
+  try {
+    batch.enqueue([["analytics"]])
+    await vi.advanceTimersByTimeAsync(100)
+    for (let i = 0; i < 5; i++) {
+      batch.enqueue([["analytics"], ["analytics", "slow"]])
+      await vi.advanceTimersByTimeAsync(100)
+    }
+    expect(queryFn).toHaveBeenCalledTimes(1)
+    first.resolve(1)
+    await vi.advanceTimersByTimeAsync(100)
+    expect(queryFn).toHaveBeenCalledTimes(2)
+    expect(observer.getCurrentResult().data).toBe(2)
+  } finally { batch.dispose(); unsubscribe(); client.clear() }
+})
+
+it("does not launch a dirty follow-up after the provider is disposed", async () => {
+  vi.useFakeTimers()
+  const initial = deferred<number>()
+  const queryFn = vi.fn(() => initial.promise)
+  const client = new QueryClient({defaultOptions: {queries: {retry: false}}})
+  const observer = new QueryObserver(client, {queryKey: ["analytics", "disposed"], queryFn})
+  const unsubscribe = observer.subscribe(() => {})
+  const batch = coalescedInvalidation(client)
+  batch.enqueue([["analytics"]])
+  await vi.advanceTimersByTimeAsync(100)
+  batch.dispose()
+  initial.resolve(1)
+  await vi.advanceTimersByTimeAsync(100)
+  expect(queryFn).toHaveBeenCalledTimes(1)
+  unsubscribe()
+  client.clear()
 })
