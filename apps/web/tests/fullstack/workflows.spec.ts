@@ -92,6 +92,17 @@ test('application hints update a second administrator within two seconds without
   const viewer = await testAccount(page, 'account')
   const context = await browser.newContext({baseURL})
   const second = await context.newPage()
+  await second.addInitScript(() => {
+    const NativeSocket = window.WebSocket
+    let socket: WebSocket | undefined
+    window.WebSocket = class extends NativeSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        super(url, protocols)
+        if (new URL(url).pathname === '/ws') socket = this
+      }
+    }
+    Object.assign(window, {disconnectApplicationSocket: () => socket?.close()})
+  })
   const frames: string[] = []
   second.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))
   try {
@@ -104,6 +115,12 @@ test('application hints update a second administrator within two seconds without
     expect(created.status()).toBe(201)
     await expect(second.getByText(label, {exact: true})).toBeVisible({timeout: 2000})
     expect(frames.some(frame => frame.includes('application.settings_changed'))).toBe(true)
+    const connections = frames.filter(frame => frame.startsWith('CONNECTED')).length
+    await second.evaluate(() => (window as Window & {disconnectApplicationSocket?: () => void}).disconnectApplicationSocket?.())
+    const missed = label + ' while disconnected'
+    expect((await command(page, '/api/v1/admin/customers', {name: missed})).status()).toBe(201)
+    await expect.poll(() => frames.filter(frame => frame.startsWith('CONNECTED')).length).toBeGreaterThan(connections)
+    await expect(second.getByText(missed, {exact: true})).toBeVisible()
 
     const message = 'Realtime intake ' + randomUUID().slice(0, 8)
     await second.goto('/statistics')
