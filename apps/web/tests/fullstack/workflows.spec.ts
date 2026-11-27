@@ -94,14 +94,14 @@ test('application hints update a second administrator within two seconds without
   const second = await context.newPage()
   await second.addInitScript(() => {
     const NativeSocket = window.WebSocket
-    let socket: WebSocket | undefined
+    let disconnect: (() => void) | undefined
     window.WebSocket = class extends NativeSocket {
       constructor(url: string | URL, protocols?: string | string[]) {
         super(url, protocols)
-        if (new URL(url).pathname === '/ws') socket = this
+        if (new URL(url).pathname === '/ws') disconnect = () => this.close()
       }
     }
-    Object.assign(window, {disconnectApplicationSocket: () => socket?.close()})
+    Object.assign(window, {disconnectApplicationSocket: () => disconnect?.()})
   })
   const frames: string[] = []
   second.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))
@@ -138,6 +138,9 @@ test('application hints update a second administrator within two seconds without
     await panel.getByRole('textbox', {name: 'Reply text'}).fill('Draft survives background updates')
     await command(second, '/api/v1/admin/customers', {name: label + ' second'})
     await expect(panel.getByRole('textbox', {name: 'Reply text'})).toHaveValue('Draft survives background updates')
+    const selected = (await page.request.get('/api/v1/cases')).json()
+    const caseId = (await selected).items.find((item: {lastMessagePreview: string}) => item.lastMessagePreview === message).id
+    expect((await command(page, '/api/v1/cases/' + caseId + '/resolve', {})).status()).toBe(200)
   } finally {
     await context.close()
   }
