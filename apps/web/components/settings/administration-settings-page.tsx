@@ -190,7 +190,7 @@ type SettingsActions = ReturnType<typeof useAdministrationSettingsActions>
 
 function GeneralPanel({ data, actions }: { data: GeneralSettings; actions: SettingsActions }) {
   const t = useT()
-  const [form, setForm] = useState(data)
+  const [form, setForm] = useSettingsForm(data)
 
   return (
     <SettingsCard title={t("Ogólne")} description={t("Podstawowe zachowanie i wygląd skrzynki.")}>
@@ -208,7 +208,7 @@ function GeneralPanel({ data, actions }: { data: GeneralSettings; actions: Setti
 
 function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActions }) {
   const t = useT()
-  const [form, setForm] = useState(data)
+  const [form, setForm] = useSettingsForm(data)
   const example = calculateSlaExample(form)
 
   const numberFields: { key: keyof Pick<SlaSettings, "firstResponseMinutes" | "nextResponseMinutes" | "customerWaitingMinutes" | "unclaimedReminderMinutes" | "inProgressReminderMinutes" | "warningBeforeDeadlineMinutes" | "repeatedBreachMinutes">; label: string; hint: string }[] = [
@@ -254,7 +254,7 @@ function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActio
 
 function SchedulePanel({ data, actions }: { data: WorkScheduleSettings; actions: SettingsActions }) {
   const t = useT()
-  const [form, setForm] = useState(data)
+  const [form, setForm] = useSettingsForm(data)
   const [exceptionOpen, setExceptionOpen] = useState(false)
   const [exception, setException] = useState<Omit<ScheduleException, "id">>({ date: "", name: "", closed: true })
 
@@ -323,7 +323,7 @@ const placeholders = ["customer_name", "next_opening_date", "next_opening_time",
 
 function OutOfOfficePanel({ data, actions }: { data: OutOfOfficeSettings; actions: SettingsActions }) {
   const t = useT()
-  const [form, setForm] = useState(data)
+  const [form, setForm] = useSettingsForm(data)
   const preview = (form.template === data.template && data.previewMessage ? data.previewMessage : form.template)
     .replaceAll("{{customer_name}}", "Joanno")
     .replaceAll("{{next_opening_date}}", t("4 sierpnia 2026"))
@@ -737,7 +737,7 @@ function NotificationsPanel({ data, deliveries, integrations, actions }: { data:
 
 function PermissionsPanel({ data, actions }: { data: RolePermissions[]; actions: SettingsActions }) {
   const t = useT()
-  const [form, setForm] = useState(data)
+  const [form, setForm] = useSettingsForm(data)
 
   const toggle = (role: RolePermissions["role"], permission: AdministrationPermission, checked: boolean) => {
     setForm((current) => current.map((item) => item.role !== role ? item : {
@@ -863,4 +863,17 @@ function addBusinessMinutes(start: Date, amount: number) {
 
 function getErrorMessage(error: unknown) {
   return userError(error)
+}
+
+// Refetches refresh untouched forms while preserving edits in progress.
+function useSettingsForm<T>(data: T) {
+  const [state, setState] = useState({ source: data, form: data })
+  if (state.source !== data) {
+    const untouched = JSON.stringify(state.form) === JSON.stringify(state.source)
+    setState({ source: data, form: untouched ? data : state.form })
+  }
+  const setForm = (action: T | ((previous: T) => T)) => setState(current => ({
+    ...current, form: typeof action === "function" ? (action as (previous: T) => T)(current.form) : action,
+  }))
+  return [state.form, setForm] as const
 }

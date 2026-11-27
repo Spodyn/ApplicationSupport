@@ -87,6 +87,45 @@ async function inbound(page: Page, text: string | undefined, thread?: string,
   return {ts, payload, timestamp, signature}
 }
 
+test('application hints update a second administrator within two seconds without losing a reply draft', async ({page, browser, baseURL}) => {
+  await login(page, undefined, true)
+  const viewer = await testAccount(page, 'account')
+  const context = await browser.newContext({baseURL})
+  const second = await context.newPage()
+  const frames: string[] = []
+  second.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))
+  try {
+    await login(second, viewer.email, true)
+    await second.goto('/settings')
+    await second.getByRole('tab', {name: 'Customers', exact: true}).click()
+    await expect.poll(() => frames.some(frame => frame.includes('CONNECTED'))).toBe(true)
+    const label = 'Realtime customer ' + randomUUID().slice(0, 8)
+    const created = await command(page, '/api/v1/admin/customers', {name: label})
+    expect(created.status()).toBe(201)
+    await expect(second.getByText(label, {exact: true})).toBeVisible({timeout: 2000})
+    expect(frames.some(frame => frame.includes('application.settings_changed'))).toBe(true)
+
+    const message = 'Realtime intake ' + randomUUID().slice(0, 8)
+    await second.goto('/statistics')
+    const responses: string[] = []
+    second.on('response', response => {
+      if (response.url().endsWith('/api/v1/statistics/records')) responses.push(response.url())
+    })
+    await expect(second.getByRole('heading', {name: 'Statistics', exact: true})).toBeVisible()
+    const previous = responses.length
+    await inbound(page, message)
+    await expect.poll(() => responses.length, {timeout: 2000}).toBeGreaterThan(previous)
+    await page.getByRole('button').filter({hasText: message}).click()
+    const panel = page.getByRole('region', {name: /^Conversation /})
+    await panel.getByRole('button', {name: 'Claim', exact: true}).click()
+    await panel.getByRole('textbox', {name: 'Reply text'}).fill('Draft survives background updates')
+    await command(second, '/api/v1/admin/customers', {name: label + ' second'})
+    await expect(panel.getByRole('textbox', {name: 'Reply text'})).toHaveValue('Draft survives background updates')
+  } finally {
+    await context.close()
+  }
+})
+
 test('real login → customer mapping → signed intake → Claim → Reply → realtime → refresh → logout', async ({page}) => {
   const frames: string[] = []
   page.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))

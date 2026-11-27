@@ -298,12 +298,14 @@
       "feature": "WebSocket/STOMP",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Session/origin required; no client SEND; bounded destinations; revocation blocks outbound",
+      "expected": "Authenticated scoped hints after commit; application-wide query mapping and reconnect; coalesced bursts; preserved drafts; no client SEND or private broadcasts",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/RealtimeWebSocketIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/AuthenticatedWebSocketHandshakeInterceptorTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/SessionBoundWebSocketHandlerDecoratorTests.java",
         "apps/web/tests/unit/realtime-stomp-client.test.ts",
+        "apps/web/tests/unit/realtime-query-invalidation.test.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/ApplicationRealtimeListenerTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
       "gap": "Real-stack CONNECT/MESSAGE/reload plus backend security tests"
