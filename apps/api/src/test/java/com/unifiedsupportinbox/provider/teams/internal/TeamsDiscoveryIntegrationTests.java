@@ -35,7 +35,7 @@ class TeamsDiscoveryIntegrationTests {
         customer=jdbc.queryForObject("INSERT INTO customers(name) VALUES ('Default customer') RETURNING id",UUID.class);
         connections.selectTeam(integration,TEAM,customer);
         when(secrets.resolve(anyString(),eq("teams-client-secret"))).thenAnswer(c->Optional.of("synthetic-secret".getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        when(directory.channels(integration,TEAM)).thenAnswer(c->{assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();return List.of(json.readTree("{\"id\":\"new-channel\",\"displayName\":\"Support\",\"membershipType\":\"standard\"}"),json.readTree("{\"id\":\"private\",\"displayName\":\"Private\",\"membershipType\":\"private\"}"));});
+        when(directory.channels(integration,TEAM)).thenAnswer(c->{assertThat(org.springframework.transaction.support.TransactionSynchronizationManager.isActualTransactionActive()).isFalse();return List.of(json.readTree("{\"id\":\"new-channel\",\"displayName\":\"Support\",\"membershipType\":\"standard\"}"),json.readTree("{\"id\":\"private\",\"displayName\":\"Private\",\"membershipType\":\"private\"}"),json.readTree("{\"id\":\"shared\",\"displayName\":\"Shared\",\"membershipType\":\"shared\"}"));});
     }
     void scan(){var claim=connections.claimDue().orElseThrow();int count=discovery.discover(claim);connections.finished(claim,"READY",null,count,Duration.ofSeconds(30));}
     String activity(String id,String type){return "{\"id\":\""+id+"\",\"type\":\""+type+"\",\"channelId\":\"msteams\",\"timestamp\":\""+Instant.now()+"\",\"serviceUrl\":\"https://smba.trafficmanager.net/emea/\",\"from\":{\"id\":\"human\"},\"recipient\":{\"id\":\"28:33333333-3333-4333-8333-333333333333\"},\"conversation\":{\"id\":\"new-channel;messageid=root\",\"conversationType\":\"channel\"},\"channelData\":{\"team\":{\"aadGroupId\":\""+TEAM+"\"},\"channel\":{\"id\":\"new-channel\"},\"replyChain\":{\"id\":\"root\"}},\"text\":\"immediate message\"}";}
@@ -57,6 +57,22 @@ class TeamsDiscoveryIntegrationTests {
         assertThat(jdbc.queryForObject("SELECT ignored FROM channels",Boolean.class)).isTrue();
         assertThat(jdbc.queryForObject("SELECT metadata_json->>'siteId' FROM channels",String.class)).isEqualTo("retained");
         verify(directory,times(2)).channels(integration,TEAM);
+    }
+    @Test void channelReadinessDeclarationDoesNotEnablePrivateOrSharedMessageProcessing(){
+        scan();
+        assertThat(jdbc.queryForList("SELECT external_channel_id FROM channels",String.class)).containsExactly("new-channel");
+        for(String membership:List.of("private","shared")) {
+            var body=(tools.jackson.databind.node.ObjectNode)json.readTree(activity(membership,"message"));
+            // Even a matching selected team and an existing standard-channel mapping
+            // must not make an explicitly unsupported channel context ingestible.
+            body.withObjectProperty("channelData").withObjectProperty("channel").put("membershipType",membership);
+            var event=inbound.persistTeamAndWake(integration,TEAM,membership,json.writeValueAsString(body),membership);
+            worker.process(event.id());
+            assertThat(jdbc.queryForObject("SELECT status FROM inbound_events WHERE id=?",String.class,event.id())).isEqualTo("PROCESSED");
+        }
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages",Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM cases",Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM teams_conversation_routes",Integer.class)).isZero();
     }
     @Test void channelCreatedRequestsDiscoveryWithoutCreatingBusinessContent(){
         scan();var body=(tools.jackson.databind.node.ObjectNode)json.readTree(activity("created","conversationUpdate"));

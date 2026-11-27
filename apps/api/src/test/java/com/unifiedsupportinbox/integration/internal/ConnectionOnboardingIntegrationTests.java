@@ -87,7 +87,16 @@ class ConnectionOnboardingIntegrationTests {
         try(var archive=new ZipInputStream(zip)){for(var entry=archive.getNextEntry();entry!=null;entry=archive.getNextEntry())contents.put(entry.getName(),archive.readAllBytes());}
         assertThat(contents.keySet()).containsExactlyInAnyOrder("manifest.json","color.png","outline.png");
         var manifest=new ObjectMapper().readTree(contents.get("manifest.json"));
+        // Current Teams upload validation requires channel readiness on schema 1.25+.
+        assertThat(manifest.path("manifestVersion").asText()).isEqualTo("1.25");
+        assertThat(manifest.path("$schema").asText()).isEqualTo("https://developer.microsoft.com/json-schemas/teams/v1.25/MicrosoftTeams.schema.json");
+        assertThat(manifest.path("supportsChannelFeatures").asText()).isEqualTo("tier1");
+        assertThat(manifest.has("supportedChannelTypes")).isFalse();
+        assertThat(manifest.path("version").asText()).isEqualTo("1.1.1");
+        assertThat(manifest.path("id").asText()).isEqualTo(CLIENT);
+        assertThat(manifest.path("description").path("full").asText()).contains("standard channels", "Private and shared channels are not processed");
         assertThat(manifest.path("bots").get(0).path("scopes").toString()).isEqualTo("[\"team\"]");
+        assertThat(manifest.path("authorization").path("permissions").path("resourceSpecific")).hasSize(2);
         assertThat(manifest.path("authorization").path("permissions").path("resourceSpecific").toString()).contains("ChannelMessage.Read.Group","ChannelSettings.Read.Group").doesNotContain(".Read.All","ChatMessage.Read.Chat");
         assertThat(manifest.path("webApplicationInfo").path("id").asText()).isEqualTo(CLIENT);
         for(var item:Map.of("color.png",192,"outline.png",32).entrySet()) {
