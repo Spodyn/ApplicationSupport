@@ -57,12 +57,14 @@ function commonCase(input: {
   availableActions?: string[]
 }): InboxCase {
   const deadline = input.operationalDeadline
+  const channelName = input.channelName?.trim() ?? ""
   return {
     id: input.id,
     reference: input.reference,
     subject: input.subject,
     platform: mapApiChannel(input.provider),
-    sourceChannel: input.provider === "SLACK" ? `#${input.channelName}` : input.channelName,
+    sourceChannel: input.provider === "SLACK" && channelName && !channelName.startsWith("#")
+      ? `#${channelName}` : channelName,
     customer: { id: !input.customerId || input.customerId === "00000000-0000-0000-0000-000000000000" ? "unassigned" : input.customerId, name: input.customerName, contactName: input.customerName },
     status: input.status.toLowerCase() as InboxCase["status"],
     workflowStatus: input.workflowStatus,

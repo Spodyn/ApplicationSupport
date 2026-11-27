@@ -544,6 +544,10 @@ decisions:
     source: [OWNER_REQUEST_2026_11_20_PROVIDER_ADMIN_ONBOARDING]
     rule: Administrators configure Slack and Teams connections in Settings using server-only credential references and instance-specific callbacks. New connections enable automatic channel discovery; existing settings and channel mappings/ignored flags survive upgrades. One Teams team per instance is selected by canonical Graph groupId, verified against authenticated bot team identity before activity persistence. New team-only installation packages request ChannelMessage.Read.Group and ChannelSettings.Read.Group; tenant-only or group-chat events cannot satisfy the selected-team boundary. Historical records and the earlier development package remain intact. Initial, lifecycle-triggered and periodic reconciliation discover only selected standard channels and assign the default customer to new channels. Durable retries preserve first-message intake and discovery ownership across restarts.
 
+  - id: DEC-CASE-SOURCE-TITLE-001
+    source: [OWNER_REQUEST_2026_11_27_CASE_CHANNEL_TITLE]
+    rule: Case card primary titles always use the provider channel, topic or conversation name independently of customer mapping. Localize the genuinely missing-name fallback. Preserve customer details, search, analytics and provider identities. Discovery renames emit durable Case refresh hints through the existing realtime pipeline.
+
 technical_resolutions:
   - id: TECH-TEAMS-SELECTED-FILES-001
     source: [OWNER_REQUEST_2026_11_19_TEAMS_AUDIT, OWNER_APPROVAL_2026_11_19_TEAMS_SITE_WRITE]

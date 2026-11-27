@@ -182,6 +182,8 @@ Index names, UNIQUE constraints and CHECK constraints are explicit in the owning
 
 Business commit -> transactional outbox -> RabbitMQ -> WebSocket/STOMP. Semantics are at-least-once and duplicate/out-of-order safe. DB/refetch is source of truth; WebSocket is a signal, not durable event store.
 
+Channel discovery name changes write minimal `case.updated` hints for existing Cases referencing that channel in the discovery transaction. Unchanged discovery emits no rename hint. Inbox/detail refetches join the latest channel name without changing Case activity, customer mapping or provider identity.
+
 Heartbeat10s, dead connection about30s. Reconnect roughly1/2/5/10/30s + jitter, followed by bounded list/counter/current-Case/message resync.
 
 Personal unread/Snooze events use backend-controlled user destinations; clients cannot subscribe to arbitrary user IDs.

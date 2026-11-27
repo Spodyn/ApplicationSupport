@@ -64,13 +64,15 @@
       "feature": "Slack discovery/mapping",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Complete membership snapshot; inactive disappearance; customer/grouping configuration",
+      "expected": "Complete membership snapshot; inactive disappearance; customer/grouping configuration; source-name Case titles independent of customer mapping; durable rename refresh without identity changes",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/channel/internal/ChannelIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackChannelDiscoveryServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackIgnoredChannelIntegrationTests.java",
         "apps/web/tests/unit/api-channel-adapter.test.ts",
-        "apps/web/tests/fullstack/workflows.spec.ts"
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/web/tests/unit/inbox-api-adapter.test.ts",
+        "apps/web/tests/e2e/application.spec.ts"
       ],
       "gap": "Live private/Connect membership acceptance external"
     },

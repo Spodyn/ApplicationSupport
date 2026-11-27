@@ -38,6 +38,7 @@ public final class FullStackTestServer {
     private static JdbcTemplate fixtureDatabase;
     private static PasswordEncoder fixtureEncoder;
     private static UUID fixtureIntegration;
+    private static com.unifiedsupportinbox.channel.ChannelDiscovery fixtureDiscovery;
     private static final List<String> PERMISSIONS = List.of("manage_users", "manage_integrations", "manage_sla", "manage_schedule",
             "manage_notifications", "view_global_statistics", "reassign_cases", "force_resolve", "view_audit");
 
@@ -77,6 +78,15 @@ public final class FullStackTestServer {
                         """, UUID.class, fixtureIntegration, externalChannel);
                 response = Map.of("email", email, "displayName", name, "userId", user, "channelId", channel,
                         "externalChannelId", externalChannel, "workspaceId", "TTESTFULL");
+            } else if (path.equals("/rename-channel") && exchange.getRequestMethod().equals("POST")) {
+                var input = JSON.readTree(exchange.getRequestBody());
+                UUID channelId = UUID.fromString(input.path("channelId").asText());
+                var channel = fixtureDatabase.queryForMap("SELECT integration_id, external_channel_id, grouping_strategy FROM channels WHERE id = ?", channelId);
+                var renamed = fixtureDiscovery.upsert(new com.unifiedsupportinbox.channel.DiscoveredChannel(
+                        (UUID) channel.get("integration_id"), (String) channel.get("external_channel_id"),
+                        input.path("name").asText(), com.unifiedsupportinbox.channel.ChannelGroupingStrategy.valueOf((String) channel.get("grouping_strategy")),
+                        true, null, "{}"));
+                response = Map.of("id", renamed.id(), "name", renamed.name());
             } else if (path.equals("/expire-deadline") && exchange.getRequestMethod().equals("POST")) {
                 UUID caseId = UUID.fromString(JSON.readTree(exchange.getRequestBody()).path("caseId").asText());
                 response = Map.of("changed", expireDeadline(caseId));
@@ -251,6 +261,7 @@ public final class FullStackTestServer {
                     VALUES (?, 'CTESTFULL', 'synthetic-support', 'SLACK_ROOT_THREAD') RETURNING id
                     """, UUID.class, integration);
             fixtureDatabase = jdbc;
+            fixtureDiscovery = context.getBean(com.unifiedsupportinbox.channel.ChannelDiscovery.class);
             fixtureEncoder = context.getBean(PasswordEncoder.class);
             fixtureIntegration = integration;
             var s3 = context.getBean(S3Client.class);
