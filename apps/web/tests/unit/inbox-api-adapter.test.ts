@@ -71,6 +71,22 @@ function fixture() {
 }
 
 describe("real inbox API adapter", () => {
+  it.each([
+    ["SLACK", " support ", "#support"], ["SLACK", "#support", "#support"],
+    ["TEAMS", "support-test", "support-test"], ["TELEGRAM", "Group / Topic", "Group / Topic"],
+    ["SLACK", " ", ""], ["SLACK", null, ""], ["TEAMS", undefined, ""],
+  ])("normalizes %s source %s without substituting the mapped customer", async (provider, channelName, expected) => {
+    const repository = createApiInboxRepository({ request: vi.fn(async (input: ApiTransportRequest) =>
+      input.path === "/api/v1/cases"
+        ? { items: [{ ...listItem, provider, channelName }], nextCursor: null }
+        : { ...detail, channel: { ...detail.channel, name: channelName }, integration: { ...detail.integration, provider } }
+    ) } as ApiTransport)
+    expect((await repository.list()).items[0].sourceChannel).toBe(expected)
+    const mapped = await repository.getCase(caseId)
+    expect(mapped.sourceChannel).toBe(expected)
+    expect(mapped.customer.name).toBe(listItem.customerName)
+  })
+
   it("uses server retry availability and fails closed for older responses", () => {
     const failed = { ...message, kind: "SUPPORT" as const, inbound: false, deliveryStatus: "FAILED" as const }
     expect(mapCaseMessage(caseId, failed).retryAllowed).toBe(false)

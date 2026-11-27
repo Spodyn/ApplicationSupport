@@ -87,6 +87,35 @@ async function inbound(page: Page, text: string | undefined, thread?: string,
   return {ts, payload, timestamp, signature}
 }
 
+test('discovery rename updates a mapped Case title through realtime and keeps the customer', async ({page}) => {
+  const frames: string[] = []
+  page.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))
+  await login(page, undefined, true)
+  await expect.poll(() => frames.some(frame => frame.startsWith('CONNECTED'))).toBe(true)
+  const fixture = fixtures.get(page)!
+  const label = 'Rename fixture ' + randomUUID().slice(0, 8)
+  const customerResponse = await command(page, '/api/v1/admin/customers', {name: 'Mapped customer ' + randomUUID().slice(0, 8)})
+  expect(customerResponse.status()).toBe(201)
+  const customer = await customerResponse.json()
+  const configured = await command(page, '/api/v1/admin/channels/' + fixture.channelId, {customerId: customer.id, ignored: false, groupingStrategy: 'SLACK_ROOT_THREAD'}, 'PATCH')
+  expect(configured.status()).toBe(200)
+  await inbound(page, label)
+  const tile = page.getByRole('button').filter({hasText: label})
+  await tile.click()
+  await expect(tile.locator('span[title="#synthetic-support"]')).toBeVisible()
+  const renamed = await page.request.post('/__test/rename-channel', {data: {channelId: fixture.channelId, name: 'renamed-provider-channel'}})
+  expect(renamed.status()).toBe(200)
+  await expect(tile.locator('span[title="#renamed-provider-channel"]')).toBeVisible({timeout: 2000})
+  await expect(page.getByRole('heading', {name: '#renamed-provider-channel', exact: true})).toBeVisible()
+  const details = page.getByRole('complementary', {name: 'Case details'})
+  await expect(details.getByText(customer.name, {exact: true})).toBeVisible()
+  const item = (await (await page.request.get('/api/v1/cases')).json()).items.find((value: {channelId: string}) => value.channelId === fixture.channelId)
+  expect(item).toMatchObject({customerId: customer.id, externalChannelId: fixture.externalChannelId})
+  // Close this isolated fixture so later scenarios keep their normal active ordering.
+  expect((await command(page, '/api/v1/cases/' + item.id + '/claim', {})).status()).toBe(200)
+  expect((await command(page, '/api/v1/cases/' + item.id + '/resolve', {})).status()).toBe(200)
+})
+
 test('real login → customer mapping → signed intake → Claim → Reply → realtime → refresh → logout', async ({page}) => {
   const frames: string[] = []
   page.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))
@@ -100,7 +129,7 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   expect((await command(page, `/api/v1/admin/channels/${fixture.channelId}`, {customerId, groupingStrategy: 'SLACK_ROOT_THREAD'}, 'PATCH')).status()).toBe(200)
   const sourceSentAt = ((Date.now() - 120_000) / 1000).toFixed(6)
   const first = await inbound(page, `Synthetic request ${marker}`, undefined, {ts: sourceSentAt})
-  const option = page.getByRole('button', {name: new RegExp(`Regression ${marker}`)})
+  const option = page.getByRole('button').filter({hasText: `Synthetic request ${marker}`})
   await expect(option).toContainText(`Synthetic request ${marker}`)
   const list = await (await page.request.get('/api/v1/cases')).json()
   const caseId = list.items.find((item: {lastMessagePreview: string}) => item.lastMessagePreview === `Synthetic request ${marker}`).id

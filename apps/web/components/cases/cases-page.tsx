@@ -119,7 +119,7 @@ function toPresentation(record: InboxCase, t: ReturnType<typeof useT>, now: numb
     preview,
     time: record.lastMessageAt ?? (record.lastMessageId || bodyPreview ? record.createdAt : undefined),
     platform: record.platform === "slack" ? "Slack" : record.platform === "teams" ? "Teams" : "Telegram",
-    source: record.sourceChannel,
+    source: record.sourceChannel?.trim() || t("Nazwa kanału niedostępna"),
     status: t(record.workflowStatus ? inboxWorkflowStatusLabels[record.workflowStatus] : inboxStatusLabels[record.status]),
     statusTone,
     sla: paused && !terminal ? `SLA · ${t("Wstrzymane")}` : dueAt && !terminal
@@ -544,7 +544,7 @@ function CaseListItem({
           <span className="grid size-6 shrink-0 place-items-center rounded bg-white/[0.05]" role="img" aria-label={item.platform}>
             {item.platform === "Slack" ? <SlackMark /> : item.platform === "Teams" ? <UsersRound className="size-3.5 text-violet-300" /> : <Send className="size-3.5 text-sky-300" />}
           </span>
-          <span className={cn("truncate text-sm", unread ? "font-bold text-white" : "text-[#eff0f4]")} title={item.company}>{item.company}</span>
+          <span className={cn("truncate text-sm", unread ? "font-bold text-white" : "text-[#eff0f4]")} title={item.source}>{item.source}</span>
           {item.time && <time dateTime={item.time} className="ml-auto shrink-0 text-[10px] tabular-nums text-[#9ba5b5]">{timeLabel(item.time)}</time>}
           {unread && <span className="size-2 shrink-0 rounded-full bg-[#7650ff]" aria-label={t("Nieodczytane")} />}
         </span>
@@ -911,6 +911,8 @@ function CaseDetails({ item, record, activity, items }: {
           <dd className="mt-1">{record.ignoreVotes.current} / {record.ignoreVotes.required}</dd>
         </div>}
         {record?.integration && <div>
+          <dt className="text-xs text-[#aeb8c8]">{t("Klient")}</dt>
+          <dd className="mt-1 mb-3">{record.customer.name}</dd>
           <dt className="text-xs text-[#aeb8c8]">{t("Integracja")}</dt>
           <dd className="mt-1">{record.integration.name}{record.integration.workspace && <><br />{record.integration.workspace}</>}</dd>
           <dd className="mt-1 text-xs text-[#aeb8c8]">{item.source} · {record.integration.externalChannelId}</dd>

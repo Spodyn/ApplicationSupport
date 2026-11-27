@@ -75,6 +75,39 @@ class ChannelIntegrationTests {
     }
 
     @Test
+    void discoveryRenameRefreshesExistingCasesWithoutChangingProviderIdentityOrMapping() {
+        for (String provider : java.util.List.of("SLACK", "TEAMS")) {
+            UUID integration = createIntegration(provider, "Provider integration");
+            UUID customer = createCustomer("Different customer");
+            var strategy = provider.equals("SLACK") ? ChannelGroupingStrategy.SLACK_ROOT_THREAD : ChannelGroupingStrategy.TEAMS_ROOT_REPLIES;
+            var channel = discovery.upsert(new DiscoveredChannel(integration, "source-id", "old-name", strategy, true, null, "{}"));
+            jdbc.update("UPDATE channels SET customer_id = ? WHERE id = ?", customer, channel.id());
+            UUID caseId = jdbc.queryForObject("""
+                    INSERT INTO cases(integration_id, channel_id, customer_id, provider, external_conversation_id)
+                    VALUES (?, ?, ?, ?, 'stable-provider-conversation') RETURNING id
+                    """, UUID.class, integration, channel.id(), customer, provider);
+            assertThatThrownBy(() -> context.getBean(com.unifiedsupportinbox.channel.ChannelDiscoveryCatalog.class).replace(integration, java.util.List.of(
+                    new DiscoveredChannel(integration, "source-id", "rolled-back-name", strategy, true, null, "{}"),
+                    new DiscoveredChannel(integration, "invalid", "invalid-customer", strategy, true, null, "{}", UUID.randomUUID()))))
+                    .isInstanceOf(com.unifiedsupportinbox.ApiProblemException.class);
+            assertThat(jdbc.queryForObject("SELECT name FROM channels WHERE id = ?", String.class, channel.id())).isEqualTo("old-name");
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE type = 'case.updated' AND aggregate_id = ?", Integer.class, caseId))
+                    .isZero();
+            var renamed = discovery.upsert(new DiscoveredChannel(integration, "source-id", "new-name", strategy, true, null, "{}"));
+            assertThat(renamed.id()).isEqualTo(channel.id());
+            assertThat(renamed.customerId()).isEqualTo(customer);
+            assertThat(jdbc.queryForMap("SELECT channel_id, customer_id, external_conversation_id FROM cases WHERE id = ?", caseId))
+                    .containsEntry("channel_id", channel.id()).containsEntry("customer_id", customer)
+                    .containsEntry("external_conversation_id", "stable-provider-conversation");
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE type = 'case.updated' AND aggregate_id = ?", Integer.class, caseId))
+                    .isOne();
+            discovery.upsert(new DiscoveredChannel(integration, "source-id", "new-name", strategy, true, null, "{}"));
+            assertThat(jdbc.queryForObject("SELECT count(*) FROM outbox_events WHERE type = 'case.updated' AND aggregate_id = ?", Integer.class, caseId))
+                    .isOne();
+        }
+    }
+
+    @Test
     void discoveryUpsertRenamesExistingChannelAndPreservesAdminMapping() {
         UUID integrationId = createIntegration("TELEGRAM", "Support Telegram");
         UUID customerId = createCustomer("Acme");

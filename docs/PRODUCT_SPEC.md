@@ -216,3 +216,7 @@ Settings → Integrations provides optional Slack/Teams history recovery with in
 ## Provider onboarding owner extension (2026-11-20)
 
 The Integrations panel configures Slack and Teams using instance callbacks and server-held secrets, with readiness and per-connection automatic discovery. Teams selects one team and a default customer; standard channels are discovered automatically. The selected Graph team identity is checked before inbound storage. Existing channel mappings and monitoring choices are preserved. See [Product Contract](PRODUCT_CONTRACT.md#owner-approved-provider-onboarding-2026-11-20) and [provider onboarding](PROVIDER_ONBOARDING.md).
+
+## Case inbox source titles (owner request, 2026-11-27)
+
+Case card primary titles use the actual provider channel, topic or conversation name for mapped and unmapped Cases. Slack channel names have one leading `#`. A genuinely missing name uses the localized “Channel name unavailable” / “Nazwa kanału niedostępna” fallback. Long names keep the existing truncation and expose the full title. Customer mappings remain visible in Case details and retain existing search and analytics semantics. Discovery renames retain channel/provider/Case identity and publish durable Case refresh hints through the existing outbox and authenticated realtime transport.
