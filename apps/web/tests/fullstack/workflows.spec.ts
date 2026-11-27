@@ -146,6 +146,35 @@ test('application hints update a second administrator within two seconds without
   }
 })
 
+test('discovery rename updates a mapped Case title through realtime and keeps the customer', async ({page}) => {
+  const frames: string[] = []
+  page.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))
+  await login(page, undefined, true)
+  await expect.poll(() => frames.some(frame => frame.startsWith('CONNECTED'))).toBe(true)
+  const fixture = fixtures.get(page)!
+  const label = 'Rename fixture ' + randomUUID().slice(0, 8)
+  const customerResponse = await command(page, '/api/v1/admin/customers', {name: 'Mapped customer ' + randomUUID().slice(0, 8)})
+  expect(customerResponse.status()).toBe(201)
+  const customer = await customerResponse.json()
+  const configured = await command(page, '/api/v1/admin/channels/' + fixture.channelId, {customerId: customer.id, ignored: false, groupingStrategy: 'SLACK_ROOT_THREAD'}, 'PATCH')
+  expect(configured.status()).toBe(200)
+  await inbound(page, label)
+  const tile = page.getByRole('button').filter({hasText: label})
+  await tile.click()
+  await expect(tile.locator('span[title="#synthetic-support"]')).toBeVisible()
+  const renamed = await page.request.post('/__test/rename-channel', {data: {channelId: fixture.channelId, name: 'renamed-provider-channel'}})
+  expect(renamed.status()).toBe(200)
+  await expect(tile.locator('span[title="#renamed-provider-channel"]')).toBeVisible({timeout: 2000})
+  await expect(page.getByRole('heading', {name: '#renamed-provider-channel', exact: true})).toBeVisible()
+  const details = page.getByRole('complementary', {name: 'Case details'})
+  await expect(details.getByText(customer.name, {exact: true})).toBeVisible()
+  const item = (await (await page.request.get('/api/v1/cases')).json()).items.find((value: {channelId: string}) => value.channelId === fixture.channelId)
+  expect(item).toMatchObject({customerId: customer.id, externalChannelId: fixture.externalChannelId})
+  // Close this isolated fixture so later scenarios keep their normal active ordering.
+  expect((await command(page, '/api/v1/cases/' + item.id + '/claim', {})).status()).toBe(200)
+  expect((await command(page, '/api/v1/cases/' + item.id + '/resolve', {})).status()).toBe(200)
+})
+
 test('real login → customer mapping → signed intake → Claim → Reply → realtime → refresh → logout', async ({page}) => {
   const frames: string[] = []
   page.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))
@@ -159,10 +188,10 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   expect((await command(page, `/api/v1/admin/channels/${fixture.channelId}`, {customerId, groupingStrategy: 'SLACK_ROOT_THREAD'}, 'PATCH')).status()).toBe(200)
   const sourceSentAt = ((Date.now() - 120_000) / 1000).toFixed(6)
   const first = await inbound(page, `Synthetic request ${marker}`, undefined, {ts: sourceSentAt})
-  const option = page.getByRole('button', {name: new RegExp(`Regression ${marker}`)})
-  await expect(option).toContainText(`Synthetic request ${marker}`)
+  await expect(page.getByRole('button').filter({hasText: `Synthetic request ${marker}`})).toContainText(`Synthetic request ${marker}`)
   const list = await (await page.request.get('/api/v1/cases')).json()
   const caseId = list.items.find((item: {lastMessagePreview: string}) => item.lastMessagePreview === `Synthetic request ${marker}`).id
+  const option = page.locator(`button[data-case-id="${caseId}"]`)
   await option.click()
   const conversation = page.getByRole('region', {name: `Rozmowa Regression ${marker}`})
   await conversation.getByRole('button', {name: 'Przejmij', exact: true}).click()
@@ -215,7 +244,19 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   await inbound(page, 'Second message in the same NRT series', first.ts)
   await expect(conversation.getByText('Second message in the same NRT series', {exact: true})).toBeVisible()
   expect((await readSla()).responseCycles).toEqual([round])
-  expect((await readSla()).operationalDeadline.id).not.toBe(activeRound.id)
+  const restarted = (await readSla()).operationalDeadline
+  expect(restarted.id).not.toBe(activeRound.id)
+  expect(Date.parse(restarted.dueAt)).toBeGreaterThanOrEqual(Date.parse(activeRound.dueAt))
+  expect(await (await page.request.post('/__test/expire-deadline', {data: {caseId}})).json()).toEqual({changed: 1})
+  await expect.poll(async () => (await readSla()).operationalDeadline.state).toBe('BREACHED')
+  await expect.poll(async () => (await (await page.request.get('/api/v1/notifications/sla-reminders')).json()).items
+    .filter((item: {id: string}) => item.id === restarted.id))
+    .toEqual([expect.objectContaining({kind: 'NRT', unread: true})])
+  const breached = await (await page.request.get('/api/v1/statistics/records')).json()
+  expect(breached.records.find((record: {id: string}) => record.id === caseId)).toMatchObject({
+    historicalSupportBreach: true, historicalNextResponseBreach: true,
+    operationalDeadlineKind: 'NRT', operationalDeadlineState: 'BREACHED',
+  })
 
   expect((await command(page, casePath + '/messages', {body: 'Successful NRT reply'})).status()).toBe(202)
   await expect.poll(async () => (await readSla()).responseSla.state).toBe('PAUSED')
@@ -269,10 +310,43 @@ test('shared countdown changes without requests and follow-up expiry reaches onl
 
   const reminderPath = '/api/v1/notifications/sla-reminders'
   const reminders = async (tab: Page) => (await (await tab.request.get(reminderPath)).json()).items
+  const reference = (await detail()).reference
+  const notificationMenu = page.getByRole('button', {name: 'Powiadomienia', exact: true})
+  const followUpNotification = page.getByRole('button', {name: /Czas skontaktować się z klientem/}).filter({hasText: reference})
+  const statsPage = await page.context().newPage()
+  await statsPage.goto('/statistics')
+  await statsPage.getByRole('combobox', {name: 'Właściciel sprawy', exact: true}).click()
+  await statsPage.getByRole('option', {name: owner.displayName, exact: true}).click()
+  const statistic = (label: string) => statsPage.locator('dl > div')
+    .filter({has: statsPage.getByText(label, {exact: true})}).locator('dd')
+  const historicalLabel = 'Sprawy z historycznym naruszeniem SLA odpowiedzi'
+  const followsLabel = 'Sprawy wymagające kontaktu z klientem'
+  await expect(statistic(followsLabel)).toHaveText('0')
+  await expect(statistic(historicalLabel)).toHaveText(/^0/)
+  const statisticsFact = async () => (await (await statsPage.request.get('/api/v1/statistics/records')).json()).records
+    .find((item: {id: string}) => item.id === caseId)
+  const beforeExpiry = await statisticsFact()
+  expect(beforeExpiry).toMatchObject({
+    firstResponderId: owner.userId, historicalSupportBreach: false, historicalNextResponseBreach: false,
+    firstResponseOutcome: 'met', operationalDeadlineKind: 'FOLLOW_UP', operationalDeadlineState: 'ON_TRACK',
+  })
+  await notificationMenu.click()
+  await expect(followUpNotification).toHaveCount(0)
   expect(await (await page.request.post('/__test/expire-deadline', {data: {caseId}})).json()).toEqual({changed: 1})
+  await expect(followUpNotification).toBeVisible()
   await expect.poll(async () => (await reminders(page)).filter((item: {caseId: string}) => item.caseId === caseId))
     .toEqual([expect.objectContaining({kind: 'FOLLOW_UP', unread: true})])
   await expect(panel.locator('[data-sla-countdown]')).toContainText('Po terminie')
+  await expect(statistic(followsLabel)).toHaveText('1')
+  await expect(statistic(historicalLabel)).toHaveText(/^0/)
+  expect(await statisticsFact()).toEqual({...beforeExpiry, operationalDeadlineState: 'FOLLOW_UP_DUE'})
+  await selectLanguage(statsPage, "English", "pl")
+  await expect(statistic('Customer follow-ups due')).toHaveText('1')
+  await expect(statistic('Cases with historical response breaches')).toHaveText(/^0/)
+  await expect(statsPage.getByRole('button', {name: 'Definition: Missed first-response deadlines', exact: true})).toBeVisible()
+  await selectLanguage(statsPage, "Polski", "en")
+  await statsPage.close()
+  await notificationMenu.click()
   const reminder = (await reminders(page)).find((item: {caseId: string}) => item.caseId === caseId)
   const viewerSession = await request.newContext({baseURL})
   try {
@@ -304,8 +378,8 @@ test('shared countdown changes without requests and follow-up expiry reaches onl
     workflowStatus: 'WAITING_ON_CUSTOMER', owner: {id: owner.userId},
     operationalDeadline: {kind: 'FOLLOW_UP', state: 'FOLLOW_UP_DUE'},
   })
-  await page.getByRole('button', {name: 'Powiadomienia', exact: true}).click()
-  await page.getByRole('button', {name: /Czas skontaktować się z klientem/}).filter({hasText: (await detail()).reference}).click()
+  await notificationMenu.click()
+  await followUpNotification.click()
   await expect.poll(async () => (await reminders(page)).filter((item: {caseId: string}) => item.caseId === caseId))
     .toEqual([expect.objectContaining({kind: 'FOLLOW_UP', unread: false})])
   expect((await command(page, path + '/resolve', {})).status()).toBe(200)

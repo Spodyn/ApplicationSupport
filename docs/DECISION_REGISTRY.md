@@ -107,3 +107,7 @@ The grouped owner requests of 2026-11-10 and 2026-11-12 define the interface and
 ## Owner provider onboarding extension, 2026-11-20
 
 - DEC-PROVIDER-ADMIN-ONBOARDING-001: admin-managed Slack/Teams connections, per-connection discovery, instance-specific bot/callback, one selected Teams team verified before persistence, and a new team-only package with message/channel-list RSC. Supersedes the earlier group-chat intake profile while preserving historical data. See [provider onboarding](PROVIDER_ONBOARDING.md).
+
+## Owner Case inbox title correction, 2026-11-27
+
+- DEC-CASE-SOURCE-TITLE-001: Case cards use the actual provider source name independently of customer mapping, with a localized missing-name fallback. Discovery renames refresh existing inboxes without changing identity or mappings. See [Product Contract](PRODUCT_CONTRACT.md#owner-approved-case-inbox-titles-2026-11-27).

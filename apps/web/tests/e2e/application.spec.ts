@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import type { CaseOperationalDeadline } from "@usi/api-client/generated"
 
 const localOrigin = "http://127.0.0.1:3100"
 
@@ -36,10 +37,17 @@ const inboundMessage = {
   }>,
 }
 
-async function preparePage(page: Page, initiallyAuthenticated = true, options: { incomingBody?: string; customerName?: string; sendGate?: Promise<void>; english?: boolean; fileName?: string; caseActions?: boolean; recoverySource?: "manual" | "automatic" } = {}) {
+async function preparePage(page: Page, initiallyAuthenticated = true, options: {
+  incomingBody?: string; customerName?: string; sendGate?: Promise<void>; english?: boolean; fileName?: string;
+  caseActions?: boolean; recoverySource?: "manual" | "automatic"; operationalDeadline?: CaseOperationalDeadline;
+  provider?: "SLACK" | "TEAMS" | "TELEGRAM"; channelName?: string; customerId?: string;
+} = {}) {
   const incomingMessage = { ...inboundMessage, recoverySource: options.recoverySource, body: options.incomingBody ?? inboundMessage.body }
   const attachmentName = options.fileName ?? "evidence.txt"
-  const listItem = { ...caseListItem, customerName: options.customerName ?? caseListItem.customerName }
+  const listItem = { ...caseListItem, customerName: options.customerName ?? caseListItem.customerName,
+    provider: options.provider ?? caseListItem.provider,
+    channelName: options.channelName ?? caseListItem.channelName,
+    customerId: options.customerId ?? caseListItem.customerId }
   const externalRequests: string[] = []
   let authenticated = initiallyAuthenticated
   let claimed = false
@@ -144,21 +152,22 @@ async function preparePage(page: Page, initiallyAuthenticated = true, options: {
         items: [{ ...listItem, status: claimed ? "VERIFICATION" : "NEW",
           ownerUserId: claimed ? authenticatedSession.id : null,
           ownerDisplayName: claimed ? authenticatedSession.displayName : null,
-          unreadForCurrentUser: !read }], nextCursor: null,
+          unreadForCurrentUser: !read, operationalDeadline: options.operationalDeadline }], nextCursor: null,
       }) })
       return
     }
     if (requestUrl.pathname === `/api/v1/cases/${caseId}` && request.method() === "GET") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
         id: caseId, reference: listItem.reference, status: claimed ? "VERIFICATION" : "NEW",
-        customer: { id: "customer", name: listItem.customerName, externalRef: "slack-test" },
+        customer: { id: listItem.customerId, name: listItem.customerName, externalRef: "slack-test" },
         owner: { id: claimed ? authenticatedSession.id : null, displayName: claimed ? authenticatedSession.displayName : null },
-        channel: { id: "channel", name: "new-channel", externalChannelId: "C0C6N61M4HZ", groupingStrategy: "SLACK_ROOT_THREAD" },
-        integration: { id: "integration", provider: "SLACK", displayName: "TestApp", workspaceExternalId: "team", workspaceName: "TestApp" },
+        channel: { id: "channel", name: listItem.channelName, externalChannelId: "C0C6N61M4HZ", groupingStrategy: "SLACK_ROOT_THREAD" },
+        integration: { id: "integration", provider: listItem.provider, displayName: "TestApp", workspaceExternalId: "team", workspaceName: "TestApp" },
         relatedCase: { id: null, reference: null }, personalState: { lastReadMessageId: read ? inboundMessageId : null, lastReadAt: null, snoozedUntil: null },
         sla: null, ignoreScore: 0, availableActions: claimed ? ["REPLY", "MARK_READ", ...(options.caseActions ? ["RESOLVE", "REASSIGN"] : [])] : ["CLAIM", "MARK_READ"],
         claimedAt: null, waitingUntil: null, resolvedAt: null, ignoredAt: null, resolutionCategory: null,
-        createdAt: listItem.createdAt, updatedAt: listItem.updatedAt, lastActivityAt: listItem.lastActivityAt, version: claimed ? 2 : 1,
+        createdAt: listItem.createdAt, updatedAt: listItem.updatedAt, lastActivityAt: listItem.lastActivityAt,
+        version: claimed ? 2 : 1, operationalDeadline: options.operationalDeadline,
       }) })
       return
     }
@@ -273,6 +282,82 @@ async function preparePage(page: Page, initiallyAuthenticated = true, options: {
 
   return { externalRequests, sends, uploads, retries, historyBefore, supportMessages }
 }
+
+for (const [kind, warningSeconds] of [["FRT", 225], ["NRT", 450]] as const) {
+  test(`${kind} countdown ticks to the warning and pauses outside business hours`, async ({ page }) => {
+    const observed = Date.parse("2026-11-23T10:59:54Z")
+    const open = Date.parse("2026-11-23T12:00:00Z")
+    const iso = (time: number) => new Date(time).toISOString()
+    await page.clock.install({ time: observed })
+    const deadline: CaseOperationalDeadline = {
+      id: caseId, kind, state: "ON_TRACK", startedAt: iso(observed - 60_000),
+      observedAt: iso(observed), warningAt: iso(observed + 3_000),
+      dueAt: iso(open + (warningSeconds - 3) * 1_000), clockValidUntil: iso(open + 3_600_000),
+      remainingMillis: (warningSeconds + 3) * 1_000,
+      businessIntervals: [
+        { start: iso(observed), end: iso(observed + 6_000) },
+        { start: iso(open), end: iso(open + 3_600_000) },
+      ],
+    }
+    await preparePage(page, true, { english: true, operationalDeadline: deadline })
+    await page.goto("/cases")
+    const tile = page.locator(`button[data-case-id="${caseId}"]`).locator("[data-sla-countdown]")
+    await expect(tile).toContainText(kind)
+    const browserNow = await page.evaluate(() => Date.now())
+    await page.clock.pauseAt(browserNow + 500)
+    const before = await tile.textContent()
+    await expect(tile).toHaveClass(/text-emerald-400/)
+    await page.clock.runFor(5_000)
+    await expect(tile).not.toHaveText(before!)
+    await expect(tile).toHaveClass(/text-amber-400/)
+    await page.clock.runFor(3_000)
+    const afterClose = await tile.textContent()
+    await page.clock.runFor(3_000)
+    await expect(tile).toHaveText(afterClose!)
+  })
+}
+
+for (const provider of ["SLACK", "TEAMS", "TELEGRAM"] as const) {
+  for (const mapped of [true, false]) {
+    test(`${provider} ${mapped ? "mapped" : "unmapped"} Case card uses its provider channel title`, async ({ page }) => {
+      const channelName = provider === "SLACK" ? "customer-support" : provider === "TEAMS" ? "support-test" : "Group / Help topic"
+      const title = provider === "SLACK" ? "#" + channelName : channelName
+      await preparePage(page, true, { english: true, provider, channelName, customerName: "Different mapped customer",
+        customerId: mapped ? "customer" : "00000000-0000-0000-0000-000000000000" })
+      await page.goto("/cases")
+      const card = page.locator(`button[data-case-id="${caseId}"]`)
+      await expect(card.locator("span[title]").first()).toHaveText(title)
+      await expect(card).not.toContainText("Different mapped customer")
+      if (mapped) {
+        await card.click()
+        await expect(page.getByRole("complementary", { name: "Case details" }).getByText("Different mapped customer", { exact: true })).toBeVisible()
+      }
+    })
+  }
+}
+
+for (const english of [true, false]) {
+  test(`missing channel title has a safe ${english ? "English" : "Polish"} fallback`, async ({ page }) => {
+    await preparePage(page, true, { english, channelName: "   ", customerName: "Different mapped customer" })
+    await page.goto("/cases")
+    const card = page.locator(`button[data-case-id="${caseId}"]`)
+    await expect(card.locator("span[title]").first()).toHaveText(english ? "Channel name unavailable" : "Nazwa kanału niedostępna")
+    await expect(card).not.toContainText(/undefined|null|Different mapped customer/)
+  })
+}
+
+test("long provider channel title stays truncated with the full name available", async ({ page }) => {
+  const title = "support-".repeat(30)
+  await preparePage(page, true, { english: true, provider: "TEAMS", channelName: title })
+  await page.setViewportSize({width: 390, height: 844})
+  await page.goto("/cases")
+  const card = page.locator(`button[data-case-id="${caseId}"]`)
+  const label = card.locator("span[title]").first()
+  await expect(label).toHaveText(title)
+  await expect(label).toHaveAttribute("title", title)
+  await expect(label).toHaveClass(/truncate/)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+})
 
 async function prepareSettingsApi(page: Page, options: { forbidden?: boolean; provider?: "SLACK" | "TEAMS" } = {}) {
   const writes: Array<{ method: string; path: string; body?: unknown }> = []
@@ -452,7 +537,7 @@ test("niezalogowany użytkownik trafia na login i może utworzyć sesję", async
 test("real API Case opens, is marked read, claimed, and receives one persisted support reply", async ({ page }) => {
   const { externalRequests, sends } = await preparePage(page)
   await page.goto("/cases")
-  const chat = page.getByRole("button", { name: /Slack Test Customer/ })
+  const chat = page.locator(`button[data-case-id="${caseId}"]`)
   await expect(chat).toContainText("Hello from Slack - USI test 1")
   await chat.click()
   await expect(chat.getByLabel("Nieodczytane")).toHaveCount(0)
@@ -734,7 +819,7 @@ test("mobilny widok czatów przechodzi z listy do rozmowy i wraca", async ({ pag
 
   const chatList = page.getByRole("region", { name: "Lista czatów" })
   await expect(chatList).toBeVisible()
-  await page.getByRole("button", { name: /Slack Test Customer/ }).click()
+  await page.locator(`button[data-case-id="${caseId}"]`).click()
 
   const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
   await expect(conversation).toBeVisible()
@@ -758,7 +843,8 @@ test("language switches immediately, survives reload and leaves customer and pro
   await expect(page.getByRole("heading", { name: "Chats", exact: true })).toBeVisible()
   await expect(page.getByRole("region", { name: "Conversation Nowe" })).toBeVisible()
   await expect(page.getByText("Rozwiązane — treść klienta", { exact: true })).toBeVisible()
-  await expect(page.getByRole("button", { name: /Nowe/ })).toBeVisible()
+  await expect(page.locator(`button[data-case-id="${caseId}"] span[title="#new-channel"]`)).toHaveText("#new-channel")
+  await expect(page.getByRole("complementary", { name: "Case details" }).getByText("Nowe", { exact: true })).toBeVisible()
   await page.reload()
   await expect(page.locator("html")).toHaveAttribute("lang", "en")
   await expect(page.getByRole("heading", { name: "Chats", exact: true })).toBeVisible()
@@ -834,7 +920,7 @@ for (const width of [1440, 820, 390, 320]) {
     const fileName = "filename".repeat(28) + ".txt"
     await preparePage(page, true, { incomingBody: long, fileName })
     await page.goto("/cases")
-    await page.getByRole("button", {name:/Slack Test Customer/}).click()
+    await page.locator(`button[data-case-id="${caseId}"]`).click()
     const panel = page.getByRole("region", {name:"Rozmowa Slack Test Customer"})
     await panel.getByRole("button", {name:"Przejmij",exact:true}).click()
     await expect(panel.getByLabel("Treść odpowiedzi")).toBeEnabled()
@@ -902,7 +988,7 @@ for (const width of [1440, 390]) {
     await page.setViewportSize({width, height: 850})
     await preparePage(page, true, {caseActions: true})
     await page.goto("/cases")
-    await page.getByRole("button", {name: /Slack Test Customer/}).click()
+    await page.locator(`button[data-case-id="${caseId}"]`).click()
     const panel = page.getByRole("region", {name: "Rozmowa Slack Test Customer"})
     await panel.getByRole("button", {name: "Przejmij", exact: true}).click()
     for (const name of ["Rozwiąż", "Administruj"]) {
@@ -1030,7 +1116,7 @@ test("resolved Case indicators use neutral gray without changing the workflow en
   await preparePage(page)
   await page.route("**/api/v1/cases?**", route=>route.fulfill({json:{items:[{...caseListItem,status:"RESOLVED"}],nextCursor:null}}))
   await page.goto("/cases")
-  const list = page.getByRole("button",{name:/Slack Test Customer/})
+  const list = page.locator(`button[data-case-id="${caseId}"]`)
   await expect(list).toHaveClass(/border-slate-400/)
   await expect(list).not.toHaveClass(/border-red-500/)
   await expect(list.getByText("SLA —", {exact: true})).toHaveClass(/text-slate-300/)

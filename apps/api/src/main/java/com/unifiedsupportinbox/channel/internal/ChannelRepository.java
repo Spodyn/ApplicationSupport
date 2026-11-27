@@ -77,8 +77,9 @@ class ChannelRepository {
         String metadataJson = discovered.metadataJson() == null
                 ? "{}"
                 : requiredText(discovered.metadataJson(), "metadataJson", Integer.MAX_VALUE);
+        var previous = findByIntegrationAndExternalChannel(discovered.integrationId(), externalChannelId);
 
-        return jdbc.query("""
+        ChannelRecord persisted = jdbc.query("""
                 INSERT INTO channels (
                     integration_id,
                     external_channel_id,
@@ -119,6 +120,16 @@ class ChannelRepository {
                 .findFirst()
                 .flatMap(this::findById)
                 .orElseThrow(() -> new IllegalStateException("Channel discovery upsert did not return a persisted channel."));
+        if (previous.isPresent() && !previous.get().name().equals(persisted.name())) {
+            // Discovery and the minimal refresh hints commit together. Refetch joins
+            // the current Channel name while provider and Case identities stay stable.
+            jdbc.update("""
+                    INSERT INTO outbox_events(type, aggregate_type, aggregate_id, payload_json, correlation_id)
+                    SELECT 'case.updated', 'case', id, jsonb_build_object('caseId', id), ?
+                    FROM cases WHERE channel_id = ?
+                    """, UUID.randomUUID().toString(), persisted.id());
+        }
+        return persisted;
     }
 
     boolean activeCustomerExists(UUID customerId) {

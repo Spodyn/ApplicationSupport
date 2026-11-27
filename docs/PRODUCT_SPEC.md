@@ -164,6 +164,8 @@ Events are at-least-once and duplicate/out-of-order safe. Personal unread/Snooze
 
 Every active USER can see own statistics. Team/global statistics require `ADMIN + view_global_statistics`.
 
+Statistics uses the reporting timezone and one measured first-response outcome for the FRT KPI, historical chart, and customer attainment. The response SLA summary separates recorded Case-level response breaches and the NRT subset from currently overdue support responses and customer follow-ups due. User first-response results are attributed to the confirmed reply author. See [metric definitions](PRODUCT_CONTRACT.md#response-sla-on-the-statistics-dashboard).
+
 Created, resolved and ignored metrics remain distinct; IGNORED does not inflate resolution rate. Duration APIs expose count, average, p50, p90 and p95. Default range is 30 days, interactive max 366 days. No-data is null/empty rather than fake zero/success.
 
 Inside `/statistics`, ADMIN has **Aktualna praca**, backed by `GET /api/v1/admin/current-cases`. It includes all nonterminal statuses and read access requires ADMIN only, not `view_global_statistics`. Reassign/unassign and force-resolve remain separately permission-gated.
@@ -214,3 +216,7 @@ Settings → Integrations provides optional Slack/Teams history recovery with in
 ## Provider onboarding owner extension (2026-11-20)
 
 The Integrations panel configures Slack and Teams using instance callbacks and server-held secrets, with readiness and per-connection automatic discovery. Teams selects one team and a default customer; standard channels are discovered automatically. The selected Graph team identity is checked before inbound storage. Existing channel mappings and monitoring choices are preserved. See [Product Contract](PRODUCT_CONTRACT.md#owner-approved-provider-onboarding-2026-11-20) and [provider onboarding](PROVIDER_ONBOARDING.md).
+
+## Case inbox source titles (owner request, 2026-11-27)
+
+Case card primary titles use the actual provider channel, topic or conversation name for mapped and unmapped Cases. Slack channel names have one leading `#`. A genuinely missing name uses the localized “Channel name unavailable” / “Nazwa kanału niedostępna” fallback. Long names keep the existing truncation and expose the full title. Customer mappings remain visible in Case details and retain existing search and analytics semantics. Discovery renames retain channel/provider/Case identity and publish durable Case refresh hints through the existing outbox and authenticated realtime transport.

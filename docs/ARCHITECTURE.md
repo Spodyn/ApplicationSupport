@@ -184,6 +184,8 @@ Business commit -> transactional outbox -> RabbitMQ -> WebSocket/STOMP. Semantic
 
 Application-wide projections use database-triggered outbox hints so administrative commands and discovery/resync workers share commit semantics. Authenticated user queues carry minimal hints with recipient checks at delivery. The explicit frontend event-to-query mapping batches invalidations and reconciles active scopes after reconnect. See [routing contract](../apps/api/openapi/v1/realtime-events.md).
 
+Channel discovery name changes write minimal `case.updated` hints for existing Cases referencing that channel in the discovery transaction. Unchanged discovery emits no rename hint. Inbox/detail refetches join the latest channel name without changing Case activity, customer mapping or provider identity.
+
 Heartbeat10s, dead connection about30s. Reconnect roughly1/2/5/10/30s + jitter, followed by bounded list/counter/current-Case/message resync.
 
 Personal unread/Snooze events use backend-controlled user destinations; clients cannot subscribe to arbitrary user IDs.

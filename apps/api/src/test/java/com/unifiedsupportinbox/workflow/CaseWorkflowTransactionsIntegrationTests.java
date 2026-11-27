@@ -7,11 +7,14 @@ import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.UsiApiApplication;
 import com.unifiedsupportinbox.cases.CaseStatus;
 import com.unifiedsupportinbox.identity.UserRole;
+import com.unifiedsupportinbox.sla.CaseOperationalDeadlines;
+import com.unifiedsupportinbox.sla.CaseResponseCycles;
 import com.unifiedsupportinbox.sla.CaseSlaInitializer;
 import com.unifiedsupportinbox.sla.CaseSlaWaitingRecorder;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
 import com.unifiedsupportinbox.workflow.CaseTransitionPolicy.*;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -24,6 +27,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.slf4j.MDC;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
@@ -143,6 +148,73 @@ class CaseWorkflowTransactionsIntegrationTests {
         assertThat(jdbc.queryForList("SELECT type FROM outbox_events WHERE aggregate_id = ?", String.class, id))
                 .containsExactly("case.sla_changed");
         assertThat(jdbc.queryForObject("SELECT count(*) FROM messages WHERE case_id = ?", Integer.class, id)).isZero();
+    }
+
+    @Test
+    void consecutiveCustomerMessagesResetResponseDeadlinesAndExpiredSupportDeadlinesAreRecordedOnce() {
+        UUID id = newCase();
+        Actor owner = newActor();
+        execute(id, 0, owner, Action.CLAIM);
+        Instant start = Instant.parse("2099-01-05T09:00:00Z"); // Monday, seeded UTC schedule
+        context.getBean(CaseSlaInitializer.class).initialize(id, start);
+        var cycles = context.getBean(CaseResponseCycles.class);
+        var reminders = context.getBean("operationalDeadlineService");
+
+        cycles.customerMessage(id, UUID.randomUUID(), start);
+        assertActiveDeadline(id, "FRT", start, start.plusSeconds(675), start.plusSeconds(900));
+        Instant second = start.plusSeconds(240);
+        UUID secondMessage = UUID.randomUUID();
+        cycles.customerMessage(id, secondMessage, second);
+        cycles.customerMessage(id, secondMessage, second.plusSeconds(60));
+        Instant firstDue = second.plusSeconds(900);
+        assertActiveDeadline(id, "FRT", second, second.plusSeconds(675), firstDue);
+        ReflectionTestUtils.invokeMethod(reminders, "remindDue", firstDue.minusSeconds(1));
+        assertThat(supportReminderCount(id)).isZero();
+        ReflectionTestUtils.invokeMethod(reminders, "remindDue", firstDue);
+        ReflectionTestUtils.invokeMethod(reminders, "remindDue", firstDue.plusSeconds(1));
+        assertThat(supportReminderCount(id)).isOne();
+
+        Instant replied = firstDue.plusSeconds(2);
+        UUID reply = UUID.randomUUID();
+        new TransactionTemplate(context.getBean(org.springframework.transaction.PlatformTransactionManager.class))
+                .executeWithoutResult(tx -> {
+                    context.getBean(CaseOperationalDeadlines.class).followUp(id, reply, replied, replied.plusSeconds(86400));
+                    cycles.humanResponse(id, reply, replied);
+                });
+        Instant next = start.plusSeconds(3600);
+        cycles.customerMessage(id, UUID.randomUUID(), next);
+        assertActiveDeadline(id, "NRT", next, next.plusSeconds(1350), next.plusSeconds(1800));
+        Instant restart = next.plusSeconds(360);
+        cycles.customerMessage(id, UUID.randomUUID(), restart);
+        Instant nextDue = restart.plusSeconds(1800);
+        assertActiveDeadline(id, "NRT", restart, restart.plusSeconds(1350), nextDue);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM case_next_response_cycles WHERE case_id = ?", Integer.class, id)).isOne();
+        ReflectionTestUtils.invokeMethod(reminders, "remindDue", nextDue);
+        ReflectionTestUtils.invokeMethod(reminders, "remindDue", nextDue.plusSeconds(1));
+        assertThat(supportReminderCount(id)).isEqualTo(2);
+        assertThat(jdbc.queryForList("""
+                SELECT breached_at FROM case_operational_deadlines
+                WHERE case_id = ? AND breached_at IS NOT NULL ORDER BY breached_at
+                """, OffsetDateTime.class, id).stream().map(OffsetDateTime::toInstant))
+                .containsExactly(firstDue, nextDue);
+    }
+
+    private static void assertActiveDeadline(UUID caseId, String kind, Instant start, Instant warning, Instant due) {
+        var deadline = jdbc.queryForMap("""
+                SELECT kind, extract(epoch FROM started_at)::bigint AS start,
+                    extract(epoch FROM warning_at)::bigint AS warning, extract(epoch FROM due_at)::bigint AS due
+                FROM case_operational_deadlines WHERE case_id = ? AND ended_at IS NULL
+                """, caseId);
+        assertThat(deadline).containsEntry("kind", kind).containsEntry("start", start.getEpochSecond())
+                .containsEntry("warning", warning.getEpochSecond()).containsEntry("due", due.getEpochSecond());
+    }
+
+    private static int supportReminderCount(UUID caseId) {
+        return jdbc.queryForObject("""
+                SELECT count(*) FROM case_deadline_reminder_recipients r
+                JOIN case_operational_deadlines d ON d.id = r.deadline_id
+                WHERE d.case_id = ? AND d.kind IN ('FRT', 'NRT')
+                """, Integer.class, caseId);
     }
 
     @Test

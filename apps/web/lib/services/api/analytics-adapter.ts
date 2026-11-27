@@ -8,11 +8,12 @@ type ApiFacts = {
   users: { id: string; fullName: string }[]
   generatedAt: string
   global: boolean
+  reportingTimezone?: string
 }
 
 export const apiAnalyticsRepository: AnalyticsRepository = {
   async calculate(filters) {
     const facts = await browserApiTransport.request<ApiFacts>({ method: "GET", path: "/api/v1/statistics/records" })
-    return buildAnalyticsResult(facts.records, facts.users, filters, facts.generatedAt, facts.global)
+    return buildAnalyticsResult(facts.records, facts.users, filters, facts.generatedAt, facts.global, facts.reportingTimezone)
   },
 }

@@ -1,10 +1,11 @@
 import { inboxWorkflowStatusLabels } from "@/lib/domain/inbox"
 import type {
   AnalyticsFilters,
+  AnalyticsDatePreset,
   AnalyticsKpis,
   AnalyticsRecord,
   AnalyticsResult,
-  AnalyticsSlaState,
+  FirstResponseOutcome,
   BacklogAgePoint,
   ClientPerformance,
   DistributionPoint,
@@ -18,10 +19,54 @@ export interface AnalyticsRepository {
   calculate(filters: AnalyticsFilters): Promise<AnalyticsResult>
 }
 
-const slaLabels: Record<AnalyticsSlaState, string> = {
-  met: "Spełnione",
-  warning: "Zagrożone",
-  breached: "Przekroczone",
+const firstResponseLabels: Record<FirstResponseOutcome, string> = {
+  met: "Pierwsza odpowiedź w terminie",
+  breached: "Termin pierwszej odpowiedzi przekroczony",
+  pending: "Oczekiwanie na pierwszą odpowiedź",
+  unmeasured: "Brak wyniku SLA pierwszej odpowiedzi",
+}
+
+export function reportingDate(at: string | number, timezone: string) {
+  return new Intl.DateTimeFormat("sv-SE", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit" })
+    .format(new Date(at))
+}
+
+export function analyticsPresetRange(preset: AnalyticsDatePreset, today: string) {
+  const end = new Date(`${today}T12:00:00Z`)
+  if (preset === "yesterday") {
+    end.setUTCDate(end.getUTCDate() - 1)
+    const date = end.toISOString().slice(0, 10)
+    return { from: date, to: date }
+  }
+  if (preset === "this_month") return { from: `${today.slice(0, 8)}01`, to: today }
+  if (preset === "previous_month") {
+    end.setUTCDate(0)
+    const to = end.toISOString().slice(0, 10)
+    return { from: `${to.slice(0, 8)}01`, to }
+  }
+  const days = preset === "today" ? 1 : preset === "7days" ? 7 : preset === "30days" ? 30 : 90
+  end.setUTCDate(end.getUTCDate() - days + 1)
+  return { from: end.toISOString().slice(0, 10), to: today }
+}
+
+function firstResponseOutcome(record: AnalyticsRecord, observedAt: number): FirstResponseOutcome {
+  if (record.firstResponseOutcome) return record.firstResponseOutcome
+  if (!record.slaDeadlineAt) return "unmeasured"
+  const due = Date.parse(record.slaDeadlineAt)
+  if (record.firstResponseAt) return Date.parse(record.firstResponseAt) <= due ? "met" : "breached"
+  if (record.firstResponseStoppedAt) return Date.parse(record.firstResponseStoppedAt) >= due ? "breached" : "unmeasured"
+  if (record.status === "resolved" || record.status === "ignored") return "unmeasured"
+  return observedAt >= due ? "breached" : "pending"
+}
+
+function firstResponseTotals(records: AnalyticsRecord[], outcomes: ReadonlyMap<string, FirstResponseOutcome>) {
+  const totals = { met: 0, breached: 0, pending: 0, unmeasured: 0 }
+  for (const record of records) totals[outcomes.get(record.id) ?? "unmeasured"] += 1
+  return totals
+}
+
+function firstResponsePercentage({ met, breached }: { met: number; breached: number }) {
+  return met + breached ? met / (met + breached) : null
 }
 
 function minutesBetween(from: string, to?: string) {
@@ -63,13 +108,13 @@ function dimensionLabel(record: AnalyticsRecord): string {
   return record.workflowStatus ? inboxWorkflowStatusLabels[record.workflowStatus] : record.statusLabel
 }
 
-function matchesDimensions(record: AnalyticsRecord, filters: AnalyticsFilters) {
+function matchesDimensions(record: AnalyticsRecord, filters: AnalyticsFilters, outcome?: FirstResponseOutcome) {
   if (filters.userId && record.userId !== filters.userId) return false
   if (filters.customerId && record.customerId !== filters.customerId) return false
   if (filters.platform && record.platform !== filters.platform) return false
   if (filters.sourceChannel && record.sourceChannel !== filters.sourceChannel) return false
   if (filters.status && statusDimension(record) !== filters.status) return false
-  if (filters.slaState && record.slaState !== filters.slaState) return false
+  if (filters.firstResponseOutcome && outcome !== filters.firstResponseOutcome) return false
   if (filters.priority && record.priority !== filters.priority) return false
   if (filters.tag && !record.tags.includes(filters.tag)) return false
   if (filters.team && record.team !== filters.team) return false
@@ -92,6 +137,7 @@ function calculateKpis(
   ignoredRecords: AnalyticsRecord[],
   claimedRecords: AnalyticsRecord[],
   backlogRecords: AnalyticsRecord[],
+  outcomes: ReadonlyMap<string, FirstResponseOutcome>,
 ): AnalyticsKpis {
   const claimTimes = createdRecords.flatMap((record) => {
     const value = minutesBetween(record.createdAt, record.claimedAt)
@@ -106,20 +152,7 @@ function calculateKpis(
       ? minutesBetween(record.createdAt, record.resolvedAt) : record.resolutionWallSeconds / 60
     return value === undefined ? [] : [value]
   })
-  const firstResponseMet = (record: AnalyticsRecord) => Boolean(
-    record.firstResponseAt
-      && record.slaDeadlineAt
-      && new Date(record.firstResponseAt).getTime() <= new Date(record.slaDeadlineAt).getTime(),
-  )
-  const firstResponseBreached = (record: AnalyticsRecord) => Boolean(
-    record.slaDeadlineAt
-      && (record.firstResponseAt
-        ? new Date(record.firstResponseAt).getTime() > new Date(record.slaDeadlineAt).getTime()
-        : record.firstResponseStoppedAt
-          ? Date.parse(record.firstResponseStoppedAt) >= Date.parse(record.slaDeadlineAt)
-          : Date.now() >= Date.parse(record.slaDeadlineAt)),
-  )
-  const slaEligible = createdRecords.filter((record) => firstResponseMet(record) || firstResponseBreached(record))
+  const firstResponse = firstResponseTotals(createdRecords, outcomes)
 
   return {
     created: createdRecords.length,
@@ -127,11 +160,10 @@ function calculateKpis(
     ignored: ignoredRecords.length,
     claimed: claimedRecords.length,
     backlog: backlogRecords.length,
-    slaFirstResponsePercentage: slaEligible.length
-      ? slaEligible.filter(firstResponseMet).length / slaEligible.length
-      : null,
-    breachedSla: createdRecords.filter(firstResponseBreached).length,
-    warningSla: createdRecords.filter((record) => record.slaState === "warning").length,
+    slaFirstResponsePercentage: firstResponsePercentage(firstResponse),
+    breachedSla: firstResponse.breached,
+    historicalSupportBreachedCases: createdRecords.filter((record) => record.historicalSupportBreach).length,
+    nextResponseBreachedCases: createdRecords.filter((record) => record.historicalNextResponseBreach).length,
     averageClaimMinutes: average(claimTimes),
     averageFirstResponseMinutes: average(responseTimes),
     averageResolutionMinutes: average(resolutionTimes),
@@ -146,20 +178,31 @@ function calculateKpis(
 function calculateUserPerformance(
   records: AnalyticsRecord[],
   backlogRecords: AnalyticsRecord[],
+  outcomes: ReadonlyMap<string, FirstResponseOutcome>,
 ): UserPerformance[] {
-  const grouped = new Map<string, AnalyticsRecord[]>()
-  for (const record of records.filter((item) => !item.excludedFromUserPerformance)) {
-    if (!record.userId || !record.userName) continue
-    grouped.set(record.userId, [...(grouped.get(record.userId) ?? []), record])
+  const owners = new Map<string, AnalyticsRecord[]>()
+  const responders = new Map<string, AnalyticsRecord[]>()
+  const names = new Map<string, string>()
+  for (const record of records) {
+    if (record.userId && record.userName && !record.excludedFromUserPerformance) {
+      names.set(record.userId, record.userName)
+      owners.set(record.userId, [...(owners.get(record.userId) ?? []), record])
+    }
+    if (record.firstResponderId && record.firstResponderName && record.firstResponseAt) {
+      names.set(record.firstResponderId, record.firstResponderName)
+      responders.set(record.firstResponderId, [...(responders.get(record.firstResponderId) ?? []), record])
+    }
   }
 
-  return [...grouped.entries()]
-    .map(([userId, items]) => {
+  return [...names.entries()]
+    .map(([userId, userName]) => {
+      const items = owners.get(userId) ?? []
+      const replies = responders.get(userId) ?? []
       const claimTimes = items.flatMap((item) => {
         const value = minutesBetween(item.createdAt, item.claimedAt)
         return value === undefined ? [] : [value]
       })
-      const responseTimes = items.flatMap((item) => {
+      const responseTimes = replies.flatMap((item) => {
         const value = minutesBetween(item.firstResponseStartedAt ?? item.createdAt, item.firstResponseAt)
         return value === undefined ? [] : [value]
       })
@@ -169,7 +212,7 @@ function calculateUserPerformance(
       })
       return {
         userId,
-        userName: items[0].userName ?? "Nieznany użytkownik",
+        userName,
         claimed: items.filter((item) => item.claimedAt).length,
         resolved: items.filter((item) => item.resolutionReason === "resolved").length,
         currentlyAssigned: backlogRecords.filter((item) => item.userId === userId).length,
@@ -179,7 +222,7 @@ function calculateUserPerformance(
         medianResponseMinutes: percentile(responseTimes, 0.5),
         p90ResponseMinutes: percentile(responseTimes, 0.9),
         averageResolutionMinutes: average(resolutionTimes),
-        slaPercentage: items.length ? items.filter((item) => item.slaState === "met").length / items.length : null,
+        slaPercentage: firstResponsePercentage(firstResponseTotals(replies, outcomes)),
       }
     })
     .sort((a, b) => b.resolved - a.resolved || a.userName.localeCompare(b.userName, "pl"))
@@ -203,7 +246,7 @@ function calculateBacklogAge(records: AnalyticsRecord[], periodEnd: string): Bac
   return buckets
 }
 
-function calculateClientPerformance(records: AnalyticsRecord[]): ClientPerformance[] {
+function calculateClientPerformance(records: AnalyticsRecord[], outcomes: ReadonlyMap<string, FirstResponseOutcome>): ClientPerformance[] {
   const grouped = new Map<string, AnalyticsRecord[]>()
   for (const record of records) {
     grouped.set(record.customerId, [...(grouped.get(record.customerId) ?? []), record])
@@ -225,7 +268,7 @@ function calculateClientPerformance(records: AnalyticsRecord[]): ClientPerforman
         resolved: items.filter((item) => item.resolutionReason === "resolved").length,
         notApplicable: items.filter((item) => item.resolutionReason === "not_applicable").length,
         spam: items.filter((item) => item.resolutionReason === "spam").length,
-      slaPercentage: items.length ? items.filter((item) => item.slaState === "met").length / items.length : null,
+        slaPercentage: firstResponsePercentage(firstResponseTotals(items, outcomes)),
         averageResponseMinutes: average(responseTimes),
         averageResolutionMinutes: average(resolutionTimes),
       }
@@ -267,8 +310,8 @@ function calculateResponseTimeSeries(records: AnalyticsRecord[], dates: string[]
   })
 }
 
-function calculatePeriod(records: AnalyticsRecord[], filters: AnalyticsFilters) {
-  const dimensionRecords = records.filter((record) => matchesDimensions(record, filters))
+function calculatePeriod(records: AnalyticsRecord[], filters: AnalyticsFilters, outcomes: ReadonlyMap<string, FirstResponseOutcome>) {
+  const dimensionRecords = records.filter((record) => matchesDimensions(record, filters, outcomes.get(record.id)))
   const createdDate = (record: AnalyticsRecord) => record.createdDate ?? toDateKey(record.createdAt)
   const resolvedDate = (record: AnalyticsRecord) => record.resolvedAt
     ? record.resolvedDate ?? toDateKey(record.resolvedAt)
@@ -298,14 +341,12 @@ function calculatePeriod(records: AnalyticsRecord[], filters: AnalyticsFilters) 
   })
   const slaTimeSeries = dates.map((date) => ({
     date,
-    met: createdRecords.filter((record) => createdDate(record) === date && record.slaState === "met").length,
-    warning: createdRecords.filter((record) => createdDate(record) === date && record.slaState === "warning").length,
-    breached: createdRecords.filter((record) => createdDate(record) === date && record.slaState === "breached").length,
+    ...firstResponseTotals(createdRecords.filter((record) => createdDate(record) === date), outcomes),
   }))
   return {
     createdRecords,
     backlogRecords,
-    kpis: calculateKpis(createdRecords, resolvedRecords, ignoredRecords, claimedRecords, backlogRecords),
+    kpis: calculateKpis(createdRecords, resolvedRecords, ignoredRecords, claimedRecords, backlogRecords, outcomes),
     timeSeries,
     slaTimeSeries,
     responseTimeSeries: calculateResponseTimeSeries(createdRecords, dates),
@@ -334,8 +375,16 @@ export function buildAnalyticsResult(
   filters: AnalyticsFilters,
   generatedAt: string,
   includeCurrentWork = false,
+  timezone = "UTC",
 ): AnalyticsResult {
-    const current = calculatePeriod(records, filters)
+    const today = reportingDate(generatedAt, timezone)
+    if (filters.datePreset) {
+      const range = analyticsPresetRange(filters.datePreset, today)
+      filters = { ...filters, dateFrom: range.from, dateTo: range.to }
+    }
+    const observedAt = Date.parse(generatedAt)
+    const outcomes = new Map(records.map(record => [record.id, firstResponseOutcome(record, observedAt)]))
+    const current = calculatePeriod(records, filters, outcomes)
     const allCustomers = [...new Map(records.map((record) => [record.customerId, { id: record.customerId, name: record.customerName }])).values()]
       .sort((a, b) => a.name.localeCompare(b.name, "pl"))
     const allChannels = [...new Map(records.map((record) => [record.sourceChannel, { value: record.sourceChannel, label: record.sourceChannel, platform: record.platform }])).values()]
@@ -355,17 +404,13 @@ export function buildAnalyticsResult(
       (status) => statusLabels.get(status) ?? status,
       (status) => current.createdRecords.filter((record) => statusDimension(record) === status).length,
     )
-    const slaDistribution = distribution<AnalyticsSlaState>(
-      ["met", "warning", "breached"],
-      (state) => slaLabels[state],
-      (state) => current.createdRecords.filter((record) => record.slaState === state).length,
-    )
-
     const comparisonFilters = filters.comparePrevious ? previousPeriod(filters) : undefined
-    const comparisonPeriod = comparisonFilters ? calculatePeriod(records, comparisonFilters) : undefined
+    const comparisonPeriod = comparisonFilters ? calculatePeriod(records, comparisonFilters, outcomes) : undefined
     const result: AnalyticsResult = {
       filters,
       lastUpdatedAt: generatedAt,
+      reportingTimezone: timezone,
+      reportingDate: today,
       comparison: comparisonFilters && comparisonPeriod
         ? {
             filters: comparisonFilters,
@@ -378,12 +423,20 @@ export function buildAnalyticsResult(
       slaTimeSeries: current.slaTimeSeries,
       sourceDistribution,
       statusDistribution,
-      slaDistribution,
+      slaAttention: {
+        overdueSupportResponses: current.createdRecords.filter(record =>
+          (record.operationalDeadlineKind === "FRT" || record.operationalDeadlineKind === "NRT")
+            && record.operationalDeadlineState === "BREACHED",
+        ).length,
+        dueCustomerFollowUps: current.createdRecords.filter(record =>
+          record.operationalDeadlineKind === "FOLLOW_UP" && record.operationalDeadlineState === "FOLLOW_UP_DUE",
+        ).length,
+      },
       backlogAgeDistribution: calculateBacklogAge(current.backlogRecords, filters.dateTo),
-      clientPerformance: calculateClientPerformance(current.createdRecords),
+      clientPerformance: calculateClientPerformance(current.createdRecords, outcomes),
       heatmap: calculateHeatmap(current.createdRecords),
       responseTimeSeries: current.responseTimeSeries,
-      userPerformance: calculateUserPerformance(current.createdRecords, current.backlogRecords),
+      userPerformance: calculateUserPerformance(current.createdRecords, current.backlogRecords, outcomes),
       currentWork: includeCurrentWork ? current.backlogRecords.map((record) => ({
         id: record.id,
         reference: record.reference ?? record.id,
@@ -394,14 +447,16 @@ export function buildAnalyticsResult(
         statusLabel: dimensionLabel(record),
         userName: record.userName,
         createdAt: record.createdAt,
-        slaState: record.slaState,
+        operationalDeadlineKind: record.operationalDeadlineKind,
+        operationalDeadlineState: record.operationalDeadlineState,
       })) : undefined,
       options: {
         users,
         customers: allCustomers,
         channels: allChannels,
         statuses: allStatuses,
-        slaStates: (["met", "warning", "breached"] as const).map((value) => ({ value, label: slaLabels[value] })),
+        firstResponseOutcomes: (Object.keys(firstResponseLabels) as FirstResponseOutcome[])
+          .map(value => ({ value, label: firstResponseLabels[value] })),
       },
     }
     return result
