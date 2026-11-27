@@ -15,13 +15,13 @@ export function realtimeQueryScopes(destination: string, body: unknown, accountI
       case "application.reminders_changed":
         return [["support-inbox", "sla-reminders", accountId]]
       case "application.catalog_changed":
-        return [["support-inbox", "filter-options"], ["support-inbox", "cases"], ["analytics"]]
+        return [["support-inbox", "filter-options"], ["support-inbox", "cases"], ["support-inbox", "case"], ["analytics"]]
       case "application.settings_changed":
         return [["administration", "settings"], ["administration", "resync"], ["administration", "provider-setup"],
-          ["support-inbox", "filter-options"], ["analytics"]]
+          ["support-inbox", "filter-options"], ["support-inbox", "cases"], ["support-inbox", "case"], ["analytics"]]
       case "application.directory_changed":
         return [["administration", "users"], ["direct-recipients"], ["support-inbox", "filter-options"],
-          ["support-inbox", "assignees"], ["analytics"]]
+          ["support-inbox", "assignees"], ["support-inbox", "cases"], ["support-inbox", "case"], ["analytics"]]
       case "application.identity_changed":
         return reconciliationScopes
       case "application.case_changed": {
