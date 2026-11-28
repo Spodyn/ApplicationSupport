@@ -507,6 +507,48 @@ for (const [kind, warningSeconds] of [["FRT", 225], ["NRT", 450]] as const) {
   })
 }
 
+for (const kind of ["FRT", "NRT"] as const) {
+  for (const english of [true, false]) {
+    test(`${kind} overdue clock keeps ticking after closing in ${english ? "English" : "Polish"} across all Case surfaces`, async ({ page }) => {
+      const observed = Date.parse("2026-03-29T10:00:00Z")
+      const due = Date.parse("2026-03-27T16:00:00Z")
+      await page.clock.install({ time: observed })
+      const iso = (time: number) => new Date(time).toISOString()
+      const deadline: CaseOperationalDeadline = {
+        id: caseId, kind, state: "BREACHED", startedAt: iso(due - 900_000),
+        observedAt: iso(observed), warningAt: iso(due - 225_000), dueAt: iso(due),
+        clockValidUntil: iso(observed + 86_400_000), remainingMillis: due - observed,
+        businessIntervals: [],
+      }
+      await preparePage(page, true, { english, operationalDeadline: deadline })
+      await page.setViewportSize({ width: 1440, height: 900 })
+      await page.goto("/cases")
+      const tile = page.locator(`button[data-case-id="${caseId}"]`)
+      await tile.click()
+      const badges = [tile, page.getByRole("region", { name: english ? /^Conversation / : /^Rozmowa / }),
+        page.getByRole("complementary", { name: english ? "Case details" : "Szczegóły sprawy" })]
+        .map(surface => surface.locator("[data-sla-countdown]"))
+      for (const badge of badges) {
+        await expect(badge).toContainText(kind)
+        await expect(badge).toContainText("42")
+      }
+      const browserNow = await page.evaluate(() => Date.now())
+      await page.clock.pauseAt(browserNow + 500)
+      await page.clock.runFor(1_000)
+      const seconds = (text: string) => text.match(/\d+/g)!.map(Number).reduce((total, part) => total * 60 + part, 0)
+      const before = await Promise.all(badges.map(async badge => seconds((await badge.textContent())!)))
+      const requests: string[] = []
+      page.on("request", request => { if (request.url().includes("/api/v1/")) requests.push(request.url()) })
+      await page.clock.runFor(3_000)
+      for (const [index, badge] of badges.entries()) {
+        expect(seconds((await badge.textContent())!)).toBe(before[index] + 3)
+        await expect(badge).toContainText(english ? "overdue" : "Po terminie")
+      }
+      expect(requests).toHaveLength(0)
+    })
+  }
+}
+
 for (const provider of ["SLACK", "TEAMS", "TELEGRAM"] as const) {
   for (const mapped of [true, false]) {
     test(`${provider} ${mapped ? "mapped" : "unmapped"} Case card uses its provider channel title`, async ({ page }) => {

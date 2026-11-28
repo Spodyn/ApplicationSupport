@@ -523,6 +523,17 @@ decisions:
       clock: server_intervals_shared_client_clock
       automatic_customer_message: false
 
+  - id: DEC-OPERATIONAL-SLA-OVERDUE-001
+    area: operational_sla_countdown
+    status: owner_approved
+    source: [OWNER_CLARIFICATION_2026_11_28_OVERDUE_OUTSIDE_BUSINESS_HOURS]
+    decision:
+      before_due: remaining_snapshotted_business_time_pauses_during_closures
+      from_due: elapsed_overdue_time_including_nights_weekends_holidays
+      unexpired_closure: no_overdue_time
+      historical_FRT_NRT_TTR: unchanged_business_time_measurements
+      reminder_eligibility_and_follow_up_classification: unchanged
+
   - id: DEC-PROVIDER-DELETED-CONTENT-001
     area: provider_message_deletion
     status: owner_approved

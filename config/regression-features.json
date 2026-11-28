@@ -195,7 +195,7 @@
       "feature": "FRT, NRT, TTR and SLA queue",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "FRT/NRT run in business windows, pause at closure, warn at 25%, and reset on separate accepted customer messages; support and follow-up expiry create deduplicated internal reminders without counting follow-up as a support breach",
+      "expected": "FRT/NRT run in business windows, pause at closure, warn at 25%, and reset on separate accepted customer messages; support and follow-up expiry create deduplicated internal reminders without counting follow-up as a support breach; operational FRT/NRT remaining countdown pauses during closures; expired countdown grows in elapsed time across nights/weekends/holidays without changing historical measurements",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
@@ -209,7 +209,9 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
-        "apps/web/tests/unit/operational-sla.test.ts"
+        "apps/web/tests/unit/operational-sla.test.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseOperationalDeadlineTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseDetailServiceIntegrationTests.java"
       ],
       "gap": "Production SLO/load evidence is not a unit-test pass"
     },

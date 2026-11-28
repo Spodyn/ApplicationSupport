@@ -1,4 +1,4 @@
-"""Require covered added executable lines in the explicitly scoped security/transport LCOV report."""
+"""Require covered added executable lines in the explicitly scoped security/transport/SLA LCOV report."""
 from pathlib import Path
 import argparse
 import re
@@ -48,4 +48,4 @@ if __name__ == '__main__':
     if not covered_lines(lcov): raise SystemExit('Empty LCOV cannot establish changed-line coverage')
     failures = uncovered_changes(diff, lcov)
     if failures: raise SystemExit('Uncovered changed executable lines:\n' + '\n'.join(failures))
-    print('Changed executable lines in scoped security/transport modules are covered.')
+    print('Changed executable lines in scoped security/transport/SLA modules are covered.')

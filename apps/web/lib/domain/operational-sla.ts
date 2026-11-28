@@ -13,15 +13,17 @@ export interface OperationalDeadline {
 
 export function operationalClock(deadline: OperationalDeadline, monotonicNow: number) {
   const estimatedNow = deadline.observedAt + Math.max(0, monotonicNow - deadline.receivedAt)
+  // Once due, elapsed lateness needs no future business-calendar windows.
+  if (estimatedNow >= deadline.dueAt) {
+    return { overdue: true, seconds: Math.floor((estimatedNow - deadline.dueAt) / 1_000), warning: false }
+  }
   const now = deadline.businessIntervals === null ? estimatedNow : Math.min(deadline.clockValidUntil, estimatedNow)
   const elapsed = deadline.businessIntervals === null ? now - deadline.observedAt
     : deadline.businessIntervals.reduce((total, interval) =>
       total + Math.max(0, Math.min(now, interval.end) - Math.max(deadline.observedAt, interval.start)), 0)
-  const overdue = now >= deadline.dueAt
-  const seconds = overdue ? Math.floor(Math.max(0, elapsed - deadline.remainingMillis) / 1_000)
-    : Math.ceil(Math.max(0, deadline.remainingMillis - elapsed) / 1_000)
-  const warning = !overdue && deadline.warningAt !== null && now >= deadline.warningAt
-  return { overdue, seconds, warning }
+  const seconds = Math.ceil(Math.max(0, deadline.remainingMillis - elapsed) / 1_000)
+  const warning = deadline.warningAt !== null && now >= deadline.warningAt
+  return { overdue: false, seconds, warning }
 }
 
 const durationUnits = ["hour", "minute", "second"] as const

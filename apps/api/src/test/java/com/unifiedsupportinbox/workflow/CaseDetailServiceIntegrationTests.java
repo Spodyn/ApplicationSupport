@@ -7,6 +7,9 @@ import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.UsiApiApplication;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
 import java.util.UUID;
+import java.time.Duration;
+import java.time.Instant;
+import java.sql.Timestamp;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
@@ -99,6 +102,29 @@ class CaseDetailServiceIntegrationTests {
     void rejectsMissingCaseAndUnknownAuthenticatedUser() {
         assertThatThrownBy(() -> details.detail(UUID.randomUUID(), UUID.randomUUID()))
                 .isInstanceOf(ApiProblemException.class);
+    }
+
+    @Test
+    void queueAndDetailExposeElapsedOverdueTimeIndependentlyOfTheBusinessCalendar() {
+        UUID viewer = user("USER");
+        Instant due = Instant.parse("2020-01-03T17:00:00Z");
+        for (String kind : new String[] {"FRT", "NRT"}) {
+            UUID id = caseId("overdue-clock-" + UUID.randomUUID());
+            jdbc.update("""
+                    INSERT INTO case_operational_deadlines (case_id, kind, started_at, warning_at, due_at, schedule)
+                    VALUES (?, ?, ?, ?, ?, '{"id":"00000000-0000-0000-0000-000000000001", "timezone":"UTC",
+                      "active":true, "intervals":[{"dayOfWeek":1,"start":"09:00","end":"17:00"}],
+                      "exceptions":[], "updatedBy":"test", "updatedAt":"2020-01-01T00:00:00Z"}'::jsonb)
+                    """, id, kind, Timestamp.from(due.minusSeconds(900)), Timestamp.from(due.minusSeconds(225)), Timestamp.from(due));
+            var detail = details.detail(id, viewer).operationalDeadline();
+            var queue = context.getBean(CaseListService.class).list(viewer, null, 100).items().stream()
+                    .filter(item -> item.id().equals(id)).findFirst().orElseThrow().operationalDeadline();
+            for (var deadline : new CaseOperationalDeadline[] {detail, queue}) {
+                assertThat(deadline.kind()).isEqualTo(kind);
+                assertThat(deadline.state()).isEqualTo("BREACHED");
+                assertThat(deadline.remainingMillis()).isEqualTo(Duration.between(deadline.observedAt(), due).toMillis());
+            }
+        }
     }
 
     private static UUID user(String role) {

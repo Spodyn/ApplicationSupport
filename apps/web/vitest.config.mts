@@ -15,9 +15,11 @@ export default defineConfig({
     coverage: {
       provider: 'v8', reporter: ['text-summary', 'json-summary', 'lcov'],
       include: ['lib/security/external-message.ts', 'lib/services/api/http-transport.ts',
-        'lib/services/api/auth-adapter.ts', 'config/same-origin-policy.mjs', 'config/browser-security.mjs'],
+        'lib/services/api/auth-adapter.ts', 'config/same-origin-policy.mjs', 'config/browser-security.mjs',
+        'lib/domain/operational-sla.ts'],
       reportsDirectory: 'coverage',
-      thresholds: {lines: 83, statements: 81, functions: 78, branches: 76},
+      thresholds: {lines: 83, statements: 81, functions: 78, branches: 76,
+        'lib/domain/operational-sla.ts': {lines: 100, statements: 100, functions: 100, branches: 100}},
     },
   },
 })

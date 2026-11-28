@@ -95,3 +95,15 @@ The platform-scoped resolved-read regression first fails with a missing provider
 ## Outbound message mutations
 
 `MESSAGE_MUTATIONS`: MessageMutationIntegrationTests covers both providers, authorization, idempotency, deterministic retries, lease fencing, concurrency, duplicate/stale callbacks, retained content/attachments and unchanged workflow/SLA/send timestamps. SlackMutationHttpTests and TeamsMutationHttpTests verify actual controlled update/delete HTTP, routing, attachment preservation and ambiguous receipts. message-mutations.test.tsx covers transport mapping and EN/PL pending/confirmation behavior; workflows.spec.ts exercises both controlled adapters and another connected browser. Live tenant validation remains NOT RUN. [Contract](OUTBOUND_MESSAGE_MUTATIONS.md).
+
+## Operational overdue countdown (2026-11-28 owner clarification)
+
+| Scenario | Expected | Permanent regression | Mandatory CI |
+| --- | --- | --- | --- |
+| FRT/NRT before expiry, closure, warning, Warsaw DST | Business seconds pause at closure; resume at opening; 25% warning | `operational-sla.test.ts`; `CaseOperationalDeadlineTests.unexpiredSupportDeadlineExcludesWeekendAndHonorsWarsawDst`; existing `BusinessTimeCalculatorTests` | web, backend |
+| FRT/NRT expires at closing, then weekend/refetch | Overdue seconds use elapsed time from `dueAt`, even after the business-window horizon | `operational-sla.test.ts`; `CaseOperationalDeadlineTests.expiredSupportDeadlineIncludesClosedWeekendInOverdueDuration` | web, backend |
+| Queue and details REST projection | Negative `remainingMillis` equals elapsed lateness; historical metrics retain business time | `CaseDetailServiceIntegrationTests.queueAndDetailExposeElapsedOverdueTimeIndependentlyOfTheBusinessCalendar` | integration |
+| Queue/conversation/details tick in EN/PL | All three advance after expiry without per-second API requests | `application.spec.ts`: FRT/NRT overdue clock tests, frozen Friday clock | web |
+| Real REST/DB/worker/STOMP + closed calendar | FRT/NRT are overdue, have no open windows, and visible clocks still advance without requests | `workflows.spec.ts`: FRT/NRT overdue clock tests; per-Case closures in disposable fixtures | fullstack |
+
+Before the fix, the new frontend FRT/NRT regressions returned zero overdue seconds after closing, and backend regressions returned zero rather than 42 elapsed hours across a fixed DST weekend. Live Brave staging observations at revision `1101c14` confirmed a frozen FRT overdue badge on Saturday while elapsed customer follow-ups kept ticking. Post-deployment acceptance of the correction is pending independent integration; automated checks are not a live acceptance pass.

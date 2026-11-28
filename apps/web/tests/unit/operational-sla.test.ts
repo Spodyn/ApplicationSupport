@@ -19,6 +19,25 @@ function fixture(): OperationalDeadline {
 }
 
 describe("operational countdown", () => {
+  it.each(["FRT", "NRT"] as const)("keeps overdue %s running through a closed weekend and after refetch", (kind) => {
+    const dueAt = instant("2026-03-27T16:00:00Z")
+    const observedAt = dueAt - 2_000
+    const deadline: OperationalDeadline = { ...fixture(), kind, observedAt, dueAt,
+      receivedAt: 0, remainingMillis: 2_000, warningAt: observedAt,
+      clockValidUntil: dueAt + 86_400_000,
+      businessIntervals: [{ start: observedAt, end: dueAt }],
+    }
+    expect(operationalClock(deadline, 1_000)).toEqual({ seconds: 1, overdue: false, warning: true })
+    expect(operationalClock(deadline, 2_000)).toEqual({ seconds: 0, overdue: true, warning: false })
+    expect(operationalClock(deadline, 4_000)).toEqual({ seconds: 2, overdue: true, warning: false })
+    // The business calendar horizon cannot stop an already expired deadline.
+    const sunday = instant("2026-03-29T10:00:00Z")
+    expect(operationalClock(deadline, sunday - observedAt).seconds).toBe(42 * 3_600)
+    const refreshed = { ...deadline, observedAt: sunday, receivedAt: 900,
+      remainingMillis: -(sunday - dueAt), businessIntervals: [] }
+    expect(operationalClock(refreshed, 3_900).seconds).toBe(42 * 3_600 + 3)
+  })
+
   it.each([["FRT", 15], ["NRT", 30]] as const)("runs %s in business hours and warns at exactly 25%% remaining", (kind, minutes) => {
     const observedAt = instant("2026-11-23T11:55:00Z")
     const opens = instant("2026-11-23T13:00:00Z")
@@ -54,14 +73,24 @@ describe("operational countdown", () => {
     expect(operationalClock(deadline, monday + 3_000)).toEqual({ seconds: 1, overdue: true, warning: false })
   })
 
-  it("renders elapsed follow-up time and clamps a stale business calendar to the server horizon", () => {
+  it("renders elapsed follow-up time and clamps an unexpired business calendar to the server horizon", () => {
     const deadline = fixture()
     expect(operationalClock({ ...deadline, kind: "FOLLOW_UP", businessIntervals: null,
       dueAt: deadline.observedAt + 5_000, warningAt: null, remainingMillis: 5_000 },
     deadline.receivedAt + 7_000)).toEqual({ seconds: 2, overdue: true, warning: false })
-    expect(operationalClock(deadline, Number.MAX_SAFE_INTEGER))
-      .toEqual(operationalClock(deadline, deadline.clockValidUntil - deadline.observedAt + deadline.receivedAt))
+    expect(operationalClock({ ...deadline, kind: "FOLLOW_UP", businessIntervals: null,
+      dueAt: deadline.observedAt + 5_000, warningAt: null, remainingMillis: 5_000 },
+    deadline.receivedAt + 2_000)).toEqual({ seconds: 3, overdue: false, warning: false })
+    const beforeDue = { ...deadline, dueAt: deadline.clockValidUntil + 60_000, remainingMillis: 2_000 + 91 * 60_000 }
+    const horizon = deadline.clockValidUntil - deadline.observedAt + deadline.receivedAt
+    expect(operationalClock(beforeDue, horizon + 30_000)).toEqual(operationalClock(beforeDue, horizon))
+    expect(operationalClock(beforeDue, horizon)).toEqual({ seconds: 60, overdue: false, warning: true })
     expect(formatDeadlineDuration(3_662, "en")).toBe("1 hr 1 min 2 sec")
     expect(formatDeadlineDuration(3_662, "pl")).toMatch(/1.*1.*2/)
   })
+
+  it.each([[0, "0 sec"], [59, "59 sec"], [60, "1 min 0 sec"], [3_600, "1 hr 0 min 0 sec"]] as const)(
+    "formats the %s-second boundary without losing seconds", (seconds, expected) => {
+      expect(formatDeadlineDuration(seconds, "en")).toBe(expected)
+    })
 })
