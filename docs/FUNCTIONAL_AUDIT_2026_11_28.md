@@ -21,7 +21,7 @@ Obserwacje wykonano przez połączone rozszerzenie Brave na `https://application
 
 Osobno: ruleset GitHub wymienia sześć kontekstów (`configuration`, `backend`, `integration`, `infrastructure`, `openapi`, `validate`); `web` i `fullstack` są wymagane pośrednio przez fail-closed `validate` oraz niezależny guard. Zalecenie: dopisać oba konteksty bezpośrednio. Nie zmieniono rulesetu ani ochrony gałęzi.
 
-Obserwacja lokalizacyjna do osobnego odtworzenia: angielskie szczegóły CASE-21 pokazują polskie `Nie przypisano`. Nie wolno tłumaczyć dowolnych nazw klientów jako kluczy i18n.
+Potwierdzony AUDIT-I18N-02: angielskie szczegóły niemapowanej sprawy pokazują polskie `Nie przypisano`. Trzy testy browser odtworzyły błąd EN oraz zachowały PL i literalną nazwę rzeczywistego klienta. Poprawka w PR #176 tłumaczy wyłącznie tożsamość `unassigned`, bez tłumaczenia nazw klientów.
 
 Podejrzenie do odtworzenia: po mutacji odpowiedzi Slack pojawiło się `Edited` na nieedytowanej w tym audycie wiadomości głównej. Sam odczyt UI nie ustala przyczyny; nie liczymy tego jeszcze jako potwierdzonej usterki.
 
@@ -98,6 +98,11 @@ Nowy root R4 utworzył CASE-22 (`01a223b1-d693-72e1-a1e4-03fdf320ee96`) bez refr
 - Inwentarz obejmuje 37 funkcji, 111 definicji scenariuszy pozytywnych/negatywnych/brzegowych i identyfikatory istniejących suite z warstwą oraz CI. Definicja scenariusza nie oznacza kompletnego pokrycia. Walidator wykrywa usunięte funkcje, brakujące pliki/źródła, nieaktualne identyfikatory, niespójne statusy i niewyjaśnione usunięcie powiązanego testu względem dokładnej bazy Git.
 - Rozszerzona regresja: nightly 03:23 UTC i manual, trzy niezależne powtórzenia bez retries plus mutation smoke. Obowiązkowe osiem zadań push/PR pozostaje bez zmian. JUnit, HTML, SHA, inventory i scoped coverage są zachowywane również przy sukcesie.
 
+- [PR #176](https://github.com/Spodyn/ApplicationSupport/pull/176), `bf1c241b4a5cbd8cda5afa11a06652b2b0a1e4e4`: FIXED w kodzie — lokalizacja brakującego mapowania klienta. Lokalny web check: 138 Vitest i 60 browser PASS, lint/typecheck/build PASS. Osiem kontroli [push](https://github.com/Spodyn/ApplicationSupport/actions/runs/46183958363) i [PR](https://github.com/Spodyn/ApplicationSupport/actions/runs/46183978629) PASS.
+- [PR #175](https://github.com/Spodyn/ApplicationSupport/pull/175), `6643f41a0ebcfb013abb2bd6bdc38bd7f246a147`: public smoke i zgodność uruchomionych obrazów przy każdym release, prywatny zapis rewizji/wyniku oraz opcjonalny dedykowany auth smoke bez ponownego użycia bootstrap password. Konfiguracja 94 testy PASS, w tym 6 nowych. Wszystkie osiem kontroli [push](https://github.com/Spodyn/ApplicationSupport/actions/runs/46182644027) i [PR](https://github.com/Spodyn/ApplicationSupport/actions/runs/46182664927) PASS. Faktyczna konfiguracja konta na hoście: BLOCKED / NOT RUN.
+- PR #173 ma osiem kontroli [push](https://github.com/Spodyn/ApplicationSupport/actions/runs/46182158587) i [PR](https://github.com/Spodyn/ApplicationSupport/actions/runs/46182176867) PASS na wskazanym SHA.
+- [PR #174](https://github.com/Spodyn/ApplicationSupport/pull/174): ostatnia rewizja kodu testów `880f4dcaffd3b45f4ea0fd0bb3a9656883815ef1`. Audyt odtworzył współdzielenie Teams/limitów logowania przez `--repeat-each`, wyścig pomiaru zerowej sieci z prawidłowymi zdarzeniami realtime i nieaktualny operator mutation smoke. Kontrola mutation: 13 PASS, wszystkie trzy kompilujące mutanty zabite asercjami. Dziesięć prób zegara po synchronizacji sygnałów PASS; końcowe trzy świeże pełne stosy i extended run są raportowane w PR. Starszy extended run 46183329120 wykonał 84 scenariusze, ale FAIL na starym selektorze mutacji — nie jest zieloną bramką.
+
 Stan wdrożenia tych poprawek: NOT DEPLOYED przez ten audyt. PR-y pozostają do niezależnej integracji; nie wykonywano merge/deploy. Akceptacja po wdrożeniu: NOT TESTED.
 
 ## Konkretne ograniczenia dostępu
@@ -109,12 +114,20 @@ Stan wdrożenia tych poprawek: NOT DEPLOYED przez ten audyt. PR-y pozostają do 
 - Pełny auth smoke kolejnych wdrożeń wymaga dedykowanego konta i chronionych plików na hoście. Nie tworzono konta ani sekretów. Brak takiego dostępu nie jest PASS.
 - Istniejący [PR #145](https://github.com/Spodyn/ApplicationSupport/pull/145) zawiera pracę nad pełnymi CLOSED/OPEN/OVERRIDE i OOO. Nie duplikowano równolegle tego wdrożenia i nie scalano go w audycie.
 
-## Pozostałe prace
+## Podsumowanie liczb i granice wnioskowania
 
-1. Osobny PR SLA, pełna lokalna regresja i push/PR CI dla dokładnego HEAD, niezależna integracja i akceptacja po wdrożeniu.
-2. PR #173 zawiera odtworzenie i poprawkę formularzy, lokalną regresję oraz oba komplety ośmiu zielonych kontroli na ccb03d25ad46d5f592a0744369ba46b20ed20f31. Pozostaje niezależna integracja i akceptacja po wdrożeniu.
-3. Akceptacja live drugiego konta, Teams (wiadomości niezaładowane), plików (uprawnienie rozszerzenia), deterministycznych terminów i before/after statystyk pozostaje osobno ograniczona.
-4. Rozszerzyć istniejący inwentarz o źródła, identyfikatory scenariuszy, warstwy, granice, wyniki i pochodzenie dowodów; walidować brakujące powiązania i niewyjaśnione redukcje.
-5. Oddzielny PR CI/deployment: nightly + manual, zachowanie ośmiu obowiązkowych zadań, raporty z SHA/licznikami, bezpieczny smoke kolejnych wdrożeń, bez niekontrolowanego rollbacku i bez ponownego użycia hasła bootstrap.
+- Inwentaryzacja: 37 funkcji, 9 sekcji Settings, 111 definicji scenariuszy i 230 powiązań suite. Stan akceptacji live w inwentarzu: 27 PARTIAL, 4 FAIL, 1 BLOCKED i 5 NOT TESTED. FAIL dotyczy wersji wdrożonej; FIXED w PR nie oznacza wdrożenia.
+- Pięć potwierdzonych usterek funkcjonalnych ma poprawki: zegar po przekroczeniu SLA, etykiety mapowań, domyślna integracja powiadomień, dzień tygodnia SLA w EN i brak klienta w EN. Oddzielnie poprawiono trzy wykryte problemy infrastruktury testowej. Pozostałe ulepszenia to traceability, raportowanie/nightly i weryfikacja wdrożenia; nie liczymy ich jako dodatkowych funkcji produktu.
+- Nowe testy: 4 jednostkowe backend, 1 integracyjny backend, 15 frontend, 10 browser, 3 full-stack, 9 configuration/gate — razem 42. Wzmocnienia istniejącego scenariusza zegara i istniejących operatorów mutacji nie są liczone jako nowe testy.
+- Baseline → łączny oczekiwany zbiór po integracji: backend 342→346, integracja 353→354, Vitest 138→153, browser 57→67, full-stack 28→31, Python configuration 88→94. Liczby per PR i faktyczne wyniki łącznej lokalnej weryfikacji są odrębnymi dowodami; nie zastępują przyszłej bramki dokładnego scalonego `main`.
+- Scoped coverage: pięć dotychczasowych modułów miało 85% lines / 82,73% statements / 81,48% functions / 82,75% branches. Po dodaniu operational SLA do jawnego zakresu: 87,05% / 84,90% / 83,87% / 84,84%; SLA osobno 100% we wszystkich czterech wymiarach. Nie jest to pokrycie całej aplikacji. Progów nie obniżono.
 
-Nie jest to końcowe potwierdzenie gotowości produkcyjnej ani deklaracja braku pozostałych usterek.
+## Pozostała akceptacja i kolejność integracji
+
+1. Niezależna integracja PR #172, #173, #176 i #175, następnie uzgodnienie rozszerzonego inwentarza #174. Dokumentacyjne konflikty należy połączyć semantycznie, zachowując wszystkie testy i ich identyfikatory. Każdy nowy HEAD wymaga własnych ośmiu zielonych kontroli; wynik lokalnej gałęzi łącznej nie daje prawa do merge.
+2. Po automatycznym wdrożeniu ponowić akceptację pięciu poprawek przez Brave i potwierdzić uruchomioną rewizję. Przed integracją pozostaje to NOT TESTED, bez deklaracji gotowości produkcyjnej.
+3. Przywrócić działający odczyt sandboxu Teams, udostępnić odrębne dedykowane konto USI oraz autoryzowane przesyłanie plików przez rozszerzenie. Nie zmieniano sekretów, uprawnień ani wspólnych polityk.
+4. Operator może osobno przygotować dedykowane chronione konto auth smoke; ten audyt go nie tworzy. Uwierzytelniona akceptacja kolejnych wdrożeń bez tego konta pozostaje NOT RUN.
+5. Odczytane formularze wspólnej konfiguracji nie oznaczają pełnej live akceptacji zapisów, konfliktów, OOO i wszystkich granic kalendarza. Te ograniczenia pozostają w tabelach; istniejącego PR #145 nie duplikowano.
+
+Nie jest to potwierdzenie gotowości produkcyjnej ani deklaracja braku pozostałych usterek.
