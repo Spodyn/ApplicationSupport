@@ -36,10 +36,17 @@ export function checkInventory(inventory, baseline) {
       if (!scenario?.id || !scenario.expected?.trim() || scenarioIds.has(scenario.id)) throw Error(`Missing/duplicate ${kind} scenario: ${feature.id}`)
       scenarioIds.add(scenario.id)
     }
+    for (const source of new Set(feature.tests)) {
+      if (!feature.testIdentifiers.some(test => test.source === source)) throw Error(`Unmapped test identifier: ${feature.id}/${source}`)
+    }
     for (const test of feature.testIdentifiers) {
       if (!feature.tests.includes(test.source) || !test.identifier?.trim()
         || !['backend', 'integration', 'frontend', 'browser', 'fullstack', 'configuration', 'infrastructure', 'openapi'].includes(test.layer)
         || !['configuration', 'backend', 'integration', 'infrastructure', 'openapi', 'web', 'fullstack'].includes(test.ci)) throw Error(`Invalid test identifier/layer/CI: ${feature.id}`)
+      const layerJob = {backend: 'backend', integration: 'integration', frontend: 'web', browser: 'web', fullstack: 'fullstack', configuration: 'configuration', infrastructure: 'infrastructure', openapi: 'openapi'}
+      if (test.ci !== layerJob[test.layer]) throw Error(`Invalid test identifier/layer/CI: ${feature.id}`)
+      const jobForLayer = {backend: 'backend', integration: 'integration', frontend: 'web', browser: 'web', fullstack: 'fullstack', configuration: 'configuration', infrastructure: 'infrastructure', openapi: 'openapi'}
+      if (test.ci !== jobForLayer[test.layer] || !['suite', 'test'].includes(test.kind)) throw Error(`Invalid test identifier/layer/CI: ${feature.id}`)
       if (test.kind === 'suite') {
         if (test.identifier !== test.source) throw Error(`Stale suite identifier: ${feature.id}/${test.identifier}`)
       } else if (!fs.readFileSync(checkedPath(test.source), 'utf8').includes(test.identifier)) throw Error(`Stale test identifier: ${feature.id}/${test.identifier}`)

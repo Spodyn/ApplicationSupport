@@ -378,6 +378,13 @@
           "layer": "browser",
           "ci": "web",
           "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/api-channel-adapter.test.ts",
+          "identifier": "apps/web/tests/unit/api-channel-adapter.test.ts",
+          "kind": "suite",
+          "layer": "frontend",
+          "ci": "web"
         }
       ],
       "verification": {
@@ -2227,6 +2234,13 @@
           "layer": "configuration",
           "ci": "configuration",
           "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/api-channel-adapter.test.ts",
+          "identifier": "apps/web/tests/unit/api-channel-adapter.test.ts",
+          "kind": "suite",
+          "layer": "frontend",
+          "ci": "web"
         }
       ],
       "verification": {
@@ -2768,6 +2782,20 @@
           "layer": "configuration",
           "ci": "configuration",
           "kind": "suite"
+        },
+        {
+          "source": "infra/staging/test_compose.py",
+          "identifier": "infra/staging/test_compose.py",
+          "kind": "suite",
+          "layer": "infrastructure",
+          "ci": "infrastructure"
+        },
+        {
+          "source": "infra/staging/smoke.py",
+          "identifier": "infra/staging/smoke.py",
+          "kind": "suite",
+          "layer": "infrastructure",
+          "ci": "infrastructure"
         }
       ],
       "verification": {

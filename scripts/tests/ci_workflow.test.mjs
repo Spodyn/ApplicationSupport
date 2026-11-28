@@ -63,6 +63,8 @@ test('audit traceability rejects stale anchors, absent scenario boundaries and u
     [value => {value.features[0].verification.live = 'ASSUMED'}, /verification provenance/],
     [value => {value.features[0].verification.revision = 'main'}, /verification provenance/],
     [value => {value.features[0].testIdentifiers[0].ci = 'optional'}, /identifier\/layer\/CI/],
+    [value => {value.features[0].testIdentifiers.shift()}, /Unmapped test identifier/],
+    [value => {value.features[0].testIdentifiers[0].ci = 'web'}, /identifier\/layer\/CI/],
   ]) {
     const invalid = structuredClone(inventory)
     mutate(invalid)
