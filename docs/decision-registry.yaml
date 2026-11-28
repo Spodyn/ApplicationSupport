@@ -552,6 +552,11 @@ decisions:
     source: [OWNER_REQUEST_2026_11_27_CASE_CHANNEL_TITLE]
     rule: Case card primary titles always use the provider channel, topic or conversation name independently of customer mapping. Localize the genuinely missing-name fallback. Preserve customer details, search, analytics and provider identities. Discovery renames emit durable Case refresh hints through the existing realtime pipeline.
 
+  - id: DEC-OUTBOUND-MESSAGE-MUTATIONS-001
+    source: [OWNER_REQUEST_2026_11_28_OUTBOUND_MESSAGE_EDIT_DELETE]
+    rule: Active authors may edit or delete eligible confirmed Slack and Teams support messages through supported provider mutations, durable idempotent commands and authoritative capabilities. Preserve prior content, audit, attachment security and retention, original send timestamps, Case workflow and SLA history. No arbitrary customer or other-author mutation. Missing real provider targets and incomplete multi-resource deletion are unavailable. Unknown outcomes block unsafe retries; confirmed changes synchronize through existing realtime hints.
+
+
 technical_resolutions:
   - id: TECH-TEAMS-SELECTED-FILES-001
     source: [OWNER_REQUEST_2026_11_19_TEAMS_AUDIT, OWNER_APPROVAL_2026_11_19_TEAMS_SITE_WRITE]

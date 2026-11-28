@@ -1389,3 +1389,70 @@ test("recovered messages display an orange provenance badge in the conversation"
   await expect(page.getByText("Pominięta wiadomość · odzyskana przez resync", { exact: true })).toBeVisible()
   await expect(page.getByText("Pominięta wiadomość · odzyskana przez resync", { exact: true })).toHaveClass(/text-orange-400/)
 })
+
+for (const english of [true, false]) {
+  test(`message actions preserve confirmed content, copy, cancellation and deletion confirmation in ${english ? 'English desktop dark' : 'Polish mobile light'}`, async ({page}, testInfo) => {
+    await preparePage(page, true, {english})
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+    const id = '018f0000-0000-7000-8000-000000000299'
+    let body = 'Editable provider text', revision = 0, deletedAt: string | null = null, editedAt: string | null = null
+    let operation: string | null = null, action: 'EDIT' | 'DELETE' | null = null
+    const commands: unknown[] = []
+    await page.route(`**/api/v1/cases/${caseId}/messages*`, async route => {
+      if (route.request().method() !== 'GET') return route.fallback()
+      await route.fulfill({json: {items: [{...inboundMessage, id, kind: 'SUPPORT', inbound: false, body, authorName: authenticatedSession.displayName,
+        deliveryStatus: 'SENT', editedAt, deletedAt, mutation: {isAuthor: true, canEdit: !deletedAt, canDelete: !deletedAt, canRetry: false,
+          editUnavailable: null, deleteUnavailable: null, revision, operationId: operation, action, state: operation ? 'CONFIRMED' : null, errorCode: null}}], nextCursor: null}})
+    })
+    await page.route(`**/api/v1/messages/${id}/mutations`, async route => {
+      expect(route.request().headers()['idempotency-key']).toMatch(/^[0-9a-f-]{36}$/)
+      const input = route.request().postDataJSON()
+      expect(input.expectedRevision).toBe(revision)
+      commands.push(input);operation = '018f0000-0000-7000-8000-000000000298';action = input.action;revision++
+      // This UI fixture represents a final positive provider receipt before REST reconciliation.
+      if (action === 'EDIT') {body = input.body;editedAt = new Date().toISOString()} else deletedAt = new Date().toISOString()
+      await route.fulfill({status: 202, json: {operationId: operation, state: 'QUEUED'}})
+    })
+    await page.goto('/cases?caseId=' + caseId)
+    if (english) {
+      await page.getByRole('button', {name: /Open profile menu:/}).click()
+      await page.getByRole('menuitem', {name: 'Switch to dark mode', exact: true}).click()
+      await expect(page.locator('html')).toHaveClass(/dark/)
+    } else {
+      await expect(page.locator('html')).toHaveClass(/light/)
+      await page.setViewportSize({width: 390, height: 844})
+    }
+    const message = page.locator(`[data-message-id="${id}"]`)
+    const actions = message.getByRole('button', {name: english ? 'Message actions' : 'Akcje wiadomości'})
+    await expect(message).toContainText('Editable provider text')
+    // Keyboard access does not depend on hover.
+    await actions.focus();await page.keyboard.press('Enter')
+    await page.getByRole('menuitem', {name: english ? 'Copy text' : 'Kopiuj tekst', exact: true}).click()
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('Editable provider text')
+    await actions.click()
+    await page.getByRole('menuitem', {name: english ? 'Edit message' : 'Edytuj wiadomość', exact: true}).click()
+    const editor = message.getByRole('textbox', {name: english ? 'New message text' : 'Nowa treść wiadomości'})
+    await editor.fill('Discard this draft')
+    await message.getByRole('button', {name: english ? 'Cancel' : 'Anuluj', exact: true}).click()
+    expect(commands).toEqual([]);await expect(message).toContainText('Editable provider text')
+    await actions.click();await page.getByRole('menuitem', {name: english ? 'Edit message' : 'Edytuj wiadomość', exact: true}).click()
+    await editor.fill('Provider confirmed replacement')
+    await message.getByRole('button', {name: english ? 'Save changes' : 'Zapisz zmiany'}).click()
+    await expect(message.locator('[data-message-editor]')).toHaveCount(0)
+    await expect(message).toContainText('Provider confirmed replacement')
+    await expect(message).toContainText(english ? 'Edited' : 'Edytowano')
+    await actions.click();await page.getByRole('menuitem', {name: english ? 'Delete message' : 'Usuń wiadomość', exact: true}).click()
+    let dialog = page.getByRole('dialog')
+    await dialog.getByRole('button', {name: english ? 'Cancel' : 'Anuluj', exact: true}).click()
+    expect(commands).toHaveLength(1);expect(deletedAt).toBeNull()
+    await actions.click();await page.getByRole('menuitem', {name: english ? 'Delete message' : 'Usuń wiadomość', exact: true}).click()
+    dialog = page.getByRole('dialog')
+    await dialog.getByRole('button', {name: english ? 'Delete message' : 'Usuń wiadomość', exact: true}).click()
+    await expect(message).toHaveAttribute('data-message-deleted', 'true')
+    await expect(message).toContainText(english ? 'This message was deleted.' : 'Wiadomość została usunięta.')
+    await expect(message).toContainText('Provider confirmed replacement')
+    expect(commands).toEqual([{action: 'EDIT', body: 'Provider confirmed replacement', expectedRevision: 0}, {action: 'DELETE', body: null, expectedRevision: 1}])
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({path: testInfo.outputPath(english ? 'message-actions-dark.png' : 'message-actions-mobile-light.png'), animations: 'disabled'})
+  })
+}

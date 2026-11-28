@@ -251,3 +251,7 @@ Integration-owned ports define connection configuration, runtime readiness and d
 Inbox mode is a sparse `user_inbox_preferences` row keyed by authenticated account. GET/PUT `/api/v1/users/me/inbox-preferences` uses the existing session and CSRF controls. Missing rows project Unified. V58 writes commit-bound `application.preferences_changed` hints through the existing outbox; only the affected account receives them on `/user/queue/application`. Reconnect reconciles `inbox-preferences` alongside the other scopes. Query keys include provider and filters. Inactive platform counts reuse GET Cases with `limit=1`; full pages remain provider-scoped. Drafts live in an account-keyed authenticated-shell memory store. See [INBOX_PREFERENCES.md](INBOX_PREFERENCES.md).
 
 The resolved-read batch API retains its global default and accepts an optional provider filter. Provider-scoped requests include that scope in their idempotency fingerprint; existing global fingerprints remain valid.
+
+## Durable outbound mutations
+
+Message mutations reuse authenticated REST, the transactional outbox, Rabbit workers and targeted message.updated/case.updated realtime hints. Separate per-message revisions serialize edits/deletes without changing delivery checkpoints or Case workflow versions. Provider HTTP remains outside database transactions; ambiguous outcomes block replay. V59 is additive and preserves N-1 delivery behavior. [Design](OUTBOUND_MESSAGE_MUTATIONS.md).

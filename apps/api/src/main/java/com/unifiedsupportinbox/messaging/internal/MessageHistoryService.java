@@ -31,18 +31,26 @@ class MessageHistoryService {
     private final MessageDeliveryRepository deliveries;
     private final NamedParameterJdbcTemplate jdbc;
     private final CaseInternalNoteService notes;
+    private final MessageMutationService mutations;
 
+    MessageHistoryService(MessageRepository messages,AttachmentMetadataCatalog attachments,CursorCodec cursors,
+            MessageDeliveryRepository deliveries,NamedParameterJdbcTemplate jdbc,CaseInternalNoteService notes) {
+        this(messages,attachments,cursors,deliveries,jdbc,notes,null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
     MessageHistoryService(
             MessageRepository messages,
             AttachmentMetadataCatalog attachments,
             CursorCodec cursors, MessageDeliveryRepository deliveries, NamedParameterJdbcTemplate jdbc,
-            CaseInternalNoteService notes) {
+            CaseInternalNoteService notes, MessageMutationService mutations) {
         this.messages = messages;
         this.attachments = attachments;
         this.cursors = cursors;
         this.deliveries = deliveries;
         this.jdbc = jdbc;
         this.notes = notes;
+        this.mutations = mutations;
     }
 
     @Transactional(readOnly = true)
@@ -84,11 +92,12 @@ class MessageHistoryService {
                 historicalAuthors.put(rs.getObject("id", UUID.class), rs.getString("display_name"));
             });
         }
+        var mutationViews = mutations==null?Map.<UUID,MessageMutationService.View>of():mutations.views(page.stream().map(MessageEntity::id).toList(),viewer);
         return new CursorPage<>(pageRows.stream().map(row -> {
             if (row.note() != null) return MessageHistoryItem.from(row.note());
             var message = row.message();
             return MessageHistoryItem.from(message, attachmentsByMessage.getOrDefault(message.id(), List.of()),
-                    failures.get(message.id()), historicalAuthors.get(message.authorUserId()));
+                    failures.get(message.id()), historicalAuthors.get(message.authorUserId()),mutationViews.get(message.id()));
         }).toList(), nextCursor);
     }
 
@@ -115,13 +124,13 @@ class MessageHistoryService {
             Instant deletedAt,
             String authorName,
             String recoverySource,
-            List<MessageAttachmentItem> attachments) {
+            List<MessageAttachmentItem> attachments, MessageMutationService.View mutation) {
         static MessageHistoryItem from(CaseInternalNoteService.Note note) {
             return new MessageHistoryItem(note.id(), "INTERNAL_NOTE", note.body(), MessageBodyFormat.PLAIN_TEXT,
-                    false, null, false, null, null, null, note.createdAt(), null, null, note.authorName(), null, List.of());
+                    false, null, false, null, null, null, note.createdAt(), null, null, note.authorName(), null, List.of(),null);
         }
 
-        static MessageHistoryItem from(MessageEntity message, List<AttachmentMetadata> attachments, MessageDeliveryRepository.FailureView failure, String historicalAuthor) {
+        static MessageHistoryItem from(MessageEntity message, List<AttachmentMetadata> attachments, MessageDeliveryRepository.FailureView failure, String historicalAuthor,MessageMutationService.View mutation) {
             String author = message.authorName();
             if (author == null) author = historicalAuthor == null ? message.authorExternalId() : historicalAuthor;
             return new MessageHistoryItem(
@@ -130,7 +139,7 @@ class MessageHistoryService {
                     failure == null ? null : failure.nextRetryAt(),
                     message.providerCreatedAt(), message.createdAt(), message.editedAt(),
                     message.deletedAt(), author, message.recoverySource(),
-                    attachments.stream().map(MessageAttachmentItem::from).toList());
+                    attachments.stream().map(MessageAttachmentItem::from).toList(),mutation);
         }
     }
 

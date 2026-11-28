@@ -224,3 +224,7 @@ Case card primary titles use the actual provider channel, topic or conversation 
 ## Personal inbox modes (owner decision, 2026-11-27)
 
 Personal **Inbox preferences** is available from the profile menu to every authenticated user. Unified inbox remains the default; Separate by platform adds compact configured-platform buttons above the list. The server filters every page and counter. See [INBOX_PREFERENCES.md](INBOX_PREFERENCES.md).
+
+## Outbound public message actions
+
+The author action menu exposes Copy text, inline Edit with Save/Cancel and confirmed Delete for supported Slack/Teams targets. Pending, failed, uncertain, edited and retained deleted states are localized in EN/PL. No successful content change is shown before provider confirmation. [Contract and limitations](OUTBOUND_MESSAGE_MUTATIONS.md).

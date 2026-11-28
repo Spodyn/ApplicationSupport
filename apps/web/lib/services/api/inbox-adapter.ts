@@ -114,6 +114,7 @@ export function mapCaseListItem(item: CaseListItem): InboxCase {
       lastMessageId: item.lastMessageId,
     }),
     lastMessageAt: item.lastMessageAt ?? undefined,
+    lastMessageDeleted: item.lastMessageDeleted ?? false,
     lastMessageAuthor: item.lastMessageAuthor ?? undefined,
     lastMessageKind: item.lastMessageKind?.toLowerCase() as InboxCase["lastMessageKind"],
     lastMessageFile: item.lastMessageFile ?? undefined,
@@ -176,6 +177,14 @@ export function mapCaseMessage(first: CaseMessage | string, second?: string | Ca
     createdAt: message.providerCreatedAt ?? message.createdAt,
     addedAt: message.createdAt,
     recoverySource: message.recoverySource ?? undefined,
+    mutation: message.mutation ? {
+      isAuthor: message.mutation.isAuthor, canEdit: message.mutation.canEdit, canDelete: message.mutation.canDelete,
+      revision: message.mutation.revision, editUnavailable: message.mutation.editUnavailable ?? undefined,
+      deleteUnavailable: message.mutation.deleteUnavailable ?? undefined, operationId: message.mutation.operationId ?? undefined,
+      action: message.mutation.action?.toLowerCase() as "edit" | "delete" | undefined,
+      state: message.mutation.state?.toLowerCase() as NonNullable<InboxMessage["mutation"]>["state"],
+      errorCode: message.mutation.errorCode ?? undefined, canRetry: message.mutation.canRetry,
+    } : undefined,
     edited: Boolean(message.editedAt),
     deleted: Boolean(message.deletedAt),
     deliveryStatus: message.deliveryStatus?.toLowerCase() as InboxMessage["deliveryStatus"],
@@ -222,6 +231,15 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
   const client = createApiClient(transport)
   const uploadedByDraft = new WeakMap<object, Map<File, InboxPendingAttachment>>()
   const repository: InboxRepository = {
+    async mutateMessage(messageId, input) {
+      const receipt = await client.mutateCaseMessage({ messageId, "Idempotency-Key": input.idempotencyKey,
+        body: { action: input.action === "edit" ? "EDIT" : "DELETE", body: input.body ?? null, expectedRevision: input.expectedRevision } })
+      return { operationId: receipt.operationId }
+    },
+    async retryMessageMutation(messageId, operationId, idempotencyKey) {
+      const receipt = await client.retryCaseMessageMutation({ messageId, operationId, "Idempotency-Key": idempotencyKey })
+      return { operationId: receipt.operationId }
+    },
     async bulk(input) {
       if (!input.caseIds.length || input.caseIds.length > 1000) throw new Error(t("Select 1 to 1000 Cases."))
       const results: import("../inbox").InboxBulkResult[] = []

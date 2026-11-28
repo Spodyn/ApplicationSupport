@@ -91,3 +91,7 @@ Testy implementacyjne korzystają z izolowanych zasobów testowych i nigdy nie �
 - legal hold per Case lub per user;
 - tenant selector, cross-tenant API i `tenant_id` w tabelach runtime v1;
 - zmiany istniejącego UX lub dodanie konfiguracji retencji/legal hold do UI.
+
+## Retained support-message mutations
+
+Provider-confirmed edits preserve prior content versions; provider-confirmed deletion retains the accepted body/author/timestamps and existing clean attachment access with an explicit deleted marker. The additive mutation target, operation and version records follow Message retention through cascading foreign keys. No physical erasure or retention duration is changed by this feature. [Contract](OUTBOUND_MESSAGE_MUTATIONS.md).

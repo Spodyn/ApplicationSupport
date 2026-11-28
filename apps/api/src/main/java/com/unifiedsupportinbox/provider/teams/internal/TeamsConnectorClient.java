@@ -2,6 +2,9 @@ package com.unifiedsupportinbox.provider.teams.internal;
 
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.DeliveryResult;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.DeliveryCommand;
+import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.MutationCommand;
+import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.MutationTarget;
+import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.MutationResult;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.*;
@@ -86,6 +89,12 @@ class TeamsConnectorClient {
                     LOG.warn("Teams outbound acceptance reference missing; status={}, receiptType={}",status,receipt.getNodeType());return DeliveryResult.permanentFailure("TEAMS_DELIVERY_UNCONFIRMED");
                 }
                 command.recordAcceptedBody().accept(reference);
+                try {
+                    command.recordMutationTarget().accept(new MutationTarget(reference,route.conversationId(),route.botId(),route.serviceUrl(),
+                            route.contextType(),json.writeValueAsString(attachments),null));
+                }catch(RuntimeException unavailable) {
+                    LOG.warn("Teams mutation route checkpoint unavailable; messageId={}",command.messageId());
+                }
                 return DeliveryResult.sent(reference);
             }catch(RuntimeException failure) {
                 if(status==202)return acceptedAsynchronously(command);
@@ -102,6 +111,41 @@ class TeamsConnectorClient {
             return DeliveryResult.permanentFailure("TEAMS_DELIVERY_UNCONFIRMED");
         }
     }
+    MutationResult mutate(String token,MutationCommand command) {
+        var target=command.target();
+        if(!TeamsJwtAuthenticator.safeServiceUrl(target.serviceUrl()))return MutationResult.failed("TEAMS_UNTRUSTED_SERVICE_URL");
+        String path=target.serviceUrl().replaceAll("/+$","")+"/v3/conversations/"+encode(target.conversationId())+"/activities/"+encode(target.providerMessageRef());
+        return mutate(URI.create(path),token,command);
+    }
+
+    MutationResult mutate(URI endpoint,String token,MutationCommand command) {
+        try {
+            var target=command.target();
+            var request=HttpRequest.newBuilder(endpoint).timeout(Duration.ofSeconds(15))
+                    .header("Authorization","Bearer "+token).header("Content-Type","application/json");
+            if(command.action().equals("DELETE"))request.DELETE();
+            else {
+                var body=new java.util.LinkedHashMap<String,Object>();
+                body.put("type","message");body.put("id",target.providerMessageRef());
+                body.put("from",Map.of("id",target.senderId()));body.put("conversation",Map.of("id",target.conversationId()));
+                body.put("text",command.body());body.put("textFormat",command.bodyFormat()==com.unifiedsupportinbox.messaging.MessageBodyFormat.MARKDOWN?"markdown":"plain");
+                var attachments=json.readTree(target.attachmentPayload());
+                if(attachments!=null&&attachments.isArray()&&!attachments.isEmpty())body.put("attachments",attachments);
+                request.PUT(HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body)));
+            }
+            var response=http.send(request.build(),HttpResponse.BodyHandlers.ofString());
+            int status=response.statusCode();
+            if(status==429)return MutationResult.retry("TEAMS_RATE_LIMITED",retryAfter(response));
+            if(status==202||status>=500)return MutationResult.uncertain("TEAMS_MUTATION_UNCONFIRMED");
+            if(status==401||status==403)return MutationResult.failed("TEAMS_PERMISSION_DENIED");
+            if(status==404)return MutationResult.failed("TEAMS_MESSAGE_NOT_FOUND");
+            if(status<200||status>=300)return MutationResult.failed("TEAMS_MUTATION_REJECTED");
+            return MutationResult.confirmed();
+        }catch(java.net.ConnectException unavailable){return MutationResult.retry("TEAMS_CONNECTION_UNAVAILABLE",null);}
+        catch(InterruptedException interrupted){Thread.currentThread().interrupt();return MutationResult.uncertain("TEAMS_MUTATION_UNCONFIRMED");}
+        catch(java.io.IOException failure){return MutationResult.uncertain("TEAMS_MUTATION_UNCONFIRMED");}
+    }
+
     private DeliveryResult acceptedAsynchronously(DeliveryCommand command) {
         try {acceptance.record(command);return DeliveryResult.sent(null);}
         catch(RuntimeException failure) {

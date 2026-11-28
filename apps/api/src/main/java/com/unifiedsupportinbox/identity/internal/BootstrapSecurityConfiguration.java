@@ -162,6 +162,7 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers("/api/v1/statistics/records").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/v1/users/me/inbox-preferences").authenticated()
                         .requestMatchers(HttpMethod.PUT, "/api/v1/users/me/inbox-preferences").authenticated()
+                        .requestMatchers(HttpMethod.POST,"/api/v1/messages/*/mutations", "/api/v1/messages/*/mutations/*/retry").authenticated()
                         .anyRequest().denyAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")

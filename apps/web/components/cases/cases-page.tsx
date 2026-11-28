@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { useInboxDraft } from "./inbox-drafts"
 import type { Channel } from "@/lib/domain/shared"
 import { deliveryPresentation } from "@/lib/i18n/delivery-presentation"
+import { MessageMutationControls } from "./message-mutation-controls"
 import { MessageAttachments } from "./message-attachments"
 import { attachmentLimitError } from "@/lib/services/attachment-limits"
 import { userError } from "@/lib/i18n/errors"
@@ -150,7 +151,7 @@ function toPresentation(record: InboxCase, t: ReturnType<typeof useT>, now: numb
     : warning ? "amber" : followUp ? "gray" : "green"
   const company = record.customer.id === "unassigned" ? record.sourceChannel : record.customer.name
   const bodyPreview = record.lastMessagePreview.trim()
-  const preview = bodyPreview
+  const preview = record.lastMessageDeleted ? t("Wiadomość została usunięta.") : bodyPreview
     ? record.platform === "slack" ? slackMessagePreview(bodyPreview) : bodyPreview
     : record.lastMessageFile ? t("Plik: {{value0}}", { value0: record.lastMessageFile }) : ""
   return {
@@ -860,7 +861,7 @@ function ConversationPanel({
               }
               const sender = message.sender || t(message.kind === "support" ? "Wsparcie" : message.kind === "customer" ? "Klient" : "System")
               return (
-                <article key={message.id} data-message-kind={message.kind} data-message-deleted={message.deleted || undefined} aria-label={message.deleted ? t("Usunięta wiadomość") : undefined} className={cn("flex min-w-0 items-start gap-2.5", message.deleted && "grayscale")}>
+                <article key={message.id} data-message-id={message.id} data-message-kind={message.kind} data-message-deleted={message.deleted || undefined} aria-label={message.deleted ? t("Usunięta wiadomość") : undefined} className={cn("group/message relative flex min-w-0 items-start gap-2.5", message.deleted && "grayscale")}>
                   <Avatar initials={initials(sender)} size="sm" />
                   <div className={cn("min-w-0 flex-1 rounded-lg px-3 py-2 [overflow-wrap:anywhere]",
                     message.deleted ? "border border-white/10 bg-white/[0.02]" : message.kind === "support" ? "border border-violet-400/15 bg-violet-500/10" : "border border-white/[0.05] bg-white/[0.025]")}>
@@ -875,6 +876,7 @@ function ConversationPanel({
                     {message.body && <p className={cn("mt-1 whitespace-pre-wrap text-sm leading-6", message.deleted ? "text-[#aeb8c8]" : "text-[#edf0f4]")}>
                       <SafeExternalMessage slack={message.kind === "customer" && item.platform === "Slack"} content={message.body} />
                     </p>}
+                    <MessageMutationControls message={message} caseId={item.id} />
                     <MessageAttachments attachments={message.attachments} canManageIntegrations={canManageIntegrations} />
                     <DeliveryNotice message={message} canManageIntegrations={canManageIntegrations} />
                     {message.retryAllowed && <button type="button" onClick={() => workflow.retryMessage.mutate(message.id)} disabled={workflow.retryMessage.isPending} className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-red-300/20 px-2.5 py-1.5 text-xs text-red-200 disabled:opacity-50"><RotateCcw className="size-3.5" /> {t("Ponów wysyłkę")}</button>}

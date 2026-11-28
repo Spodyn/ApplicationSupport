@@ -691,6 +691,7 @@ export type CaseListItem = {
   "closureReason"?: "IGNORED" | null
   "responseSla"?: CaseResponseSla
   "operationalDeadline"?: CaseOperationalDeadline | null
+  "lastMessageDeleted"?: boolean
 }
 
 export type CaseListPage = {
@@ -718,6 +719,7 @@ export type CaseMessage = {
   "deliveryErrorCode"?: string | null
   "nextRetryAt"?: string | null
   "recoverySource"?: "manual" | "automatic" | null
+  "mutation"?: MessageMutationView | null
 }
 
 export type CaseMessagePage = {
@@ -1065,6 +1067,31 @@ export type MessageAttachment = {
 export type MessageBodyFormat = "PLAIN_TEXT" | "MARKDOWN"
 
 export type MessageDeliveryStatus = "QUEUED" | "SENDING" | "SENT" | "DELIVERED" | "FAILED"
+
+export type MessageMutationInput = {
+  "action": "EDIT" | "DELETE"
+  "body"?: string | null
+  "expectedRevision": number
+}
+
+export type MessageMutationReceipt = {
+  "operationId": string
+  "state": "QUEUED"
+}
+
+export type MessageMutationView = {
+  "isAuthor": boolean
+  "canEdit": boolean
+  "canDelete": boolean
+  "canRetry": boolean
+  "editUnavailable": string | null
+  "deleteUnavailable": string | null
+  "errorCode": string | null
+  "revision": number
+  "operationId": string | null
+  "action": "EDIT" | "DELETE" | null
+  "state": "QUEUED" | "RUNNING" | "RETRY" | "CONFIRMED" | "FAILED" | "UNCERTAIN" | null
+}
 
 export type OperationalSlaReminder = {
   "id": string

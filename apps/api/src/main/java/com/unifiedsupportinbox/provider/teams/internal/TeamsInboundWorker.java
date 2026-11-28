@@ -13,6 +13,9 @@ import tools.jackson.databind.ObjectMapper;
 
 @Component
 class TeamsInboundWorker {
+    private com.unifiedsupportinbox.messaging.OutboundMutationCallbacks mutations;
+    @org.springframework.beans.factory.annotation.Autowired
+    void mutationCallbacks(com.unifiedsupportinbox.messaging.OutboundMutationCallbacks mutations){this.mutations=mutations;}
     private TeamsTeamMembership membership;
     @org.springframework.beans.factory.annotation.Autowired
     void teamMembership(TeamsTeamMembership membership){this.membership=membership;}
@@ -56,6 +59,8 @@ class TeamsInboundWorker {
                     outcomes.mark(id,InboundEventOutcomeStore.UNSUPPORTED_PROVIDER_EVENT);return;
                 }
                 var activity = TeamsActivity.parse(json.readTree(event.payloadJson()), clientId);
+                boolean ownMutation=false;
+                if(activity==null){activity=TeamsActivity.parseBotMutation(json.readTree(event.payloadJson()),clientId);ownMutation=activity!=null;}
                 if (activity==null) { outcomes.mark(id, InboundEventOutcomeStore.UNSUPPORTED_PROVIDER_EVENT); return; }
                 if (!routes.isRecovery(id) && !routes.withinMonitoring(event.integrationId(),activity.occurredAt())) {
                     outcomes.mark(id,InboundEventOutcomeStore.UNSUPPORTED_PROVIDER_EVENT); return;
@@ -68,6 +73,12 @@ class TeamsInboundWorker {
                 if (!routes.approvedContext(event.integrationId(), activity.channelId(), activity.contextType())) {
                     outcomes.mark(id, InboundEventOutcomeStore.UNSUPPORTED_PROVIDER_EVENT); return;
                 }
+                if(activity.mutation()!=InboundMessageCommandHandler.Mutation.CREATE && mutations!=null
+                        && mutations.observe(IntegrationProvider.TEAMS,event.integrationId(),activity.channelId(),activity.id(),activity.author(),
+                            activity.body(),activity.mutation()==InboundMessageCommandHandler.Mutation.DELETE,activity.occurredAt())) {
+                    outcomes.mark(id,InboundEventOutcomeStore.IGNORED_BOT_MESSAGE);return;
+                }
+                if(ownMutation){outcomes.mark(id,InboundEventOutcomeStore.IGNORED_BOT_MESSAGE);return;}
                 routes.save(event.integrationId(), activity);
                 var command=new Command(id,event.integrationId(),channel.channelId(),IntegrationProvider.TEAMS,
                         event.externalEventId(),activity.channelId(),activity.id(),activity.thread(),activity.author(),

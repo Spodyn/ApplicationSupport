@@ -80,18 +80,25 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
         try {
             DeliveryResult messageResult = DeliveryResult.sent(command.acceptedBodyRef());
             if (command.acceptedBodyRef() == null && command.body() != null && !command.body().isBlank()) {
-                messageResult = SlackDeliveryErrorClassifier.classifyPost(slack.postMessage(
+                var receipt=slack.postMessage(
                         token,
                         command.externalConversationId(),
                         command.externalThreadKey(),
                         command.body(),
                         command.bodyFormat(),
-                        command.idempotencyKey()));
+                        command.idempotencyKey());
+                messageResult = SlackDeliveryErrorClassifier.classifyPost(receipt);
                 if (messageResult.outcome() != Outcome.SENT) {
                     reportResult(command.integrationId(), messageResult);
                     return messageResult;
                 }
                 command.recordAcceptedBody().accept(messageResult.providerMessageRef());
+                try {
+                    command.recordMutationTarget().accept(new MutationTarget(messageResult.providerMessageRef(),command.externalConversationId(),
+                            receipt.senderId(),null,null,"[]",null));
+                }catch(RuntimeException unavailable) {
+                    org.slf4j.LoggerFactory.getLogger(getClass()).warn("Slack mutation target checkpoint unavailable; messageId={}",command.messageId());
+                }
             }
             if (attachments != null) {
                 try {
@@ -118,6 +125,22 @@ class SlackMessageDeliveryProvider implements MessageDeliveryProvider {
         } finally {
             Arrays.fill(token, (byte) 0);
         }
+    }
+
+    @Override public MutationCapability mutationCapability(MutationTarget target,boolean hasAttachments,boolean hasText) {
+        if(target==null||target.providerMessageRef()==null||!target.providerMessageRef().matches("[0-9]+\\.[0-9]+"))
+            return new MutationCapability(false,false,"PROVIDER_TARGET_UNAVAILABLE","PROVIDER_TARGET_UNAVAILABLE");
+        return new MutationCapability(hasText,!hasAttachments,hasText?null:"NO_TEXT_RESOURCE",hasAttachments?"MULTIPLE_PROVIDER_RESOURCES":null);
+    }
+
+    @Override public MutationResult mutate(MutationCommand command) {
+        var matches=integrations.findEnabledForProvider(IntegrationProvider.SLACK).stream()
+                .filter(i->i.integrationId().equals(command.integrationId())).toList();
+        if(matches.size()!=1||!java.util.Objects.equals(matches.getFirst().secretRef(),command.target().credentialRef()))
+            return MutationResult.failed("SLACK_CREDENTIAL_REFERENCE_CHANGED");
+        byte[] token=secrets.resolve(matches.getFirst().secretRef(),BOT_TOKEN_CREDENTIAL_FILE).orElse(null);
+        if(token==null)return MutationResult.failed("SLACK_BOT_TOKEN_MISSING");
+        try{return slack.mutate(token,command);}finally{Arrays.fill(token,(byte)0);}
     }
 
     private void reportResult(java.util.UUID integrationId, DeliveryResult result) {

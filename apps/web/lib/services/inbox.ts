@@ -98,7 +98,16 @@ export interface InboxBulkResult {
   code: string
 }
 
+export interface InboxMessageMutationInput {
+  action: "edit" | "delete"
+  body?: string
+  expectedRevision: number
+  idempotencyKey: string
+}
+
 export interface InboxRepository {
+  mutateMessage(messageId: string, input: InboxMessageMutationInput): Promise<{ operationId: string }>
+  retryMessageMutation(messageId: string, operationId: string, idempotencyKey: string): Promise<{ operationId: string }>
   listSlaReminders(): Promise<{ items: InboxSlaReminder[]; unreadCount: number }>
   markSlaRemindersRead(deadlineId?: string): Promise<void>
   bulk(input: InboxBulkInput): Promise<InboxBulkResult[]>
@@ -224,6 +233,8 @@ function matchesQuickView(item: InboxCase, view: Exclude<InboxQuickView, "all">)
 }
 
 export const mockInboxRepository: InboxRepository = {
+  async mutateMessage() { throw new Error("Provider mutations require the API.") },
+  async retryMessageMutation() { throw new Error("Provider mutations require the API.") },
   async listSlaReminders() { return { items: [], unreadCount: 0 } },
   async markSlaRemindersRead() {},
   async bulk() { throw new Error(t("Bulk operations require the API.")) },

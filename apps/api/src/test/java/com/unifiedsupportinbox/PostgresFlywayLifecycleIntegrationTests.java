@@ -45,7 +45,7 @@ class PostgresFlywayLifecycleIntegrationTests {
             statement.executeUpdate("INSERT INTO integrations(provider,display_name,status,health) VALUES ('SLACK','Existing integration','ENABLED','HEALTHY')");
         }
         Flyway current=Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).load();
-        assertThat(current.migrate().migrationsExecuted).isEqualTo(5);current.validate();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(6);current.validate();
         assertThat(current.info().pending()).isEmpty();
         assertThat(queryInt("SELECT count(*) FROM integrations")).isEqualTo(1);
         assertThat(queryInt("SELECT count(*) FROM integration_resync_settings WHERE enabled OR automatic")).isZero();
@@ -63,11 +63,34 @@ class PostgresFlywayLifecycleIntegrationTests {
             statement.executeUpdate("INSERT INTO channels(integration_id,external_channel_id,name,customer_id,ignored,active,grouping_strategy,metadata_json) SELECT i.id,'legacy','Legacy',c.id,TRUE,TRUE,'TEAMS_ROOT_REPLIES','{\"teamsTeamId\":\"11111111-1111-4111-8111-111111111111\"}'::jsonb FROM integrations i CROSS JOIN customers c WHERE i.provider='TEAMS'");
         }
         var current=Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).load();
-        assertThat(current.migrate().migrationsExecuted).isEqualTo(4);current.validate();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(5);current.validate();
         assertThat(queryString("SELECT secret_ref FROM integrations WHERE provider='TEAMS'")).isEqualTo("legacy/retained");
         assertThat(queryInt("SELECT count(*) FROM channels WHERE ignored AND active AND customer_id IS NOT NULL")).isEqualTo(1);
         assertThat(queryInt("SELECT count(*) FROM integration_connection_settings WHERE automatic_discovery IS NULL")).isEqualTo(2);
         assertThat(queryString("SELECT team_id::text FROM teams_instance_binding")).isEqualTo("11111111-1111-4111-8111-111111111111");
+    }
+
+    @Test void upgradesV58WithoutInventingTargetsOrChangingMessagesCasesAndPreferences() throws SQLException {
+        cleanDatabase();
+        Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).target("58").load().migrate();
+        try(var connection=connection();var statement=connection.createStatement()) {
+            statement.executeUpdate("INSERT INTO users(email,display_name,role,active) VALUES ('mutation-upgrade@example.test','Retained author','USER',true)");
+            statement.executeUpdate("INSERT INTO user_inbox_preferences(user_id,mode) SELECT id,'SEPARATE_BY_PLATFORM' FROM users");
+            statement.executeUpdate("INSERT INTO customers(name) VALUES ('Retained customer')");
+            statement.executeUpdate("INSERT INTO integrations(provider,display_name,status,health) VALUES ('TEAMS','Retained Teams','ENABLED','HEALTHY')");
+            statement.executeUpdate("INSERT INTO channels(integration_id,external_channel_id,name,grouping_strategy) SELECT id,'channel','Retained channel','TEAMS_ROOT_REPLIES' FROM integrations");
+            statement.executeUpdate("INSERT INTO cases(customer_id,integration_id,channel_id,provider,external_conversation_id) SELECT cu.id,i.id,ch.id,'TEAMS','channel' FROM customers cu,integrations i,channels ch");
+            statement.executeUpdate("INSERT INTO messages(case_id,kind,author_user_id,body,inbound,delivery_status,correlation_id) SELECT c.id,'SUPPORT',u.id,'Accepted without provider ID',false,'SENT','upgrade-test' FROM cases c,users u");
+        }
+        String before=queryString("SELECT jsonb_build_object('message',to_jsonb(m),'case',to_jsonb(c))::text FROM messages m JOIN cases c ON c.id=m.case_id");
+        var current=Flyway.configure().dataSource(POSTGRES.getJdbcUrl(),POSTGRES.getUsername(),POSTGRES.getPassword()).load();
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);current.validate();
+        assertThat(queryString("SELECT jsonb_build_object('message',to_jsonb(m)-'mutation_revision'-'provider_mutated_at','case',to_jsonb(c))::text FROM messages m JOIN cases c ON c.id=m.case_id")).isEqualTo(before);
+        assertThat(queryString("SELECT mode FROM user_inbox_preferences")).isEqualTo("SEPARATE_BY_PLATFORM");
+        assertThat(queryInt("SELECT count(*) FROM message_mutation_targets")).isZero();
+        assertThat(queryInt("SELECT count(*) FROM message_mutations")).isZero();
+        assertThat(queryInt("SELECT count(*) FROM message_content_versions")).isZero();
+        assertThat(queryInt("SELECT count(*) FROM messages WHERE mutation_revision=0 AND external_message_id IS NULL AND delivery_status='SENT'")).isEqualTo(1);
     }
 
     @Test
@@ -79,7 +102,7 @@ class PostgresFlywayLifecycleIntegrationTests {
             statement.executeUpdate("INSERT INTO users(email, display_name, role, active) VALUES ('existing@example.test', 'Existing account', 'USER', TRUE)");
         }
         var current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword()).load();
-        assertThat(current.migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(2);
         current.validate();
         assertThat(queryString("SELECT display_name FROM users WHERE email='existing@example.test'")).isEqualTo("Existing account");
         assertThat(queryInt("SELECT count(*) FROM user_inbox_preferences")).isZero();
@@ -124,7 +147,7 @@ class PostgresFlywayLifecycleIntegrationTests {
         }
         var current = Flyway.configure().dataSource(POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword())
                 .load();
-        assertThat(current.migrate().migrationsExecuted).isEqualTo(3);
+        assertThat(current.migrate().migrationsExecuted).isEqualTo(4);
         current.validate();
         assertThat(queryInt("SELECT count(*) FROM case_operational_deadlines")).isEqualTo(2);
         assertThat(queryInt("SELECT count(*) FROM case_operational_deadlines WHERE kind = 'FRT' AND due_at = '2026-11-26T09:15:00Z'")).isOne();

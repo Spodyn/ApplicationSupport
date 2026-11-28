@@ -153,3 +153,7 @@ History recovery (owner override 2026-11-20): recovered Slack/Teams customer Mes
 ## Personal inbox modes (owner decision, 2026-11-27)
 
 Personal Unified/Separate by platform inbox mode changes only query scope. Workflow eligibility remains authoritative server-side. Switching platform clears selected IDs, selected conversation and scoped action dialogs before new actions; text/note/attachment drafts and retry identities remain bound to their original Case. No workflow transition is caused by switching modes or platforms.
+
+## Message mutation invariants
+
+Editing/deleting one’s eligible delivered support message is independent of ownership and Case transitions. Confirmation changes only message content/deletion revision and Case preview/update metadata; it preserves workflow status/version, owner, send/activity timestamps and all SLA anchors/history/deadlines. It cannot reopen a terminal Case or create a new response cycle. Lifetime Ignore restrictions still deny mutation. [Details](OUTBOUND_MESSAGE_MUTATIONS.md).

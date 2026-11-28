@@ -12,6 +12,7 @@ import type {
   InboxResolveInput,
   InboxSendInput,
   InboxInternalNoteInput,
+  InboxMessageMutationInput,
 } from "./inbox"
 import type {
   AdministrationSettings,
@@ -181,6 +182,25 @@ export function useInboxCases(query?: InboxListQuery, enabled = true) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor,
   })
+}
+
+export function useInboxMessageMutations(caseId: string) {
+  const client = useQueryClient()
+  const refresh = () => {
+    void client.invalidateQueries({ queryKey: queryKeys.inboxMessages(caseId) })
+    void client.invalidateQueries({ queryKey: queryKeys.inboxCases() })
+    void client.invalidateQueries({ queryKey: queryKeys.inboxActivity(caseId) })
+  }
+  const mutate = useMutation({
+    mutationFn: ({ messageId, input }: { messageId: string; input: InboxMessageMutationInput }) => serviceRegistry.inbox.mutateMessage(messageId, input),
+    onSuccess: refresh,
+  })
+  const retry = useMutation({
+    mutationFn: ({ messageId, operationId, key }: { messageId: string; operationId: string; key: string }) =>
+      serviceRegistry.inbox.retryMessageMutation(messageId, operationId, key),
+    onSuccess: refresh,
+  })
+  return { mutate, retry }
 }
 
 export function useInboxFilterOptions() {

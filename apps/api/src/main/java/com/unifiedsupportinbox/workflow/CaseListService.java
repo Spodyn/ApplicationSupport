@@ -76,8 +76,8 @@ class CaseListService {
                            channel.id AS channel_id, channel.name AS channel_name,
                            channel.external_channel_id, integration.provider,
                            integration.workspace_external_id, c.external_thread_key,
-                           latest.id AS last_message_id, CASE WHEN latest.deleted_at IS NOT NULL THEN 'Wiadomość została usunięta w Slack.' ELSE LEFT(latest.body, 240) END AS last_message_preview,
-                           latest.sent_at AS last_message_at, latest.author AS last_message_author,
+                           latest.id AS last_message_id, CASE WHEN latest.deleted_at IS NOT NULL THEN 'Message deleted' ELSE LEFT(latest.body, 240) END AS last_message_preview,
+                           (latest.deleted_at IS NOT NULL) AS last_message_deleted, latest.sent_at AS last_message_at, latest.author AS last_message_author,
                            latest.kind AS last_message_kind, latest_file.original_filename AS last_message_file,
                            reads.last_read_message_id, snoozes.until_at AS snoozed_until,
                            COALESCE(op.state, response.state) AS sla_state, COALESCE(op.due_at, response.due_at) AS sla_due_at,
@@ -292,7 +292,7 @@ class CaseListService {
                 rs.getString("last_message_kind"), rs.getString("last_message_file"),
                 rs.getBoolean("unread"), instant(rs, "snoozed_until"), rs.getString("sla_state"),
                 instant(rs, "sla_due_at"), rs.getInt("ignore_score"), instant(rs, "waiting_until"),
-                instant(rs, "created_at"), instant(rs, "updated_at"), instant(rs, "last_activity_at"), CaseResponseSla.read(rs, json), CaseOperationalDeadline.read(rs, json));
+                instant(rs, "created_at"), instant(rs, "updated_at"), instant(rs, "last_activity_at"), CaseResponseSla.read(rs, json), CaseOperationalDeadline.read(rs, json),rs.getBoolean("last_message_deleted"));
     }
 
     private static Instant instant(ResultSet rs, String column) throws SQLException {
@@ -324,5 +324,5 @@ class CaseListService {
             boolean unreadForCurrentUser,
             Instant snoozedUntil, String slaState, Instant slaDueAt, int ignoreScore,
             Instant waitingUntil, Instant createdAt, Instant updatedAt, Instant lastActivityAt, CaseResponseSla responseSla,
-            CaseOperationalDeadline operationalDeadline) {}
+            CaseOperationalDeadline operationalDeadline, boolean lastMessageDeleted) {}
 }
