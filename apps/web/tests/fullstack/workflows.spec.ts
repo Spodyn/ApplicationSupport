@@ -387,6 +387,13 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
 })
 
 test('shared countdown changes without requests and follow-up expiry reaches only the owner', async ({page, baseURL}) => {
+  const frames: Array<{eventType: string; entityId: string; correlationId: string; payload: {caseId?: string; messageId?: string; deliveryStatus?: string}}> = []
+  page.on('websocket', socket => socket.on('framereceived', frame => {
+    const payload = String(frame.payload)
+    if (!payload.startsWith('MESSAGE\n')) return
+    const body = payload.slice(payload.indexOf('\n\n') + 2).replace(/\0$/, '')
+    frames.push(JSON.parse(body))
+  }))
   await page.setViewportSize({width: 1440, height: 900})
   await page.clock.install()
   const owner = await testAccount(page, 'account')
@@ -405,16 +412,40 @@ test('shared countdown changes without requests and follow-up expiry reaches onl
   const details = page.getByRole('complementary', {name: 'Szczegóły sprawy'})
   await panel.getByRole('button', {name: 'Przejmij', exact: true}).click()
   await expect(panel.getByLabel('Treść odpowiedzi')).toBeEnabled()
-  expect((await command(page, path + '/messages', {body: 'Synthetic public reply'})).status()).toBe(202)
+  const sent = await command(page, path + '/messages', {body: 'Synthetic public reply'})
+  expect(sent.status()).toBe(202)
+  const messageId = (await sent.json()).messageId
+  const correlationId = sent.headers()['x-correlation-id']
   const badges = [tile, panel, details].map(element => element.locator('[data-sla-countdown]'))
   for (const badge of badges) await expect(badge).toContainText('Kontakt z klientem')
+  // Delivery and read acknowledgements enqueue genuine realtime refetches after HTTP
+  // acceptance. Observe their causal socket signals before measuring clock-only work.
+  await expect.poll(() => frames.some(event => event.eventType === 'message.delivery_updated'
+    && event.entityId === messageId && event.payload.deliveryStatus === 'SENT')).toBe(true)
+  await expect.poll(() => frames.some(event => event.eventType === 'message.created'
+    && event.entityId === messageId)).toBe(true)
+  await expect.poll(() => frames.some(event => event.eventType === 'case.updated'
+    && event.payload.caseId === caseId && event.correlationId === correlationId)).toBe(true)
+  await expect.poll(() => frames.some(event => event.eventType === 'case.read_position_changed'
+    && event.payload.caseId === caseId && event.payload.messageId === messageId)).toBe(true)
+  const signalResponse = await page.request.post('/__test/realtime-signals', {data: {messageId}})
+  expect(signalResponse.status()).toBe(200)
+  const {signals} = await signalResponse.json() as {signals: Array<{eventType: string; correlationId: string}>}
+  expect(signals).toEqual(expect.arrayContaining([expect.objectContaining({eventType: 'case.sla_changed'})]))
+  for (const signal of signals) {
+    await expect.poll(() => frames.some(event => event.eventType === signal.eventType
+      && event.payload.caseId === caseId && event.correlationId === signal.correlationId)).toBe(true)
+  }
+  // Flush one shared-clock tick, including pending coalesced invalidation timers.
+  await page.clock.runFor(1_000)
   await page.waitForLoadState('networkidle')
+  const frameIndex = frames.length
   const requestPaths: string[] = []
   page.on('request', event => { if (event.url().includes('/api/v1/')) requestPaths.push(event.url()) })
   const before = await Promise.all(badges.map(badge => badge.textContent()))
   await page.clock.runFor(2_200)
   for (const [index, badge] of badges.entries()) await expect(badge).not.toHaveText(before[index]!)
-  expect(requestPaths).toHaveLength(0)
+  expect(requestPaths, JSON.stringify(frames.slice(frameIndex))).toHaveLength(0)
 
   const reminderPath = '/api/v1/notifications/sla-reminders'
   const reminders = async (tab: Page) => (await (await tab.request.get(reminderPath)).json()).items

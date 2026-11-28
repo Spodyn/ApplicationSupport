@@ -9,9 +9,13 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = Path('src/main/java/com/unifiedsupportinbox/messaging/internal/MessageRetryPolicy.java')
-ORIGINAL = '"TRANSIENT".equals(category) || "PERMANENT".equals(category) && "INTEGRATION_DISABLED".equals(code)'
+REPAIRABLE_PERMANENT = '"PERMANENT".equals(category) && java.util.Set.of(\n' + \
+    '                "INTEGRATION_DISABLED", "TEAMS_FILE_PERMISSION_REQUIRED", "TEAMS_FILE_STORAGE_CONFIGURATION_REQUIRED",\n' + \
+    '                "TEAMS_AUTH_FAILED", "TEAMS_PERMISSION_DENIED", "TEAMS_CLIENT_SECRET_MISSING", "TEAMS_FILE_CONTEXT_INACTIVE")\n' + \
+    '                .contains(java.util.Objects.toString(code,""))'
+ORIGINAL = '"TRANSIENT".equals(category) || ' + REPAIRABLE_PERMANENT
 MUTANTS = {
-    'drop-transient': '"PERMANENT".equals(category) && "INTEGRATION_DISABLED".equals(code)',
+    'drop-transient': REPAIRABLE_PERMANENT,
     'allow-all-permanent': '"TRANSIENT".equals(category) || "PERMANENT".equals(category)',
     'deny-all': 'false',
 }
@@ -39,7 +43,7 @@ def run():
             tests = int(suite.get('tests', '0')) if suite is not None else 0
             failures = int(suite.get('failures', '0')) if suite is not None else 0
             errors = int(suite.get('errors', '0')) if suite is not None else 0
-            valid = tests >= 9 and errors == 0
+            valid = tests >= 13 and errors == 0
             passed = valid and (completed.returncode == 0 and failures == 0 if name == 'control'
                                 else completed.returncode != 0 and failures > 0)
             evidence.append({'operator': name, 'tests': tests, 'assertionFailures': failures, 'errors': errors, 'verified': passed})

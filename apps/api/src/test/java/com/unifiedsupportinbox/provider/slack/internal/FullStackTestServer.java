@@ -149,6 +149,18 @@ public final class FullStackTestServer {
                         """, caseId);
                 expireDeadline(caseId);
                 response = Map.of("changed", changed);
+            } else if (path.equals("/realtime-signals")) {
+                var input = JSON.readTree(exchange.getRequestBody().readAllBytes());
+                UUID messageId = UUID.fromString(input.path("messageId").asText());
+                var signals = fixtureDatabase.queryForList("""
+                        SELECT event.type AS "eventType", event.correlation_id AS "correlationId"
+                        FROM outbox_events event JOIN messages message
+                          ON event.payload_json->>'caseId' = message.case_id::text
+                        WHERE message.id = ? AND event.created_at >= message.created_at
+                          AND event.type IN ('case.updated', 'case.sla_changed', 'message.created',
+                            'message.updated', 'case.read_position_changed', 'application.case_changed')
+                        """, messageId);
+                response = Map.of("signals", signals);
             } else if (path.equals("/observed")) response = Map.of("messages", DELIVERED, "files", SHARED_FILES,"mutations",MUTATED,"teamsMutations",teamsConnector.mutations(),"slackContent",SLACK_CONTENT,"teamsActivities",teamsConnector.activities());
             else if (path.equals("/files.getUploadURLExternal")) {
                 String form = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
