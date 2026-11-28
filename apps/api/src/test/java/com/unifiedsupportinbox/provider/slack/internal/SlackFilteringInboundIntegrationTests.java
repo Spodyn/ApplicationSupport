@@ -151,6 +151,33 @@ class SlackFilteringInboundIntegrationTests {
         assertThat(sink.commands()).isEmpty();
     }
 
+    @Test void ownBotMutationCallbacksUpdateRetainedSupportContentWithoutBusinessCommandOrFeedbackLoop() {
+        UUID integration=createSlackIntegration(),channel=createChannel(integration,"C-support",true,false);
+        UUID author=jdbc.queryForObject("INSERT INTO users(email,display_name,role,active) VALUES ('callback@example.test','Author','USER',true) RETURNING id",UUID.class);
+        UUID caseId=jdbc.queryForObject("INSERT INTO cases(customer_id,integration_id,channel_id,provider,external_conversation_id) SELECT customer_id,integration_id,id,'SLACK',external_channel_id FROM channels WHERE id=? RETURNING id",UUID.class,channel);
+        UUID message=jdbc.queryForObject("INSERT INTO messages(case_id,kind,author_user_id,body,inbound,delivery_status,external_message_id,correlation_id) VALUES (?,'SUPPORT',?,'before',false,'SENT','1790000000.1','callback') RETURNING id",UUID.class,caseId,author);
+        jdbc.update("INSERT INTO message_mutation_targets(message_id,provider_message_ref,conversation_id,sender_id) VALUES (?,'1790000000.1','C-support','B-usi')",message);
+        for(int index=0;index<2;index++) {
+            String payload="""
+                    {"type":"event_callback","event_id":"bot-edit-%d","event":{"type":"message","subtype":"message_changed","channel":"C-support","channel_type":"channel",
+                     "event_ts":"1790000001.1","message":{"type":"message","bot_id":"B-usi","ts":"1790000000.1","text":"after","edited":{"ts":"1790000001.1"}}}}
+                    """.formatted(index);
+            var callback=persist(integration,"bot-edit-"+index,payload);assertThat(worker.process(callback.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+            assertThat(outcome(callback.id())).isEqualTo(InboundEventOutcomeStore.IGNORED_BOT_MESSAGE);
+        }
+        assertThat(jdbc.queryForObject("SELECT body FROM messages WHERE id=?",String.class,message)).isEqualTo("after");
+        assertThat(jdbc.queryForObject("SELECT mutation_revision FROM messages WHERE id=?",Long.class,message)).isEqualTo(1);
+        var deletion=persist(integration,"bot-delete","""
+                {"type":"event_callback","event_id":"bot-delete","event":{"type":"message","subtype":"message_deleted","channel":"C-support","channel_type":"channel",
+                 "event_ts":"1790000002.1","deleted_ts":"1790000000.1","previous_message":{"type":"message","bot_id":"B-usi","ts":"1790000000.1","text":"after"}}}
+                """);
+        assertThat(worker.process(deletion.id())).isEqualTo(SlackInboundWorker.AttemptResult.PROCESSED);
+        assertThat(jdbc.queryForObject("SELECT deleted_at IS NOT NULL FROM messages WHERE id=?",Boolean.class,message)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT body FROM message_content_versions WHERE message_id=? AND revision=0",String.class,message)).isEqualTo("before");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM message_mutations",Integer.class)).isZero();
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM cases",Integer.class)).isEqualTo(1);assertThat(sink.commands()).isEmpty();
+    }
+
     private UUID createSlackIntegration() {
         UUID integrationId = UUID.randomUUID();
         jdbc.update("""

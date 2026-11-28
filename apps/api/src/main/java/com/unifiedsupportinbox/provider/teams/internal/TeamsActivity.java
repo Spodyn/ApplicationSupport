@@ -9,10 +9,19 @@ record TeamsActivity(String id, String channelId, String conversationId, String 
         String author, String authorName, String body, Mutation mutation, Instant occurredAt,
         String serviceUrl, String botId, String contextType) {
     static TeamsActivity parse(JsonNode a, String clientId) {
+        return parse(a,clientId,false);
+    }
+    static TeamsActivity parseBotMutation(JsonNode a,String clientId) {
+        String author=a.path("from").path("id").asText("");
+        if(!java.util.Set.of(clientId,"28:"+clientId).contains(author)
+                ||!java.util.Set.of("messageUpdate","messageDelete").contains(a.path("type").asText()))return null;
+        return parse(a,clientId,true);
+    }
+    private static TeamsActivity parse(JsonNode a,String clientId,boolean ownMutation) {
         String type = text(a, "type");
         if (!java.util.Set.of("message", "messageUpdate", "messageDelete").contains(type)) return null;
         String author = text(a.path("from"), "id");
-        if (author.equals(clientId) || author.equals("28:" + clientId) || author.startsWith("28:")) return null;
+        if (!ownMutation && (author.equals(clientId) || author.equals("28:" + clientId) || author.startsWith("28:"))) return null;
         String conversationType = text(a.path("conversation"), "conversationType");
         String conversation = text(a.path("conversation"), "id");
         String channel, thread, context;

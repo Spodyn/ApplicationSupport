@@ -115,3 +115,7 @@ The grouped owner requests of 2026-11-10 and 2026-11-12 define the interface and
 ## Personal inbox modes (owner decision, 2026-11-27)
 
 **DEC-PER-USER-INBOX-MODES-001 — owner approved, 2026-11-27.** Every authenticated account can persist Unified (default) or Separate by platform mode. Provider tabs use the existing server filter and scoped counters; ordinary users gain no administrative privileges. Platform switching clears action targets and retains Case drafts. No grouping, workflow, SLA or provider behavior changes. [Contract](INBOX_PREFERENCES.md).
+
+## Author outbound mutations (owner decision, 2026-11-28)
+
+**DEC-OUTBOUND-MESSAGE-MUTATIONS-001 — owner approved.** Eligible authors may edit/delete delivered Slack/Teams public messages using supported provider operations and confirmed outcomes. Durable commands, safe retries, audited retained history and realtime updates preserve workflow/SLA semantics. Missing actual targets and partial multi-resource deletion are unavailable. Supersedes earlier outbound-mutation exclusions. [Contract](OUTBOUND_MESSAGE_MUTATIONS.md).

@@ -46,4 +46,20 @@ class TeamsActivityTests {
         var a=activity();a.put("id","reply-2");
         assertThat(TeamsActivity.parse(a,"bot").thread()).isEqualTo("root-1");
     }
+    @Test void onlyOwnBotMutationCallbacksAreParsedWithoutAllowingBotCreatesOrUnsupportedChannels() {
+        var a=activity();a.withObjectProperty("from").put("id","28:bot");
+        assertThat(TeamsActivity.parseBotMutation(a,"bot")).isNull();
+        for(String type:java.util.List.of("messageUpdate","messageDelete")) {
+            a.put("type",type);assertThat(TeamsActivity.parse(a,"bot")).isNull();
+            var callback=TeamsActivity.parseBotMutation(a,"bot");
+            assertThat(callback.id()).isEqualTo("root-1");assertThat(callback.botId()).isEqualTo("28:bot");
+            assertThat(callback.channelId()).isEqualTo("19:channel");
+        }
+        a.withObjectProperty("from").put("id","28:another-bot");assertThat(TeamsActivity.parseBotMutation(a,"bot")).isNull();
+        a.withObjectProperty("from").put("id","28:bot");
+        for(String membership:java.util.List.of("private","shared")) {
+            a.withObjectProperty("channelData").withObjectProperty("channel").put("membershipType",membership);
+            assertThat(TeamsActivity.parseBotMutation(a,"bot")).isNull();
+        }
+    }
 }

@@ -136,3 +136,7 @@ Operational SLA reminders are visible only to the authenticated recipient in an 
 ## Personal inbox modes (owner decision, 2026-11-27)
 
 Inbox preferences belong exclusively to the current authenticated principal. Neither role nor client-supplied account IDs can select another account. GET/PUT `/api/v1/users/me/inbox-preferences` is authenticated; PUT retains CSRF protection. Preference hints are sent to the affected user queue only, including when other recipients are administrators. Draft content and File objects remain in account-scoped memory, are never stored in local/session storage, and are discarded at sign-out/account replacement.
+
+## Message mutation authorization
+
+Every mutation and retry revalidates the active author, Case access, lifetime Ignore restriction, successful delivery, provider capability and integration identity. Administrators cannot mutate another author’s message. Existing CSRF, idempotency, callback authentication, tenant/channel restrictions, safe Connector URLs and attachment scan/access controls remain required. Audit metadata excludes content and secrets; immutable mutation targets stay server-only. [Details](OUTBOUND_MESSAGE_MUTATIONS.md).

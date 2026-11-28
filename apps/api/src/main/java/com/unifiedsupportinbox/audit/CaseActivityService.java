@@ -78,6 +78,13 @@ class CaseActivityService {
 
     private static String actionDescription(String action) {
         return switch (action) {
+            case "SUPPORT_MESSAGE_EDITED" -> "Support message edited";
+            case "SUPPORT_MESSAGE_DELETED" -> "Support message deleted";
+            case "MESSAGE_MUTATION_REQUESTED" -> "Message mutation requested";
+            case "MESSAGE_MUTATION_RETRIED" -> "Message mutation retried";
+            case "MESSAGE_MUTATION_RETRY_SCHEDULED" -> "Message mutation retry scheduled";
+            case "MESSAGE_MUTATION_FAILED" -> "Message mutation failed";
+            case "MESSAGE_MUTATION_UNCERTAIN" -> "Message mutation awaiting confirmation";
             case "CASE_CLAIM" -> "Case claimed";
             case "CASE_IGNORE" -> "Case ignore vote recorded";
             case "CASE_REPLY" -> "Support reply sent";

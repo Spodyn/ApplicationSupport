@@ -77,6 +77,7 @@ export interface InboxCase {
   closureReason?: "IGNORED"
   owner?: Pick<User, "id" | "fullName">
   lastMessageId?: string
+  lastMessageDeleted?: boolean
   lastMessageAt?: string
   lastMessageAuthor?: string
   lastMessageKind?: InboxMessage["kind"]
@@ -135,6 +136,13 @@ export interface InboxAttachment {
 }
 
 export interface InboxMessage {
+  mutation?: {
+    isAuthor: boolean; canEdit: boolean; canDelete: boolean; revision: number
+    editUnavailable?: string; deleteUnavailable?: string
+    operationId?: string; action?: "edit" | "delete"
+    state?: "queued" | "running" | "retry" | "confirmed" | "failed" | "uncertain"
+    errorCode?: string; canRetry: boolean
+  }
   recoverySource?: "manual" | "automatic"
   addedAt?: string
   id: string

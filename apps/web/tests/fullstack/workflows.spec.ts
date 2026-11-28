@@ -1754,3 +1754,96 @@ for (const visibility of ['public', 'private'] as const) {
     }
   })
 }
+
+for (const provider of ['Slack', 'Teams'] as const) {
+  test(`${provider} confirmed message mutations reach the controlled provider and another browser without changing SLA`, async ({page, browser, baseURL}, testInfo) => {
+    await login(page, undefined, true)
+    const marker = `Mutation ${provider} ${randomUUID().slice(0, 8)}`
+    let teams: {caseId: string; channel: string; conversation: string} | undefined
+    if (provider === 'Teams') {
+      const response = await page.request.post('/__test/teams-mutation-fixture', {data: {marker}})
+      expect(response.status()).toBe(200)
+      teams = await response.json()
+    } else await inbound(page, marker)
+    let caseId = teams?.caseId
+    if (!caseId) {
+      await expect.poll(async () => (await (await page.request.get('/api/v1/cases', {params: {search: fixtures.get(page)!.externalChannelId}})).json()).items.length).toBe(1)
+      caseId = (await (await page.request.get('/api/v1/cases', {params: {search: fixtures.get(page)!.externalChannelId}})).json()).items[0].id
+    }
+    const path = '/api/v1/cases/' + caseId
+    const secondContext = await browser.newContext({baseURL})
+    const second = await secondContext.newPage()
+    const frames: string[] = []
+    second.on('websocket', socket => socket.on('framereceived', frame => frames.push(String(frame.payload))))
+    const history = async () => (await (await page.request.get(path + '/messages')).json()).items
+    try {
+      await page.goto('/cases?caseId=' + caseId)
+      await page.getByRole('button', {name: 'Claim', exact: true}).click()
+      await page.getByRole('textbox', {name: 'Reply text'}).fill(marker + ' original')
+      await page.getByRole('button', {name: 'Send', exact: true}).click()
+      await expect.poll(async () => (await history()).find((m: {body: string}) => m.body === marker + ' original')?.deliveryStatus).toBe('SENT')
+      const sent = (await history()).find((m: {body: string}) => m.body === marker + ' original')
+      expect(sent.mutation).toMatchObject({isAuthor: true, canEdit: true, canDelete: true, revision: 0})
+      const snapshot = await (await page.request.get(path)).json()
+      await login(second, undefined, true)
+      await second.goto('/cases?caseId=' + caseId)
+      await expect.poll(() => frames.some(frame => frame.startsWith('CONNECTED'))).toBe(true)
+      const ownMessage = page.locator(`[data-message-id="${sent.id}"]`)
+      const otherMessage = second.locator(`[data-message-id="${sent.id}"]`)
+      await expect(otherMessage).toContainText(marker + ' original')
+      // Another agent cannot mutate it even if the UI is bypassed.
+      expect((await command(second, '/api/v1/messages/' + sent.id + '/mutations', {action: 'EDIT', body: 'forbidden', expectedRevision: 0})).status()).toBe(403)
+      await ownMessage.getByRole('button', {name: 'Message actions'}).click()
+      await page.getByRole('menuitem', {name: 'Edit message', exact: true}).click()
+      await ownMessage.getByRole('textbox', {name: 'New message text'}).fill(marker + ' edited')
+      const editedAt = Date.now()
+      await ownMessage.getByRole('button', {name: 'Save changes'}).click()
+      await expect(otherMessage).toContainText(marker + ' edited', {timeout: 2_000})
+      expect(Date.now() - editedAt).toBeLessThan(2_000)
+      await expect(ownMessage.locator('[data-message-editor]')).toHaveCount(0)
+      await expect(ownMessage).toContainText('Edited')
+      const observedEdit = await (await page.request.get('/__test/observed')).json()
+      const providerTarget = provider === 'Slack'
+        ? observedEdit.messages.find((m: {clientMessageId: string}) => m.clientMessageId === sent.id).ts
+        : observedEdit.teamsMutations.find((m: {activity: {text?: string}}) => m.activity.text === marker + ' edited').id
+      if (provider === 'Slack') expect(observedEdit.slackContent[providerTarget]).toBe(marker + ' edited')
+      else expect(observedEdit.teamsActivities[providerTarget].text).toBe(marker + ' edited')
+      const edited = (await history()).find((m: {id: string}) => m.id === sent.id)
+      expect(edited.createdAt).toBe(sent.createdAt)
+      expect(edited.mutation).toMatchObject({state: 'CONFIRMED', revision: 1})
+      if (provider === 'Slack') expect(observedEdit.mutations).toContainEqual(expect.objectContaining({method: '/chat.update', channel: fixtures.get(page)!.externalChannelId, text: marker + ' edited'}))
+      else expect(observedEdit.teamsMutations).toContainEqual(expect.objectContaining({method: 'PUT', activity: expect.objectContaining({text: marker + ' edited', conversation: {id: teams!.conversation}})}))
+      await ownMessage.getByRole('button', {name: 'Message actions'}).click()
+      await page.getByRole('menuitem', {name: 'Delete message', exact: true}).click()
+      const dialog = page.getByRole('dialog', {name: 'Delete message?'})
+      await expect(dialog).toBeVisible()
+      expect((await history()).find((m: {id: string}) => m.id === sent.id).deletedAt).toBeNull()
+      const deletedAt = Date.now()
+      await dialog.getByRole('button', {name: 'Delete message', exact: true}).click()
+      await expect(otherMessage).toHaveAttribute('data-message-deleted', 'true', {timeout: 2_000})
+      expect(Date.now() - deletedAt).toBeLessThan(2_000)
+      await expect(otherMessage).toContainText('This message was deleted.')
+      const observedDelete = await (await page.request.get('/__test/observed')).json()
+      expect(Object.hasOwn(provider === 'Slack' ? observedDelete.slackContent : observedDelete.teamsActivities, providerTarget)).toBe(false)
+      if (provider === 'Slack') expect(observedDelete.mutations).toContainEqual(expect.objectContaining({method: '/chat.delete', channel: fixtures.get(page)!.externalChannelId}))
+      else expect(observedDelete.teamsMutations).toContainEqual(expect.objectContaining({method: 'DELETE'}))
+      const after = await (await page.request.get(path)).json()
+      expect(after).toMatchObject({status: snapshot.status, workflowStatus: snapshot.workflowStatus, owner: snapshot.owner,
+        lastActivityAt: snapshot.lastActivityAt, version: snapshot.version, sla: snapshot.sla, responseCycles: snapshot.responseCycles})
+      expect(after.operationalDeadline.id).toBe(snapshot.operationalDeadline.id)
+      expect(after.operationalDeadline.dueAt).toBe(snapshot.operationalDeadline.dueAt)
+      await page.screenshot({path: testInfo.outputPath(provider.toLowerCase() + '-message-mutations.png'), animations: 'disabled'})
+    } finally {
+      await secondContext.close()
+      await closeFixtureCases(page)
+      if (teams) {
+        const detail = await (await page.request.get(path)).json()
+        if (detail.status !== 'RESOLVED') expect((await command(page, '/api/v1/admin/cases/' + teams.caseId + '/force-resolve', {resolutionCategory: 'OTHER'})).status()).toBe(200)
+        const cleanup = await page.request.delete('/__test/teams-mutation-fixture', {data: {caseId: teams.caseId}})
+        expect(cleanup.status()).toBe(200)
+        expect(await cleanup.json()).toEqual({cleaned: true, retainedAudit: true})
+        expect((await (await page.request.get(path)).json()).status).toBe('RESOLVED')
+      }
+    }
+  })
+}

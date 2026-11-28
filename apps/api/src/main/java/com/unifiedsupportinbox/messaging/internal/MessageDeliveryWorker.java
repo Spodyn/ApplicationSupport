@@ -22,12 +22,19 @@ class MessageDeliveryWorker {
 
     private final MessageDeliveryService deliveries;
     private final ObjectProvider<MessageDeliveryProvider> providers;
+    private final MessageMutationService mutations;
 
     MessageDeliveryWorker(
             MessageDeliveryService deliveries,
             ObjectProvider<MessageDeliveryProvider> providers) {
+        this(deliveries,providers,null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    MessageDeliveryWorker(MessageDeliveryService deliveries,ObjectProvider<MessageDeliveryProvider> providers,MessageMutationService mutations) {
         this.deliveries = deliveries;
         this.providers = providers;
+        this.mutations = mutations;
     }
 
     AttemptResult process(java.util.UUID messageId) {
@@ -67,7 +74,8 @@ class MessageDeliveryWorker {
                     claim.message().bodyFormat(),
                     claim.message().correlationId(),
                     claim.message().externalMessageId(),
-                    reference -> deliveries.recordAcceptedBody(claim, reference)));
+                    reference -> deliveries.recordAcceptedBody(claim, reference),
+                    target -> { if(mutations!=null)mutations.recordTarget(claim.message().messageId(),target); }));
         } catch (RuntimeException providerFailure) {
             LOGGER.warn(
                     "Outbound Message provider call failed; messageId={}, provider={}, attempt={}, reason={}",

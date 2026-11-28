@@ -26,6 +26,7 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
     private final SlackNormalizer normalizer;
     private final ObjectProvider<InboundMessageCommandHandler> downstreamHandlers;
     private final SlackInboundAttachmentService attachments;
+    private final com.unifiedsupportinbox.messaging.OutboundMutationCallbacks mutations;
 
     SlackFilteringInboundEventHandler(
             ChannelIngestionPolicy channelPolicy,
@@ -33,11 +34,18 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
             SlackNormalizer normalizer,
             ObjectProvider<InboundMessageCommandHandler> downstreamHandlers,
             SlackInboundAttachmentService attachments) {
+        this(channelPolicy,outcomes,normalizer,downstreamHandlers,attachments,null);
+    }
+
+    SlackFilteringInboundEventHandler(ChannelIngestionPolicy channelPolicy,InboundEventOutcomeStore outcomes,
+            SlackNormalizer normalizer,ObjectProvider<InboundMessageCommandHandler> downstreamHandlers,
+            SlackInboundAttachmentService attachments,com.unifiedsupportinbox.messaging.OutboundMutationCallbacks mutations) {
         this.channelPolicy = channelPolicy;
         this.outcomes = outcomes;
         this.normalizer = normalizer;
         this.downstreamHandlers = downstreamHandlers;
         this.attachments = attachments;
+        this.mutations = mutations;
     }
 
     @Override
@@ -75,6 +83,7 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
             return;
         }
 
+        observeSupportMutation(inbound,externalChannelId);
         SlackNormalizer.Result result = normalizer.normalize(inbound, channel.channelId());
         if (result instanceof Filtered filtered) {
             outcomes.mark(inbound.inboundEventId(), outcomeFor(filtered.reason()));
@@ -92,6 +101,25 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
         if (command.mutation() == InboundMessageCommandHandler.Mutation.CREATE) {
             attachments.enqueue(command, persisted, SlackFileReference.from(event));
         }
+    }
+
+    private void observeSupportMutation(SlackInboundEvent inbound,String channel) {
+        if(mutations==null)return;
+        var event=inbound.event();
+        String subtype=event.path("subtype").asText();
+        if(!java.util.Set.of("message_changed","message_deleted").contains(subtype))return;
+        boolean deleted=subtype.equals("message_deleted");
+        var message=event.path(deleted?"previous_message":"message");
+        String sender=message.path("bot_id").asText(null);
+        if(sender==null)sender=message.path("user").asText(null);
+        String reference=deleted?event.path("deleted_ts").asText(message.path("ts").asText(null)):message.path("ts").asText(null);
+        if(reference==null||!reference.matches("[0-9]+\\.[0-9]+"))return;
+        String timestamp=message.path("edited").path("ts").asText(event.path("event_ts").asText(""));
+        if(!timestamp.matches("[0-9]{1,12}(\\.[0-9]{1,9})?"))return;
+        var decimal=new java.math.BigDecimal(timestamp);
+        var occurred=java.time.Instant.ofEpochSecond(decimal.longValue(),decimal.remainder(java.math.BigDecimal.ONE).movePointRight(9).longValue());
+        mutations.observe(com.unifiedsupportinbox.integration.IntegrationProvider.SLACK,inbound.integrationId(),channel,channel,reference,sender,
+                message.path("text").asText(null),deleted,occurred);
     }
 
     private static String requiredChannel(JsonNode event) {

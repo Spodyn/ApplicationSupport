@@ -3,6 +3,8 @@ package com.unifiedsupportinbox.provider.teams.internal;
 import com.sun.net.httpserver.HttpServer;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.DeliveryCommand;
 import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.DeliveryResult;
+import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.MutationCommand;
+import com.unifiedsupportinbox.messaging.MessageDeliveryProvider.MutationResult;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -21,6 +23,8 @@ public final class ControlledTeamsConnector implements AutoCloseable {
     private final HttpServer server;
     private final URI base;
     private final List<Post> posts = new CopyOnWriteArrayList<>();
+    private final List<Map<String,Object>> mutations = new CopyOnWriteArrayList<>();
+    private final Map<String,JsonNode> activities = new java.util.concurrent.ConcurrentHashMap<>();
     private volatile Runnable beforeReceipt = () -> {};
 
     public record Post(String path, JsonNode activity) {}
@@ -34,8 +38,21 @@ public final class ControlledTeamsConnector implements AutoCloseable {
             try (var output = exchange.getResponseBody()) { output.write(response); }
         });
         server.createContext("/emea/v3/conversations/", exchange -> {
+            if (!exchange.getRequestMethod().equals("POST")) {
+                String path=exchange.getRequestURI().getRawPath();
+                String id=java.net.URLDecoder.decode(path.substring(path.lastIndexOf('/')+1),java.nio.charset.StandardCharsets.UTF_8);
+                JsonNode activity=exchange.getRequestMethod().equals("PUT")?json.readTree(exchange.getRequestBody()):json.createObjectNode();
+                boolean exists=activities.containsKey(id);
+                if(exists) {
+                    if(exchange.getRequestMethod().equals("PUT"))activities.put(id,activity); else activities.remove(id);
+                    mutations.add(Map.of("method",exchange.getRequestMethod(),"id",id,"path",path,"activity",activity));
+                }
+                byte[] response=json.writeValueAsBytes(Map.of("id",id));exchange.sendResponseHeaders(exists?200:404,response.length);
+                try(var output=exchange.getResponseBody()){output.write(response);}return;
+            }
             JsonNode activity = json.readTree(exchange.getRequestBody());
             posts.add(new Post(exchange.getRequestURI().getRawPath(), activity));
+            activities.put("synthetic-"+activity.path("id").asText(),activity);
             beforeReceipt.run();
             byte[] response = json.writeValueAsBytes(Map.of("id", "synthetic-" + activity.path("id").asText()));
             exchange.sendResponseHeaders(200, response.length);
@@ -47,10 +64,14 @@ public final class ControlledTeamsConnector implements AutoCloseable {
 
     public List<Post> posts() { return List.copyOf(posts); }
 
+    public Map<String,JsonNode> activities() {return Map.copyOf(activities);}
+
+    public List<Map<String,Object>> mutations() {return List.copyOf(mutations);}
+
     public void beforeReceipt(Runnable callback) { beforeReceipt = callback; }
 
     public void reset() {
-        posts.clear();
+        posts.clear(); mutations.clear(); activities.clear();
         beforeReceipt = () -> {};
     }
 
@@ -71,6 +92,11 @@ public final class ControlledTeamsConnector implements AutoCloseable {
                 @Override
                 String token(URI endpoint, String clientId, byte[] secret) {
                     return super.token(fixture.base.resolve("/token"), clientId, secret);
+                }
+
+                @Override
+                MutationResult mutate(URI endpoint,String token,MutationCommand command) {
+                    return super.mutate(fixture.base.resolve(endpoint.getRawPath()),token,command);
                 }
 
                 @Override

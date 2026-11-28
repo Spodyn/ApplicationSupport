@@ -19,7 +19,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 @Tag("integration")
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK)
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.MOCK, properties="usi.providers.teams.client-id=bot")
 @ActiveProfiles("test")
 class TeamsInboxIntegrationTests {
     static final org.testcontainers.postgresql.PostgreSQLContainer POSTGRES = TestInfrastructure.postgres();
@@ -60,6 +60,30 @@ class TeamsInboxIntegrationTests {
         channel = jdbc.queryForObject("INSERT INTO channels(integration_id,external_channel_id,name,customer_id,grouping_strategy,active) VALUES (?,'conversation','support',?,'TEAMS_ROOT_REPLIES',TRUE) RETURNING id", UUID.class, integration, customer);
         jdbc.update("UPDATE channels SET metadata_json='{\"teamsContextType\":\"standardChannel\"}'::jsonb WHERE id=?",channel);
     }
+    @Test void ownBotEditAndDeleteCallbacksDoNotCreateCustomerMessagesOrFeedbackMutations() {
+        var first=handler.handle(command("customer-root","root"));
+        UUID author=jdbc.queryForObject("INSERT INTO users(email,display_name,role,active) VALUES ('bot-callback@example.test','Author','USER',true) RETURNING id",UUID.class);
+        UUID message=jdbc.queryForObject("INSERT INTO messages(case_id,kind,author_user_id,body,inbound,delivery_status,external_message_id,correlation_id) VALUES (?,'SUPPORT',?,'before',false,'SENT','outbound-activity','callback') RETURNING id",UUID.class,first.caseId(),author);
+        jdbc.update("INSERT INTO message_mutation_targets(message_id,provider_message_ref,conversation_id,sender_id,service_url,context_type) VALUES (?,'outbound-activity','conversation','28:bot','https://smba.trafficmanager.net/emea/','standardChannel')",message);
+        var json=new tools.jackson.databind.ObjectMapper();
+        for(int index=0;index<2;index++) {
+            var body=(tools.jackson.databind.node.ObjectNode)json.readTree(activity("outbound-activity","root","channel"));
+            body.put("type","messageUpdate").put("text","after");body.withObjectProperty("from").put("id","28:bot");
+            var event=deliveries.persistAndWake(integration,"bot-edit-"+index,json.writeValueAsString(body),"bot-edit");worker.process(event.id());
+            assertThat(jdbc.queryForObject("SELECT processing_outcome FROM inbound_events WHERE id=?",String.class,event.id())).isEqualTo("IGNORED_BOT_MESSAGE");
+        }
+        assertThat(jdbc.queryForObject("SELECT body FROM messages WHERE id=?",String.class,message)).isEqualTo("after");
+        assertThat(jdbc.queryForObject("SELECT mutation_revision FROM messages WHERE id=?",Long.class,message)).isEqualTo(1);
+        var body=(tools.jackson.databind.node.ObjectNode)json.readTree(activity("outbound-activity","root","channel"));
+        body.put("type","messageDelete");body.withObjectProperty("from").put("id","28:bot");
+        var event=deliveries.persistAndWake(integration,"bot-delete",json.writeValueAsString(body),"bot-delete");worker.process(event.id());worker.process(event.id());
+        assertThat(jdbc.queryForObject("SELECT deleted_at IS NOT NULL FROM messages WHERE id=?",Boolean.class,message)).isTrue();
+        assertThat(jdbc.queryForObject("SELECT body FROM message_content_versions WHERE message_id=? AND revision=0",String.class,message)).isEqualTo("before");
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM messages",Integer.class)).isEqualTo(2);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM cases",Integer.class)).isEqualTo(1);
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM message_mutations",Integer.class)).isZero();
+    }
+
     @Test void rootRepliesAndNewRootsUseSeparateCasesAndTerminalActivityLinksANewGeneration() {
         var first = handler.handle(command("1", "root-1"));
         assertThat(handler.handle(command("2", "root-1")).caseId()).isEqualTo(first.caseId());

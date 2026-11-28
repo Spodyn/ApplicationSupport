@@ -579,6 +579,24 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/ResolvedCaseBatchReadServiceIntegrationTests.java"
       ],
       "gap": "Live deployed acceptance pending PR deployment; automated controlled providers and independent sessions cover the contract. Drafts are in memory and do not survive reload."
+    },
+    {
+      "id": "MESSAGE_MUTATIONS",
+      "status": "IMPLEMENTED",
+      "expected": "Author-only durable provider-confirmed Slack/Teams edits/deletes, safe retry and callback races, retained history, accurate attachment/target limitations, localized controls and realtime without workflow/SLA changes.",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageMutationIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackMutationHttpTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsMutationHttpTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+        "apps/web/tests/unit/message-mutations.test.tsx",
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsMutationCapabilityTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsInboxIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFilteringInboundIntegrationTests.java",
+        "apps/web/tests/e2e/application.spec.ts"
+      ],
+      "gap": "Real Slack and Teams tenant mutation validation NOT RUN; no live credentials used. Missing Teams target IDs and multi-resource complete deletion are intentionally unavailable; uncertain outcomes need provider confirmation."
     }
   ]
 }

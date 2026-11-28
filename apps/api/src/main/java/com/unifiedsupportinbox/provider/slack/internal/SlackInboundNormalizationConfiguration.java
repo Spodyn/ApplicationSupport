@@ -20,8 +20,8 @@ class SlackInboundNormalizationConfiguration {
             InboundEventOutcomeStore outcomes,
             SlackNormalizer normalizer,
             ObjectProvider<InboundMessageCommandHandler> downstreamHandlers,
-            SlackInboundAttachmentService attachments) {
+            SlackInboundAttachmentService attachments,com.unifiedsupportinbox.messaging.OutboundMutationCallbacks mutations) {
         return new SlackFilteringInboundEventHandler(
-                channelPolicy, outcomes, normalizer, downstreamHandlers, attachments);
+                channelPolicy, outcomes, normalizer, downstreamHandlers, attachments,mutations);
     }
 }

@@ -61,6 +61,20 @@ class CaseActivityServiceTests {
         assertThat(page.nextCursor()).isNull();
     }
 
+    @Test void messageMutationOutcomesHaveStableDescriptionsWithoutExposingContent() {
+        var repository=mock(CaseActivityRepository.class);UUID caseId=UUID.randomUUID();
+        when(repository.caseExists(caseId)).thenReturn(true);
+        when(repository.find(eq(caseId),eq(VIEWER),any(),any(),eq(11))).thenReturn(List.of(
+                event(AuditActorType.USER,"Author","MESSAGE_MUTATION_REQUESTED",NOW,"{\"body\":\"private draft\"}"),
+                event(AuditActorType.USER,"Author","SUPPORT_MESSAGE_EDITED",NOW,"{}"),
+                event(AuditActorType.PROVIDER,null,"SUPPORT_MESSAGE_DELETED",NOW,"{}"),
+                event(AuditActorType.USER,"Author","MESSAGE_MUTATION_UNCERTAIN",NOW,"{}")));
+        var items=service(repository).activity(caseId,VIEWER,null,10).items();
+        assertThat(items).extracting(CaseActivityService.ActivityItem::actionDescription).containsExactly(
+                "Message mutation requested","Support message edited","Support message deleted","Message mutation awaiting confirmation");
+        assertThat(items.getFirst().metadata().toString()).doesNotContain("private draft");
+    }
+
     private static CaseActivityService service(CaseActivityRepository repository) {
         return new CaseActivityService(repository,
                 new CursorCodec("case-activity-test-key-material-123".getBytes(StandardCharsets.UTF_8),

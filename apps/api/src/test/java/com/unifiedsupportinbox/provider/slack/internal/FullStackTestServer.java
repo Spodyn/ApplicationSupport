@@ -30,6 +30,9 @@ import tools.jackson.databind.ObjectMapper;
 public final class FullStackTestServer {
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final List<Map<String, Object>> DELIVERED = new CopyOnWriteArrayList<>();
+    private static final List<Map<String,Object>> MUTATED = new CopyOnWriteArrayList<>();
+    private static com.unifiedsupportinbox.provider.teams.internal.ControlledTeamsConnector teamsConnector;
+    private static final Map<String,String> SLACK_CONTENT = new java.util.concurrent.ConcurrentHashMap<>();
     private static final List<Map<String, Object>> SHARED_FILES = new CopyOnWriteArrayList<>();
     private static final java.util.Set<String> UPLOADED_FILES = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static final java.util.Set<String> FAILED_SCANS = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -53,6 +56,7 @@ public final class FullStackTestServer {
         Files.createDirectories(secrets.resolve("test-only"));
         Files.writeString(secrets.resolve("test-only/slack-bot-token"), "test-only-fullstack-bot");
         Files.writeString(secrets.resolve("test-only/slack-signing-secret"), "test-only-fullstack-signing");
+        Files.writeString(secrets.resolve("test-only/teams-client-secret"), "test-only-fullstack-teams");
         var provider = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         provider.createContext("/", exchange -> {
             Map<String, ?> response;
@@ -78,6 +82,23 @@ public final class FullStackTestServer {
                         """, UUID.class, fixtureIntegration, externalChannel);
                 response = Map.of("email", email, "displayName", name, "userId", user, "channelId", channel,
                         "externalChannelId", externalChannel, "workspaceId", "TTESTFULL");
+            } else if (path.equals("/teams-mutation-fixture") && exchange.getRequestMethod().equals("POST")) {
+                String marker=JSON.readTree(exchange.getRequestBody()).path("marker").asText();
+                String external="19:"+UUID.randomUUID(),root="root-"+UUID.randomUUID();
+                UUID customer=fixtureDatabase.queryForObject("INSERT INTO customers(name) VALUES (?) RETURNING id",UUID.class,marker);
+                UUID integration=fixtureDatabase.queryForObject("INSERT INTO integrations(provider,display_name,status,health,workspace_external_id,secret_ref) VALUES ('TEAMS',?,'ENABLED','HEALTHY',?,'test-only') RETURNING id",UUID.class,marker,com.unifiedsupportinbox.provider.teams.internal.ControlledTeamsMutations.TENANT);
+                UUID channel=fixtureDatabase.queryForObject("INSERT INTO channels(integration_id,external_channel_id,name,customer_id,grouping_strategy,metadata_json) VALUES (?,?,?,?,'TEAMS_ROOT_REPLIES','{\"teamsContextType\":\"standardChannel\"}'::jsonb) RETURNING id",UUID.class,integration,external,marker,customer);
+                fixtureDatabase.update("INSERT INTO teams_conversation_routes(integration_id,external_channel_id,thread_key,connector_conversation_id,service_url,bot_id,context_type) VALUES (?,?,?,?,'https://smba.trafficmanager.net/emea/',?,'standardChannel')",integration,external,root,external+";messageid="+root,"28:"+com.unifiedsupportinbox.provider.teams.internal.ControlledTeamsMutations.BOT);
+                UUID caseId=fixtureDatabase.queryForObject("INSERT INTO cases(customer_id,integration_id,channel_id,provider,external_conversation_id,external_thread_key) VALUES (?,?,?,'TEAMS',?,?) RETURNING id",UUID.class,customer,integration,channel,external,root);
+                fixtureDatabase.update("INSERT INTO messages(case_id,external_message_id,external_thread_key,kind,author_external_id,author_name,body,inbound,provider_created_at,correlation_id) VALUES (?,?,?,'CUSTOMER','fixture','Test customer',?,TRUE,now(),'teams-mutation-fixture')",caseId,root,root,marker);
+                response=Map.of("caseId",caseId,"channel",external,"conversation",external+";messageid="+root);
+            } else if (path.equals("/teams-mutation-fixture") && exchange.getRequestMethod().equals("DELETE")) {
+                UUID caseId=UUID.fromString(JSON.readTree(exchange.getRequestBody()).path("caseId").asText());
+                var owned=fixtureDatabase.queryForMap("SELECT integration_id,channel_id,customer_id FROM cases c WHERE c.id=? AND c.provider='TEAMS' AND c.status='RESOLVED' AND EXISTS (SELECT 1 FROM messages m WHERE m.case_id=c.id AND m.correlation_id='teams-mutation-fixture')",caseId);
+                // Retain the exercised Case and immutable audit until this disposable stack is destroyed.
+                fixtureDatabase.update("UPDATE channels SET active=false WHERE id=?",owned.get("channel_id"));
+                fixtureDatabase.update("UPDATE integrations SET status='DISABLED' WHERE id=?",owned.get("integration_id"));
+                response=Map.of("cleaned",true,"retainedAudit",true);
             } else if (path.equals("/inbox-platform-fixture") && exchange.getRequestMethod().equals("POST")) {
                 // Inert Teams fixture: no provider credentials, selected-team binding or external calls.
                 String marker = JSON.readTree(exchange.getRequestBody()).path("marker").asText();
@@ -128,7 +149,7 @@ public final class FullStackTestServer {
                         """, caseId);
                 expireDeadline(caseId);
                 response = Map.of("changed", changed);
-            } else if (path.equals("/observed")) response = Map.of("messages", DELIVERED, "files", SHARED_FILES);
+            } else if (path.equals("/observed")) response = Map.of("messages", DELIVERED, "files", SHARED_FILES,"mutations",MUTATED,"teamsMutations",teamsConnector.mutations(),"slackContent",SLACK_CONTENT,"teamsActivities",teamsConnector.activities());
             else if (path.equals("/files.getUploadURLExternal")) {
                 String form = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
                 if (!"application/x-www-form-urlencoded".equals(exchange.getRequestHeaders().getFirst("Content-Type"))
@@ -194,6 +215,16 @@ public final class FullStackTestServer {
                         response = Map.of("ok", true, "files", List.of(Map.of("id", id)));
                     }
                 }
+            } else if (path.equals("/chat.update") || path.equals("/chat.delete")) {
+                var input=JSON.readTree(exchange.getRequestBody());String ts=input.path("ts").asText(),channel=input.path("channel").asText();
+                boolean own=DELIVERED.stream().anyMatch(m->ts.equals(m.get("ts"))&&channel.equals(m.get("channel")));
+                if(!"Bearer test-only-fullstack-bot".equals(exchange.getRequestHeaders().getFirst("Authorization")))response=Map.of("ok",false,"error","invalid_auth");
+                else if(!own||!SLACK_CONTENT.containsKey(ts))response=Map.of("ok",false,"error","message_not_found");
+                else {
+                    if(path.equals("/chat.update"))SLACK_CONTENT.put(ts,input.path("text").asText());else SLACK_CONTENT.remove(ts);
+                    MUTATED.add(Map.of("method",path,"ts",ts,"channel",channel,"text",input.path("text").asText()));
+                    response=Map.of("ok",true,"channel",channel,"ts",ts);
+                }
             } else if (path.equals("/chat.postMessage")) {
                 var body = JSON.readTree(exchange.getRequestBody());
                 if (!"Bearer test-only-fullstack-bot".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
@@ -212,7 +243,8 @@ public final class FullStackTestServer {
                     String ts = "1790000000." + String.format("%06d", DELIVERED.size() + 1);
                     DELIVERED.add(Map.of("clientMessageId", body.path("client_msg_id").asText(),
                             "thread", body.path("thread_ts").asText(), "channel", body.path("channel").asText(), "ts", ts));
-                    response = Map.of("ok", true, "ts", ts);
+                    SLACK_CONTENT.put(ts,body.path("text").asText());
+                    response = Map.of("ok", true, "ts", ts,"message",Map.of("bot_id","BTESTFULL"));
                 }
             } else if (path.equals("/auth.test")) response = Map.of("ok", true, "team_id", "TTESTFULL", "team", "Synthetic workspace");
             else if (path.equals("/conversations.list")) response = Map.of("ok", true, "channels", List.of(Map.of(
@@ -255,7 +287,7 @@ public final class FullStackTestServer {
                     "--usi.cases.waiting-timeout.poll-interval=1s",
                     "--usi.realtime.case-lifecycle-worker.enabled=true", "--usi.realtime.message-created-worker.enabled=true",
                     "--usi.readstate.case-created-worker.enabled=true", "--usi.realtime.heartbeat=1s"));
-            var context = new SpringApplicationBuilder(UsiApiApplication.class, ProviderBoundary.class)
+            var context = new SpringApplicationBuilder(UsiApiApplication.class, ProviderBoundary.class, com.unifiedsupportinbox.provider.teams.internal.ControlledTeamsConnector.Configuration.class, com.unifiedsupportinbox.provider.teams.internal.ControlledTeamsMutations.class)
                     .profiles("test").run(options.toArray(String[]::new));
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 context.close(); provider.stop(0); minio.stop(); rabbit.stop(); postgres.stop();
@@ -263,6 +295,7 @@ public final class FullStackTestServer {
                     files.sorted(java.util.Comparator.reverseOrder()).forEach(file -> { try { Files.deleteIfExists(file); } catch (Exception ignored) { } });
                 } catch (Exception ignored) { }
             }));
+            teamsConnector=context.getBean(com.unifiedsupportinbox.provider.teams.internal.ControlledTeamsConnector.class);
             JdbcTemplate jdbc = context.getBean(JdbcTemplate.class);
             String password = "test-only-fullstack-credential";
             UUID administrator = jdbc.queryForObject("""

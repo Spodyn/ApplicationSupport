@@ -243,3 +243,7 @@ The operational SLA reminder worker claims bounded deadline batches under Case r
 ## Personal inbox modes (owner decision, 2026-11-27)
 
 V58 adds sparse account inbox preferences; no backfill or destructive update is required. Existing accounts retain Unified inbox. Preference changes use the durable application outbox and existing STOMP reverse-proxy path; bounded 30-second preference and 15-second inbox/counter reconciliation remain fallbacks. Disabled configured platforms stay selectable for historical access. No provider or SLA policy setting changes. See [INBOX_PREFERENCES.md](INBOX_PREFERENCES.md).
+
+## Outbound mutation uncertainty
+
+The existing delivery-worker enable flag/poll interval also controls durable mutation dispatch. Known-safe failures use bounded retries; worker lease expiry, timeouts and ambiguous provider results become UNCERTAIN without replay. Investigate the operation ID, sanitized audit outcome and original provider target; preserve original content/history. Do not reset an uncertain operation or fabricate a provider ID. A matching authenticated callback or original fenced late receipt may reconcile it. Missing provider confirmation can leave an operation blocked. [Runbook and limitations](OUTBOUND_MESSAGE_MUTATIONS.md#durable-commands-and-races).
