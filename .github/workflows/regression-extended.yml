@@ -3,7 +3,7 @@ name: Extended regression
 on:
   workflow_dispatch:
   schedule:
-    - cron: '23 3 * * 1'
+    - cron: '23 3 * * *'
 
 permissions:
   contents: read
@@ -48,4 +48,5 @@ jobs:
             apps/web/test-results/
             apps/api/target/mutation-smoke.json
             apps/api/target/fullstack-runtime.log
+            config/regression-features.json
           retention-days: 7

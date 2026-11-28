@@ -7,7 +7,9 @@ export default defineConfig({
   fullyParallel: false, workers: 1, retries: 0, forbidOnly: Boolean(process.env.CI),
   timeout: 60_000, expect: {timeout: 15_000},
   use: {baseURL: `http://127.0.0.1:${port}`, serviceWorkers: 'allow', trace: 'retain-on-failure', screenshot: 'only-on-failure'},
-  reporter: process.env.CI ? [['github'], ['html', {open: 'never'}]] : [['list']],
+  reporter: process.env.CI
+    ? [['github'], ['html', {open: 'never'}], ['junit', {outputFile: 'test-results/fullstack-junit.xml'}]]
+    : [['list'], ['html', {open: 'never'}], ['junit', {outputFile: 'test-results/fullstack-junit.xml'}]],
   projects: [{name: 'real-stack-chromium', use: {...devices['Desktop Chrome']}}],
   webServer: {
     command: 'node ../../scripts/testing/fullstack.mjs',

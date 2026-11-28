@@ -11,8 +11,8 @@ export default defineConfig({
   retries: 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: process.env.CI
-    ? [["github"], ["html", { open: "never" }]]
-    : [["list"], ["html", { open: "never" }]],
+    ? [["github"], ["html", { open: "never" }], ["junit", {outputFile: "test-results/browser-junit.xml"}]]
+    : [["list"], ["html", { open: "never" }], ["junit", {outputFile: "test-results/browser-junit.xml"}]],
   use: {
     baseURL,
     serviceWorkers: "block",

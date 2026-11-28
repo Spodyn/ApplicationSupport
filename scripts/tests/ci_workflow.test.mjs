@@ -53,3 +53,46 @@ test('traceability rejects erased features, broken test links and out-of-reposit
     assert.throws(() => checkInventory(invalid), /Missing or out-of-repository test/)
   }
 })
+
+test('audit traceability rejects stale anchors, absent scenario boundaries and unproven acceptance', () => {
+  const inventory = JSON.parse(readFileSync(new URL('../../config/regression-features.json', import.meta.url), 'utf8'))
+  for (const [mutate, expected] of [
+    [value => {value.features[0].testIdentifiers[0].identifier = 'nonexistent-test-anchor'}, /Stale suite identifier/],
+    [value => {delete value.features[0].scenarios.boundary}, /boundary scenario/],
+    [value => {value.features[0].sources = ['../outside-repository']}, /out-of-repository/],
+    [value => {value.features[0].verification.live = 'ASSUMED'}, /verification provenance/],
+    [value => {value.features[0].verification.revision = 'main'}, /verification provenance/],
+    [value => {value.features[0].testIdentifiers[0].ci = 'optional'}, /identifier\/layer\/CI/],
+  ]) {
+    const invalid = structuredClone(inventory)
+    mutate(invalid)
+    assert.throws(() => checkInventory(invalid), expected)
+  }
+})
+
+test('coverage reduction requires an explicit reason and a mapped replacement', () => {
+  const inventory = JSON.parse(readFileSync(new URL('../../config/regression-features.json', import.meta.url), 'utf8'))
+  const baseline = structuredClone(inventory)
+  baseline.features[0].tests.push('retired-test.java')
+  assert.throws(() => checkInventory(inventory, baseline), /Unexplained coverage reduction/)
+  const explained = structuredClone(inventory)
+  explained.coverageChanges = [{feature: 'AUTH', removed: 'retired-test.java', reason: 'Consolidated equivalent assertions', replacements: [inventory.features[0].tests[0]]}]
+  assert.equal(checkInventory(explained, baseline), 37)
+  explained.coverageChanges[0].replacements = ['unmapped.java']
+  assert.throws(() => checkInventory(explained, baseline), /Unexplained coverage reduction/)
+})
+
+
+test('nightly evidence preserves mandatory suites, zero retries and exact executed revisions', () => {
+  const extended = readFileSync(new URL('../../.github/workflows/regression-extended.yml', import.meta.url), 'utf8')
+  assert.match(extended, /23 3 \* \* \*/)
+  assert.match(extended, /pnpm test:fullstack --repeat-each=3/)
+  assert.match(extended, /mutation_smoke\.py/)
+  assert.doesNotMatch(extended, /--retries|continue-on-error|secrets\./)
+  assert.match(workflow, /check-inventory\.mjs --base-ref/)
+  assert.match(workflow, /git rev-parse HEAD > apps\/web\/test-results\/tested-revision\.txt/)
+  for (const file of ['playwright.config.ts', 'playwright.fullstack.config.ts']) {
+    const source = readFileSync(new URL('../../apps/web/' + file, import.meta.url), 'utf8')
+    assert.match(source, /junit/)
+  }
+})

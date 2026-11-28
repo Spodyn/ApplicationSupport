@@ -16,7 +16,85 @@
         "apps/web/tests/unit/auth-adapter.test.ts",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Real proxy HTTPS/Secure-cookie acceptance is external"
+      "gap": "Real proxy HTTPS/Secure-cookie acceptance is external",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/identity",
+        "apps/web/components/auth"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "AUTH-POSITIVE",
+          "expected": "Valid sign-in, secure session and logout"
+        },
+        "negative": {
+          "id": "AUTH-NEGATIVE",
+          "expected": "Wrong/inactive/expired credentials, CSRF and cross-origin denial"
+        },
+        "boundary": {
+          "id": "AUTH-BOUNDARY",
+          "expected": "Concurrent attempts, one-time reset and session expiry"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/AuthSessionIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/AuthSessionIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/CredentialHashConfigurationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/CredentialHashConfigurationTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/CredentialRehashIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/CredentialRehashIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/PasswordPolicyTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/PasswordPolicyTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/e2e/security.spec.ts",
+          "identifier": "apps/web/tests/e2e/security.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/auth-adapter.test.ts",
+          "identifier": "apps/web/tests/unit/auth-adapter.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "USERS",
@@ -30,7 +108,64 @@
         "apps/web/tests/unit/administration-users-adapter.test.ts",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Per-route body validation and admin CRUD HTTP matrix to extend"
+      "gap": "Per-route body validation and admin CRUD HTTP matrix to extend",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/identity",
+        "apps/web/app/users"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "USERS-POSITIVE",
+          "expected": "Authorized directory and account updates"
+        },
+        "negative": {
+          "id": "USERS-NEGATIVE",
+          "expected": "Ordinary-user denial and last-admin protection"
+        },
+        "boundary": {
+          "id": "USERS-BOUNDARY",
+          "expected": "Concurrent changes and active-session revocation"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/AdminUserListIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/AdminUserListIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/PermissionIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/PermissionIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/administration-users-adapter.test.ts",
+          "identifier": "apps/web/tests/unit/administration-users-adapter.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "Three-user directory, roles and workload read; no access changes or new accounts."
+      }
     },
     {
       "id": "CUSTOMERS",
@@ -43,7 +178,57 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/testing/ApiSurfaceIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Full-stack customer create/map added; detailed negative update validation remains targeted"
+      "gap": "Full-stack customer create/map added; detailed negative update validation remains targeted",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/customer",
+        "apps/web/components/settings"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "CUSTOMERS-POSITIVE",
+          "expected": "Create/edit/deactivate and preserve existing mappings"
+        },
+        "negative": {
+          "id": "CUSTOMERS-NEGATIVE",
+          "expected": "Duplicate references and unauthorized writes"
+        },
+        "boundary": {
+          "id": "CUSTOMERS-BOUNDARY",
+          "expected": "Empty names, inactive customers and historical links"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/customer/internal/CustomerIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/customer/internal/CustomerIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/testing/ApiSurfaceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/testing/ApiSurfaceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "INTEGRATIONS",
@@ -57,7 +242,64 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/IntegrationIntegrationTests.java",
         "apps/web/tests/unit/administration-channel-settings.test.ts"
       ],
-      "gap": "Real provider health/scope acceptance requires explicitly authorized sandbox"
+      "gap": "Real provider health/scope acceptance requires explicitly authorized sandbox",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/integration",
+        "apps/web/components/settings"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "INTEGRATIONS-POSITIVE",
+          "expected": "Configured health/readiness and safe persistence"
+        },
+        "negative": {
+          "id": "INTEGRATIONS-NEGATIVE",
+          "expected": "Forbidden secrets and unsupported provider scopes"
+        },
+        "boundary": {
+          "id": "INTEGRATIONS-BOUNDARY",
+          "expected": "Disabled integration, timeouts and reconnect"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/IntegrationConnectionTestRunnerTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/IntegrationConnectionTestRunnerTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/IntegrationHealthCoordinatorTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/IntegrationHealthCoordinatorTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/IntegrationIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/IntegrationIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/administration-channel-settings.test.ts",
+          "identifier": "apps/web/tests/unit/administration-channel-settings.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "CHANNELS",
@@ -74,7 +316,78 @@
         "apps/web/tests/unit/inbox-api-adapter.test.ts",
         "apps/web/tests/e2e/application.spec.ts"
       ],
-      "gap": "Live private/Connect membership acceptance external"
+      "gap": "Live private/Connect membership acceptance external",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/channel",
+        "apps/web/components/settings"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "CHANNELS-POSITIVE",
+          "expected": "Discover, map and rename without changing identity"
+        },
+        "negative": {
+          "id": "CHANNELS-NEGATIVE",
+          "expected": "Unauthorized or ignored channel intake"
+        },
+        "boundary": {
+          "id": "CHANNELS-BOUNDARY",
+          "expected": "Pagination, removed membership and missing names"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/channel/internal/ChannelIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/channel/internal/ChannelIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackChannelDiscoveryServiceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackChannelDiscoveryServiceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackIgnoredChannelIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackIgnoredChannelIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/inbox-api-adapter.test.ts",
+          "identifier": "apps/web/tests/unit/inbox-api-adapter.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/e2e/application.spec.ts",
+          "identifier": "apps/web/tests/e2e/application.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "FAIL",
+        "note": "Channel titles correct; Settings exposes customer UUID/sentinel."
+      }
     },
     {
       "id": "SLACK_IN",
@@ -95,7 +408,113 @@
         "apps/web/tests/unit/external-message.test.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFileReferenceTests.java"
       ],
-      "gap": "Real provider sandbox separate from deterministic PR CI"
+      "gap": "Real provider sandbox separate from deterministic PR CI",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/provider/slack",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "SLACK_IN-POSITIVE",
+          "expected": "Signed public/private/Connect root and reply intake"
+        },
+        "negative": {
+          "id": "SLACK_IN-NEGATIVE",
+          "expected": "Bad signature, replay and bot feedback filtering"
+        },
+        "boundary": {
+          "id": "SLACK_IN-BOUNDARY",
+          "expected": "Duplicate/out-of-order callbacks and concurrent roots"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFilteringInboundIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFilteringInboundIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackIgnoredChannelIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackIgnoredChannelIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundDeliveryServiceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundDeliveryServiceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundWorkerIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundWorkerIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackNormalizerTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackNormalizerTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackRootCaseMappingIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackRootCaseMappingIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackRootUnreadIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackRootUnreadIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackWebhookIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackWebhookIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/external-message.test.ts",
+          "identifier": "apps/web/tests/unit/external-message.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFileReferenceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFileReferenceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "SLACK_OUT",
@@ -110,7 +529,71 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackMessageDeliveryProviderTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Synthetic Slack covers partial delivery and a lost completion response; live delivery acceptance requires sandbox"
+      "gap": "Synthetic Slack covers partial delivery and a lost completion response; live delivery acceptance requires sandbox",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/messaging",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "SLACK_OUT-POSITIVE",
+          "expected": "Confirmed text and attachment delivery to the right thread"
+        },
+        "negative": {
+          "id": "SLACK_OUT-NEGATIVE",
+          "expected": "Archived/missing permission and unsafe attachment rejection"
+        },
+        "boundary": {
+          "id": "SLACK_OUT-BOUNDARY",
+          "expected": "Partial checkpoints, rate limiting and lost receipts"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/HttpSlackWebApiClientTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/HttpSlackWebApiClientTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDeliveryErrorClassifierTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDeliveryErrorClassifierTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackMessageDeliveryProviderTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackMessageDeliveryProviderTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "CASE",
@@ -125,7 +608,71 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseTerminalLinkingIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "No runtime tenant model; customer isolation is per deployment"
+      "gap": "No runtime tenant model; customer isolation is per deployment",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/cases",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "CASE-POSITIVE",
+          "expected": "Stable identity and grouping with linked successors"
+        },
+        "negative": {
+          "id": "CASE-NEGATIVE",
+          "expected": "Unsupported conversation and unauthorized command"
+        },
+        "boundary": {
+          "id": "CASE-BOUNDARY",
+          "expected": "Concurrent creation and contact after terminal state"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseCreationServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseCreationServiceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CasePersistenceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CasePersistenceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseReferenceGenerationIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseReferenceGenerationIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseTerminalLinkingIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseTerminalLinkingIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "CLAIM",
@@ -139,7 +686,64 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Existing real PostgreSQL race tests retained"
+      "gap": "Existing real PostgreSQL race tests retained",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/workflow",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "CLAIM-POSITIVE",
+          "expected": "Eligible explicit claim retains authoritative ownership"
+        },
+        "negative": {
+          "id": "CLAIM-NEGATIVE",
+          "expected": "Ineligible actor and losing claimant rejected"
+        },
+        "boundary": {
+          "id": "CLAIM-BOUNDARY",
+          "expected": "Exactly one concurrent winner and historical waiting recovery"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseClaimServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseClaimServiceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "REPLY",
@@ -153,7 +757,64 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Slack browser workflow and Teams Connector HTTP use controlled hosts; live tenant acceptance is separate"
+      "gap": "Slack browser workflow and Teams Connector HTTP use controlled hosts; live tenant acceptance is separate",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/workflow",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "REPLY-POSITIVE",
+          "expected": "Consecutive replies in OPEN/ASKED retain owner"
+        },
+        "negative": {
+          "id": "REPLY-NEGATIVE",
+          "expected": "Other actor, terminal or failed/queued delivery cannot transition"
+        },
+        "boundary": {
+          "id": "REPLY-BOUNDARY",
+          "expected": "Attachment-only, stale receipt and concurrent customer reply"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/SupportSendMessageServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/SupportSendMessageServiceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "RESOLVE",
@@ -165,7 +826,51 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Full browser administration transitions are not all automated"
+      "gap": "Full browser administration transitions are not all automated",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/workflow",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "RESOLVE-POSITIVE",
+          "expected": "Owner resolves OPEN/ASKED and authorized admin reassigns"
+        },
+        "negative": {
+          "id": "RESOLVE-NEGATIVE",
+          "expected": "Ordinary actor cannot force resolve or assign"
+        },
+        "boundary": {
+          "id": "RESOLVE-BOUNDARY",
+          "expected": "Same-owner no-op, stale version and concurrent intake"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseTransitionPolicyTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "scope": "Shared suite reference; feature-specific scenario coverage remains to be reviewed.",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "IGNORE",
@@ -176,7 +881,43 @@
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java"
       ],
-      "gap": "Existing PostgreSQL invariants retained"
+      "gap": "Existing PostgreSQL invariants retained",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/workflow",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "IGNORE-POSITIVE",
+          "expected": "Authorized votes reach threshold and retain audit"
+        },
+        "negative": {
+          "id": "IGNORE-NEGATIVE",
+          "expected": "Lifetime claim restriction and duplicate vote rejection"
+        },
+        "boundary": {
+          "id": "IGNORE-BOUNDARY",
+          "expected": "Concurrent threshold, terminal state and successor"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "SNOOZE",
@@ -188,7 +929,51 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseSnoozeIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Controlled-clock duration/replay, personal cancel and due worker covered; live push delivery remains separate"
+      "gap": "Controlled-clock duration/replay, personal cancel and due worker covered; live push delivery remains separate",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/readstate",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "SNOOZE-POSITIVE",
+          "expected": "Personal snooze/cancel/wake without workflow or SLA reset"
+        },
+        "negative": {
+          "id": "SNOOZE-NEGATIVE",
+          "expected": "Other user cannot change personal state"
+        },
+        "boundary": {
+          "id": "SNOOZE-BOUNDARY",
+          "expected": "DST, exact expiry, replay and scheduler deduplication"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseSnoozeIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseSnoozeIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "scope": "Shared suite reference; feature-specific scenario coverage remains to be reviewed.",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "NOT TESTED",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "SLA",
@@ -211,7 +996,120 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
         "apps/web/tests/unit/operational-sla.test.ts"
       ],
-      "gap": "Production SLO/load evidence is not a unit-test pass"
+      "gap": "Production SLO/load evidence is not a unit-test pass",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/sla",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "SLA-POSITIVE",
+          "expected": "FRT/NRT/FOLLOW_UP deadlines and distinct reminders"
+        },
+        "negative": {
+          "id": "SLA-NEGATIVE",
+          "expected": "Failed/queued/stale sends and notes/mutations cannot restart"
+        },
+        "boundary": {
+          "id": "SLA-BOUNDARY",
+          "expected": "Business closures, DST, 25% warning, expiry and history preservation"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseWorkflowTransactionsIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseCreationServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/cases/internal/CaseCreationServiceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/sla/BusinessTimeCalculatorTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/sla/BusinessTimeCalculatorTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/sla.test.ts",
+          "identifier": "apps/web/tests/unit/sla.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/e2e/application.spec.ts",
+          "identifier": "apps/web/tests/e2e/application.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/analytics-workflow.test.ts",
+          "identifier": "apps/web/tests/unit/analytics-workflow.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/operational-sla.test.ts",
+          "identifier": "apps/web/tests/unit/operational-sla.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "FAIL",
+        "note": "Frozen overdue FRT outside business hours; correction in PR 172 awaits integration."
+      }
     },
     {
       "id": "SCHEDULE",
@@ -223,7 +1121,50 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/sla/internal/BusinessHoursIntegrationTests.java",
         "apps/web/tests/unit/api-business-hours-adapter.test.ts"
       ],
-      "gap": "Some settings UI work remains in separate draft PRs"
+      "gap": "Some settings UI work remains in separate draft PRs",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/sla",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "SCHEDULE-POSITIVE",
+          "expected": "Weekly split/overnight intervals and date exceptions"
+        },
+        "negative": {
+          "id": "SCHEDULE-NEGATIVE",
+          "expected": "Overlapping invalid schedules and permission denial"
+        },
+        "boundary": {
+          "id": "SCHEDULE-BOUNDARY",
+          "expected": "CLOSED/OPEN/OVERRIDE, holidays, DST and no future opening"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/sla/internal/BusinessHoursIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/sla/internal/BusinessHoursIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/api-business-hours-adapter.test.ts",
+          "identifier": "apps/web/tests/unit/api-business-hours-adapter.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "NOTIFICATIONS",
@@ -235,7 +1176,50 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/notification/internal/NotificationConfigurationIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/notification/internal/NotificationDeliveryWorkerIntegrationTests.java"
       ],
-      "gap": "Real provider notifications require explicit sandbox; no ordinary CI external calls"
+      "gap": "Real provider notifications require explicit sandbox; no ordinary CI external calls",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/notification",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "NOTIFICATIONS-POSITIVE",
+          "expected": "Internal bell and configured external rule/destination routing"
+        },
+        "negative": {
+          "id": "NOTIFICATIONS-NEGATIVE",
+          "expected": "Disabled destinations, unauthorized reads and secret leakage"
+        },
+        "boundary": {
+          "id": "NOTIFICATIONS-BOUNDARY",
+          "expected": "Worker retries, reminder deduplication and reconnect"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/notification/internal/NotificationConfigurationIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/notification/internal/NotificationConfigurationIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/notification/internal/NotificationDeliveryWorkerIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/notification/internal/NotificationDeliveryWorkerIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "FAIL",
+        "note": "Historic bell reminders visible; new destination defaults to nonexistent int-slack."
+      }
     },
     {
       "id": "READ",
@@ -251,7 +1235,78 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CustomerMessageUnreadDomainServiceIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/ResolvedCaseBatchReadServiceIntegrationTests.java"
       ],
-      "gap": "Real-stack refresh/reconnect plus existing transaction tests"
+      "gap": "Real-stack refresh/reconnect plus existing transaction tests",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/readstate",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "READ-POSITIVE",
+          "expected": "Seen acknowledgement advances only personal read state"
+        },
+        "negative": {
+          "id": "READ-NEGATIVE",
+          "expected": "Other users remain unread and unauthorized marks fail"
+        },
+        "boundary": {
+          "id": "READ-BOUNDARY",
+          "expected": "Overlapping pages, deleted messages and reconnect"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseCreatedUnreadListenerTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseCreatedUnreadListenerTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseCreatedUnreadProjectionIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseCreatedUnreadProjectionIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseCreatedUnreadRabbitConfigurationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseCreatedUnreadRabbitConfigurationTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseReadStateIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CaseReadStateIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CustomerMessageUnreadDomainServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/CustomerMessageUnreadDomainServiceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/ResolvedCaseBatchReadServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/ResolvedCaseBatchReadServiceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "ANALYTICS",
@@ -267,7 +1322,78 @@
         "apps/web/tests/fullstack/workflows.spec.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/AnalyticsRecordsIntegrationTests.java"
       ],
-      "gap": "Historical per-user features in unmerged PRs are not claimed implemented"
+      "gap": "Historical per-user features in unmerged PRs are not claimed implemented",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/analytics",
+        "apps/web/app/statistics"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "ANALYTICS-POSITIVE",
+          "expected": "Independent FRT/NRT/historical/current/follow-up definitions"
+        },
+        "negative": {
+          "id": "ANALYTICS-NEGATIVE",
+          "expected": "No false follow-up breach or unauthorized global statistics"
+        },
+        "boundary": {
+          "id": "ANALYTICS-BOUNDARY",
+          "expected": "Reporting timezone, date cohorts, missing outcomes and comparisons"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/web/tests/unit/analytics-workflow.test.ts",
+          "identifier": "apps/web/tests/unit/analytics-workflow.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/AnalyticsContractDocumentationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/AnalyticsContractDocumentationTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/analytics/StatisticsOverviewServiceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/analytics/StatisticsOverviewServiceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/analytics/AnalyticsRecordsIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/analytics/AnalyticsRecordsIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "Live distinct historical=3, NRT=1, overdue=1, follow-up=0 in selected cohort; independent live dataset unavailable."
+      }
     },
     {
       "id": "HISTORY",
@@ -283,7 +1409,78 @@
         "apps/web/tests/unit/search-filter.test.tsx",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Cross-customer Case reads are permitted within one deployment"
+      "gap": "Cross-customer Case reads are permitted within one deployment",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/messaging",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "HISTORY-POSITIVE",
+          "expected": "Stable ordered pagination, search and retained mutations"
+        },
+        "negative": {
+          "id": "HISTORY-NEGATIVE",
+          "expected": "Unauthorized reads and unsafe rendered content"
+        },
+        "boundary": {
+          "id": "HISTORY-BOUNDARY",
+          "expected": "Overlapping cursors, long bodies and duplicate events"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/CursorCodecTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/CursorCodecTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageHistoryServiceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageHistoryServiceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/inbox-api-adapter.test.ts",
+          "identifier": "apps/web/tests/unit/inbox-api-adapter.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/search-filter.test.tsx",
+          "identifier": "apps/web/tests/unit/search-filter.test.tsx",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "CASE_NOTES",
@@ -296,7 +1493,58 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/SupportSendMessageServiceIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Text-only notes use existing Case permissions"
+      "gap": "Text-only notes use existing Case permissions",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/messaging",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "CASE_NOTES-POSITIVE",
+          "expected": "Owner notes remain internal with separate drafts"
+        },
+        "negative": {
+          "id": "CASE_NOTES-NEGATIVE",
+          "expected": "Non-owner rejected and no provider dispatch"
+        },
+        "boundary": {
+          "id": "CASE_NOTES-BOUNDARY",
+          "expected": "ASKED notes, retry, ordering and unchanged SLA"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/SupportSendMessageServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/SupportSendMessageServiceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "scope": "Shared suite reference; feature-specific scenario coverage remains to be reviewed.",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "NOT TESTED",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "REALTIME",
@@ -313,7 +1561,85 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/ApplicationRealtimeListenerTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Real-stack CONNECT/MESSAGE/reload plus backend security tests"
+      "gap": "Real-stack CONNECT/MESSAGE/reload plus backend security tests",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/realtime",
+        "apps/web/components/realtime"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "REALTIME-POSITIVE",
+          "expected": "Authorized projections reconcile through STOMP and REST"
+        },
+        "negative": {
+          "id": "REALTIME-NEGATIVE",
+          "expected": "No administrative/personal data on public destinations"
+        },
+        "boundary": {
+          "id": "REALTIME-BOUNDARY",
+          "expected": "Reconnect, bursts, duplicates, out-of-order and in-flight fetches"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/RealtimeWebSocketIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/RealtimeWebSocketIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/AuthenticatedWebSocketHandshakeInterceptorTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/AuthenticatedWebSocketHandshakeInterceptorTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/SessionBoundWebSocketHandlerDecoratorTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/SessionBoundWebSocketHandlerDecoratorTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/realtime-stomp-client.test.ts",
+          "identifier": "apps/web/tests/unit/realtime-stomp-client.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/realtime-query-invalidation.test.ts",
+          "identifier": "apps/web/tests/unit/realtime-query-invalidation.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/ApplicationRealtimeListenerTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/ApplicationRealtimeListenerTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "ATTACHMENTS",
@@ -336,7 +1662,127 @@
         "apps/web/tests/unit/inbox-api-adapter.test.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFileReferenceTests.java"
       ],
-      "gap": "Live Slack and real scanner acceptance is separate from deterministic full-stack tests; TIFF and HEIC/HEIF are download-only"
+      "gap": "Live Slack and real scanner acceptance is separate from deterministic full-stack tests; TIFF and HEIC/HEIF are download-only",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/storage",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "ATTACHMENTS-POSITIVE",
+          "expected": "Validated clean upload/download and provider resources"
+        },
+        "negative": {
+          "id": "ATTACHMENTS-NEGATIVE",
+          "expected": "Quarantine, ownership, SSRF and type/size denial"
+        },
+        "boundary": {
+          "id": "ATTACHMENTS-BOUNDARY",
+          "expected": "Scanner errors, signed URL expiry and partial delivery"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/ProviderAttachmentGatewayContractTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/ProviderAttachmentGatewayContractTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackOutboundAttachmentServiceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackOutboundAttachmentServiceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackProviderAttachmentGatewayTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackProviderAttachmentGatewayTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentFilePolicyTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentFilePolicyTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDeliveryErrorClassifierTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDeliveryErrorClassifierTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentMetadataIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentMetadataIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentObjectStorageIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentObjectStorageIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentScanStateIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentScanStateIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/ClamAvAttachmentMalwareScannerTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/ClamAvAttachmentMalwareScannerTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/DefaultAttachmentSecurityServiceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/DefaultAttachmentSecurityServiceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/inbox-api-adapter.test.ts",
+          "identifier": "apps/web/tests/unit/inbox-api-adapter.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFileReferenceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFileReferenceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "NOT TESTED",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "RETRY",
@@ -355,7 +1801,100 @@
         "apps/web/tests/fullstack/workflows.spec.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageRetryPolicyTests.java"
       ],
-      "gap": "No real customer messages or existing queues are replayed by tests"
+      "gap": "No real customer messages or existing queues are replayed by tests",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/messaging",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "RETRY-POSITIVE",
+          "expected": "Durable idempotent retries and fenced work claims"
+        },
+        "negative": {
+          "id": "RETRY-NEGATIVE",
+          "expected": "Permanent failure and expired lease cannot reapply effects"
+        },
+        "boundary": {
+          "id": "RETRY-BOUNDARY",
+          "expected": "Restart, duplicates, rate limits and ambiguous receipts"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/IdempotentCommandExecutorIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/IdempotentCommandExecutorIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/InboundOutboxFoundationIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/InboundOutboxFoundationIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/OutboxClaimFencingIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/OutboxClaimFencingIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryPolicyTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryPolicyTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundWorkerIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackInboundWorkerIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackMessageDeliveryProviderTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackMessageDeliveryProviderTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "scope": "Shared suite reference; feature-specific scenario coverage remains to be reviewed.",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageRetryPolicyTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageRetryPolicyTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "NOT TESTED",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "PERSISTENCE",
@@ -373,7 +1912,92 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/testing/PersistenceFixturesIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Backup/PITR/encryption/least-privilege runtime roles require deployment evidence"
+      "gap": "Backup/PITR/encryption/least-privilege runtime roles require deployment evidence",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "PERSISTENCE-POSITIVE",
+          "expected": "Flyway and durable PostgreSQL/outbox/object persistence"
+        },
+        "negative": {
+          "id": "PERSISTENCE-NEGATIVE",
+          "expected": "Invalid migration, schema mismatch and unsafe reset denial"
+        },
+        "boundary": {
+          "id": "PERSISTENCE-BOUNDARY",
+          "expected": "Restart, contention and N-1 additive upgrade"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/InfrastructureSmokeIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/InfrastructureSmokeIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/ParallelInfrastructureIsolationIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/ParallelInfrastructureIsolationIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresConcurrencyConventionsIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresConcurrencyConventionsIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/AuthenticationBudgetMigrationIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/AuthenticationBudgetMigrationIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentObjectStorageIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/storage/internal/AttachmentObjectStorageIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/testing/PersistenceFixturesIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/testing/PersistenceFixturesIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "AUDIT",
@@ -390,7 +2014,85 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/audit/AuditMetadataTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/audit/AuditSearchServiceTests.java"
       ],
-      "gap": "Full retention orchestration/hash-chain/DR contract remains incomplete; not claimed covered"
+      "gap": "Full retention orchestration/hash-chain/DR contract remains incomplete; not claimed covered",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/audit",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "AUDIT-POSITIVE",
+          "expected": "Attribution and retained outcome history"
+        },
+        "negative": {
+          "id": "AUDIT-NEGATIVE",
+          "expected": "Unauthorized audit/retention access"
+        },
+        "boundary": {
+          "id": "AUDIT-BOUNDARY",
+          "expected": "Duplicate outcomes and retention boundaries; full DR remains a gap"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/ApiProblemControllerAdviceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/ApiProblemControllerAdviceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/ApiProblemSecurityHandlersTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/ApiProblemSecurityHandlersTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/SensitiveDataRedactorTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/SensitiveDataRedactorTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/StructuredLoggingConfigurationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/StructuredLoggingConfigurationTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/audit/AuditEventSchemaIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/audit/AuditEventSchemaIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/audit/AuditMetadataTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/audit/AuditMetadataTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/audit/AuditSearchServiceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/audit/AuditSearchServiceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "BROWSER",
@@ -406,7 +2108,79 @@
         "apps/web/tests/unit/http-transport.test.ts",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "API-intercepted UI tests remain separate from real-stack E2E"
+      "gap": "API-intercepted UI tests remain separate from real-stack E2E",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox",
+        "apps/web/components/layout"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "BROWSER-POSITIVE",
+          "expected": "Accessible desktop/mobile navigation and state preservation"
+        },
+        "negative": {
+          "id": "BROWSER-NEGATIVE",
+          "expected": "XSS/CSP and cross-origin protection"
+        },
+        "boundary": {
+          "id": "BROWSER-BOUNDARY",
+          "expected": "Empty/loading/error, long content and responsive overflow"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/web/tests/e2e/application.spec.ts",
+          "identifier": "apps/web/tests/e2e/application.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/e2e/security.spec.ts",
+          "identifier": "apps/web/tests/e2e/security.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/browser-security.test.ts",
+          "identifier": "apps/web/tests/unit/browser-security.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/external-message.test.ts",
+          "identifier": "apps/web/tests/unit/external-message.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/http-transport.test.ts",
+          "identifier": "apps/web/tests/unit/http-transport.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "scope": "Shared suite reference; feature-specific scenario coverage remains to be reviewed.",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "API",
@@ -419,7 +2193,50 @@
         "apps/web/tests/unit/api-channel-adapter.test.ts",
         "scripts/openapi/openapi.test.mjs"
       ],
-      "gap": "Success/invalid-input/owner matrices must be reviewed by route; denial counts alone are not full success coverage"
+      "gap": "Success/invalid-input/owner matrices must be reviewed by route; denial counts alone are not full success coverage",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox",
+        "apps/api/openapi/v1"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "API-POSITIVE",
+          "expected": "Runtime mappings and deterministic OpenAPI/client roundtrip"
+        },
+        "negative": {
+          "id": "API-NEGATIVE",
+          "expected": "Anonymous/permission/invalid request denial"
+        },
+        "boundary": {
+          "id": "API-BOUNDARY",
+          "expected": "Contract compatibility, cursor and idempotency boundaries"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/testing/ApiSurfaceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/testing/ApiSurfaceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "scripts/openapi/openapi.test.mjs",
+          "identifier": "scripts/openapi/openapi.test.mjs",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "NOT TESTED",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "CI",
@@ -436,7 +2253,85 @@
         "scripts/tests/ci_workflow.test.mjs",
         "scripts/tests/test_changed_coverage.py"
       ],
-      "gap": "Production deployment approval remains protected; no automatic merge activation"
+      "gap": "Production deployment approval remains protected; no automatic merge activation",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox",
+        ".github/workflows"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "CI-POSITIVE",
+          "expected": "Exact-head eight-job fail-closed gate"
+        },
+        "negative": {
+          "id": "CI-NEGATIVE",
+          "expected": "Skipped/missing/cancelled jobs and security failures block"
+        },
+        "boundary": {
+          "id": "CI-BOUNDARY",
+          "expected": "Push/PR/merge-group parity and first-branch validation base"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "scripts/tests/ci_gate.test.mjs",
+          "identifier": "scripts/tests/ci_gate.test.mjs",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        },
+        {
+          "source": "scripts/tests/ci_merge.test.mjs",
+          "identifier": "scripts/tests/ci_merge.test.mjs",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        },
+        {
+          "source": "scripts/tests/delete_merged_branch.test.mjs",
+          "identifier": "scripts/tests/delete_merged_branch.test.mjs",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        },
+        {
+          "source": "scripts/tests/prune_merged_branches.test.mjs",
+          "identifier": "scripts/tests/prune_merged_branches.test.mjs",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        },
+        {
+          "source": "scripts/tests/test_orchestrator_policy.py",
+          "identifier": "scripts/tests/test_orchestrator_policy.py",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        },
+        {
+          "source": "scripts/tests/ci_workflow.test.mjs",
+          "identifier": "scripts/tests/ci_workflow.test.mjs",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        },
+        {
+          "source": "scripts/tests/test_changed_coverage.py",
+          "identifier": "scripts/tests/test_changed_coverage.py",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "PROVIDERS",
@@ -465,7 +2360,169 @@
         "apps/web/tests/unit/inbox-api-adapter.test.ts",
         "apps/web/tests/e2e/application.spec.ts"
       ],
-      "gap": "Teams text and attachment transfer have synthetic regressions; live permission/recipient acceptance is tracked in the technical audit. Group-chat live acceptance, recovery and full installation lifecycle remain outstanding."
+      "gap": "Teams text and attachment transfer have synthetic regressions; live permission/recipient acceptance is tracked in the technical audit. Group-chat live acceptance, recovery and full installation lifecycle remain outstanding.",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/provider",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "PROVIDERS-POSITIVE",
+          "expected": "Supported Slack/Teams/Telegram boundaries"
+        },
+        "negative": {
+          "id": "PROVIDERS-NEGATIVE",
+          "expected": "Unsupported channel types and invented provider targets rejected"
+        },
+        "boundary": {
+          "id": "PROVIDERS-BOUNDARY",
+          "expected": "Pagination, missing IDs, auth expiry and capability limitations"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/ProviderAttachmentGatewayContractTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/ProviderAttachmentGatewayContractTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackProviderAttachmentGatewayTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackProviderAttachmentGatewayTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramChatCaseMappingIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramChatCaseMappingIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramTopicCaseMappingIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramTopicCaseMappingIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramWebhookIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/telegram/internal/TelegramWebhookIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsInboxIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsInboxIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsSecurityTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsSecurityTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsActivityTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsActivityTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsConnectorClientTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsConnectorClientTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsWebhookIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsWebhookIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsMessageDeliveryProviderTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsMessageDeliveryProviderTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "scripts/tests/test_teams_development_contract.py",
+          "identifier": "scripts/tests/test_teams_development_contract.py",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        },
+        {
+          "source": "scripts/tests/test_teams_package.py",
+          "identifier": "scripts/tests/test_teams_package.py",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsSigningKeysTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsSigningKeysTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsFilesHttpClientTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsFilesHttpClientTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsOutboundAttachmentsTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsOutboundAttachmentsTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsFilesAdminControllerTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsFilesAdminControllerTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/inbox-api-adapter.test.ts",
+          "identifier": "apps/web/tests/unit/inbox-api-adapter.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/e2e/application.spec.ts",
+          "identifier": "apps/web/tests/e2e/application.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "I18N",
@@ -478,7 +2535,57 @@
         "apps/web/tests/e2e/application.spec.ts",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Preference is browser-specific, not synchronized across devices"
+      "gap": "Preference is browser-specific, not synchronized across devices",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox",
+        "apps/web/lib/i18n"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "I18N-POSITIVE",
+          "expected": "Immediate EN/PL switching without translating user content"
+        },
+        "negative": {
+          "id": "I18N-NEGATIVE",
+          "expected": "No stale cross-account language"
+        },
+        "boundary": {
+          "id": "I18N-BOUNDARY",
+          "expected": "Reload, mobile, dates and both themes"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/web/tests/unit/i18n.test.tsx",
+          "identifier": "apps/web/tests/unit/i18n.test.tsx",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/e2e/application.spec.ts",
+          "identifier": "apps/web/tests/e2e/application.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "FAIL",
+        "note": "EN/PL and themes persist; SLA example received timestamp remains Polish in English."
+      }
     },
     {
       "id": "BULK",
@@ -494,7 +2601,79 @@
         "apps/web/tests/fullstack/workflows.spec.ts",
         "apps/web/tests/unit/bulk-selection.test.ts"
       ],
-      "gap": "Select all matching enumerates at most 1000 explicit IDs; larger result sets require narrower filters"
+      "gap": "Select all matching enumerates at most 1000 explicit IDs; larger result sets require narrower filters",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/workflow",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "BULK-POSITIVE",
+          "expected": "Explicit scoped selection and per-item authorized outcomes"
+        },
+        "negative": {
+          "id": "BULK-NEGATIVE",
+          "expected": "No force-resolve escalation or hidden selection truncation"
+        },
+        "boundary": {
+          "id": "BULK-BOUNDARY",
+          "expected": "1000 limit, filter/platform changes and lost-response replay"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseBulkServiceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/bulk-inbox-adapter.test.ts",
+          "identifier": "apps/web/tests/unit/bulk-inbox-adapter.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/e2e/application.spec.ts",
+          "identifier": "apps/web/tests/e2e/application.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "scope": "Shared suite reference; feature-specific scenario coverage remains to be reviewed.",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/bulk-selection.test.ts",
+          "identifier": "apps/web/tests/unit/bulk-selection.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "NOT TESTED",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "DIRECT_MESSAGES",
@@ -506,7 +2685,50 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/DirectMessageIntegrationTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts"
       ],
-      "gap": "Single deployment and text-only scope."
+      "gap": "Single deployment and text-only scope.",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/messaging",
+        "apps/web/app/direct-messages"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "DIRECT_MESSAGES-POSITIVE",
+          "expected": "Private text, unread and realtime for participants"
+        },
+        "negative": {
+          "id": "DIRECT_MESSAGES-NEGATIVE",
+          "expected": "Unrelated administrator and inactive recipient denied"
+        },
+        "boundary": {
+          "id": "DIRECT_MESSAGES-BOUNDARY",
+          "expected": "Reconnect, pagination and duplicate sends"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/DirectMessageIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/DirectMessageIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "Empty state and navigation read; no dedicated second test account for live sending."
+      }
     },
     {
       "id": "STAGING",
@@ -519,7 +2741,43 @@
         "infra/staging/test_compose.py",
         "infra/staging/smoke.py"
       ],
-      "gap": "First VPS application deployment and public ACME acceptance wait for merge; small staging has no production load/HA/off-host DR acceptance"
+      "gap": "First VPS application deployment and public ACME acceptance wait for merge; small staging has no production load/HA/off-host DR acceptance",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox",
+        "infra/staging"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "STAGING-POSITIVE",
+          "expected": "Verified immutable revision, health and safe read-only smoke"
+        },
+        "negative": {
+          "id": "STAGING-NEGATIVE",
+          "expected": "Bad revision, missing checks and public actuator exposure denied"
+        },
+        "boundary": {
+          "id": "STAGING-BOUNDARY",
+          "expected": "First bootstrap versus later releases; no automatic DB rollback"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "scripts/tests/test_staging_deployment.py",
+          "identifier": "scripts/tests/test_staging_deployment.py",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "HISTORY_RECOVERY",
@@ -537,7 +2795,92 @@
         "apps/web/tests/e2e/application.spec.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/HttpSlackHistoryClientTests.java"
       ],
-      "gap": "Real Slack/Teams resync sandbox acceptance NOT RUN; no live credentials or tenant permission changes performed"
+      "gap": "Real Slack/Teams resync sandbox acceptance NOT RUN; no live credentials or tenant permission changes performed",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/provider",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "HISTORY_RECOVERY-POSITIVE",
+          "expected": "Opt-in durable paged manual/scheduled ingestion"
+        },
+        "negative": {
+          "id": "HISTORY_RECOVERY-NEGATIVE",
+          "expected": "Wrong channel/team and stale worker rejected"
+        },
+        "boundary": {
+          "id": "HISTORY_RECOVERY-BOUNDARY",
+          "expected": "Original timestamp versus ingestion anchor, duplicates and outage recovery"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/internal/HistoryRecoveryIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/internal/HistoryRecoveryIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/internal/HistoryRecoveryControllerTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/internal/HistoryRecoveryControllerTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/internal/HistoryRecoveryWorkerTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/internal/HistoryRecoveryWorkerTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackHistoryRecoveryAdapterTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackHistoryRecoveryAdapterTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsHistoryRecoveryAdapterTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsHistoryRecoveryAdapterTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/integration-resync.test.ts",
+          "identifier": "apps/web/tests/unit/integration-resync.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/e2e/application.spec.ts",
+          "identifier": "apps/web/tests/e2e/application.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/HttpSlackHistoryClientTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/HttpSlackHistoryClientTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "NOT TESTED",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "PROVIDER_ONBOARDING",
@@ -561,7 +2904,135 @@
         "apps/web/tests/fullstack/workflows.spec.ts",
         "scripts/tests/test_environment_contract.py"
       ],
-      "gap": "Live staging end-to-end acceptance pending selected-team installation with the schema 1.25/tier1 package and gated deployment; automated ZIP and private/shared rejection coverage tracked in PROVIDER_ONBOARDING_VALIDATION.md"
+      "gap": "Live staging end-to-end acceptance pending selected-team installation with the schema 1.25/tier1 package and gated deployment; automated ZIP and private/shared rejection coverage tracked in PROVIDER_ONBOARDING_VALIDATION.md",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/provider",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "PROVIDER_ONBOARDING-POSITIVE",
+          "expected": "Selected-team setup and automatic discovery preserve mappings"
+        },
+        "negative": {
+          "id": "PROVIDER_ONBOARDING-NEGATIVE",
+          "expected": "Private/shared/wrong team and credential exposure rejected"
+        },
+        "boundary": {
+          "id": "PROVIDER_ONBOARDING-BOUNDARY",
+          "expected": "First event, lifecycle retry, rate limit and manifest constraints"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/ConnectionOnboardingIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/ConnectionOnboardingIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/TeamIdentifierTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/integration/internal/TeamIdentifierTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDiscoveryIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDiscoveryIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsDiscoveryIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsDiscoveryIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsDirectoryClientTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsDirectoryClientTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsTeamMembershipTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsTeamMembershipTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsWebhookIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsWebhookIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/customer/internal/CustomerIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/customer/internal/CustomerIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/provider-onboarding.test.ts",
+          "identifier": "apps/web/tests/unit/provider-onboarding.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/e2e/application.spec.ts",
+          "identifier": "apps/web/tests/e2e/application.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDiscoveryRateLimitTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackDiscoveryRateLimitTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "scope": "Shared suite reference; feature-specific scenario coverage remains to be reviewed.",
+          "kind": "suite"
+        },
+        {
+          "source": "scripts/tests/test_environment_contract.py",
+          "identifier": "scripts/tests/test_environment_contract.py",
+          "layer": "configuration",
+          "ci": "configuration",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "NOT TESTED",
+        "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
+      }
     },
     {
       "id": "INBOX_PREFERENCES",
@@ -578,7 +3049,99 @@
         "apps/web/tests/fullstack/workflows.spec.ts",
         "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/ResolvedCaseBatchReadServiceIntegrationTests.java"
       ],
-      "gap": "Live deployed acceptance pending PR deployment; automated controlled providers and independent sessions cover the contract. Drafts are in memory and do not survive reload."
+      "gap": "Live deployed acceptance pending PR deployment; automated controlled providers and independent sessions cover the contract. Drafts are in memory and do not survive reload.",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/identity",
+        "apps/web/app/preferences"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "INBOX_PREFERENCES-POSITIVE",
+          "expected": "Persisted per-account unified/provider scopes and counters"
+        },
+        "negative": {
+          "id": "INBOX_PREFERENCES-NEGATIVE",
+          "expected": "No contradictory filters or stale cross-platform actions"
+        },
+        "boundary": {
+          "id": "INBOX_PREFERENCES-BOUNDARY",
+          "expected": "Reload, two accounts, inactive events and draft preservation"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/InboxPreferencesIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/InboxPreferencesIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/ApplicationRealtimeListenerTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/ApplicationRealtimeListenerTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/inbox-preferences.test.tsx",
+          "identifier": "apps/web/tests/unit/inbox-preferences.test.tsx",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/realtime-query-invalidation.test.ts",
+          "identifier": "apps/web/tests/unit/realtime-query-invalidation.test.ts",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/e2e/application.spec.ts",
+          "identifier": "apps/web/tests/e2e/application.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/ResolvedCaseBatchReadServiceIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/ResolvedCaseBatchReadServiceIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "Both modes and reload persistence observed; Slack 5/Teams 16 scoped counts; restored unified. Account isolation and missed-event cases remain controlled-only."
+      }
     },
     {
       "id": "MESSAGE_MUTATIONS",
@@ -596,7 +3159,113 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFilteringInboundIntegrationTests.java",
         "apps/web/tests/e2e/application.spec.ts"
       ],
-      "gap": "Real Slack and Teams tenant mutation validation NOT RUN; no live credentials used. Missing Teams target IDs and multi-resource complete deletion are intentionally unavailable; uncertain outcomes need provider confirmation."
+      "gap": "Real Slack and Teams tenant mutation validation NOT RUN; no live credentials used. Missing Teams target IDs and multi-resource complete deletion are intentionally unavailable; uncertain outcomes need provider confirmation.",
+      "sources": [
+        "docs/PRODUCT_CONTRACT.md",
+        "apps/api/src/main/java/com/unifiedsupportinbox/messaging",
+        "apps/web/components/cases"
+      ],
+      "scenarios": {
+        "positive": {
+          "id": "MESSAGE_MUTATIONS-POSITIVE",
+          "expected": "Author-only provider-confirmed edits/deletes and retained history"
+        },
+        "negative": {
+          "id": "MESSAGE_MUTATIONS-NEGATIVE",
+          "expected": "Customer/other-author/unsupported target rejected"
+        },
+        "boundary": {
+          "id": "MESSAGE_MUTATIONS-BOUNDARY",
+          "expected": "Missing IDs, ambiguous receipts, attachments and unchanged SLA/workflow"
+        }
+      },
+      "testIdentifiers": [
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageMutationIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageMutationIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackMutationHttpTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackMutationHttpTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsMutationHttpTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsMutationHttpTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/unit/message-mutations.test.tsx",
+          "identifier": "apps/web/tests/unit/message-mutations.test.tsx",
+          "layer": "frontend",
+          "ci": "web",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/fullstack/workflows.spec.ts",
+          "identifier": "apps/web/tests/fullstack/workflows.spec.ts",
+          "layer": "fullstack",
+          "ci": "fullstack",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsMutationCapabilityTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsMutationCapabilityTests.java",
+          "layer": "backend",
+          "ci": "backend",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsInboxIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/teams/internal/TeamsInboxIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFilteringInboundIntegrationTests.java",
+          "identifier": "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackFilteringInboundIntegrationTests.java",
+          "layer": "integration",
+          "ci": "integration",
+          "kind": "suite"
+        },
+        {
+          "source": "apps/web/tests/e2e/application.spec.ts",
+          "identifier": "apps/web/tests/e2e/application.spec.ts",
+          "layer": "browser",
+          "ci": "web",
+          "kind": "suite"
+        }
+      ],
+      "verification": {
+        "automated": "PASS",
+        "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+        "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+        "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
+        "live": "PARTIAL",
+        "note": "Own Slack text send/edit/copy/delete verified in USI and provider UI; Teams live confirmation remains pending."
+      }
     }
-  ]
+  ],
+  "schemaVersion": 2,
+  "auditBaseline": {
+    "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
+    "ciRun": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
+    "date": "2026-11-28",
+    "scope": "Mapped automated suites passed; feature completeness and live acceptance are separate."
+  }
 }
