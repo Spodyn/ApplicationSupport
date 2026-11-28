@@ -131,7 +131,21 @@ public final class FullStackTestServer {
                         true, null, "{}"));
                 response = Map.of("id", renamed.id(), "name", renamed.name());
             } else if (path.equals("/expire-deadline") && exchange.getRequestMethod().equals("POST")) {
-                UUID caseId = UUID.fromString(JSON.readTree(exchange.getRequestBody()).path("caseId").asText());
+                var input = JSON.readTree(exchange.getRequestBody());
+                UUID caseId = UUID.fromString(input.path("caseId").asText());
+                if (input.path("closeBusinessCalendar").asBoolean(false)) {
+                    // Per-fixture closures only. Never change the shared policy or server clock.
+                    fixtureDatabase.update("""
+                            UPDATE case_operational_deadlines SET schedule = jsonb_build_object(
+                              'id', id, 'timezone', 'UTC', 'active', true,
+                              'intervals', jsonb_build_array(jsonb_build_object('dayOfWeek', 1, 'start', '09:00', 'end', '17:00')),
+                              'exceptions', jsonb_build_array(
+                                jsonb_build_object('date', (now() AT TIME ZONE 'UTC')::date, 'type', 'CLOSED'),
+                                jsonb_build_object('date', (now() AT TIME ZONE 'UTC')::date + 1, 'type', 'CLOSED')),
+                              'updatedBy', 'test', 'updatedAt', now())
+                            WHERE case_id=? AND ended_at IS NULL AND kind IN ('FRT','NRT')
+                            """, caseId);
+                }
                 response = Map.of("changed", expireDeadline(caseId));
             } else if (path.equals("/breach") && exchange.getRequestMethod().equals("POST")) {
                 UUID caseId = UUID.fromString(JSON.readTree(exchange.getRequestBody()).path("caseId").asText());

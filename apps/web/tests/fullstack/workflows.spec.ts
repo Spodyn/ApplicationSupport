@@ -386,6 +386,54 @@ test('real login → customer mapping → signed intake → Claim → Reply → 
   await expect(page).toHaveURL(/\/login$/)
 })
 
+for (const kind of ['FRT', 'NRT']) {
+  test(`${kind} overdue clock keeps ticking through a closed business calendar on all inbox surfaces`, async ({page}) => {
+    await page.setViewportSize({width: 1440, height: 900})
+    await page.clock.install()
+    await login(page, undefined, true)
+    const marker = `Closed-calendar ${kind} ${randomUUID().slice(0, 8)}`
+    const source = await inbound(page, marker)
+    const card = page.getByRole('button').filter({hasText: marker})
+    await card.click()
+    const caseId = (await card.getAttribute('data-case-id'))!
+    const path = '/api/v1/cases/' + caseId
+    if (kind === 'NRT') {
+      expect((await command(page, path + '/claim', {})).status()).toBe(200)
+      const queued = await command(page, path + '/messages', {body: 'Synthetic first response'})
+      expect(queued.status()).toBe(202)
+      const messageId = (await queued.json()).messageId
+      await expect.poll(async () => (await (await page.request.get(path + '/messages')).json()).items
+        .find((message: {id: string}) => message.id === messageId)?.deliveryStatus).toBe('SENT')
+      await inbound(page, marker + ' next response', source.ts)
+      // Provider HTTP acceptance precedes durable intake. Expire the established NRT,
+      // rather than the follow-up that this incoming message is about to replace.
+      await expect.poll(async () => (await (await page.request.get(path)).json()).operationalDeadline?.kind).toBe('NRT')
+    }
+    expect(await (await page.request.post('/__test/expire-deadline', {data: {caseId, closeBusinessCalendar: true}})).json())
+      .toEqual({changed: 1})
+    const read = async () => (await (await page.request.get(path)).json()).operationalDeadline
+    await expect.poll(async () => (await read()).state).toBe('BREACHED')
+    const deadline = await read()
+    expect(deadline.kind).toBe(kind)
+    expect(deadline.businessIntervals).toEqual([])
+    // REST timestamps retain PostgreSQL microseconds; Date.parse truncates to milliseconds.
+    expect(Math.abs(deadline.remainingMillis - (Date.parse(deadline.dueAt) - Date.parse(deadline.observedAt))))
+      .toBeLessThanOrEqual(1)
+    const badges = [page.locator(`button[data-case-id="${caseId}"]`),
+      page.getByRole('region', {name: /^Conversation /}), page.getByRole('complementary', {name: 'Case details'})]
+      .map(surface => surface.locator('[data-sla-countdown]'))
+    for (const badge of badges) await expect(badge).toContainText(kind)
+    for (const badge of badges) await expect(badge).toContainText('overdue')
+    await page.waitForLoadState('networkidle')
+    const before = await Promise.all(badges.map(badge => badge.textContent()))
+    const requests: string[] = []
+    page.on('request', event => { if (event.url().includes('/api/v1/')) requests.push(event.url()) })
+    await page.clock.runFor(2_000)
+    for (const [index, badge] of badges.entries()) await expect(badge).not.toHaveText(before[index]!)
+    expect(requests).toHaveLength(0)
+  })
+}
+
 test('shared countdown changes without requests and follow-up expiry reaches only the owner', async ({page, baseURL}) => {
   await page.setViewportSize({width: 1440, height: 900})
   await page.clock.install()

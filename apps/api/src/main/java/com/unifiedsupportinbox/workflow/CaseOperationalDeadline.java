@@ -28,8 +28,9 @@ record CaseOperationalDeadline(UUID id, String kind, String state, Instant start
         long remaining = Duration.between(observed, due).toMillis();
         if (snapshot != null) {
             var schedule = mapper.readValue(snapshot, BusinessHoursScheduleView.class);
-            remaining = observed.isAfter(due) ? -BUSINESS_TIME.measure(schedule, due, observed).toMillis()
-                    : BUSINESS_TIME.measure(schedule, observed, due).toMillis();
+            if (observed.isBefore(due)) {
+                remaining = BUSINESS_TIME.measure(schedule, observed, due).toMillis();
+            }
             intervals = BUSINESS_TIME.intervals(schedule, observed, validUntil);
         }
         return new CaseOperationalDeadline(id, rs.getString("operational_kind"), rs.getString("operational_state"),

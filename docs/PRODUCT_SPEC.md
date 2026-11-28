@@ -138,6 +138,8 @@ Three core measurements use business time:
 
 Historical FRT and NRT preserve their original response-cycle anchors and outcomes. The operational clock starts or restarts on every accepted customer message and uses 15 business minutes for FRT and 30 for NRT by default. Provider-confirmed human delivery switches it to a configurable follow-up clock. The Case snapshots the response policy and business calendar. Response clocks warn with 25% remaining. Overdue responses and due follow-ups create distinct internal reminders. Resolution and Ignore end the active deadline. Reports retain unclaimed and in-progress data and provide elapsed and working TTR where the calendar is known.
 
+The operational response countdown pauses outside business hours until its deadline. After that deadline, visible overdue duration grows in elapsed time even during closures. This presentation does not change historical business-time measurements or support/follow-up breach classification (owner clarification, 2026-11-28).
+
 ## 17. Business hours and OOO
 
 One IANA organization timezone per deployment. Bootstrap default is UTC; production explicitly configures intended timezone. Default schedule is Mon-Fri 09:00-17:00, OOO OFF.

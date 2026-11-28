@@ -96,6 +96,7 @@ The grouped owner requests of 2026-11-10 and 2026-11-12 define the interface and
 
 - DEC-CASE-WORKFLOW-COMMANDS-001: administrative undo applies to ordinary and forced resolution. Public replies enter owned waiting after delivery. The shared provider-context lock protects active generation uniqueness.
 - DEC-OPERATIONAL-SLA-001: each accepted public message establishes an operational deadline. Historical FRT, NRT, TTR and breach records retain their original rules. Waiting expiry creates an internal follow-up reminder.
+- DEC-OPERATIONAL-SLA-OVERDUE-001 (owner clarification, 2026-11-28): operational FRT/NRT remaining time pauses outside snapshotted business hours; once `dueAt` is reached, overdue duration grows in elapsed time during all closures. Historical business-time performance measurements remain unchanged.
 - DEC-CASE-CONSECUTIVE-REPLIES-001 supersedes DEC-ASK-001. The owner can reply, add notes and resolve in OPEN and ASKED. Provider-confirmed public replies retain ownership. Further replies retain ownership and follow DEC-OPERATIONAL-SLA-001 for their deadline. An eligible agent can explicitly claim historical unassigned waiting. The legacy Ask endpoint is deprecated.
 
 - TECH-TEAMS-SELECTED-FILES-001 (owner approval, 2026-11-19): the sandbox bot receives Graph application `Sites.Selected` and `write` only on USISandbox. A separate transient administrator session assigns the site grant; the bot receives no tenant-wide file access. See [Integration attachment boundaries](INTEGRATIONS.md#teams-attachment-transfer-owner-approved-2026-11-19).
