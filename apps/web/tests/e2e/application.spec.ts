@@ -758,6 +758,9 @@ test("current owner uploads an attachment and sends it with the persisted messag
   const conversation = page.getByRole("region", { name: "Rozmowa Slack Test Customer" })
   await conversation.getByRole("button", { name: "Przejmij" }).click()
 
+  // Claim finishes asynchronously through authoritative detail refetch. Unlike a
+  // real file-picker interaction, setInputFiles can target a disabled input.
+  await expect(conversation.locator('input[type="file"]')).toBeEnabled()
   await conversation.locator('input[type="file"]').setInputFiles({
     name: "evidence.txt",
     mimeType: "text/plain",

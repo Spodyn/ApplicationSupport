@@ -131,3 +131,14 @@ Stan wdrożenia tych poprawek: NOT DEPLOYED przez ten audyt. PR-y pozostają do 
 5. Odczytane formularze wspólnej konfiguracji nie oznaczają pełnej live akceptacji zapisów, konfliktów, OOO i wszystkich granic kalendarza. Te ograniczenia pozostają w tabelach; istniejącego PR #145 nie duplikowano.
 
 Nie jest to potwierdzenie gotowości produkcyjnej ani deklaracja braku pozostałych usterek.
+
+### Końcowa kontrola powtarzalności
+
+Trzy lokalne, niezależne pełne stosy na kodzie `880f4dc` zakończyły się
+28/28 każdy (84/84). Extended CI [46185464871](https://github.com/Spodyn/ApplicationSupport/actions/runs/46185464871)
+zakończyło się PASS, łącznie z trzema powtórzeniami oraz mutation smoke.
+Następny push CI wykrył odrębny wyścig testu UI załącznika: ślad Playwright
+potwierdził `setInputFiles` na jeszcze wyłączonym polu przed zakończeniem
+refetch uprawnień po Claim. Dodano asercję gotowości pola przed wyborem pliku;
+wszystkie asercje uploadu i zapisu zachowano. Dziesięć powtórzeń scenariusza
+PASS. Wynik starszego czerwonego push nie zastępuje wymaganych bramek nowego HEAD.
