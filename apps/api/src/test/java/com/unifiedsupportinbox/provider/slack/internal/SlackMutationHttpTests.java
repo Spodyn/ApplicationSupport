@@ -41,6 +41,12 @@ class SlackMutationHttpTests {
             assertThat(body.path("ts").asText()).isEqualTo(target.providerMessageRef());
             assertThat(body.path("as_user").asBoolean()).isTrue();
             assertThat(body.path("text").asText()).isEqualTo("edited text");
+            assertThat(body.path("parse").asText()).isEqualTo("none");
+            assertThat(body.has("mrkdwn")).isFalse();
+            var plain=new MutationCommand(edit.operationId(),edit.messageId(),edit.integrationId(),edit.provider(),edit.externalChannelId(),"EDIT","literal *text*",MessageBodyFormat.PLAIN_TEXT,target);
+            assertThat(client.mutate(token,plain).outcome()).isEqualTo(MutationOutcome.CONFIRMED);
+            assertThat(json.readTree(captured.get()).path("parse").asText()).isEqualTo("full");
+            assertThat(json.readTree(captured.get()).path("link_names").asBoolean(true)).isFalse();
             assertThat(body.has("attachments")).isFalse();assertThat(body.has("files")).isFalse();
             assertThat(client.mutate(token,command("DELETE",target)).outcome()).isEqualTo(MutationOutcome.CONFIRMED);
             assertThat(path.get()).isEqualTo("/api/chat.delete");assertThat(json.readTree(captured.get()).has("text")).isFalse();

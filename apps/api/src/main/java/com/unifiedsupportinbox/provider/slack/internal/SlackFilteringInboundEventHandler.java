@@ -113,11 +113,12 @@ class SlackFilteringInboundEventHandler implements SlackInboundEventHandler {
         String sender=message.path("bot_id").asText(null);
         if(sender==null)sender=message.path("user").asText(null);
         String reference=deleted?event.path("deleted_ts").asText(message.path("ts").asText(null)):message.path("ts").asText(null);
+        if(reference==null||!reference.matches("[0-9]+\\.[0-9]+"))return;
         String timestamp=message.path("edited").path("ts").asText(event.path("event_ts").asText(""));
         if(!timestamp.matches("[0-9]{1,12}(\\.[0-9]{1,9})?"))return;
         var decimal=new java.math.BigDecimal(timestamp);
         var occurred=java.time.Instant.ofEpochSecond(decimal.longValue(),decimal.remainder(java.math.BigDecimal.ONE).movePointRight(9).longValue());
-        mutations.observe(com.unifiedsupportinbox.integration.IntegrationProvider.SLACK,inbound.integrationId(),channel,reference,sender,
+        mutations.observe(com.unifiedsupportinbox.integration.IntegrationProvider.SLACK,inbound.integrationId(),channel,channel,reference,sender,
                 message.path("text").asText(null),deleted,occurred);
     }
 

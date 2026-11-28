@@ -217,10 +217,15 @@ class MessageMutationService implements OutboundMutationCallbacks {
     }
 
     @Override @Transactional
-    public boolean observe(IntegrationProvider provider,UUID integration,String channel,String reference,String sender,String body,boolean deleted,Instant occurred) {
+    public boolean observe(IntegrationProvider provider,UUID integration,String channel,String conversation,String reference,String sender,String body,boolean deleted,Instant occurred) {
         if(reference==null || occurred==null)return false;
-        var matches=jdbc.query(SELECT+" WHERE c.provider=? AND c.integration_id=? AND c.external_conversation_id=? AND t.provider_message_ref=? AND (? OR t.sender_id=?) AND m.kind='SUPPORT' AND NOT m.inbound FOR UPDATE OF m",
-                this::map,provider.name(),integration,channel,reference,deleted,sender);
+        var matches=jdbc.query(SELECT+"""
+                 WHERE c.provider=? AND c.integration_id=? AND c.external_conversation_id=?
+                   AND COALESCE(t.conversation_id,c.external_conversation_id)=?
+                   AND (t.provider_message_ref=? OR (t.message_id IS NULL AND c.provider='SLACK' AND m.external_message_id=?))
+                   AND (? OR t.sender_id=? OR (t.message_id IS NULL AND c.provider='SLACK'))
+                   AND m.kind='SUPPORT' AND NOT m.inbound FOR UPDATE OF m
+                """,this::map,provider.name(),integration,channel,conversation,reference,reference,deleted,sender);
         for(Message row:matches) {
             if(row.deletedAt()!=null)return true;
             Operation op=active(row.id());

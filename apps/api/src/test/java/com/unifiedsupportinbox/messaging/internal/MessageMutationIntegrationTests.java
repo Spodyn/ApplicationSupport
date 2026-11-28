@@ -94,7 +94,7 @@ class MessageMutationIntegrationTests {
         assertThat(mutations.views(List.of(f.message),f.actor).get(f.message).canRetry()).isFalse();
         clock.advance(Duration.ofDays(1));assertThat(mutations.redispatch()).isZero();worker.process(op);assertThat(provider.calls.get()).isEqualTo(2);
         assertThatThrownBy(()->mutations.retry(f.message,op,f.actor,"unsafe-retry")).isInstanceOf(ApiProblemException.class);
-        mutations.observe(IntegrationProvider.TEAMS,f.integration,"channel","provider-id","BOT_TEST","after",false,clock.instant());
+        mutations.observe(IntegrationProvider.TEAMS,f.integration,"channel","connector-conversation","provider-id","BOT_TEST","after",false,clock.instant());
         assertThat(state(op)).isEqualTo("CONFIRMED");assertThat(body(f)).isEqualTo("after");
     }
 
@@ -113,18 +113,39 @@ class MessageMutationIntegrationTests {
     void callbacksCannotDuplicateResurrectOrRollBackNewerEdits(IntegrationProvider type) {
         Fixture f=fixture(type);Instant originalEditTime=clock.instant();
         UUID op=id(mutations.request(f.message,f.actor,"callback","EDIT","after",0,"test"));
-        provider.before=()->mutations.observe(type,f.integration,"channel",reference(type),"BOT_TEST","after",false,clock.instant());
+        provider.before=()->mutations.observe(type,f.integration,"channel",conversation(type),reference(type),"BOT_TEST","after",false,clock.instant());
         worker.process(op);assertThat(body(f)).isEqualTo("after");assertThat(state(op)).isEqualTo("CONFIRMED");
-        mutations.observe(type,f.integration,"channel",reference(type),"BOT_TEST","after",false,clock.instant());
+        mutations.observe(type,f.integration,"channel",conversation(type),reference(type),"BOT_TEST","after",false,clock.instant());
         assertThat(jdbc.queryForObject("SELECT mutation_revision FROM messages WHERE id=?",Long.class,f.message)).isEqualTo(1);
         provider.before=()->{};clock.advance(Duration.ofSeconds(1));
         UUID next=id(mutations.request(f.message,f.actor,"next","EDIT","newer",1,"test"));worker.process(next);
-        mutations.observe(type,f.integration,"channel",reference(type),"BOT_TEST","after",false,originalEditTime);
+        mutations.observe(type,f.integration,"channel",conversation(type),reference(type),"BOT_TEST","after",false,originalEditTime);
         assertThat(body(f)).isEqualTo("newer");
-        mutations.observe(type,f.integration,"channel",reference(type),"MODERATOR",null,true,clock.instant().plusSeconds(2));
+        mutations.observe(type,f.integration,"channel",conversation(type),reference(type),"MODERATOR",null,true,clock.instant().plusSeconds(2));
         assertThat(deleted(f)).isNotNull();
-        mutations.observe(type,f.integration,"channel",reference(type),"BOT_TEST","bad resurrection",false,clock.instant().plusSeconds(3));
+        mutations.observe(type,f.integration,"channel",conversation(type),reference(type),"BOT_TEST","bad resurrection",false,clock.instant().plusSeconds(3));
         assertThat(body(f)).isEqualTo("newer");assertThat(provider.calls.get()).isEqualTo(2);
+    }
+
+    @Test void historicalSlackIdentityCanReconcileAnUncertainMutationOnlyInItsOriginalConversation() {
+        Fixture f=fixture(IntegrationProvider.SLACK);jdbc.update("DELETE FROM message_mutation_targets WHERE message_id=?",f.message);
+        UUID op=id(mutations.request(f.message,f.actor,"legacy-target","EDIT","after",0,"test"));
+        provider.result=MutationResult.uncertain("SLACK_MUTATION_UNCONFIRMED");worker.process(op);clock.advance(Duration.ofSeconds(1));
+        assertThat(mutations.observe(IntegrationProvider.SLACK,f.integration,"channel","wrong-conversation",reference(IntegrationProvider.SLACK),"BOT_TEST","after",false,clock.instant())).isFalse();
+        assertThat(state(op)).isEqualTo("UNCERTAIN");assertThat(body(f)).isEqualTo("before");
+        assertThat(mutations.observe(IntegrationProvider.SLACK,f.integration,"channel","channel",reference(IntegrationProvider.SLACK),"BOT_TEST","after",false,clock.instant())).isTrue();
+        assertThat(state(op)).isEqualTo("CONFIRMED");assertThat(body(f)).isEqualTo("after");
+    }
+
+    @Test void callbackActivityIdentityCannotCrossConnectorConversationsInTheSameTeamsChannel() {
+        Fixture f=fixture(IntegrationProvider.TEAMS);
+        UUID otherCase=jdbc.queryForObject("INSERT INTO cases(customer_id,integration_id,channel_id,provider,external_conversation_id,external_thread_key,status,owner_user_id,claimed_at,waiting_until) SELECT customer_id,integration_id,channel_id,provider,external_conversation_id,'other-root',status,owner_user_id,claimed_at,waiting_until FROM cases WHERE id=? RETURNING id",UUID.class,f.caseId);
+        UUID otherMessage=jdbc.queryForObject("INSERT INTO messages(case_id,external_message_id,kind,author_user_id,body,inbound,delivery_status,correlation_id) VALUES (?,'provider-id','SUPPORT',?,'other conversation',false,'SENT','other-conversation') RETURNING id",UUID.class,otherCase,f.actor);
+        jdbc.update("INSERT INTO message_mutation_targets(message_id,provider_message_ref,conversation_id,sender_id,service_url,context_type) VALUES (?,'provider-id','other-connector-conversation','BOT_TEST','https://smba.trafficmanager.net/emea/','standardChannel')",otherMessage);
+        mutations.observe(IntegrationProvider.TEAMS,f.integration,"channel","connector-conversation","provider-id","BOT_TEST","after",false,clock.instant());
+        assertThat(body(f)).isEqualTo("after");
+        assertThat(jdbc.queryForObject("SELECT body FROM messages WHERE id=?",String.class,otherMessage)).isEqualTo("other conversation");
+        assertThat(jdbc.queryForObject("SELECT mutation_revision FROM messages WHERE id=?",Long.class,otherMessage)).isZero();
     }
 
     @Test void genuinelyNewExternalEditCanReuseAnOlderBodyWithoutBeingMistakenForAnEcho() {
@@ -132,7 +153,7 @@ class MessageMutationIntegrationTests {
         worker.process(id(mutations.request(f.message,f.actor,"old-body","EDIT","after",0,"test")));
         clock.advance(Duration.ofSeconds(1));worker.process(id(mutations.request(f.message,f.actor,"new-body","EDIT","newer",1,"test")));
         clock.advance(Duration.ofSeconds(1));
-        mutations.observe(IntegrationProvider.SLACK,f.integration,"channel",reference(IntegrationProvider.SLACK),"BOT_TEST","after",false,clock.instant());
+        mutations.observe(IntegrationProvider.SLACK,f.integration,"channel","channel",reference(IntegrationProvider.SLACK),"BOT_TEST","after",false,clock.instant());
         assertThat(body(f)).isEqualTo("after");assertThat(provider.calls.get()).isEqualTo(2);
         assertThat(jdbc.queryForObject("SELECT mutation_revision FROM messages WHERE id=?",Long.class,f.message)).isEqualTo(3);
     }
@@ -144,7 +165,7 @@ class MessageMutationIntegrationTests {
         UUID second=id(mutations.request(f.message,f.actor,"second-body","EDIT","newer",1,"test"));worker.process(second);
         clock.advance(Duration.ofSeconds(1));
         UUID current=id(mutations.request(f.message,f.actor,"revert-body","EDIT","after",2,"test"));
-        provider.before=()->mutations.observe(IntegrationProvider.SLACK,f.integration,"channel",reference(IntegrationProvider.SLACK),"BOT_TEST","after",false,earlier);
+        provider.before=()->mutations.observe(IntegrationProvider.SLACK,f.integration,"channel","channel",reference(IntegrationProvider.SLACK),"BOT_TEST","after",false,earlier);
         provider.result=MutationResult.failed("SLACK_PERMISSION_DENIED");worker.process(current);
         assertThat(state(current)).isEqualTo("FAILED");assertThat(body(f)).isEqualTo("newer");
     }
@@ -152,14 +173,14 @@ class MessageMutationIntegrationTests {
     @Test void olderUnknownExternalEditCannotRollBackAConfirmedProviderMutation() {
         Fixture f=fixture(IntegrationProvider.SLACK);Instant earlier=clock.instant();clock.advance(Duration.ofSeconds(5));
         UUID op=id(mutations.request(f.message,f.actor,"confirmed-newer","EDIT","after",0,"test"));worker.process(op);
-        mutations.observe(IntegrationProvider.SLACK,f.integration,"channel",reference(IntegrationProvider.SLACK),"BOT_TEST","older external content",false,earlier);
+        mutations.observe(IntegrationProvider.SLACK,f.integration,"channel","channel",reference(IntegrationProvider.SLACK),"BOT_TEST","older external content",false,earlier);
         assertThat(body(f)).isEqualTo("after");assertThat(state(op)).isEqualTo("CONFIRMED");
     }
 
     @Test void deletionCallbackWinsAgainstAnInFlightEdit() {
         Fixture f=fixture(IntegrationProvider.SLACK);
         UUID op=id(mutations.request(f.message,f.actor,"race-delete","EDIT","after",0,"test"));
-        provider.before=()->mutations.observe(IntegrationProvider.SLACK,f.integration,"channel",reference(IntegrationProvider.SLACK),"BOT_TEST",null,true,clock.instant());
+        provider.before=()->mutations.observe(IntegrationProvider.SLACK,f.integration,"channel","channel",reference(IntegrationProvider.SLACK),"BOT_TEST",null,true,clock.instant());
         worker.process(op);assertThat(deleted(f)).isNotNull();assertThat(body(f)).isEqualTo("before");assertThat(state(op)).isEqualTo("FAILED");
     }
 
@@ -248,7 +269,7 @@ class MessageMutationIntegrationTests {
         UUID channel=jdbc.queryForObject("INSERT INTO channels(integration_id,external_channel_id,name,customer_id,grouping_strategy) VALUES (?,'channel',?,?,?) RETURNING id",UUID.class,integration,namespace,customer,type==IntegrationProvider.TEAMS?"TEAMS_ROOT_REPLIES":"SLACK_ROOT_THREAD");
         UUID caseId=jdbc.queryForObject("INSERT INTO cases(customer_id,integration_id,channel_id,provider,external_conversation_id,external_thread_key,status,owner_user_id,claimed_at,waiting_until) VALUES (?,?,?,?,'channel','root','WAITING_FOR_CUSTOMER',?,now(),now()+interval '1 day') RETURNING id",UUID.class,customer,integration,channel,type.name(),actor);
         UUID message=jdbc.queryForObject("INSERT INTO messages(case_id,external_message_id,external_thread_key,kind,author_user_id,body,inbound,delivery_status,correlation_id) VALUES (?,?,'root','SUPPORT',?,'before',false,'SENT','mutation-test') RETURNING id",UUID.class,caseId,reference(type),actor);
-        jdbc.update("INSERT INTO message_mutation_targets(message_id,provider_message_ref,conversation_id,sender_id,service_url,context_type,credential_ref) VALUES (?,?,'connector-conversation','BOT_TEST','https://smba.trafficmanager.net/emea','standardChannel','test-only/mutations')",message,reference(type));
+        jdbc.update("INSERT INTO message_mutation_targets(message_id,provider_message_ref,conversation_id,sender_id,service_url,context_type,credential_ref) VALUES (?,?,?,'BOT_TEST','https://smba.trafficmanager.net/emea','standardChannel','test-only/mutations')",message,reference(type),conversation(type));
         context.getBean(CaseSlaInitializer.class).initialize(caseId,Instant.now());
         context.getBean(com.unifiedsupportinbox.sla.CaseSlaResponseRecorder.class).recordProviderAcceptedResponse(caseId,clock.instant());
         new org.springframework.transaction.support.TransactionTemplate(context.getBean(org.springframework.transaction.PlatformTransactionManager.class)).executeWithoutResult(ignored->{
@@ -258,6 +279,7 @@ class MessageMutationIntegrationTests {
         jdbc.update("INSERT INTO case_next_response_cycles(case_id,opening_message_id,started_at,warning_at,due_at,ended_at,outcome,response_message_id) VALUES (?,?,?::timestamptz,?::timestamptz,?::timestamptz,?::timestamptz,'RESPONDED',?)",caseId,UUID.randomUUID(),"2026-12-04T10:00:00Z","2026-12-04T10:22:30Z","2026-12-04T10:30:00Z","2026-12-04T11:00:00Z",message);
         return new Fixture(actor,integration,caseId,message);
     }
+    private static String conversation(IntegrationProvider type){return type==IntegrationProvider.SLACK?"channel":"connector-conversation";}
     private static String reference(IntegrationProvider type){return type==IntegrationProvider.SLACK?"1790000000.123456":"provider-id";}
     private static UUID user(String name){return jdbc.queryForObject("INSERT INTO users(email,display_name,role,active) VALUES (?,?,'USER',true) RETURNING id",UUID.class,name+UUID.randomUUID()+"@example.test",name);}
     private static UUID id(IdempotencyResult result){assertThat(result.status()).isEqualTo(202);return UUID.fromString(result.body().path("operationId").asText());}

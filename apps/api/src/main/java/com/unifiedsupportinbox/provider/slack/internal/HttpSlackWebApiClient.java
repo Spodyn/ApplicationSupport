@@ -112,7 +112,7 @@ class HttpSlackWebApiClient implements SlackWebApiClient {
         boolean edit=command.action().equals("EDIT");
         Map<String,Object> body=new LinkedHashMap<>();
         body.put("channel",target.conversationId()); body.put("ts",target.providerMessageRef()); body.put("as_user",true);
-        if(edit){body.put("text",command.body());body.put("mrkdwn",command.bodyFormat()==MessageBodyFormat.MARKDOWN);}
+        if(edit){body.put("text",command.body());body.put("parse",command.bodyFormat()==MessageBodyFormat.MARKDOWN?"none":"full");body.put("link_names",false);}
         try {
             var request=HttpRequest.newBuilder(chatPostMessageEndpoint.resolve(edit?"chat.update":"chat.delete"))
                     .timeout(REQUEST_TIMEOUT).header("Authorization","Bearer "+new String(token,StandardCharsets.UTF_8).strip())

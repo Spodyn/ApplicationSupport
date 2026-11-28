@@ -74,7 +74,7 @@ class TeamsInboundWorker {
                     outcomes.mark(id, InboundEventOutcomeStore.UNSUPPORTED_PROVIDER_EVENT); return;
                 }
                 if(activity.mutation()!=InboundMessageCommandHandler.Mutation.CREATE && mutations!=null
-                        && mutations.observe(IntegrationProvider.TEAMS,event.integrationId(),activity.channelId(),activity.id(),activity.author(),
+                        && mutations.observe(IntegrationProvider.TEAMS,event.integrationId(),activity.channelId(),activity.conversationId(),activity.id(),activity.author(),
                             activity.body(),activity.mutation()==InboundMessageCommandHandler.Mutation.DELETE,activity.occurredAt())) {
                     outcomes.mark(id,InboundEventOutcomeStore.IGNORED_BOT_MESSAGE);return;
                 }
