@@ -33,3 +33,7 @@ Existing owner services/data remain untouched in the original checkout. New real
 The additional inventory regression rejects removal of a required feature, an empty inventory and missing/out-of-repository test links; all four workflow/traceability tests also passed in an isolated Linux Node 22 container. Provider documentation distinguishes implemented Telegram inbound from absent outbound/Teams behavior.
 
 Final test review strengthened the service-worker assertion: it waits for an active controller, uses browser fetches (APIRequestContext bypasses workers), verifies the static cache exists, and checks that offline static assets work while authenticated API requests fail rather than returning cached data. All 12 repeated full-stack executions passed after this change, without retries. The production JAR was inspected and contains neither the test HTTP server nor regression fixture classes.
+
+## Unassigned customer detail — 2026-11-28
+
+Three browser regressions on main `1101c14749f88ebda7e0c395b451e80fccb01f64`: English unassigned FAIL with Polish fallback; Polish unassigned and literal mapped customer name PASS. The correction localizes only the unassigned sentinel. New browser scenarios belong to the mandatory web suite. No backend/OpenAPI/schema/history change. Actual staging observation is separate from controlled browser verification; post-deployment acceptance remains NOT TESTED until independent integration.
