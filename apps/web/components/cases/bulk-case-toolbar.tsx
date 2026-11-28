@@ -35,7 +35,8 @@ function rememberBulk(storageKey: string, operation: PendingBulk | null) {
   }
 }
 
-export function BulkCaseToolbar({ active, selected, references, clear, children }: {
+export function BulkCaseToolbar({ active, selected, references, clear, children, inboxScope = "unified:" }: {
+  inboxScope?: string
   active: boolean
   selected: string[]
   references: ReadonlyMap<string, string>
@@ -45,7 +46,7 @@ export function BulkCaseToolbar({ active, selected, references, clear, children 
   const t = useT()
   const mutation = useBulkInboxCases()
   const user = useCurrentUser()
-  const storageKey = "usi-bulk:" + user.data?.id
+  const storageKey = "usi-bulk:" + user.data?.id + (inboxScope === "unified:" ? "" : ":" + inboxScope)
   const [pending, setPending] = useState(() => recoverBulk(storageKey))
   const [action, setAction] = useState<InboxBulkInput["action"] | null>(pending?.action ?? null)
   const [target, setTarget] = useState(pending?.targetUserId ?? "")

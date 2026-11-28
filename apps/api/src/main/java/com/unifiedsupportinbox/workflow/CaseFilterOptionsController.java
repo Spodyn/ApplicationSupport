@@ -43,7 +43,10 @@ class CaseFilterOptionsController {
                   AND (valid_until IS NULL OR valid_until > CURRENT_TIMESTAMP)
                 ORDER BY display_name, id
                 """, (rs, row) -> new Option(rs.getObject("id", UUID.class), rs.getString("display_name")));
-        return new FilterOptions(customers, channels, owners, List.of("SLACK", "TEAMS", "TELEGRAM"));
+        // Include configured integrations even when disabled: their historical Cases remain accessible.
+        List<String> providers = jdbc.query("SELECT DISTINCT provider FROM integrations ORDER BY provider",
+                (rs, row) -> rs.getString("provider"));
+        return new FilterOptions(customers, channels, owners, providers);
     }
 
     record Option(UUID id, String name) {}

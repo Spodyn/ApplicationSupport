@@ -347,6 +347,37 @@ class CaseListServiceIntegrationTests {
         return OffsetDateTime.ofInstant(at, ZoneOffset.UTC);
     }
 
+    @Test
+    void providerScopeBindsCountersUnreadSearchPaginationAndCursorReplay() {
+        UUID agent = user(true);
+        String marker = "provider-scope-" + UUID.randomUUID();
+        UUID slack = caseId(marker + "-slack");
+        UUID teamsFirst = caseId(marker + "-teams-1");
+        UUID teamsSecond = caseId(marker + "-teams-2");
+        for (UUID id : java.util.List.of(teamsFirst, teamsSecond)) {
+            jdbc.update("UPDATE integrations SET provider='TEAMS' WHERE id=(SELECT integration_id FROM cases WHERE id=?)", id);
+            jdbc.update("UPDATE channels SET grouping_strategy='TEAMS_ROOT_REPLIES' WHERE id=(SELECT channel_id FROM cases WHERE id=?)", id);
+            jdbc.update("UPDATE cases SET provider='TEAMS' WHERE id=?", id);
+        }
+        message(slack, "Scoped needle");
+        message(teamsFirst, "Scoped needle first");
+        message(teamsSecond, "Scoped needle second");
+        jdbc.update("UPDATE cases SET last_activity_at=now()-interval '1 minute' WHERE id=?", teamsFirst);
+        var teams = new CaseListFilter(false, false, true, false, null, null, null, null, "TEAMS", null, marker);
+        var first = cases.list(agent, null, 1, CaseListView.ACTIVE, teams);
+        assertThat(first.items()).extracting(CaseListService.CaseListItem::id).containsExactly(teamsSecond);
+        assertThat(first.quickViewCounts()).isEqualTo(new CaseListService.QuickViewCounts(2, 0, 0, 2));
+        var next = cases.list(agent, first.nextCursor(), 1, CaseListView.ACTIVE, teams);
+        assertThat(next.items()).extracting(CaseListService.CaseListItem::id).containsExactly(teamsFirst);
+        assertThat(next.quickViewCounts()).isEqualTo(first.quickViewCounts());
+        assertThat(next.nextCursor()).isNull();
+        var slackFilter = new CaseListFilter(false, false, true, false, null, null, null, null, "SLACK", null, marker);
+        assertThat(cases.list(agent, null, 1, CaseListView.ACTIVE, slackFilter).quickViewCounts())
+                .isEqualTo(new CaseListService.QuickViewCounts(1, 0, 0, 1));
+        assertThatThrownBy(() -> cases.list(agent, first.nextCursor(), 1, CaseListView.ACTIVE, slackFilter))
+                .hasMessageContaining("cursor");
+    }
+
     private static UUID user(boolean active) {
         return jdbc.queryForObject("""
                 INSERT INTO users (email, display_name, role, active)

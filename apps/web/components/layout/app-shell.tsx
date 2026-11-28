@@ -1,6 +1,7 @@
 "use client"
 
 import { useT } from "@/lib/i18n/provider"
+import { InboxDraftProvider } from "@/components/cases/inbox-drafts"
 import { useEffect, useState, type ReactNode } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -70,6 +71,7 @@ function AuthenticatedAppShell({ children }: AppShellProps) {
 
   return (
     <LanguageScope accountId={currentUser.data.id}>
+    <InboxDraftProvider key={currentUser.data.id}>
     <RealtimeProvider accountId={currentUser.data.id}>
       <ShellProvider value={{ openMobileNav: () => setMobileNavOpen(true) }}>
         <div className="flex h-svh w-full overflow-hidden bg-background">
@@ -95,6 +97,7 @@ function AuthenticatedAppShell({ children }: AppShellProps) {
         </div>
       </ShellProvider>
     </RealtimeProvider>
+    </InboxDraftProvider>
     </LanguageScope>
   )
 }

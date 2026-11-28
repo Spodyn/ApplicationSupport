@@ -46,6 +46,14 @@ class ApplicationRealtimeListenerTests {
             return envelope.get("eventType").equals("application.directory_changed")
                     && envelope.get("payload").equals(Map.of());
         }));
+        reset(messaging);
+        listener.receive(event("application.preferences_changed", "{\"userId\":\"" + agent + "\",\"mode\":\"private\"}"));
+        verify(messaging).convertAndSendToUser(eq(agent.toString()), eq("/queue/application"), argThat((Object value) -> {
+            var envelope = (Map<?, ?>) value;
+            return envelope.get("eventType").equals("application.preferences_changed")
+                    && envelope.get("payload").equals(Map.of("userId", agent.toString()));
+        }));
+        verifyNoMoreInteractions(messaging); // Even administrators must not receive another account's preferences.
     }
 
     private static Message event(String type, String body) {

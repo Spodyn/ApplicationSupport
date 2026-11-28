@@ -102,13 +102,13 @@ export interface InboxRepository {
   listSlaReminders(): Promise<{ items: InboxSlaReminder[]; unreadCount: number }>
   markSlaRemindersRead(deadlineId?: string): Promise<void>
   bulk(input: InboxBulkInput): Promise<InboxBulkResult[]>
-  list(cursor?: string, query?: InboxListQuery): Promise<InboxPage<InboxCase>>
+  list(cursor?: string, query?: InboxListQuery, pageSize?: number): Promise<InboxPage<InboxCase>>
   getFilterOptions(): Promise<InboxFilterOptions>
   getCase(caseId: string): Promise<InboxCase>
   getMessages(caseId: string, before?: string): Promise<InboxPage<InboxMessage>>
   getActivity(caseId: string, cursor?: string): Promise<InboxPage<InboxActivity>>
   markRead(caseId: string, messageId: string): Promise<void>
-  markAllResolvedRead(): Promise<void>
+  markAllResolvedRead(provider?: InboxListQuery["provider"]): Promise<void>
   claim(caseId: string): Promise<void>
   ignore(caseId: string, input: InboxIgnoreInput): Promise<void>
   resolve(caseId: string, input: InboxResolveInput): Promise<void>

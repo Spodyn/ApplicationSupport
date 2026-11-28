@@ -1,8 +1,11 @@
 package com.unifiedsupportinbox.readstate.internal;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.unifiedsupportinbox.UsiApiApplication;
+import com.unifiedsupportinbox.ApiProblemException;
+import com.unifiedsupportinbox.integration.IntegrationProvider;
 import com.unifiedsupportinbox.testing.TestInfrastructure;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -146,6 +149,35 @@ class ResolvedCaseBatchReadServiceIntegrationTests {
         var freshCommand = service.markResolvedRead(actor, "race-key-2");
         assertThat(freshCommand.body().get("updatedCount").intValue()).isEqualTo(1);
         assertThat(cursor(actor, resolved)).isEqualTo(newer);
+    }
+
+    @Test
+    void providerScopedReadPreservesOtherPlatformsUsersAndIdempotencyBoundaries() {
+        BaseFixture slackBase = baseFixture(), teamsBase = baseFixture();
+        jdbc.update("UPDATE integrations SET provider='TEAMS' WHERE id=?", teamsBase.integrationId());
+        jdbc.update("UPDATE channels SET grouping_strategy='TEAMS_ROOT_REPLIES' WHERE id=?", teamsBase.channelId());
+        UUID actor = createUser("scoped"), other = createUser("unrelated");
+        UUID slack = createCase(slackBase, "slack", "RESOLVED");
+        UUID teams = createCase(teamsBase, "teams", "RESOLVED");
+        jdbc.update("UPDATE cases SET provider='TEAMS' WHERE id=?", teams);
+        UUID slackMessage = message(slack, "slack", Instant.parse("2026-09-30T06:40:00Z"));
+        UUID teamsMessage = message(teams, "teams", Instant.parse("2026-09-30T06:40:00Z"));
+        readState(actor, slack, null);
+        readState(actor, teams, null);
+        readState(other, teams, null);
+
+        var scoped = service.markResolvedRead(actor, "scoped", IntegrationProvider.TEAMS);
+        assertThat(scoped.body().path("updatedCount").asInt()).isEqualTo(1);
+        assertThat(cursor(actor, teams)).isEqualTo(teamsMessage);
+        assertThat(cursor(actor, slack)).isNull();
+        assertThat(cursor(other, teams)).isNull();
+        assertThat(service.markResolvedRead(actor, "scoped", IntegrationProvider.TEAMS).replayed()).isTrue();
+        assertThatThrownBy(() -> service.markResolvedRead(actor, "scoped", IntegrationProvider.SLACK))
+                .isInstanceOf(ApiProblemException.class).hasMessageContaining("different request");
+        assertThat(cursor(actor, slack)).isNull();
+        assertThat(service.markResolvedRead(actor, "legacy-global").body().path("updatedCount").asInt()).isEqualTo(1);
+        assertThat(cursor(actor, slack)).isEqualTo(slackMessage);
+        assertThat(cursor(other, teams)).isNull();
     }
 
     private static BaseFixture baseFixture() {

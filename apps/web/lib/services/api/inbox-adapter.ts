@@ -234,10 +234,10 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
       }
       return results
     },
-    async list(cursor, query = {}) {
+    async list(cursor, query = {}, pageSize = 50) {
       const page = await client.listCases({
         cursor,
-        limit: 50,
+        limit: pageSize,
         view: query.view?.toUpperCase() as "ACTIVE" | "SNOOZED" | undefined,
         quickView: query.quickView?.toUpperCase() as "UNASSIGNED" | "MINE" | "SLA" | "ALL" | undefined,
         mine: query.mine,
@@ -305,8 +305,8 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     async markRead(caseId, messageId) {
       await client.markCaseRead({ caseId, body: { messageId } })
     },
-    async markAllResolvedRead() {
-      await client.markResolvedCasesRead({ "Idempotency-Key": crypto.randomUUID() })
+    async markAllResolvedRead(provider) {
+      await client.markResolvedCasesRead({ "Idempotency-Key": crypto.randomUUID(), provider: provider?.toUpperCase() as CaseListItem["provider"] | undefined })
     },
     async claim(caseId) {
       try {

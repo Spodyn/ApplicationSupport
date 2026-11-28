@@ -245,3 +245,9 @@ Internal Direct Messages use dedicated Messaging tables and a recipient-scoped S
 ## Durable provider connection discovery
 
 Integration-owned ports define connection configuration, runtime readiness and discovery claims. Provider adapters implement them without an integration-to-provider module dependency. PostgreSQL stores per-integration discovery settings, cooldowns and leased requests; SKIP LOCKED claims and conditional lease tokens fence stale snapshots. A singleton Teams binding protects the selected team. Channel snapshot publication preserves customer/ignored settings and merges provider metadata. Webhooks and discovery share the normal durable inbox/message/attachment/SLA pipeline. See [provider onboarding](PROVIDER_ONBOARDING.md).
+
+## Personal inbox modes (owner decision, 2026-11-27)
+
+Inbox mode is a sparse `user_inbox_preferences` row keyed by authenticated account. GET/PUT `/api/v1/users/me/inbox-preferences` uses the existing session and CSRF controls. Missing rows project Unified. V58 writes commit-bound `application.preferences_changed` hints through the existing outbox; only the affected account receives them on `/user/queue/application`. Reconnect reconciles `inbox-preferences` alongside the other scopes. Query keys include provider and filters. Inactive platform counts reuse GET Cases with `limit=1`; full pages remain provider-scoped. Drafts live in an account-keyed authenticated-shell memory store. See [INBOX_PREFERENCES.md](INBOX_PREFERENCES.md).
+
+The resolved-read batch API retains its global default and accepts an optional provider filter. Provider-scoped requests include that scope in their idempotency fingerprint; existing global fingerprints remain valid.

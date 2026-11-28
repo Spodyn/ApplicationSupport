@@ -3,7 +3,7 @@ import { parseRealtimeEventEnvelope } from "./event-envelope"
 
 export const reconciliationScopes = [
   ["support-inbox"], ["direct-messages"], ["direct-recipients"],
-  ["current-user"], ["administration"], ["analytics"],
+  ["current-user"], ["administration"], ["analytics"], ["inbox-preferences"],
 ] as const
 
 /** Only identifiers select a REST query. Socket payloads never replace cached data. */
@@ -12,6 +12,8 @@ export function realtimeQueryScopes(destination: string, body: unknown, accountI
   if (!event || event.version !== 1) return reconciliationScopes
   if (destination === "/user/queue/application") {
     switch (event.eventType) {
+      case "application.preferences_changed":
+        return [["inbox-preferences", accountId]]
       case "application.reminders_changed":
         return [["support-inbox", "sla-reminders", accountId]]
       case "application.catalog_changed":

@@ -37,6 +37,192 @@ const inboundMessage = {
   }>,
 }
 
+async function preparePlatformInbox(page: Page, english = true) {
+  await preparePage(page, true, { english })
+  let mode = "UNIFIED"
+  const requests: URL[] = []
+  const bulkRequests: string[][] = []
+  const resolvedReadRequests: URL[] = []
+  const providers = ["SLACK", "TEAMS", "TELEGRAM"] as const
+  const items = providers.flatMap((provider, index) => [0, 1].map((offset) => ({ ...caseListItem,
+    id: `018f0000-0000-7000-8000-000000000${301 + index * 2 + offset}`,
+    reference: `CASE-00000${301 + index * 2 + offset}`, provider, channelName: provider.toLowerCase() + "-scope-" + offset,
+    ownerUserId: authenticatedSession.id, ownerDisplayName: authenticatedSession.displayName,
+    status: "VERIFICATION", workflowStatus: "OPEN", availableActions: ["REPLY", "RESOLVE"],
+  })))
+  await page.route("**/api/v1/**", async (route) => {
+    const url = new URL(route.request().url())
+    if (url.pathname === "/api/v1/users/me/inbox-preferences") {
+      if (route.request().method() === "PUT") mode = route.request().postDataJSON().mode
+      return route.fulfill({ json: { mode } })
+    }
+    if (url.pathname === "/api/v1/cases/filter-options") return route.fulfill({ json: { customers: [], channels: [], owners: [], providers } })
+    if (url.pathname === "/api/v1/cases/read/mark-resolved") {
+      resolvedReadRequests.push(url)
+      return route.fulfill({ json: { updatedCount: 1 } })
+    }
+    if (url.pathname === "/api/v1/cases/bulk") {
+      const ids: string[] = route.request().postDataJSON().caseIds
+      bulkRequests.push(ids)
+      return route.fulfill({ json: { items: ids.map((caseId) => ({ caseId, status: "SUCCEEDED", code: "OK" })) } })
+    }
+    if (url.pathname === "/api/v1/cases") {
+      requests.push(url)
+      const filtered = items.filter((item) => (!url.searchParams.get("provider") || item.provider === url.searchParams.get("provider"))
+        && (!url.searchParams.get("search") || item.channelName.includes(url.searchParams.get("search")!)))
+      const offset = url.searchParams.get("cursor") ? 1 : 0
+      return route.fulfill({ json: { items: filtered.slice(offset, offset + 1), nextCursor: filtered.length > offset + 1 ? "next" : null,
+        quickViewCounts: { all: filtered.length, mine: filtered.length, unassigned: 0, sla: 0 } } })
+    }
+    const id = url.pathname.split("/")[4]
+    const item = items.find((item) => item.id === id)
+    if (!item) return route.fallback()
+    if (url.pathname.endsWith("/messages")) return route.fulfill({ json: { items: [{ ...inboundMessage, body: item.channelName }], nextCursor: null } })
+    if (url.pathname.endsWith("/activity")) return route.fulfill({ json: { items: [], nextCursor: null } })
+    if (url.pathname.endsWith("/read-position")) return route.fulfill({ json: {} })
+    return route.fulfill({ json: { ...item,
+      customer: { id: "customer", name: "Mapped customer", externalRef: "mapped" },
+      owner: { id: authenticatedSession.id, displayName: authenticatedSession.displayName },
+      channel: { id: "channel", name: item.channelName, externalChannelId: item.id, groupingStrategy: "SLACK_ROOT_THREAD" },
+      integration: { id: "integration", provider: item.provider, displayName: "Integration" },
+      relatedCase: { id: null, reference: null }, personalState: { snoozedUntil: null, lastReadMessageId: null },
+      sla: null, ignoreScore: 0, waitingUntil: null, resolutionCategory: null, version: 1,
+    } })
+  })
+  return { items, requests, bulkRequests, resolvedReadRequests }
+}
+
+test("account inbox modes scope server counters, search, pagination and selections while retaining drafts", async ({ page }) => {
+  const fixture = await preparePlatformInbox(page)
+  await page.goto("/cases")
+  await expect(page.getByRole("group", { name: "Inbox platforms" })).toHaveCount(0)
+  await expect(page.locator("button[data-case-id]")).toHaveCount(1)
+  expect(fixture.requests[0].searchParams.has("provider")).toBe(false)
+  await page.getByRole("button", { name: /Open profile menu:/ }).click()
+  await page.getByRole("menuitem", { name: "Inbox preferences", exact: true }).click()
+  await page.getByRole("radio", { name: /Separate by platform/ }).click()
+  await expect(page.getByRole("radio", { name: /Separate by platform/ })).toBeChecked()
+  await page.getByRole("link", { name: "Back to inbox" }).click()
+  const tabs = page.getByRole("group", { name: "Inbox platforms" })
+  await expect(tabs.getByRole("button", { name: /Slack/ })).toHaveAttribute("aria-pressed", "true")
+  const cards = page.locator("button[data-case-id]")
+  await expect(cards).toHaveCount(1)
+  await expect(cards.first()).toContainText("#slack-scope-0")
+  await page.getByRole("textbox", { name: "Reply text" }).fill("Slack unsent")
+  await page.locator('input[type="file"]').setInputFiles({ name: "unsent.txt", mimeType: "text/plain", buffer: Buffer.from("draft attachment") })
+  await page.getByRole("button", { name: "Load more", exact: true }).click()
+  await expect(cards).toHaveCount(2)
+  await page.getByRole("button", { name: "Bulk Actions", exact: true }).click()
+  await page.getByRole("checkbox").first().check()
+  await tabs.getByRole("button", { name: /Microsoft Teams/ }).click()
+  await expect(page.getByRole("checkbox").first()).not.toBeChecked()
+  await expect(cards).toHaveCount(1)
+  await expect(cards.first()).toContainText("teams-scope-0")
+  await expect(page.getByRole("textbox", { name: "Reply text" })).toHaveValue("")
+  await expect(page.getByRole("group", { name: "Bulk Actions" }).getByRole("button", { name: "Claim", exact: true })).toBeDisabled()
+  await page.getByRole("button", { name: "Filters", exact: true }).click()
+  await expect(page.getByRole("combobox", { name: "Provider" })).toHaveCount(0)
+  page.once("dialog", (dialog) => dialog.accept())
+  await page.getByRole("button", { name: "Mark resolved as read", exact: true }).click()
+  await expect.poll(() => fixture.resolvedReadRequests.length).toBe(1)
+  expect(fixture.resolvedReadRequests[0].searchParams.get("provider")).toBe("TEAMS")
+  await page.getByRole("button", { name: "Filters", exact: true }).click()
+  await page.getByRole("checkbox").first().check()
+  await page.getByRole("group", { name: "Bulk Actions" }).getByRole("button", { name: "Resolve", exact: true }).click()
+  await page.getByRole("dialog").getByRole("button", { name: "Confirm", exact: true }).click()
+  await expect(page.getByRole("dialog")).toHaveCount(0)
+  expect(fixture.bulkRequests).toEqual([[fixture.items[2].id]])
+  await page.getByRole("textbox", { name: "Search conversations" }).fill("scope-1")
+  await expect(cards.first()).toContainText("teams-scope-1")
+  await tabs.getByRole("button", { name: /Slack/ }).click()
+  await expect(cards.first()).toContainText("slack-scope-1")
+  await expect(page.getByRole("textbox", { name: "Search conversations" })).toHaveValue("scope-1")
+  await page.getByRole("textbox", { name: "Search conversations" }).fill("")
+  await expect(cards.first()).toContainText("slack-scope-0")
+  await cards.first().click()
+  await expect(page.getByRole("textbox", { name: "Reply text" })).toHaveValue("Slack unsent")
+  await expect(page.getByRole("button", { name: /unsent.txt/ })).toBeVisible()
+  expect(fixture.requests.filter((url) => url.searchParams.get("cursor")).every((url) => url.searchParams.get("provider") === "SLACK")).toBe(true)
+  expect(fixture.requests.some((url) => url.searchParams.get("provider") === "TEAMS" && url.searchParams.get("search") === "scope-1")).toBe(true)
+  await page.reload()
+  await expect(tabs).toBeVisible()
+})
+
+async function expectReadablePlatform(button: import("@playwright/test").Locator) {
+  const ratio = await button.evaluate((element) => {
+    const luminance = (color: string) => {
+      const rgb = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map((value) => {
+        const channel = value / 255
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+      })
+      return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722
+    }
+    const style = getComputedStyle(element)
+    const foreground = luminance(style.color), background = luminance(style.backgroundColor)
+    return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)
+  })
+  expect(ratio).toBeGreaterThanOrEqual(4.5)
+}
+
+test("Polish platform inbox fits a mobile light theme and supports all configured providers", async ({ page }) => {
+  await preparePlatformInbox(page, false)
+  await page.goto("/cases")
+  await page.getByRole("button", { name: /Otwórz menu profilu:/ }).click()
+  await page.getByRole("menuitem", { name: "Włącz tryb ciemny", exact: true }).click()
+  await expect(page.locator("html")).toHaveClass(/dark/)
+  await page.goto("/preferences")
+  await expect(page.getByRole("heading", { name: "Preferencje skrzynki" })).toBeVisible()
+  await page.getByRole("radio", { name: /Osobno według platformy/ }).click()
+  await expect(page.getByRole("radio", { name: /Osobno według platformy/ })).toBeChecked()
+  await page.getByRole("link", { name: "Wróć do skrzynki" }).click()
+  const tabs = page.getByRole("group", { name: "Platformy skrzynki" })
+  await expectReadablePlatform(tabs.getByRole("button", { name: /Microsoft Teams/ }))
+  await page.getByRole("button", { name: /Otwórz menu profilu:/ }).click()
+  await page.getByRole("menuitem", { name: "Włącz tryb jasny", exact: true }).click()
+  await expect(page.locator("html")).toHaveClass(/light/)
+  await expectReadablePlatform(tabs.getByRole("button", { name: /Microsoft Teams/ }))
+  await page.setViewportSize({ width: 390, height: 844 })
+  await tabs.getByRole("button", { name: /Telegram/ }).click()
+  await expect(page.locator("button[data-case-id]").first()).toContainText("telegram-scope-0")
+  await expect(page.locator("html")).toHaveClass(/light/)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
+  await page.goto("/preferences")
+  await page.getByRole("radio", { name: /Wspólna skrzynka/ }).click()
+  await expect(page.getByRole("radio", { name: /Wspólna skrzynka/ })).toBeChecked()
+  await page.getByRole("link", { name: "Wróć do skrzynki" }).click()
+  await expect(tabs).toHaveCount(0)
+})
+
+test("separated inbox deep links select the real provider and an empty catalog never fetches an unscoped queue", async ({ page }) => {
+  const fixture = await preparePlatformInbox(page)
+  await page.route("**/api/v1/users/me/inbox-preferences", (route) => route.fulfill({ json: { mode: "SEPARATE_BY_PLATFORM" } }))
+  await page.goto("/cases?caseId=" + fixture.items[2].id)
+  await expect(page.getByRole("group", { name: "Inbox platforms" }).getByRole("button", { name: /Microsoft Teams/ })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.locator(`button[data-case-id="${fixture.items[2].id}"]`)).toHaveAttribute("aria-pressed", "true")
+  // A fresh page isolates the empty catalog from in-flight requests in the deep-link phase.
+  const empty = await page.context().newPage()
+  try {
+    const emptyFixture = await preparePlatformInbox(empty)
+    await empty.route("**/api/v1/users/me/inbox-preferences", (route) => route.fulfill({ json: { mode: "SEPARATE_BY_PLATFORM" } }))
+    await empty.route("**/api/v1/cases/filter-options", (route) => route.fulfill({ json: { customers: [], channels: [], owners: [], providers: [] } }))
+    await empty.goto("/cases")
+    await empty.reload()
+    await expect(empty.getByText("No platforms configured.", { exact: true })).toBeVisible()
+    await expect(empty.locator("button[data-case-id]")).toHaveCount(0)
+    expect(emptyFixture.requests).toHaveLength(0)
+  } finally { await empty.close() }
+})
+
+test("failed preference writes restore the saved mode and display a localized error", async ({ page }) => {
+  await preparePlatformInbox(page)
+  await page.route("**/api/v1/users/me/inbox-preferences", (route) => route.request().method() === "PUT"
+    ? route.fulfill({ status: 503, json: { title: "Unavailable", status: 503 } }) : route.fallback())
+  await page.goto("/preferences")
+  await page.getByRole("radio", { name: /Separate by platform/ }).click()
+  await expect(page.getByRole("alert").filter({ hasText: "Could not save inbox preferences." })).toBeVisible()
+  await expect(page.getByRole("radio", { name: /Unified inbox/ })).toBeChecked()
+})
+
 async function preparePage(page: Page, initiallyAuthenticated = true, options: {
   incomingBody?: string; customerName?: string; sendGate?: Promise<void>; english?: boolean; fileName?: string;
   caseActions?: boolean; recoverySource?: "manual" | "automatic"; operationalDeadline?: CaseOperationalDeadline;
@@ -76,6 +262,10 @@ async function preparePage(page: Page, initiallyAuthenticated = true, options: {
       return
     }
 
+    if (requestUrl.pathname === "/api/v1/users/me/inbox-preferences") {
+      await route.fulfill({ json: { mode: "UNIFIED" } })
+      return
+    }
     if (requestUrl.pathname === "/api/v1/auth/me") {
       if (authenticated) {
         await route.fulfill({

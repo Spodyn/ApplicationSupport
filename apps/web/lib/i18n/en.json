@@ -952,5 +952,20 @@
     "Podgląd obrazu jest niedostępny.": "Image preview is unavailable.",
     "Brakujące uprawnienie Slacka: {{scope}}": "Missing Slack scope: {{scope}}",
     "Typ pliku nie zgadza się z jego zawartością.": "The file type does not match its contents."
+  },
+  "inboxPreferences": {
+    "Preferencje skrzynki": "Inbox preferences",
+    "Wróć do skrzynki": "Back to inbox",
+    "Wybierz sposób wyświetlania spraw. Ustawienie jest zapisywane na Twoim koncie.": "Choose how to display Cases. This setting is saved to your account.",
+    "Tryb skrzynki": "Inbox mode",
+    "Wspólna skrzynka": "Unified inbox",
+    "Osobno według platformy": "Separate by platform",
+    "Wszystkie platformy na jednej liście spraw.": "All platforms in one Case list.",
+    "Przełączaj platformy nad listą spraw.": "Switch platforms above the Case list.",
+    "Nie udało się wczytać preferencji skrzynki.": "Could not load inbox preferences.",
+    "Nie udało się zapisać preferencji skrzynki.": "Could not save inbox preferences.",
+    "Platformy skrzynki": "Inbox platforms",
+    "Brak skonfigurowanych platform.": "No platforms configured.",
+    "Potwierdź oznaczenie wszystkich rozwiązanych spraw z platformy {{platform}} jako przeczytane.": "Confirm marking all resolved Cases from {{platform}} as read."
   }
 }

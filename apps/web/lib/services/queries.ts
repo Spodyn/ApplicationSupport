@@ -1,7 +1,8 @@
 "use client"
 
 import { translate as t } from "@/lib/i18n/catalog"
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { queryOptions, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
+import type { InboxMode } from "./inbox-preferences"
 import { useRealtimeCase } from "@/lib/realtime/realtime-context"
 import { serviceRegistry } from "./registry"
 import { collectMatchingCaseIds } from "./bulk-selection"
@@ -40,6 +41,7 @@ export const queryKeys = {
   directHistory: (accountId: string, id: string) => ["direct-messages", accountId, "history", id] as const,
   directRecipients: (accountId: string, search: string) => ["direct-recipients", accountId, search] as const,
   currentUser: () => ["current-user"] as const,
+  inboxPreferences: (accountId: string) => ["inbox-preferences", accountId] as const,
   inboxCases: (query?: InboxListQuery) => query
     ? ["support-inbox", "cases", query] as const
     : ["support-inbox", "cases"] as const,
@@ -63,6 +65,43 @@ export function useCurrentUser() {
     queryKey: queryKeys.currentUser(),
     queryFn: () => serviceRegistry.currentUser.get(),
   })
+}
+
+export function useInboxPreferences(accountId?: string) {
+  return useQuery({
+    queryKey: queryKeys.inboxPreferences(accountId ?? ""),
+    queryFn: () => serviceRegistry.inboxPreferences.get(),
+    enabled: Boolean(accountId),
+    refetchInterval: 30_000,
+  })
+}
+
+export function useSaveInboxPreferences(accountId: string) {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (mode: InboxMode) => serviceRegistry.inboxPreferences.save(mode),
+    onMutate: (mode) => {
+      const key = queryKeys.inboxPreferences(accountId)
+      void client.cancelQueries({ queryKey: key })
+      const previous = client.getQueryData<InboxMode>(key)
+      client.setQueryData(key, mode)
+      return { previous }
+    },
+    onError: (_error, _mode, context) => {
+      client.setQueryData(queryKeys.inboxPreferences(accountId), context?.previous)
+    },
+    onSuccess: (mode) => client.setQueryData(queryKeys.inboxPreferences(accountId), mode),
+    onSettled: () => client.invalidateQueries({ queryKey: queryKeys.inboxPreferences(accountId) }),
+  })
+}
+
+export function useInboxPlatformCounts(providers: NonNullable<InboxListQuery["provider"]>[], query: InboxListQuery) {
+  return useQueries({ queries: providers.map((provider) => queryOptions({
+    // Same REST scope and counters as the list; one row bounds inactive-platform traffic.
+    queryKey: [...queryKeys.inboxCases({ ...query, provider }), "counts"],
+    queryFn: () => serviceRegistry.inbox.list(undefined, { ...query, provider }, 1),
+    refetchInterval: (state) => Math.min(15_000, Math.max(2_000, state.state.data?.attentionRefreshInMs ?? 15_000)),
+  })) })
 }
 
 export function useDirectConversations(accountId: string, search: string) {
@@ -133,9 +172,10 @@ export function useDirectMessageActions(accountId: string) {
   return { start, send, markRead }
 }
 
-export function useInboxCases(query?: InboxListQuery) {
+export function useInboxCases(query?: InboxListQuery, enabled = true) {
   return useInfiniteQuery({
     queryKey: queryKeys.inboxCases(query),
+    enabled,
     queryFn: ({ pageParam }) => serviceRegistry.inbox.list(pageParam, query),
     refetchInterval: 15_000,
     initialPageParam: undefined as string | undefined,
@@ -296,7 +336,7 @@ export function useInboxWorkflow(caseId?: string) {
 export function useMarkAllResolvedRead() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => serviceRegistry.inbox.markAllResolvedRead(),
+    mutationFn: (provider?: InboxListQuery["provider"]) => serviceRegistry.inbox.markAllResolvedRead(provider),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() }),
   })
