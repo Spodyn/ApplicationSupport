@@ -392,11 +392,11 @@ function CaseWorkspace({
             {providers.map((provider) => {
               const inactive = providers.filter((item) => item !== activeProvider).indexOf(provider)
               const total = provider === activeProvider ? counts?.[quickFilter] : platformCounts[inactive]?.data?.quickViewCounts?.[quickFilter]
-              return <Button key={provider} size="sm" variant={provider === activeProvider ? "default" : "outline"}
-                className="h-8 min-w-0 gap-1.5 px-2 text-xs" aria-pressed={provider === activeProvider}
+              return <QuickFilterButton key={provider} active={provider === activeProvider} label={providerLabel(provider)}
+                descriptionId={`inbox-platform-${provider}-count`}
                 onClick={() => onProviderChange(provider)}>
-                {providerLabel(provider)}<span aria-label={t("Liczba spraw")}>{total ?? "—"}</span>
-              </Button>
+                {providerLabel(provider)}<span id={`inbox-platform-${provider}-count`} title={t("Liczba spraw")}>{total ?? "—"}</span>
+              </QuickFilterButton>
             })}
             {!providers.length && <p className="text-sm text-muted-foreground">{t("Brak skonfigurowanych platform.")}</p>}
           </div>}

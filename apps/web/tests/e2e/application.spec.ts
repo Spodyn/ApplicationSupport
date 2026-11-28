@@ -148,22 +148,40 @@ test("account inbox modes scope server counters, search, pagination and selectio
   await expect(tabs).toBeVisible()
 })
 
+async function expectReadablePlatform(button: import("@playwright/test").Locator) {
+  const ratio = await button.evaluate((element) => {
+    const luminance = (color: string) => {
+      const rgb = color.match(/[\d.]+/g)!.slice(0, 3).map(Number).map((value) => {
+        const channel = value / 255
+        return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+      })
+      return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722
+    }
+    const style = getComputedStyle(element)
+    const foreground = luminance(style.color), background = luminance(style.backgroundColor)
+    return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)
+  })
+  expect(ratio).toBeGreaterThanOrEqual(4.5)
+}
+
 test("Polish platform inbox fits a mobile light theme and supports all configured providers", async ({ page }) => {
   await preparePlatformInbox(page, false)
   await page.goto("/cases")
   await page.getByRole("button", { name: /Otwórz menu profilu:/ }).click()
   await page.getByRole("menuitem", { name: "Włącz tryb ciemny", exact: true }).click()
   await expect(page.locator("html")).toHaveClass(/dark/)
-  await page.getByRole("button", { name: /Otwórz menu profilu:/ }).click()
-  await page.getByRole("menuitem", { name: "Włącz tryb jasny", exact: true }).click()
-  await expect(page.locator("html")).toHaveClass(/light/)
-  await page.setViewportSize({ width: 390, height: 844 })
   await page.goto("/preferences")
   await expect(page.getByRole("heading", { name: "Preferencje skrzynki" })).toBeVisible()
   await page.getByRole("radio", { name: /Osobno według platformy/ }).click()
   await expect(page.getByRole("radio", { name: /Osobno według platformy/ })).toBeChecked()
   await page.getByRole("link", { name: "Wróć do skrzynki" }).click()
   const tabs = page.getByRole("group", { name: "Platformy skrzynki" })
+  await expectReadablePlatform(tabs.getByRole("button", { name: /Microsoft Teams/ }))
+  await page.getByRole("button", { name: /Otwórz menu profilu:/ }).click()
+  await page.getByRole("menuitem", { name: "Włącz tryb jasny", exact: true }).click()
+  await expect(page.locator("html")).toHaveClass(/light/)
+  await expectReadablePlatform(tabs.getByRole("button", { name: /Microsoft Teams/ }))
+  await page.setViewportSize({ width: 390, height: 844 })
   await tabs.getByRole("button", { name: /Telegram/ }).click()
   await expect(page.locator("button[data-case-id]").first()).toContainText("telegram-scope-0")
   await expect(page.locator("html")).toHaveClass(/light/)
