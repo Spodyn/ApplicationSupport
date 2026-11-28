@@ -952,5 +952,19 @@
     "Podgląd obrazu jest niedostępny.": "Podgląd obrazu jest niedostępny.",
     "Brakujące uprawnienie Slacka: {{scope}}": "Brakujące uprawnienie Slacka: {{scope}}",
     "Typ pliku nie zgadza się z jego zawartością.": "Typ pliku nie zgadza się z jego zawartością."
+  },
+  "inboxPreferences": {
+    "Preferencje skrzynki": "Preferencje skrzynki",
+    "Wróć do skrzynki": "Wróć do skrzynki",
+    "Wybierz sposób wyświetlania spraw. Ustawienie jest zapisywane na Twoim koncie.": "Wybierz sposób wyświetlania spraw. Ustawienie jest zapisywane na Twoim koncie.",
+    "Tryb skrzynki": "Tryb skrzynki",
+    "Wspólna skrzynka": "Wspólna skrzynka",
+    "Osobno według platformy": "Osobno według platformy",
+    "Wszystkie platformy na jednej liście spraw.": "Wszystkie platformy na jednej liście spraw.",
+    "Przełączaj platformy nad listą spraw.": "Przełączaj platformy nad listą spraw.",
+    "Nie udało się wczytać preferencji skrzynki.": "Nie udało się wczytać preferencji skrzynki.",
+    "Nie udało się zapisać preferencji skrzynki.": "Nie udało się zapisać preferencji skrzynki.",
+    "Platformy skrzynki": "Platformy skrzynki",
+    "Brak skonfigurowanych platform.": "Brak skonfigurowanych platform."
   }
 }

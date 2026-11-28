@@ -220,3 +220,7 @@ The Integrations panel configures Slack and Teams using instance callbacks and s
 ## Case inbox source titles (owner request, 2026-11-27)
 
 Case card primary titles use the actual provider channel, topic or conversation name for mapped and unmapped Cases. Slack channel names have one leading `#`. A genuinely missing name uses the localized “Channel name unavailable” / “Nazwa kanału niedostępna” fallback. Long names keep the existing truncation and expose the full title. Customer mappings remain visible in Case details and retain existing search and analytics semantics. Discovery renames retain channel/provider/Case identity and publish durable Case refresh hints through the existing outbox and authenticated realtime transport.
+
+## Personal inbox modes (owner decision, 2026-11-27)
+
+Personal **Inbox preferences** is available from the profile menu to every authenticated user. Unified inbox remains the default; Separate by platform adds compact configured-platform buttons above the list. The server filters every page and counter. See [INBOX_PREFERENCES.md](INBOX_PREFERENCES.md).

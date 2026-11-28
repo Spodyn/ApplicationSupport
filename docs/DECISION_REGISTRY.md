@@ -111,3 +111,7 @@ The grouped owner requests of 2026-11-10 and 2026-11-12 define the interface and
 ## Owner Case inbox title correction, 2026-11-27
 
 - DEC-CASE-SOURCE-TITLE-001: Case cards use the actual provider source name independently of customer mapping, with a localized missing-name fallback. Discovery renames refresh existing inboxes without changing identity or mappings. See [Product Contract](PRODUCT_CONTRACT.md#owner-approved-case-inbox-titles-2026-11-27).
+
+## Personal inbox modes (owner decision, 2026-11-27)
+
+**DEC-PER-USER-INBOX-MODES-001 — owner approved, 2026-11-27.** Every authenticated account can persist Unified (default) or Separate by platform mode. Provider tabs use the existing server filter and scoped counters; ordinary users gain no administrative privileges. Platform switching clears action targets and retains Case drafts. No grouping, workflow, SLA or provider behavior changes. [Contract](INBOX_PREFERENCES.md).

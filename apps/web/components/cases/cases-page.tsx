@@ -1,7 +1,9 @@
 "use client"
 
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
+import { useInboxDraft } from "./inbox-drafts"
+import type { Channel } from "@/lib/domain/shared"
 import { deliveryPresentation } from "@/lib/i18n/delivery-presentation"
 import { MessageAttachments } from "./message-attachments"
 import { attachmentLimitError } from "@/lib/services/attachment-limits"
@@ -33,7 +35,7 @@ import { formatDeadlineDuration, operationalClock } from "@/lib/domain/operation
 import { useSlaClock } from "@/lib/domain/use-sla-clock"
 import { MAX_BULK_SELECTION } from "@/lib/services/bulk-selection"
 import type { InboxListQuery, InboxQuickView } from "@/lib/services/inbox"
-import { useSelectMatchingCases, useCurrentUser, useInboxActivity, useInboxAssignees, useInboxCase, useInboxCases, useInboxFilterOptions, useInboxMessages, useInboxWorkflow, useMarkAllResolvedRead, useMarkInboxCaseRead } from "@/lib/services/queries"
+import { useSelectMatchingCases, useInboxPreferences, useInboxPlatformCounts, useCurrentUser, useInboxActivity, useInboxAssignees, useInboxCase, useInboxCases, useInboxFilterOptions, useInboxMessages, useInboxWorkflow, useMarkAllResolvedRead, useMarkInboxCaseRead } from "@/lib/services/queries"
 import type { InboxSendInput } from "@/lib/services/inbox"
 import { cn } from "@/lib/utils"
 import { useShell } from "@/components/layout/shell-context"
@@ -58,6 +60,49 @@ function readWideInbox() {
   return window.matchMedia(wideInboxQuery).matches
 }
 type AdvancedFilter = "mine" | "unassigned" | "sla" | "unread" | "snoozed" | "active" | "terminal"
+
+function providerLabel(provider: Channel) {
+  return ({ slack: "Slack", teams: "Microsoft Teams", telegram: "Telegram" })[provider] ?? provider
+}
+
+export function CasesPage({ onlyMine, initialCaseId }: { onlyMine?: boolean; initialCaseId?: string }) {
+  const t = useT()
+  const router = useRouter()
+  const pathname = usePathname()
+  const user = useCurrentUser()
+  const preference = useInboxPreferences(user.data?.id)
+  const options = useInboxFilterOptions()
+  const [platform, setPlatform] = useState<Channel>()
+  const [requestedCaseId, setRequestedCaseId] = useState(initialCaseId)
+  const navigation = useInboxCase(requestedCaseId)
+  const separated = preference.data === "separate_by_platform"
+  const providers = options.data?.providers ?? []
+  const requestedProvider = requestedCaseId ? navigation.data?.platform : undefined
+  const activeProvider = separated
+    ? requestedProvider ?? (platform && providers.includes(platform) ? platform : providers[0])
+    : undefined
+  const changePlatform = (provider: Channel) => {
+    setRequestedCaseId(undefined)
+    setPlatform(provider)
+    router.replace(pathname, { scroll: false })
+  }
+  const openCase = (id: string) => {
+    setRequestedCaseId(id)
+    router.replace("?caseId=" + encodeURIComponent(id), { scroll: false })
+  }
+  if (preference.isPending || (separated && options.isPending)) {
+    return <main className="flex-1 p-4" role="status">{t("Wczytywanie…")}</main>
+  }
+  if (!preference.data || (separated && !options.data)) {
+    return <main className="flex-1 space-y-3 p-4" role="alert">
+      <p>{t("Nie udało się wczytać preferencji skrzynki.")}</p>
+      <Button variant="outline" onClick={() => { void preference.refetch(); void options.refetch() }}>{t("Spróbuj ponownie")}</Button>
+    </main>
+  }
+  return <CaseWorkspace onlyMine={onlyMine} separated={separated} providers={providers} activeProvider={activeProvider}
+    initialCaseId={!separated || requestedProvider ? requestedCaseId : undefined}
+    onProviderChange={changePlatform} onOpenCase={openCase} />
+}
 
 type CasePresentation = {
   id: string
@@ -133,12 +178,17 @@ function toPresentation(record: InboxCase, t: ReturnType<typeof useT>, now: numb
   }
 }
 
-export function CasesPage({
+function CaseWorkspace({
   onlyMine = false,
-  initialCaseId,
+  initialCaseId, separated, providers, activeProvider, onProviderChange, onOpenCase,
 }: {
   onlyMine?: boolean
   initialCaseId?: string
+  separated: boolean
+  providers: Channel[]
+  activeProvider?: Channel
+  onProviderChange: (provider: Channel) => void
+  onOpenCase: (caseId: string) => void
 }) {
   const t = useT()
   const shell = useShell()
@@ -175,10 +225,10 @@ export function CasesPage({
     statusScope: advancedFilters.includes("terminal") ? "terminal" : advancedFilters.includes("active") ? "active" : "all",
     workflowStatus: statusFilter || undefined,
     actionableQueue: true,
-    provider: providerFilter || undefined,
+    provider: separated ? activeProvider : providerFilter || undefined,
     ownerId: ownerFilter || undefined,
     search: serverSearch || undefined,
-  }), [advancedFilters, ownerFilter, providerFilter, quickFilter, serverSearch, statusFilter])
+  }), [advancedFilters, ownerFilter, providerFilter, quickFilter, serverSearch, statusFilter, separated, activeProvider])
   const scope = JSON.stringify(listQuery)
   const [selection, setSelection] = useState<{ scope: string; ids: string[] }>({ scope, ids: [] })
   if (selection.scope !== scope) setSelection({ scope, ids: [] })
@@ -186,19 +236,29 @@ export function CasesPage({
   const matching = useSelectMatchingCases()
   const selectionScope = useRef(scope)
   useEffect(() => { selectionScope.current = scope }, [scope])
-  const casesQuery = useInboxCases(listQuery)
+  const providerScope = separated ? `separate:${activeProvider ?? "empty"}` : `unified:${providerFilter}`
+  const [conversationScope, setConversationScope] = useState({ providerScope, initialCaseId })
+  if (conversationScope.providerScope !== providerScope || conversationScope.initialCaseId !== initialCaseId) {
+    // Clear action targets in this render, before another platform can be acted on.
+    setConversationScope({ providerScope, initialCaseId })
+    setSelectedCaseId(initialCaseId)
+    setMobileConversationOpen(Boolean(initialCaseId))
+    setDrawerOpen(false)
+  }
+  const casesQuery = useInboxCases(listQuery, !separated || Boolean(activeProvider))
+  const platformCounts = useInboxPlatformCounts(separated ? providers.filter((provider) => provider !== activeProvider) : [], listQuery)
   const filterOptions = useInboxFilterOptions()
   const markRead = useMarkInboxCaseRead()
   const markResolvedRead = useMarkAllResolvedRead()
 
   const records = useMemo(() => {
     const seen = new Set<string>()
-    return (casesQuery.data?.pages.flatMap((page) => page.items) ?? []).filter((item) => {
+    return (separated && !activeProvider ? [] : casesQuery.data?.pages.flatMap((page) => page.items) ?? []).filter((item) => {
       if (seen.has(item.id)) return false
       seen.add(item.id)
       return true
     })
-  }, [casesQuery.data])
+  }, [casesQuery.data, separated, activeProvider])
   if (selectedCaseId === undefined && records[0]?.id) {
     setSelectedCaseId(records[0].id)
   }
@@ -315,7 +375,7 @@ export function CasesPage({
             </Button>
             <h1 className="text-[21px] font-bold tracking-[-0.02em]">{t("Czaty")}</h1>
             <span aria-label={t("Liczba spraw")} className="rounded-full bg-[#151f2e] px-2 py-0.5 text-[12px] font-semibold text-[#d8dce4]">{counts?.[quickFilter] ?? "—"}</span>
-            <NotificationBell onSelect={(caseId) => { setSelectedCaseId(caseId); setMobileConversationOpen(true) }} />
+            <NotificationBell onSelect={onOpenCase} />
             <Button
               type="button"
               size="sm"
@@ -328,6 +388,18 @@ export function CasesPage({
             </Button>
           </div>
 
+          {separated && <div role="group" aria-label={t("Platformy skrzynki")} className="mt-3 flex flex-wrap gap-1.5">
+            {providers.map((provider) => {
+              const inactive = providers.filter((item) => item !== activeProvider).indexOf(provider)
+              const total = provider === activeProvider ? counts?.[quickFilter] : platformCounts[inactive]?.data?.quickViewCounts?.[quickFilter]
+              return <Button key={provider} size="sm" variant={provider === activeProvider ? "default" : "outline"}
+                className="h-8 min-w-0 gap-1.5 px-2 text-xs" aria-pressed={provider === activeProvider}
+                onClick={() => onProviderChange(provider)}>
+                {providerLabel(provider)}<span aria-label={t("Liczba spraw")}>{total ?? "—"}</span>
+              </Button>
+            })}
+            {!providers.length && <p className="text-sm text-muted-foreground">{t("Brak skonfigurowanych platform.")}</p>}
+          </div>}
           <div className="mt-[17px] flex gap-3">
             <label className="flex h-[42px] min-w-0 flex-1 items-center gap-2.5 rounded-[9px] border border-white/[0.07] bg-[#111b29] px-3 text-[#8f9aad] shadow-[inset_0_1px_0_rgba(255,255,255,0.015)] focus-within:border-violet-500/50">
               <Search className="size-[18px] shrink-0" strokeWidth={1.8} />
@@ -380,7 +452,7 @@ export function CasesPage({
                   })}
                   <div className="mt-2 grid gap-2 border-t border-white/10 pt-2">
                     <FilterSelect label={t("Status")} value={statusFilter} onChange={(value) => setStatusFilter(value as InboxWorkflowStatus | "")} options={Object.entries(inboxWorkflowStatusLabels).map(([value, label]) => ({ value, label: t(label) }))} />
-                    <FilterSelect label={t("Dostawca")} value={providerFilter} onChange={(value) => setProviderFilter(value as typeof providerFilter)} options={[{ value: "slack", label: "Slack" }, { value: "teams", label: "Teams" }, { value: "telegram", label: "Telegram" }]} />
+                    {!separated && <FilterSelect label={t("Dostawca")} value={providerFilter} onChange={(value) => setProviderFilter(value as typeof providerFilter)} options={[{ value: "slack", label: "Slack" }, { value: "teams", label: "Teams" }, { value: "telegram", label: "Telegram" }]} />}
                     <FilterSelect label={t("Właściciel")} value={ownerFilter} onChange={setOwnerFilter} options={(filterOptions.data?.owners ?? []).map((item) => ({ value: item.id, label: item.name }))} />
                   </div>
                   <button type="button" disabled={markResolvedRead.isPending} onClick={() => { if (window.confirm(t("Potwierdź oznaczenie wszystkich rozwiązanych spraw jako przeczytane."))) markResolvedRead.mutate() }} className="mt-1 w-full border-t border-white/10 px-2.5 py-2 text-left text-[12px] text-violet-300 disabled:opacity-50">{t("Oznacz rozwiązane jako przeczytane")}</button>
@@ -398,7 +470,7 @@ export function CasesPage({
           </div>
         </div>
 
-        <BulkCaseToolbar active={bulkMode} selected={selectionIds} references={new Map(records.map((item) => [item.id, item.reference]))} clear={() => setSelection({ scope, ids: [] })}>
+        <BulkCaseToolbar key={providerScope} inboxScope={providerScope} active={bulkMode} selected={selectionIds} references={new Map(records.map((item) => [item.id, item.reference]))} clear={() => setSelection({ scope, ids: [] })}>
           <div className="flex flex-wrap items-center gap-2 text-xs text-violet-300">
             <Button type="button" size="sm" variant="ghost" disabled={matching.isPending || records.length > MAX_BULK_SELECTION} aria-describedby="bulk-selection-limit" onClick={() => setSelection({ scope, ids: records.map((item) => item.id) })}>
               {t("Zaznacz widoczne (")}{records.length})
@@ -606,12 +678,13 @@ function ConversationPanel({
   className: string
 }) {
   const t = useT()
-  const [draft, setDraft] = useState("")
-  const [noteDraft, setNoteDraft] = useState("")
-  const [noteMode, setNoteMode] = useState(false)
+  const [savedDraft, updateDraft] = useInboxDraft(item.id)
+  const { body: draft, note: noteDraft, noteMode, files } = savedDraft
+  const setDraft = (body: string) => updateDraft({ body, submission: undefined })
+  const setNoteDraft = (note: string) => updateDraft({ note, noteKey: undefined })
+  const setNoteMode = (noteMode: boolean) => updateDraft({ noteMode })
+  const setFiles = (files: File[]) => updateDraft({ files, submission: undefined })
   const [noteError, setNoteError] = useState<Error | null>(null)
-  const noteKey = useRef<string | null>(null)
-  const [files, setFiles] = useState<File[]>([])
   const [sendError, setSendError] = useState<Error | null>(null)
   const [actionDialog, setActionDialog] = useState<"ignore" | "resolve" | "snooze" | "reopen" | "admin" | null>(null)
   const [actionText, setActionText] = useState("")
@@ -621,7 +694,6 @@ function ConversationPanel({
   const [actionError, setActionError] = useState<Error | null>(null)
   const sending = useRef(false)
   const composing = useRef(false)
-  const submission = useRef<InboxSendInput | null>(null)
   const workflowActionKey = useRef<string | null>(null)
   const canClaim = Boolean(record?.availableActions?.includes("CLAIM"))
   const canReply = Boolean(record?.availableActions?.includes("REPLY"))
@@ -644,46 +716,47 @@ function ConversationPanel({
     || workflow.reopen.isPending
 
   const hasContent = noteMode ? Boolean(noteDraft.trim()) : Boolean(draft.trim() || files.length)
-  const submitting = workflow.sendMessage.isPending || workflow.addInternalNote.isPending
+  const submitting = savedDraft.sending || workflow.sendMessage.isPending || workflow.addInternalNote.isPending
 
   const addFiles = (selected: File[]) => {
-    if (!canReply || noteMode || sending.current || !selected.length) return
+    if (!canReply || noteMode || submitting || sending.current || !selected.length) return
     const next = [...files, ...selected]
     const error = attachmentLimitError(next)
     setSendError(error ?? null)
     if (error) return
     setFiles(next)
-    submission.current = null
   }
 
   const send = async () => {
     if (!canReply || !hasContent || sending.current || submitting) return
     sending.current = true
+    updateDraft({ sending: true })
     if (noteMode) {
-      noteKey.current ??= crypto.randomUUID()
+      const noteKey = savedDraft.noteKey ?? crypto.randomUUID()
+      updateDraft({ noteKey })
       setNoteError(null)
       try {
-        await workflow.addInternalNote.mutateAsync({ body: noteDraft, idempotencyKey: noteKey.current })
-        setNoteDraft("")
-        noteKey.current = null
+        await workflow.addInternalNote.mutateAsync({ body: noteDraft, idempotencyKey: noteKey })
+        updateDraft({ note: "", noteKey: undefined })
       } catch (error) {
         setNoteError(error instanceof Error ? error : new Error(t("Nie udało się zapisać notatki.")))
       } finally {
         sending.current = false
+        updateDraft({ sending: false })
       }
       return
     }
-    submission.current ??= { body: draft, attachments: files, idempotencyKey: crypto.randomUUID() }
+    const submission: InboxSendInput = savedDraft.submission ?? { body: draft, attachments: files, idempotencyKey: crypto.randomUUID() }
+    updateDraft({ submission })
     setSendError(null)
     try {
-      await workflow.sendMessage.mutateAsync(submission.current)
-      setDraft("")
-      setFiles([])
-      submission.current = null
+      await workflow.sendMessage.mutateAsync(submission)
+      updateDraft({ body: "", files: [], submission: undefined })
     } catch (error) {
       setSendError(error instanceof Error ? error : new Error(t("Nie udało się wysłać odpowiedzi.")))
     } finally {
       sending.current = false
+      updateDraft({ sending: false })
     }
   }
 
@@ -846,13 +919,11 @@ function ConversationPanel({
           }} value={noteMode ? noteDraft : draft} maxLength={noteMode ? 10000 : undefined} onChange={(event) => {
             if (noteMode) {
               setNoteDraft(event.target.value)
-              noteKey.current = null
             } else {
               setDraft(event.target.value)
-              submission.current = null
             }
           }} disabled={!canReply || submitting} placeholder={canReply ? t(noteMode ? "Napisz notatkę..." : "Napisz odpowiedź...") : t("Przejmij case, aby odpowiedzieć")} aria-label={t(noteMode ? "Treść notatki" : "Treść odpowiedzi")} className="block h-[80px] w-full resize-none bg-transparent px-[23px] pt-[17px] text-[13px] text-[#eef0f4] outline-none placeholder:text-[#8e99aa] disabled:cursor-not-allowed" />
-          {!noteMode && files.length > 0 && <div className="flex flex-wrap gap-2 px-[19px] pb-2">{files.map((file, index) => <button key={`${file.name}-${file.size}-${index}`} type="button" disabled={workflow.sendMessage.isPending} onClick={() => { setFiles((current) => current.filter((_, itemIndex) => itemIndex !== index)); submission.current = null; setSendError(null) }} className="flex min-w-0 max-w-full items-center gap-2 rounded-md bg-white/[0.06] px-2 py-1 text-left text-xs text-[#cbd3df] [overflow-wrap:anywhere]" title={t("Usuń plik")}><AttachmentPreview file={file} /><span>{file.name}</span></button>)}</div>}
+          {!noteMode && files.length > 0 && <div className="flex flex-wrap gap-2 px-[19px] pb-2">{files.map((file, index) => <button key={`${file.name}-${file.size}-${index}`} type="button" disabled={submitting} onClick={() => { setFiles(files.filter((_, itemIndex) => itemIndex !== index)); setSendError(null) }} className="flex min-w-0 max-w-full items-center gap-2 rounded-md bg-white/[0.06] px-2 py-1 text-left text-xs text-[#cbd3df] [overflow-wrap:anywhere]" title={t("Usuń plik")}><AttachmentPreview file={file} /><span>{file.name}</span></button>)}</div>}
           <div className="flex min-h-[51px] items-center justify-between gap-2 px-[19px]">
             {noteMode ? <span className="text-xs text-amber-200">{t("Widoczna tylko w USI")}</span> : <label className={cn("inline-flex cursor-pointer items-center gap-2 rounded text-xs text-[#aeb8c8] focus-within:ring-2 focus-within:ring-violet-400", !canReply && "pointer-events-none opacity-50")}><Paperclip className="size-4" /> {t("Dodaj pliki")}<input type="file" multiple disabled={!canReply || submitting} className="sr-only" onChange={(event) => { addFiles(Array.from(event.target.files ?? [])); event.target.value = "" }} /></label>}
             <button type="button" data-case-action aria-busy={submitting} onClick={send} disabled={!canReply || !hasContent || submitting}

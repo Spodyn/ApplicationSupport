@@ -160,6 +160,8 @@ class BootstrapSecurityConfiguration {
                         .requestMatchers("/api/v1/statistics/overview", "/api/v1/statistics/sla")
                                 .hasAuthority("view_global_statistics")
                         .requestMatchers("/api/v1/statistics/records").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/users/me/inbox-preferences").authenticated()
+                        .requestMatchers(HttpMethod.PUT, "/api/v1/users/me/inbox-preferences").authenticated()
                         .anyRequest().denyAll())
                 .logout(logout -> logout
                         .logoutUrl("/api/v1/auth/logout")

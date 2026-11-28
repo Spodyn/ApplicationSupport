@@ -185,6 +185,10 @@ export function UserMenu({
             </DropdownMenuRadioGroup>
           </DropdownMenuSubContent>
         </DropdownMenuSub>
+        <DropdownMenuItem onClick={() => goTo("/preferences")} className="min-h-9 px-2">
+          <Settings />
+          {t("Preferencje skrzynki")}
+        </DropdownMenuItem>
         {user.role === "admin" && (
           <DropdownMenuItem onClick={() => goTo("/settings")} className="min-h-9 px-2">
             <Settings />

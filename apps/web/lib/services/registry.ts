@@ -4,6 +4,7 @@ import { apiAdministrationUserRepository } from "./api/administration-users-adap
 import { apiInboxRepository } from "./api/inbox-adapter"
 import { apiDirectMessagesRepository } from "./api/direct-messages-adapter"
 import { apiAnalyticsRepository } from "./api/analytics-adapter"
+import { apiInboxPreferencesRepository } from "./api/inbox-preferences-adapter"
 
 /**
  * Jedyny punkt wiążący interfejsy usług z implementacją danych.
@@ -12,6 +13,7 @@ import { apiAnalyticsRepository } from "./api/analytics-adapter"
  */
 export const serviceRegistry = {
   currentUser: apiCurrentUserRepository,
+  inboxPreferences: apiInboxPreferencesRepository,
   inbox: apiInboxRepository,
   directMessages: apiDirectMessagesRepository,
   administrationUsers: apiAdministrationUserRepository,

@@ -315,3 +315,9 @@ Initial and periodic Graph reconciliation plus `channelCreated` hints discover s
 ## Owner-approved Case inbox titles (2026-11-27)
 
 Case card primary titles use the actual provider channel, topic or conversation name for mapped and unmapped Cases. Slack channel names have one leading `#`. A genuinely missing name uses the localized “Channel name unavailable” / “Nazwa kanału niedostępna” fallback. Long names keep the existing truncation and expose the full title. Customer mappings remain visible in Case details and retain existing search and analytics semantics. Discovery renames retain channel/provider/Case identity and publish durable Case refresh hints through the existing outbox and authenticated realtime transport.
+
+## Owner-approved inbox modes (2026-11-27)
+
+Every authenticated account can choose **Unified inbox** (default) or **Separate by platform** in personal Inbox preferences. This personal setting is available to USER and ADMIN without granting administrative settings access, and persists server-side across sessions/devices. Changes apply immediately and synchronize only to that account's other sessions.
+
+Unified mode retains the combined inbox and advanced filters. Separate mode shows configured platforms dynamically, including disabled integrations with historical Cases. The selected platform is the authoritative REST provider filter for queue results, Quick View counters, unread/SLA attention, search, ordering, pagination and bulk matching. Incompatible advanced provider filters are hidden. Platform changes clear selection and conversation action targets; account-scoped in-memory Case drafts retain text, notes, Files and retry identities. Inactive-platform realtime hints refresh bounded server counters without mixing Case pages. Grouping, ownership, SLA and provider semantics are unchanged. Details: [INBOX_PREFERENCES.md](INBOX_PREFERENCES.md).

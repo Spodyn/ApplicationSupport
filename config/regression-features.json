@@ -562,6 +562,22 @@
         "scripts/tests/test_environment_contract.py"
       ],
       "gap": "Live staging end-to-end acceptance pending selected-team installation with the schema 1.25/tier1 package and gated deployment; automated ZIP and private/shared rejection coverage tracked in PROVIDER_ONBOARDING_VALIDATION.md"
+    },
+    {
+      "id": "INBOX_PREFERENCES",
+      "status": "IMPLEMENTED",
+      "expected": "Per-account server-persisted Unified/Separate inbox modes; scoped server pages, search, counters and bulk selection; safe drafts and account-only realtime synchronization.",
+      "tests": [
+        "apps/api/src/test/java/com/unifiedsupportinbox/identity/internal/InboxPreferencesIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/realtime/internal/ApplicationRealtimeListenerTests.java",
+        "apps/api/src/test/java/com/unifiedsupportinbox/workflow/CaseListServiceIntegrationTests.java",
+        "apps/web/tests/unit/inbox-preferences.test.tsx",
+        "apps/web/tests/unit/realtime-query-invalidation.test.ts",
+        "apps/web/tests/e2e/application.spec.ts",
+        "apps/web/tests/fullstack/workflows.spec.ts"
+      ],
+      "gap": "Live deployed acceptance pending PR deployment; automated controlled providers and independent sessions cover the contract. Drafts are in memory and do not survive reload."
     }
   ]
 }

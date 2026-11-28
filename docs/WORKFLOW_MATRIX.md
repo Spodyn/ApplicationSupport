@@ -149,3 +149,7 @@ The exact locking/query implementation is a delegated technical choice so long a
 Bulk Claim, Assign/Reassign, normal Resolve and Ignore compose the individual commands above. Availability is re-evaluated on the server under each Case row lock; no new transition or permission exists. Normal bulk Resolve remains owner-only. Each item has an independent transaction, audit/outbox and durable outcome, so ineligible/failed items do not prevent later items. See [UX_BULK_I18N.md](UX_BULK_I18N.md) for bounded selection and replay semantics.
 
 History recovery (owner override 2026-11-20): recovered Slack/Teams customer Messages use the same active-generation/terminal-linking and unread transitions as live intake. No new CaseStatus or frontend state machine is introduced. New applicable FRT/NRT starts at durable addition in both manual and automatic mode; original provider time is display/history data. Existing Messages and SLA cycles survive rescans unchanged. See [history recovery](HISTORY_RECOVERY.md).
+
+## Personal inbox modes (owner decision, 2026-11-27)
+
+Personal Unified/Separate by platform inbox mode changes only query scope. Workflow eligibility remains authoritative server-side. Switching platform clears selected IDs, selected conversation and scoped action dialogs before new actions; text/note/attachment drafts and retry identities remain bound to their original Case. No workflow transition is caused by switching modes or platforms.

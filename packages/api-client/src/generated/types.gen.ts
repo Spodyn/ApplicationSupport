@@ -943,6 +943,10 @@ export type IgnoreVoteWeightRequest = {
   "validUntil"?: string | null
 }
 
+export type InboxPreferences = {
+  "mode": "UNIFIED" | "SEPARATE_BY_PLATFORM"
+}
+
 export type Integration = {
   "id": string
   "provider": Channel

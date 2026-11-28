@@ -234,10 +234,10 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
       }
       return results
     },
-    async list(cursor, query = {}) {
+    async list(cursor, query = {}, pageSize = 50) {
       const page = await client.listCases({
         cursor,
-        limit: 50,
+        limit: pageSize,
         view: query.view?.toUpperCase() as "ACTIVE" | "SNOOZED" | undefined,
         quickView: query.quickView?.toUpperCase() as "UNASSIGNED" | "MINE" | "SLA" | "ALL" | undefined,
         mine: query.mine,

@@ -78,6 +78,16 @@ public final class FullStackTestServer {
                         """, UUID.class, fixtureIntegration, externalChannel);
                 response = Map.of("email", email, "displayName", name, "userId", user, "channelId", channel,
                         "externalChannelId", externalChannel, "workspaceId", "TTESTFULL");
+            } else if (path.equals("/inbox-platform-fixture") && exchange.getRequestMethod().equals("POST")) {
+                // Inert Teams fixture: no provider credentials, selected-team binding or external calls.
+                String marker = JSON.readTree(exchange.getRequestBody()).path("marker").asText();
+                String external = UUID.randomUUID().toString();
+                UUID customer = fixtureDatabase.queryForObject("INSERT INTO customers(name) VALUES (?) RETURNING id", UUID.class, marker + " customer");
+                UUID integration = fixtureDatabase.queryForObject("INSERT INTO integrations(provider,display_name,status,health) VALUES ('TEAMS',?,'DISABLED','HEALTHY') RETURNING id", UUID.class, marker);
+                UUID channel = fixtureDatabase.queryForObject("INSERT INTO channels(integration_id,external_channel_id,name,customer_id,grouping_strategy) VALUES (?,?,?,?,'TEAMS_ROOT_REPLIES') RETURNING id", UUID.class, integration, external, marker + " teams", customer);
+                UUID caseId = fixtureDatabase.queryForObject("INSERT INTO cases(customer_id,integration_id,channel_id,provider,external_conversation_id) VALUES (?,?,?,'TEAMS',?) RETURNING id", UUID.class, customer, integration, channel, external);
+                fixtureDatabase.update("INSERT INTO messages(case_id,external_message_id,kind,author_external_id,author_name,body,inbound,provider_created_at,correlation_id) VALUES (?,?,'CUSTOMER','fixture','Test customer',?,TRUE,now(),'inbox-fixture')", caseId, external, marker + " teams");
+                response = Map.of("caseId", caseId);
             } else if (path.equals("/rename-channel") && exchange.getRequestMethod().equals("POST")) {
                 var input = JSON.readTree(exchange.getRequestBody());
                 UUID channelId = UUID.fromString(input.path("channelId").asText());
