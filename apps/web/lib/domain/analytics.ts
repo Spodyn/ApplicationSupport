@@ -182,6 +182,7 @@ export interface AnalyticsResult {
   currentWork?: {
     id: string
     reference: string
+    customerId?: string
     customerName: string
     platform: Channel
     sourceChannel: string

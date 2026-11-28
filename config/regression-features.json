@@ -265,9 +265,10 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/SlaAnalyticsServiceTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/analytics/StatisticsOverviewServiceTests.java",
         "apps/web/tests/fullstack/workflows.spec.ts",
-        "apps/api/src/test/java/com/unifiedsupportinbox/analytics/AnalyticsRecordsIntegrationTests.java"
+        "apps/api/src/test/java/com/unifiedsupportinbox/analytics/AnalyticsRecordsIntegrationTests.java",
+        "apps/web/tests/e2e/application.spec.ts"
       ],
-      "gap": "Historical per-user features in unmerged PRs are not claimed implemented"
+      "gap": "Live and browser audit covers localized chart legends, stable unassigned-customer identity and honest unavailable exports; export and drill-down workflows remain unimplemented; historical per-user features in unmerged PRs are not claimed implemented"
     },
     {
       "id": "HISTORY",

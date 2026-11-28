@@ -2,6 +2,20 @@ import { expect, it } from "vitest"
 import type { AnalyticsFilters, AnalyticsRecord } from "@/lib/domain/analytics"
 import { buildAnalyticsResult } from "@/lib/services/analytics"
 
+it("retains stable customer identities in current work and filters despite equal display names", () => {
+  const base: AnalyticsRecord = { id: "unassigned", createdAt: "2026-11-28T10:00:00Z",
+    customerId: "00000000-0000-0000-0000-000000000000", customerName: "Nie przypisano", platform: "slack",
+    sourceChannel: "sandbox", status: "verification", statusLabel: "OPEN", workflowStatus: "OPEN",
+    priority: "medium", tags: [], slaState: "met" }
+  const records = [base, { ...base, id: "mapped", customerId: "real-customer" }]
+  const result = buildAnalyticsResult(records, [], { dateFrom: "2026-11-28", dateTo: "2026-11-28" }, "2026-11-28T11:00:00Z", true)
+  expect(result.currentWork?.map(item => item.customerId)).toEqual(records.map(item => item.customerId))
+  expect(result.options.customers).toHaveLength(2)
+  const filtered = buildAnalyticsResult(records, [], { dateFrom: "2026-11-28", dateTo: "2026-11-28", customerId: base.customerId }, "2026-11-28T11:00:00Z", true)
+  expect(filtered.currentWork?.map(item => item.id)).toEqual(["unassigned"])
+  expect(filtered.kpis.created).toBe(1)
+})
+
 it("groups simplified statuses while retaining distinct resolved and ignored totals", () => {
   const createdAt = "2026-11-15T09:00:00Z"
   const base: AnalyticsRecord = {

@@ -44,7 +44,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
@@ -113,6 +115,10 @@ const statusColors: Record<string, string> = {
 const slaColors = {
   met: "var(--success)",
   breached: "var(--destructive)",
+}
+
+function customerLabel(id: string | undefined, name: string) {
+  return id === "unassigned" || id === "00000000-0000-0000-0000-000000000000" ? t("Nie przypisano") : name
 }
 
 const metricDefinitions = {
@@ -206,15 +212,18 @@ export default function StatisticsRoute() {
           <>
             <div className="mr-1 hidden items-center gap-2 text-xs text-muted-foreground xl:flex">
               <span className={cn("size-2 rounded-full bg-success", analyticsQuery.isFetching && "animate-pulse")} />
-              <span>{t("Dane na żywo ·")} {analyticsQuery.isFetching ? "aktualizacja…" : t("aktualizacja {{value0}} s temu", { value0: updatedSecondsAgo })}</span>
+              <span>{t("Dane na żywo ·")} {analyticsQuery.isFetching ? t("aktualizacja…") : t("aktualizacja {{value0}} s temu", { value0: updatedSecondsAgo })}</span>
             </div>
             <Button variant="outline" size="sm" onClick={() => void analyticsQuery.refetch()} disabled={analyticsQuery.isFetching}>
               <RefreshCw className={analyticsQuery.isFetching ? "animate-spin" : undefined} /> {t("Odśwież")} </Button>
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="outline" size="sm"><Download /> {t("Eksportuj")} <ChevronDown /></Button>} />
               <DropdownMenuContent align="end" className="min-w-40">
-                <DropdownMenuItem onClick={() => notify.info(t("Eksport CSV"), t("Eksport zostanie podłączony do endpointu analitycznego."))}>CSV</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => notify.info(t("Eksport XLSX"), t("Eksport zostanie podłączony do endpointu analitycznego."))}>XLSX</DropdownMenuItem>
+                <DropdownMenuGroup>
+                <DropdownMenuLabel>{t("Eksport nie jest jeszcze dostępny.")}</DropdownMenuLabel>
+                <DropdownMenuItem disabled>CSV</DropdownMenuItem>
+                <DropdownMenuItem disabled>XLSX</DropdownMenuItem>
+                </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
           </>
@@ -278,7 +287,7 @@ export default function StatisticsRoute() {
 
               <FilterBar className="border-t pt-3">
                 <DashboardFilterSelect value={user} onChange={setUser} label={t("Właściciel sprawy")} allLabel={t("Wszyscy właściciele")} options={(analytics?.options.users ?? []).map((item) => ({ value: item.id, label: item.fullName }))} />
-                <DashboardFilterSelect value={customer} onChange={setCustomer} label={t("Klient")} allLabel={t("Wszyscy klienci")} options={(analytics?.options.customers ?? []).map((item) => ({ value: item.id, label: item.name }))} />
+                <DashboardFilterSelect value={customer} onChange={setCustomer} label={t("Klient")} allLabel={t("Wszyscy klienci")} options={(analytics?.options.customers ?? []).map((item) => ({ value: item.id, label: customerLabel(item.id, item.name) }))} />
                 <DashboardFilterSelect value={platform} onChange={(value) => { setPlatform(value); setSourceChannel(ALL_VALUE) }} label={t("Platforma")} allLabel={t("Wszystkie platformy")} options={(Object.entries(channelLabels) as [Channel, string][]).map(([value, label]) => ({ value, label }))} />
                 <DashboardFilterSelect value={sourceChannel} onChange={setSourceChannel} label={t("Kanał")} allLabel={t("Wszystkie kanały")} options={(analytics?.options.channels ?? []).filter((item) => platform === ALL_VALUE || item.platform === platform).map((item) => ({ value: item.value, label: item.label }))} />
                 <DashboardFilterSelect value={status} onChange={setStatus} label={t("Status")} allLabel={t("Wszystkie statusy")} options={(analytics?.options.statuses ?? []).map((item) => ({ ...item, label: t(item.label) }))} />
@@ -356,8 +365,8 @@ function AnalyticsDashboard({ data, preset }: { data: AnalyticsResult; preset: D
               <YAxis allowDecimals={false} tick={axisTick} tickLine={false} axisLine={false} width={38} />
               <RechartsTooltip contentStyle={chartTooltipStyle} labelFormatter={formatLongDate} />
               <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="created" name="Utworzone" stroke="var(--primary)" strokeWidth={2.4} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
-              <Line type="monotone" dataKey="resolved" name="Rozwiązane" stroke="var(--success)" strokeWidth={2.4} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+              <Line type="monotone" dataKey="created" name={t("Utworzone")} stroke="var(--primary)" strokeWidth={2.4} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
+              <Line type="monotone" dataKey="resolved" name={t("Rozwiązane")} stroke="var(--success)" strokeWidth={2.4} dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
               <Line type="monotone" dataKey="backlog" name="Backlog" stroke="var(--warning)" strokeWidth={2.2} strokeDasharray="5 4" dot={false} activeDot={{ r: 4 }} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
@@ -398,8 +407,8 @@ function AnalyticsDashboard({ data, preset }: { data: AnalyticsResult; preset: D
               <YAxis unit=" min" tick={axisTick} tickLine={false} axisLine={false} width={52} />
               <RechartsTooltip contentStyle={chartTooltipStyle} labelFormatter={formatLongDate} formatter={(value) => [`${Math.round(Number(value ?? 0))} min`, t("Czas")]} />
               <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
-              <Line type="monotone" dataKey="averageMinutes" name="Średnia" stroke="var(--primary)" strokeWidth={2.4} dot={false} isAnimationActive={false} />
-              <Line type="monotone" dataKey="medianMinutes" name="Mediana / P50" stroke="var(--success)" strokeWidth={2} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="averageMinutes" name={t("Średnia")} stroke="var(--primary)" strokeWidth={2.4} dot={false} isAnimationActive={false} />
+              <Line type="monotone" dataKey="medianMinutes" name={t("Mediana / P50")} stroke="var(--success)" strokeWidth={2} dot={false} isAnimationActive={false} />
               <Line type="monotone" dataKey="p90Minutes" name="P90" stroke="var(--warning)" strokeWidth={2} strokeDasharray="5 4" dot={false} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
@@ -451,7 +460,7 @@ function CurrentWorkTable({ data }: { data: NonNullable<AnalyticsResult["current
         <TableHeader><TableRow className="bg-muted/40"><TableHead>Case</TableHead><TableHead>{t("Klient")}</TableHead><TableHead>{t("Źródło")}</TableHead><TableHead>{t("Status")}</TableHead><TableHead>{t("Właściciel")}</TableHead><TableHead>SLA</TableHead><TableHead>{t("Utworzono")}</TableHead></TableRow></TableHeader>
         <TableBody>{data.map((item) => <TableRow key={item.id}>
           <TableCell className="font-mono text-xs">{item.reference}</TableCell>
-          <TableCell className="font-medium">{item.customerName}</TableCell>
+          <TableCell className="font-medium">{customerLabel(item.customerId, item.customerName)}</TableCell>
           <TableCell>{channelLabels[item.platform]} · {item.sourceChannel}</TableCell>
           <TableCell><Badge variant="secondary">{t(item.statusLabel)}</Badge></TableCell>
           <TableCell>{item.userName ?? t("Nieprzypisany")}</TableCell>
@@ -613,8 +622,8 @@ function ClientPerformanceTable({ data, onSelect }: { data: ClientPerformance[];
             <TableHeader><TableRow className="bg-muted/40"><TableHead>{t("Klient")}</TableHead><TableHead className="text-center">{t("Utworzone")}</TableHead><TableHead className="text-center">{t("Rozwiązane")}</TableHead><TableHead className="text-center">{t("Nie dotyczy")}</TableHead><TableHead className="text-center">Spam</TableHead><TableHead className="text-right"><MetricLabel label={t("SLA – pierwsza odpowiedź")} definition={metricDefinitions.sla} /></TableHead><TableHead className="text-right">{t("Śr. odpowiedź")}</TableHead><TableHead className="text-right">{t("Śr. rozwiązanie")}</TableHead></TableRow></TableHeader>
             <TableBody>
               {data.slice(0, 6).map((item) => (
-                <TableRow key={item.customerId} className="cursor-pointer" onClick={() => onSelect(item.customerName)}>
-                  <TableCell className="font-medium">{item.customerName}</TableCell>
+                <TableRow key={item.customerId} className="cursor-pointer" onClick={() => onSelect(customerLabel(item.customerId, item.customerName))}>
+                  <TableCell className="font-medium">{customerLabel(item.customerId, item.customerName)}</TableCell>
                   <TableCell className="text-center tabular-nums">{item.created}</TableCell>
                   <TableCell className="text-center tabular-nums">{item.resolved}</TableCell>
                   <TableCell className="text-center tabular-nums">{item.notApplicable}</TableCell>
