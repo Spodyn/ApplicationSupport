@@ -30,8 +30,15 @@ class TeamsMessageDeliveryProvider implements MessageDeliveryProvider {
         if(target==null||target.providerMessageRef()==null||target.providerMessageRef().isBlank()||target.senderId()==null
                 ||target.conversationId()==null||!TeamsJwtAuthenticator.safeServiceUrl(target.serviceUrl()))
             return new MutationCapability(false,false,"PROVIDER_TARGET_UNAVAILABLE","PROVIDER_TARGET_UNAVAILABLE");
+        boolean editable=hasText || (hasAttachments && hasSavedAttachments(target));
         boolean completeDelete=!hasAttachments || onlyInlineAttachments(target);
-        return new MutationCapability(hasText,completeDelete,hasText?null:"NO_TEXT_RESOURCE",completeDelete?null:"MULTIPLE_PROVIDER_RESOURCES");
+        return new MutationCapability(editable,completeDelete,editable?null:"NO_TEXT_RESOURCE",completeDelete?null:"MULTIPLE_PROVIDER_RESOURCES");
+    }
+    private static boolean hasSavedAttachments(MutationTarget target) {
+        try {
+            var attachments=JSON.readTree(target.attachmentPayload());
+            return attachments!=null&&attachments.isArray()&&!attachments.isEmpty();
+        }catch(RuntimeException invalid){return false;}
     }
     private static boolean onlyInlineAttachments(MutationTarget target) {
         try {

@@ -16,9 +16,11 @@ The compact action menu supports hover, keyboard focus and touch. Copy text requ
 | Slack text plus uploaded files | Update separate text resource, leave files untouched | Unavailable: deleting text alone leaves separate resources |
 | Teams text with actual Connector activity ID | Connector PUT using original service URL, conversation, activity and bot | Connector DELETE using same target |
 | Teams text plus files with actual activity ID | Preserve exact original attachment payload on PUT | Unavailable: external files may remain |
-| Teams activity containing only inline images | Edit existing text, preserving inline images | Supported with actual activity ID; one resource |
-| Attachment-only message | No text edit | Teams inline-only activity with actual ID supported; separate files unavailable |
+| Teams activity containing only inline images | Add/edit text, preserving inline images | Supported with actual activity ID; one resource |
+| Attachment-only message | Teams can gain text with actual activity ID and saved attachment payload; Slack has no separate text resource | Teams inline-only activity with actual ID supported; separate files unavailable |
 | Teams accepted without activity ID | Unavailable | Unavailable |
+
+Microsoft documents that an update can change the original activity type, including an attachment-only activity. Teams caption edits preserve the saved attachment payload; no-ID acceptance remains unavailable.
 
 Slack requires the existing bot `chat:write` authorization; no new scopes, impersonation or file deletion privileges are introduced. Teams uses the existing Bot Connector token flow and safe Microsoft service URL allowlist, exact integration/tenant credential reference, stored bot identity and approved standard-channel/group-chat context. Existing selected-team intake restrictions remain unchanged. No Graph chat-message mutation permission is requested. A valid Teams HTTP 202 without an ID remains a successful send, never a fabricated mutation target. Historical Teams messages without an immutable target snapshot are unavailable; historical Slack messages can use an actual stored timestamp with the current configured bot, which the provider must authorize.
 

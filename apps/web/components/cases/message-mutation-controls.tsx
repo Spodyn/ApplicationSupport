@@ -28,7 +28,7 @@ export function MessageMutationControls({ message, caseId }: { message: InboxMes
   const reason = (code?: string) => {
     switch (code) {
       case "MULTIPLE_PROVIDER_RESOURCES": return t("Wiadomość zawiera osobne zasoby dostawcy. Pełne usunięcie jest niedostępne.")
-      case "NO_TEXT_RESOURCE": return t("Wiadomość bez tekstu nie obsługuje edycji.")
+      case "NO_TEXT_RESOURCE": return t("Ta wiadomość nie ma edytowalnego zasobu tekstowego.")
       case "PROVIDER_TARGET_UNAVAILABLE": return t("Dostawca nie udostępnił bezpiecznego identyfikatora tej wiadomości.")
       case "PROVIDER_UNSUPPORTED": return t("Ta platforma nie obsługuje zmiany wiadomości.")
       case "INTEGRATION_DISABLED": return t("Integracja jest wyłączona.")

@@ -227,7 +227,6 @@
     "Nowa treść wiadomości": "Nowa treść wiadomości",
     "Usunąć wiadomość?": "Usunąć wiadomość?",
     "Wiadomość zawiera osobne zasoby dostawcy. Pełne usunięcie jest niedostępne.": "Wiadomość zawiera osobne zasoby dostawcy. Pełne usunięcie jest niedostępne.",
-    "Wiadomość bez tekstu nie obsługuje edycji.": "Wiadomość bez tekstu nie obsługuje edycji.",
     "Dostawca nie udostępnił bezpiecznego identyfikatora tej wiadomości.": "Dostawca nie udostępnił bezpiecznego identyfikatora tej wiadomości.",
     "Ta platforma nie obsługuje zmiany wiadomości.": "Ta platforma nie obsługuje zmiany wiadomości.",
     "Integracja jest wyłączona.": "Integracja jest wyłączona.",
@@ -251,7 +250,8 @@
     "Message mutation retried": "Ponowiono zmianę wiadomości",
     "Message mutation retry scheduled": "Zaplanowano ponowienie zmiany wiadomości",
     "Message mutation failed": "Zmiana wiadomości nie powiodła się",
-    "Message mutation awaiting confirmation": "Zmiana wiadomości oczekuje na potwierdzenie"
+    "Message mutation awaiting confirmation": "Zmiana wiadomości oczekuje na potwierdzenie",
+    "Ta wiadomość nie ma edytowalnego zasobu tekstowego.": "Ta wiadomość nie ma edytowalnego zasobu tekstowego."
   },
   "auth": {
     "Bezpieczna aktywacja konta": "Bezpieczna aktywacja konta",

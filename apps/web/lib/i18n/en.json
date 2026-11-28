@@ -227,7 +227,6 @@
     "Nowa treść wiadomości": "New message text",
     "Usunąć wiadomość?": "Delete message?",
     "Wiadomość zawiera osobne zasoby dostawcy. Pełne usunięcie jest niedostępne.": "This message contains separate provider resources. Complete deletion is unavailable.",
-    "Wiadomość bez tekstu nie obsługuje edycji.": "Attachment-only messages cannot be edited.",
     "Dostawca nie udostępnił bezpiecznego identyfikatora tej wiadomości.": "The provider did not return a safe target for this message.",
     "Ta platforma nie obsługuje zmiany wiadomości.": "This platform does not support message mutations.",
     "Integracja jest wyłączona.": "The integration is disabled.",
@@ -251,7 +250,8 @@
     "Message mutation retried": "Message mutation retried",
     "Message mutation retry scheduled": "Message mutation retry scheduled",
     "Message mutation failed": "Message mutation failed",
-    "Message mutation awaiting confirmation": "Message mutation awaiting confirmation"
+    "Message mutation awaiting confirmation": "Message mutation awaiting confirmation",
+    "Ta wiadomość nie ma edytowalnego zasobu tekstowego.": "This message has no editable text resource."
   },
   "auth": {
     "Bezpieczna aktywacja konta": "Secure account activation",

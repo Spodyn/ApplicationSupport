@@ -209,9 +209,10 @@ class MessageMutationIntegrationTests {
     }
 
     @ParameterizedTest @EnumSource(value=IntegrationProvider.class,names={"SLACK","TEAMS"})
-    void attachedFilesAreRetainedAndPartialDeletionAndAttachmentOnlyEditsAreUnavailable(IntegrationProvider type) {
+    void attachedFilesAreRetainedAndCapabilitiesDistinguishTextEditsFromCompleteDeletion(IntegrationProvider type) {
         Fixture f=fixture(type);UUID attachment=UUID.randomUUID();
         jdbc.update("INSERT INTO attachments(id,message_id,storage_key,original_filename,size_bytes,sha256,scan_status) VALUES (?,?,?,'report.txt',4,?,'CLEAN')",attachment,f.message,"synthetic/"+attachment,"a".repeat(64));
+        if(type==IntegrationProvider.TEAMS)jdbc.update("UPDATE message_mutation_targets SET attachment_payload=?::jsonb WHERE message_id=?","[{\"contentType\":\"application/vnd.microsoft.card.adaptive\",\"content\":{\"type\":\"AdaptiveCard\"}}]",f.message);
         var view=mutations.views(List.of(f.message),f.actor).get(f.message);
         assertThat(view.canEdit()).isTrue();assertThat(view.canDelete()).isFalse();
         assertThat(view.deleteUnavailable()).isEqualTo("MULTIPLE_PROVIDER_RESOURCES");
@@ -219,10 +220,14 @@ class MessageMutationIntegrationTests {
         UUID edit=id(mutations.request(f.message,f.actor,"attached-edit","EDIT","after",0,"test"));worker.process(edit);
         assertThat(jdbc.queryForObject("SELECT scan_status FROM attachments WHERE id=?",String.class,attachment)).isEqualTo("CLEAN");
         jdbc.update("UPDATE messages SET body='' WHERE id=?",f.message);
-        assertThat(mutations.views(List.of(f.message),f.actor).get(f.message).editUnavailable()).isEqualTo("NO_TEXT_RESOURCE");
+        if(type==IntegrationProvider.TEAMS) {
+            assertThat(mutations.views(List.of(f.message),f.actor).get(f.message).canEdit()).isTrue();
+            UUID caption=id(mutations.request(f.message,f.actor,"attachment-caption","EDIT","New attachment caption",1,"test"));worker.process(caption);
+            assertThat(body(f)).isEqualTo("New attachment caption");
+        } else assertThat(mutations.views(List.of(f.message),f.actor).get(f.message).editUnavailable()).isEqualTo("NO_TEXT_RESOURCE");
         jdbc.update("UPDATE attachments SET scan_status='INFECTED' WHERE id=?",attachment);
         assertThat(mutations.views(List.of(f.message),f.actor).get(f.message).editUnavailable()).isEqualTo("ATTACHMENT_NOT_CLEAN");
-        assertThat(provider.calls.get()).isEqualTo(1);
+        assertThat(provider.calls.get()).isEqualTo(type==IntegrationProvider.TEAMS?2:1);
     }
 
     @Test void lifetimeIgnoreRestrictionsAndIntegrationDeactivationAreRecheckedBeforeProviderIo() {
@@ -280,7 +285,7 @@ class MessageMutationIntegrationTests {
         void reset(){result=MutationResult.confirmed();calls.set(0);transactionSeen=false;before=()->{};}
         public boolean supports(IntegrationProvider type){return type!=IntegrationProvider.TELEGRAM;}
         public DeliveryResult deliver(DeliveryCommand command){throw new AssertionError("Mutation must never send a new message");}
-        public MutationCapability mutationCapability(MutationTarget target,boolean attachments,boolean text){return new MutationCapability(text,!attachments,text?null:"NO_TEXT_RESOURCE",attachments?"MULTIPLE_PROVIDER_RESOURCES":null);}
+        public MutationCapability mutationCapability(MutationTarget target,boolean attachments,boolean text){boolean edit=text||(attachments&&"provider-id".equals(target.providerMessageRef())&&!"[]".equals(target.attachmentPayload()));return new MutationCapability(edit,!attachments,edit?null:"NO_TEXT_RESOURCE",attachments?"MULTIPLE_PROVIDER_RESOURCES":null);}
         public MutationResult mutate(MutationCommand command){calls.incrementAndGet();transactionSeen|=TransactionSynchronizationManager.isActualTransactionActive();before.run();return result;}
     }
     static class MutableClock extends Clock {

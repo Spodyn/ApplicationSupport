@@ -41,7 +41,7 @@ describe("provider-neutral message mutations", () => {
     fireEvent.click(screen.getByRole("button", {name: "Message actions"}))
     expect(await screen.findByRole("menuitem", {name: /^Edit message$/})).toHaveAttribute("aria-disabled", "true")
     expect(screen.getByRole("menuitem", {name: /^Delete message$/})).toHaveAttribute("aria-disabled", "true")
-    expect(screen.getByText(/Attachment-only messages cannot be edited/)).toBeVisible()
+    expect(screen.getByText(/This message has no editable text resource/)).toBeVisible()
     expect(screen.getByText(/Complete deletion is unavailable/)).toBeVisible()
     view.rerender(<LanguageProvider initialLanguage="en"><MessageMutationControls message={{...message, mutation: {...unavailable.mutation, editUnavailable: "PROVIDER_TARGET_UNAVAILABLE", deleteUnavailable: "PROVIDER_TARGET_UNAVAILABLE"}}} caseId="case" /></LanguageProvider>)
     expect(screen.getAllByText(/The provider did not return a safe target/)).toHaveLength(2)
