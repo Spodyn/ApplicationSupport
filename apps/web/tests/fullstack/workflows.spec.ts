@@ -419,6 +419,13 @@ for (const kind of ['FRT', 'NRT']) {
     // REST timestamps retain PostgreSQL microseconds; Date.parse truncates to milliseconds.
     expect(Math.abs(deadline.remainingMillis - (Date.parse(deadline.dueAt) - Date.parse(deadline.observedAt))))
       .toBeLessThanOrEqual(1)
+    // The projection becomes overdue before the scheduler commits its reminder.
+    // Observe that durable effect through realtime before measuring the quiet clock.
+    const reference = (await (await page.request.get(path)).json()).reference
+    const bell = page.getByRole('button', {name: 'Notifications', exact: true})
+    await bell.click()
+    await expect(page.getByRole('button', {name: /Support response is overdue/}).filter({hasText: reference})).toBeVisible()
+    await bell.click()
     const badges = [page.locator(`button[data-case-id="${caseId}"]`),
       page.getByRole('region', {name: /^Conversation /}), page.getByRole('complementary', {name: 'Case details'})]
       .map(surface => surface.locator('[data-sla-countdown]'))
