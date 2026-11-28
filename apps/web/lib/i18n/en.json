@@ -873,7 +873,9 @@
     "1–4 godz.": "1–4 hours",
     "4–8 godz.": "4–8 hours",
     "8–24 godz.": "8–24 hours",
-    "1–3 dni": "1–3 days"
+    "1–3 dni": "1–3 days",
+    "Mediana / P50": "Median / P50",
+    "Eksport nie jest jeszcze dostępny.": "Export is not available yet."
   },
   "users": {
     "Nie udało się wygenerować bezpiecznego linku": "Could not generate a secure link",

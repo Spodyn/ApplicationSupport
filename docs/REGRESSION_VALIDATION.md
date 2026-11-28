@@ -33,3 +33,11 @@ Existing owner services/data remain untouched in the original checkout. New real
 The additional inventory regression rejects removal of a required feature, an empty inventory and missing/out-of-repository test links; all four workflow/traceability tests also passed in an isolated Linux Node 22 container. Provider documentation distinguishes implemented Telegram inbound from absent outbound/Teams behavior.
 
 Final test review strengthened the service-worker assertion: it waits for an active controller, uses browser fetches (APIRequestContext bypasses workers), verifies the static cache exists, and checks that offline static assets work while authenticated API requests fail rather than returning cached data. All 12 repeated full-stack executions passed after this change, without retries. The production JAR was inspected and contains neither the test HTTP server nor regression fixture classes.
+
+## Statistics presentation audit, 2026-11-28
+
+Live Brave staging at main `1101c14749f88ebda7e0c395b451e80fccb01f64` displayed Polish Created/Resolved/Average/Median legends and the Polish unassigned-customer placeholder in English. Both CSV and XLSX produced only an informational future-endpoint toast; no export was implemented. Two browser regressions reproduced the defects before changes (English legend failure and Polish enabled-export failure).
+
+The correction translates interface labels and only the stable unassigned customer identity. A real customer literally named `Nie przypisano` remains unchanged. The current-work view model carries the already available REST customer ID; filtering, metric calculations, date ranges and histories are unchanged. The existing export menu explicitly reports unavailability and disables CSV/XLSX. This is not delivery of an export feature. Drill-down and additional-filter placeholders also remain unimplemented and are not claimed accepted.
+
+Regression coverage: English and Polish chart legends, current work, real versus unassigned equal names, ID-based filtering, reload and unavailable exports in `application.spec.ts`; stable current-work/customer filtering in `analytics-workflow.test.ts`. Exact-HEAD eight-job push and PR outcomes are recorded on the PR. Post-deployment live acceptance remains NOT TESTED; no shared staging configuration was changed.

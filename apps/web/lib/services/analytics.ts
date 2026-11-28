@@ -440,6 +440,7 @@ export function buildAnalyticsResult(
       currentWork: includeCurrentWork ? current.backlogRecords.map((record) => ({
         id: record.id,
         reference: record.reference ?? record.id,
+        customerId: record.customerId,
         customerName: record.customerName,
         platform: record.platform,
         sourceChannel: record.sourceChannel,

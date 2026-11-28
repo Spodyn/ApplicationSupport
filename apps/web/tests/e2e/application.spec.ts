@@ -14,6 +14,38 @@ const authenticatedSession = {
 
 const caseId = "018f0000-0000-7000-8000-000000000201"
 const inboundMessageId = "018f0000-0000-7000-8000-000000000202"
+
+for (const english of [true, false]) {
+  test(`statistics localizes chart legends and only the unassigned identity in ${english ? "English" : "Polish"}`, async ({ page }) => {
+    await preparePage(page, true, { english })
+    const generatedAt = new Date().toISOString()
+    const base = { createdAt: generatedAt, customerName: "Nie przypisano", platform: "slack", sourceChannel: "sandbox",
+      status: "verification", workflowStatus: "OPEN", statusLabel: "OPEN", priority: "medium", tags: [], slaState: "met" }
+    await page.route("**/api/v1/statistics/records", route => route.fulfill({ json: {
+      generatedAt, global: true, reportingTimezone: "UTC", users: [], records: [
+        { ...base, id: "unmapped", reference: "CASE-UNMAPPED", customerId: "00000000-0000-0000-0000-000000000000" },
+        { ...base, id: "literal", reference: "CASE-LITERAL", customerId: "actual-customer" },
+      ],
+    } }))
+    await page.goto("/statistics")
+    const legends = page.locator(".recharts-legend-wrapper")
+    for (const label of english ? ["Created", "Resolved", "Average", "Median / P50"] : ["Utworzone", "Rozwiązane", "Średnia", "Mediana / P50"]) {
+      await expect(legends.getByText(label, { exact: true }).first()).toBeVisible()
+    }
+    await expect(page.getByRole("row").filter({ hasText: "CASE-UNMAPPED" })).toContainText(english ? "Unassigned" : "Nie przypisano")
+    await expect(page.getByRole("row").filter({ hasText: "CASE-LITERAL" })).toContainText("Nie przypisano")
+    await page.getByRole("combobox", { name: english ? "Customer" : "Klient", exact: true }).click()
+    await page.getByRole("option", { name: english ? "Unassigned" : "Nie przypisano", exact: true }).first().click()
+    await expect(page.getByRole("row").filter({ hasText: "CASE-UNMAPPED" })).toHaveCount(1)
+    await expect(page.getByRole("row").filter({ hasText: "CASE-LITERAL" })).toHaveCount(0)
+    await page.reload()
+    await expect(page.getByRole("row").filter({ hasText: "CASE-LITERAL" })).toContainText("Nie przypisano")
+    await page.getByRole("button", { name: english ? "Export" : "Eksportuj", exact: true }).click()
+    await expect(page.getByRole("menuitem", { name: "CSV", exact: true })).toBeDisabled()
+    await expect(page.getByRole("menuitem", { name: "XLSX", exact: true })).toBeDisabled()
+    await expect(page.getByText(english ? "Export is not available yet." : "Eksport nie jest jeszcze dostępny.", { exact: true })).toBeVisible()
+  })
+}
 const caseListItem = {
   id: caseId, reference: "CASE-00000002", status: "NEW", customerId: "customer",
   customerName: "Slack Test Customer", channelId: "channel", channelName: "new-channel",
