@@ -33,3 +33,11 @@ Existing owner services/data remain untouched in the original checkout. New real
 The additional inventory regression rejects removal of a required feature, an empty inventory and missing/out-of-repository test links; all four workflow/traceability tests also passed in an isolated Linux Node 22 container. Provider documentation distinguishes implemented Telegram inbound from absent outbound/Teams behavior.
 
 Final test review strengthened the service-worker assertion: it waits for an active controller, uses browser fetches (APIRequestContext bypasses workers), verifies the static cache exists, and checks that offline static assets work while authenticated API requests fail rather than returning cached data. All 12 repeated full-stack executions passed after this change, without retries. The production JAR was inspected and contains neither the test HTTP server nor regression fixture classes.
+
+## Settings presentation audit — 2026-11-28
+
+Baseline `1101c14749f88ebda7e0c395b451e80fccb01f64`. The deployed audit exposed customer mapping IDs, a hard-coded nonexistent notification integration and an unlocalized SLA timestamp. Restoring the original component against the new behavioral tests gives 8 failures / 1 pass; the fixed component gives 9 passes.
+
+The existing production-web gate passes lint, strict TypeScript, 147 Vitest tests, production build and 60 browser tests (57 baseline + 3). The complete disposable full-stack suite passes 29 scenarios (28 baseline + 1), with zero retries; the new scenario creates a disabled synthetic destination, verifies actual API/DB identity and rule persistence, reloads and removes only its fixture. Coverage is 85.00% lines, 82.73% statements, 81.48% functions and 82.75% branches in the existing five-module scope; no threshold was reduced.
+
+Nine component + three browser + one full-stack tests added. Both English and Polish labels are asserted. No backend, OpenAPI, schema, provider credentials or shared staging configuration changed. Final push/PR checks are recorded on the PR for its exact HEAD. Staging acceptance after independent integration/deployment remains NOT TESTED.

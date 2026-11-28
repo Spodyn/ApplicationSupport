@@ -251,7 +251,8 @@
     "Message mutation retry scheduled": "Message mutation retry scheduled",
     "Message mutation failed": "Message mutation failed",
     "Message mutation awaiting confirmation": "Message mutation awaiting confirmation",
-    "Ta wiadomość nie ma edytowalnego zasobu tekstowego.": "This message has no editable text resource."
+    "Ta wiadomość nie ma edytowalnego zasobu tekstowego.": "This message has no editable text resource.",
+    "Wybierz integrację": "Choose an integration"
   },
   "auth": {
     "Bezpieczna aktywacja konta": "Secure account activation",

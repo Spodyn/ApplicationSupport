@@ -240,7 +240,7 @@ function SlaPanel({ data, actions }: { data: SlaSettings; actions: SettingsActio
       <Card className="h-fit border-primary/20 bg-primary/[0.03]">
         <CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="size-4 text-primary" /> {t("Przykład na żywo")}</CardTitle><CardDescription>{t("Poniedziałek, 16:30. Przykładowy kalendarz: dni robocze 08:00–17:00.")}</CardDescription></CardHeader>
         <CardContent className="grid gap-4">
-          <TimelineItem label={t("Otrzymano")} value="pon., 16:30" />
+          <TimelineItem label={t("Otrzymano")} value={example.received} />
           <TimelineItem label={t("Ostrzeżenie")} value={example.warning} accent="warning" />
           <TimelineItem label={t("Termin SLA")} value={example.deadline} accent="destructive" />
           <p className="rounded-lg bg-muted/60 p-3 text-xs text-muted-foreground">
@@ -606,7 +606,7 @@ function ChannelsPanel({ data, customers, actions }: { data: ManagedChannel[]; c
               <TableRow key={channel.id}>
                 <TableCell><div className="flex items-center gap-2"><PlatformIcon channel={channel.platform} /> <span className="text-xs">{channelLabels[channel.platform]}</span></div></TableCell>
                 <TableCell className="font-medium">{channel.channelName} · {channel.active ? t("Aktywny") : t("Nieaktywny")}</TableCell>
-                <TableCell><Select value={channel.customerId ?? "__unmapped__"} onValueChange={(value) => void configure(channel, value === "__unmapped__" ? undefined : String(value), channel.ignored)}><SelectTrigger className="w-52"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__unmapped__">{t("Nie przypisano")}</SelectItem>{customers.filter((customer) => customer.active).map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>)}</SelectContent></Select></TableCell>
+                <TableCell><Select value={channel.customerId ?? "__unmapped__"} onValueChange={(value) => void configure(channel, value === "__unmapped__" ? undefined : String(value), channel.ignored)}><SelectTrigger className="w-52" aria-label={`${t("Klient")}: ${channel.channelName}`}><SelectValue>{channel.customerId ? (customers.find((customer) => customer.id === channel.customerId)?.name || channel.customer || t("Klient")) : t("Nie przypisano")}</SelectValue></SelectTrigger><SelectContent><SelectItem value="__unmapped__">{t("Nie przypisano")}</SelectItem>{customers.filter((customer) => customer.active).map((customer) => <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>)}</SelectContent></Select></TableCell>
                 <TableCell><div className="flex items-center gap-2"><Switch checked={!channel.ignored} onCheckedChange={(checked) => void configure(channel, channel.customerId, !checked)} aria-label={`${channel.channelName}: monitoring`} /><span className={`text-xs ${channel.ignored || !channel.customerId && channel.platform !== "slack" ? "text-warning-foreground" : "text-success"}`}>{!channel.active ? t("Nieaktywny") : channel.ignored ? t("Ignorowany") : !channel.customerId && channel.platform !== "slack" ? t("Nieprzypisany") : t("Monitorowany")}</span></div></TableCell>
                 <TableCell className="font-mono text-xs">{channel.platform === "telegram" ? <Select value={channel.groupingStrategy} onValueChange={(value) => { if (channel.customerId) void actions.configureChannel.mutateAsync({ id: channel.id, customerId: channel.customerId, ignored: channel.ignored, groupingStrategy: value as ChannelGroupingStrategy }).catch((error) => notify.error(t("Nie udało się zapisać grupowania"), getErrorMessage(error))) }}><SelectTrigger aria-label={t("{{value0}}: grupowanie", { value0: channel.channelName })}><SelectValue /></SelectTrigger><SelectContent><SelectItem value="TELEGRAM_TOPIC">{t("Temat forum")}</SelectItem><SelectItem value="TELEGRAM_CHAT_ACTIVE_CASE">{t("Aktywny case na czat")}</SelectItem></SelectContent></Select> : channel.groupingStrategy === "SLACK_ROOT_THREAD" ? t("Root + wątek") : channel.groupingStrategy}</TableCell>
                 <TableCell className="text-xs text-muted-foreground">{channel.lastMessageAt ? formatDateTime(channel.lastMessageAt) : t("Brak")}</TableCell>
@@ -632,7 +632,7 @@ const blankNotification: NotificationDestination = {
   id: "",
   name: "",
   provider: "slack",
-  integrationId: "int-slack",
+  integrationId: "",
   channelName: "",
   types: ["sla_warning", "sla_breached"],
   enabled: true,
@@ -644,8 +644,13 @@ function NotificationsPanel({ data, deliveries, integrations, actions }: { data:
   const [dialogOpen, setDialogOpen] = useState(false)
   const [removed, setRemoved] = useState<NotificationDestination | null>(null)
 
-  const openCreate = () => { setEdited({ ...blankNotification }); setDialogOpen(true) }
+  const openCreate = () => {
+    const integration = integrations[0]
+    setEdited({ ...blankNotification, integrationId: integration?.id ?? "", provider: integration?.platform ?? "slack" })
+    setDialogOpen(true)
+  }
   const openEdit = (item: NotificationDestination) => { setEdited(structuredClone(item)); setDialogOpen(true) }
+  const selectedIntegration = integrations.find((integration) => integration.id === edited?.integrationId)
 
   const saveDestinations = async (next: NotificationDestination[], message: string) => {
     try {
@@ -701,14 +706,14 @@ function NotificationsPanel({ data, deliveries, integrations, actions }: { data:
             <Field label={t("Nazwa")}><Input value={edited.name} onChange={(event) => setEdited({ ...edited, name: event.target.value })} /></Field>
             <Field label={t("Integracja")}>
               <Select value={edited.integrationId} onValueChange={(value) => { const integration = integrations.find((item) => item.id === String(value)); if (integration) setEdited({ ...edited, integrationId: integration.id, provider: integration.platform }) }}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{integrations.map((integration) => <SelectItem key={integration.id} value={integration.id}>{channelLabels[integration.platform]} · {integration.workspace}</SelectItem>)}</SelectContent>
+                <SelectTrigger className="w-full"><SelectValue>{selectedIntegration ? `${channelLabels[selectedIntegration.platform]} · ${selectedIntegration.workspace || selectedIntegration.displayName}` : t("Wybierz integrację")}</SelectValue></SelectTrigger><SelectContent>{integrations.map((integration) => <SelectItem key={integration.id} value={integration.id}>{channelLabels[integration.platform]} · {integration.workspace || integration.displayName}</SelectItem>)}</SelectContent>
               </Select>
             </Field>
             <Field label={t("Kanał docelowy")}><Input value={edited.channelName} onChange={(event) => setEdited({ ...edited, channelName: event.target.value })} placeholder="#support-alerts" /></Field>
             <fieldset className="grid gap-2 rounded-lg border p-3"><legend className="px-1 text-sm font-medium">{t("Typy powiadomień")}</legend>{(Object.entries(notificationTypeLabels) as [NotificationType, string][]).map(([type, label]) => <label key={type} className="flex items-center gap-2 text-sm"><input type="checkbox" className="size-4 accent-primary" checked={edited.types.includes(type)} onChange={(event) => setEdited({ ...edited, types: event.target.checked ? [...edited.types, type] : edited.types.filter((item) => item !== type) })} />{t(label)}</label>)}</fieldset>
             <SettingSwitch label={t("Cel aktywny")} description={t("Wyłączony cel nie otrzymuje żadnych alertów.")} checked={edited.enabled} onChange={(enabled) => setEdited({ ...edited, enabled })} />
           </div>}
-          <DialogFooter><DialogClose render={<Button variant="outline" />}>{t("Anuluj")}</DialogClose><Button disabled={!edited?.name.trim() || !edited.channelName.trim() || edited.types.length === 0 || actions.saveSection.isPending} onClick={() => { if (!edited) return; const saved = { ...edited, id: edited.id || `not-${Date.now()}` }; const next = edited.id ? data.map((item) => item.id === edited.id ? saved : item) : [...data, saved]; void saveDestinations(next, edited.id ? t("Zapisano cel powiadomień") : t("Dodano cel powiadomień")) }}>{t("Zapisz")}</Button></DialogFooter>
+          <DialogFooter><DialogClose render={<Button variant="outline" />}>{t("Anuluj")}</DialogClose><Button disabled={!edited?.name.trim() || !edited.channelName.trim() || edited.types.length === 0 || !selectedIntegration || selectedIntegration.platform !== edited.provider || actions.saveSection.isPending} onClick={() => { if (!edited || !selectedIntegration || selectedIntegration.platform !== edited.provider) return; const saved = { ...edited, id: edited.id || `not-${Date.now()}` }; const next = edited.id ? data.map((item) => item.id === edited.id ? saved : item) : [...data, saved]; void saveDestinations(next, edited.id ? t("Zapisano cel powiadomień") : t("Dodano cel powiadomień")) }}>{t("Zapisz")}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -827,6 +832,7 @@ function calculateSlaExample(settings: SlaSettings) {
   const add = (minutes: number) => addBusinessMinutes(start, minutes)
   const format = (date: Date) => new Intl.DateTimeFormat(locale(), { weekday: "short", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(date)
   return {
+    received: format(start),
     warning: format(add(settings.firstResponseMinutes * 0.75)),
     deadline: format(add(settings.firstResponseMinutes)),
   }

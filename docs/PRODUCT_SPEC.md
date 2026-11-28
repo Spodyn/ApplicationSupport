@@ -148,6 +148,8 @@ OOO is sent at most once per Case per continuous closure period, is retry-safe a
 
 ## 18. Notifications and escalations
 
+Settings displays configured customer and integration names rather than internal identifiers. Existing inactive customer mappings retain their label without becoming available for new assignments. New notification destinations start with a configured integration and its actual provider; without a valid selection, saving is unavailable. Disabling a destination still suppresses delivery independently of its rule's enabled flag. SLA example timestamps follow the selected interface language.
+
 No external notification rule/destination is active by default. Escalations contain operational metadata/deep links, not full customer message bodies or attachment content by default.
 
 Business dedup key is `(sourceEventId, ruleId, destinationId)`. Transient delivery retries max 8/24h. DLQ replay requires `ADMIN + manage_notifications`.
