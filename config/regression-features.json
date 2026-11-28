@@ -971,7 +971,7 @@
         "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
         "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
         "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
-        "live": "NOT TESTED",
+        "live": "PARTIAL",
         "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
       }
     },
@@ -1542,7 +1542,7 @@
         "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
         "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
         "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
-        "live": "NOT TESTED",
+        "live": "PARTIAL",
         "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
       }
     },
@@ -1780,7 +1780,7 @@
         "revision": "1101c14749f88ebda7e0c395b451e80fccb01f64",
         "evidence": "https://github.com/Spodyn/ApplicationSupport/actions/runs/46153518193",
         "scope": "Execution of mapped suites at baseline; suite identifiers do not assert coverage of every scenario below.",
-        "live": "NOT TESTED",
+        "live": "BLOCKED",
         "note": "See the scoped observations and remaining acceptance in docs/FUNCTIONAL_AUDIT_2026_11_28.md; linked tests alone do not establish complete live acceptance."
       }
     },

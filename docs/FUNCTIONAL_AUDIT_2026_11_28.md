@@ -50,23 +50,23 @@ Oczekiwane zachowanie i istniejące pliki testów pozostają w maszynowym inwent
 | CUSTOMERS | PARTIAL | Lista i akcje odczytane; brak modyfikacji wspólnych danych. |
 | INTEGRATIONS | PARTIAL | Odczyt zdrowia i konfiguracji; bez sekretów i ponownego onboardingu. |
 | CHANNELS | FAIL | Nazwy kanałów poprawne, błędne etykiety mapowania w Settings. |
-| SLACK_IN | PARTIAL | Historyczne dedykowane wiadomości są widoczne. Nowa odpowiedź klienta jeszcze niepotwierdzona. |
+| SLACK_IN | PARTIAL | Nowe odpowiedzi klienta i nowy root Slack dotarły do USI; nowy CASE-22 i liczniki zaktualizowały się bez refresh. Załączniki inbound i awarie live: NOT TESTED. |
 | SLACK_OUT | PARTIAL | Nowa testowa odpowiedź CASE-00000009 pojawiła się w rzeczywistym właściwym wątku Slack. Dotyczy tekstu; nowe załączniki i awarie NOT TESTED live. |
 | CASE | PARTIAL | Lista, szczegóły i powiązane źródła działają; nowa sprawa i terminalny successor jeszcze NOT TESTED. |
-| CLAIM | PARTIAL | Właściciel istniejącej sprawy testowej widoczny; nowy Claim/race nieprzeprowadzony live. |
-| REPLY | PARTIAL | Odpowiedź z ASKED zachowuje ASKED i właściciela, ustawia follow-up. Trzy nowe odpowiedzi i customer reopening jeszcze nieprzeprowadzone w tym audycie. |
-| RESOLVE | PARTIAL | Akcja dostępna w ASKED; niepotwierdzona nową operacją live. |
+| CLAIM | PARTIAL | Nowy CASE-22: New/Unassigned → Claim → Open/Hubert, FRT zachowane; liczniki zaktualizowane bez refresh. Wyścig dwóch użytkowników: NOT TESTED live. |
+| REPLY | PARTIAL | CASE-9: trzy kolejne odpowiedzi bez refresh/reclaim, każda Sent w prawidłowym wątku Slack i restart follow-up. ASKED/Hubert zachowane. Customer reply → Open/NRT 30 min bez refresh. |
+| RESOLVE | PARTIAL | CASE-9 rozwiązana z ASKED, CASE-22 rozwiązana z OPEN; aktywny termin znika, terminalny composer zablokowany. Undo/race: NOT TESTED live. |
 | IGNORE | PARTIAL | Przycisk poprawnie niedostępny dla właściciela; głosowania i terminalność nieweryfikowane live. |
-| SNOOZE | NOT TESTED | Zmiana, wygaśnięcie i osobisty zakres jeszcze nieweryfikowane live. |
+| SNOOZE | PARTIAL | CASE-22: Snooze ukrywa sprawę i zmniejsza licznik Mine; Cancel snooze przywraca kolejkę/liczniki. FRT 15 min i właściciel bez zmian. Automatyczne expiry i drugie konto: NOT TESTED live. |
 | SLA | FAIL | AUDIT-SLA-01; follow-up odlicza bez refresh w kolejce, rozmowie i szczegółach. |
 | SCHEDULE | PARTIAL | Odczyt tygodnia i następnego otwarcia; zapis i granice nieprzeprowadzone live. |
 | NOTIFICATIONS | PARTIAL | Dzwonek zawiera trwałe przypomnienie follow-up CASE-20 z 28.11 00:04 oraz cztery przypomnienia wsparcia. CASE-20 pozostaje ASKED z właścicielem. Nowa dostawa realtime, read-all, izolacja i before/after statystyki: NOT TESTED live; kontrolowane testy są odrębne. |
 | READ | PARTIAL | Wskaźniki unread widoczne; pełna izolacja i seen/ack jeszcze nieweryfikowane live. |
 | ANALYTICS | PARTIAL | W polskim widoku 22–28 listopada: FRT 3, unikalne historyczne naruszenia 3, NRT 1, aktualnie zaległe odpowiedzi 1, follow-up 0. Definicje są rozdzielone. Niezależne przeliczenie live całego zbioru i porównania: NOT TESTED. |
 | HISTORY | PARTIAL | Dedykowana rozmowa i activity odczytane; pełna paginacja i wyszukiwanie jeszcze NOT TESTED. |
-| CASE_NOTES | NOT TESTED | Widoczny tryb notatki; brak nowej operacji w tym audycie. |
+| CASE_NOTES | PARTIAL | CASE-9 w ASKED: zapis nowej wewnętrznej notatki, brak zmiany publicznego preview, workflow i follow-up; notatka nie pojawiła się w otwartym wątku Slack. Izolacja innych kont: NOT TESTED live. |
 | REALTIME | PARTIAL | Statusy nowej wysyłki i mutacji zmieniają się bez refresh. Dwa różne konta, reconnect i bursta jeszcze NOT TESTED live. |
-| ATTACHMENTS | NOT TESTED | Nowe live operacje załączników jeszcze niewykonane. |
+| ATTACHMENTS | BLOCKED | Próbę dodania syntetycznego PNG do CASE-20 zatrzymało wyłączone Allow access to file URLs w rozszerzeniu Brave. Nie rozszerzano uprawnień. Nowa live wysyłka i skan: NOT RUN. Automatyczne testy używają izolowanych plików. |
 | RETRY | NOT TESTED | Celowo nie wymuszano awarii prawdziwego dostawcy. |
 | PERSISTENCE | PARTIAL | Odczyt danych starszych wdrożeń; restart/migracje/PITR nie są przedmiotem live manipulacji. |
 | AUDIT | PARTIAL | Widoczne activity request/success dla mutacji; pełny audit/retention nieweryfikowany live. |
@@ -87,7 +87,9 @@ Oczekiwane zachowanie i istniejące pliki testów pozostają w maszynowym inwent
 
 28.11, około 19:17 Europe/Warsaw: CASE-00000009, prywatny `usi-intake-test-20261109`, istniejący dedykowany wątek z markerami poprzedniego audytu. Wysłano wyłącznie nową wiadomość `USI FUNCTIONAL AUDIT 28NOV R1`, edytowano ją, skopiowano potwierdzony tekst i usunięto z potwierdzeniem. Slack pokazał wiadomość od aplikacji, zmieniony tekst, a następnie zniknięcie tej odpowiedzi. ApplicationSupport zachował treść i znacznik usunięcia. Innych wiadomości nie edytowano ani nie usuwano. Follow-up przesunął się po wysyłce na 29.11 o 19:17; edycja i usunięcie go nie zmieniły. ASKED i właściciel pozostali.
 
-Próba nowej syntetycznej odpowiedzi klienta w UI Slack nie dała potwierdzonej wysyłki. Nie zaliczono customer reopening. Pozostał testowy szkic do sprawdzenia/posprzątania; nie należy ponawiać wysyłki bez sprawdzenia wątku. Nie jest to dowód błędu odbioru w ApplicationSupport.
+Późniejsza kontrola zidentyfikowała nakładki informacyjne Slack blokujące poprzednią próbę. Po ich zamknięciu wysłano zachowany syntetyczny szkic, potwierdzono go u dostawcy i w CASE-9. Szkic zniknął. Następnie trzy odpowiedzi R3 dotarły do tego samego wątku bez refresh/reclaim; customer reply przełączyło CASE-9 na OPEN/NRT, a kolejna odpowiedź na ASKED. Zapisano jedną prywatną notatkę w ASKED i rozwiązano dedykowaną sprawę.
+
+Nowy root R4 utworzył CASE-22 (`01a223b1-d693-72e1-a1e4-03fdf320ee96`) bez refresh. Sprawę przejęto, sprawdzono Snooze/cancel i rozwiązano. FRT 15 min oraz NRT 30 min były zatrzymane w sobotę zgodnie z kalendarzem UTC; zaległy CASE-21 nadal pokazywał błędnie stałe 7h45m na starej wdrożonej wersji. Nie zmieniano globalnej polityki ani zegarów.
 
 ## Dostarczone poprawki i automatyczna regresja
 
@@ -110,8 +112,8 @@ Stan wdrożenia tych poprawek: NOT DEPLOYED przez ten audyt. PR-y pozostają do 
 ## Pozostałe prace
 
 1. Osobny PR SLA, pełna lokalna regresja i push/PR CI dla dokładnego HEAD, niezależna integracja i akceptacja po wdrożeniu.
-2. Odtworzyć błędy formularzy na izolowanych fixture; poprawić etykiety, domyślne wartości i lokalizację bez zmieniania wspólnego stagingu.
-3. Dokończyć dostępne operacje live, drugie konto, języki/tematy, statystyki i Teams; wskazać dokładnie brakujące uprawnienia lub dostęp.
+2. PR #173 zawiera odtworzenie i poprawkę formularzy, lokalną regresję oraz oba komplety ośmiu zielonych kontroli na ccb03d25ad46d5f592a0744369ba46b20ed20f31. Pozostaje niezależna integracja i akceptacja po wdrożeniu.
+3. Akceptacja live drugiego konta, Teams (wiadomości niezaładowane), plików (uprawnienie rozszerzenia), deterministycznych terminów i before/after statystyk pozostaje osobno ograniczona.
 4. Rozszerzyć istniejący inwentarz o źródła, identyfikatory scenariuszy, warstwy, granice, wyniki i pochodzenie dowodów; walidować brakujące powiązania i niewyjaśnione redukcje.
 5. Oddzielny PR CI/deployment: nightly + manual, zachowanie ośmiu obowiązkowych zadań, raporty z SHA/licznikami, bezpieczny smoke kolejnych wdrożeń, bez niekontrolowanego rollbacku i bez ponownego użycia hasła bootstrap.
 
