@@ -95,3 +95,7 @@ The platform-scoped resolved-read regression first fails with a missing provider
 ## Outbound message mutations
 
 `MESSAGE_MUTATIONS`: MessageMutationIntegrationTests covers both providers, authorization, idempotency, deterministic retries, lease fencing, concurrency, duplicate/stale callbacks, retained content/attachments and unchanged workflow/SLA/send timestamps. SlackMutationHttpTests and TeamsMutationHttpTests verify actual controlled update/delete HTTP, routing, attachment preservation and ambiguous receipts. message-mutations.test.tsx covers transport mapping and EN/PL pending/confirmation behavior; workflows.spec.ts exercises both controlled adapters and another connected browser. Live tenant validation remains NOT RUN. [Contract](OUTBOUND_MESSAGE_MUTATIONS.md).
+
+### Every-release staging smoke (2026-11-28)
+
+`STAGING`: `test_staging_smoke.py` checks public-only asset/API isolation without reading credentials, fail-closed exposed APIs/missing assets and invalid origins/partial credential inputs. `test_compose.py` runs public and authenticated smoke against real disposable HTTPS images before and after container recreation. The mandatory infrastructure gate retains existing TLS/cookie/STOMP/persistence assertions. Protected-host dedicated account provisioning and post-integration deployment remain NOT RUN.

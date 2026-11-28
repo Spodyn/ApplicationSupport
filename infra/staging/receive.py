@@ -80,6 +80,7 @@ def main() -> None:
         check(sha)
         del os.environ["GH_TOKEN"]
         del token
+        os.environ["USI_EXPECTED_REVISION"] = sha
         run("bash", str(release / "infra/staging/deploy.sh"))
 
 
