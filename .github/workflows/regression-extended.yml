@@ -3,7 +3,7 @@ name: Extended regression
 on:
   workflow_dispatch:
   schedule:
-    - cron: '23 3 * * 1'
+    - cron: '23 3 * * *'
 
 permissions:
   contents: read
@@ -35,7 +35,18 @@ jobs:
       - run: bash infra/minio/build-source-images.sh server
       - run: pnpm build
       - name: Three independent workflow repetitions without retries
-        run: pnpm test:fullstack --repeat-each=3
+        run: |
+          for repetition in 1 2 3; do
+            result=0
+            pnpm test:fullstack || result=$?
+            evidence="regression-evidence/repetition-$repetition"
+            mkdir -p "$evidence"
+            git rev-parse HEAD > "$evidence/tested-revision.txt"
+            for source in apps/web/playwright-report apps/web/test-results apps/api/target/fullstack-runtime.log; do
+              if [ -e "$source" ]; then cp -R "$source" "$evidence/"; fi
+            done
+            if [ "$result" -ne 0 ]; then exit "$result"; fi
+          done
       - name: Selective retry-policy mutation smoke in isolated copies
         run: python3 scripts/testing/mutation_smoke.py
       - name: Preserve extended regression evidence
@@ -44,8 +55,10 @@ jobs:
         with:
           name: extended-regression-evidence
           path: |
+            regression-evidence/
             apps/web/playwright-report/
             apps/web/test-results/
             apps/api/target/mutation-smoke.json
             apps/api/target/fullstack-runtime.log
+            config/regression-features.json
           retention-days: 7

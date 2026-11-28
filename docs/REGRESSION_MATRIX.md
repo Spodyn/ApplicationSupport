@@ -95,3 +95,7 @@ The platform-scoped resolved-read regression first fails with a missing provider
 ## Outbound message mutations
 
 `MESSAGE_MUTATIONS`: MessageMutationIntegrationTests covers both providers, authorization, idempotency, deterministic retries, lease fencing, concurrency, duplicate/stale callbacks, retained content/attachments and unchanged workflow/SLA/send timestamps. SlackMutationHttpTests and TeamsMutationHttpTests verify actual controlled update/delete HTTP, routing, attachment preservation and ambiguous receipts. message-mutations.test.tsx covers transport mapping and EN/PL pending/confirmation behavior; workflows.spec.ts exercises both controlled adapters and another connected browser. Live tenant validation remains NOT RUN. [Contract](OUTBOUND_MESSAGE_MUTATIONS.md).
+
+## Comprehensive audit inventory (2026-11-28)
+
+All 37 existing feature IDs have versioned source/suite/layer/CI mappings, positive, negative and boundary expectations, and separate baseline automated/live results in `config/regression-features.json`. The validator rejects broken references, duplicate scenarios, invalid provenance and unexplained test-map reductions against the event base. These mappings describe traceability; unresolved acceptance remains explicit in [the Polish functional audit](FUNCTIONAL_AUDIT_2026_11_28.md).

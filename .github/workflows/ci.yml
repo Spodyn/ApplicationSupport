@@ -33,8 +33,8 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || github.event.before }}
         run: |
-          node scripts/testing/check-inventory.mjs
           BASE_SHA="$(node scripts/testing/base-ref.mjs)"
+          node scripts/testing/check-inventory.mjs --base-ref "$BASE_SHA"
           git diff --check "$BASE_SHA" HEAD
 
       - name: Validate checked-in development examples
@@ -229,14 +229,20 @@ jobs:
       - name: Block actionable high and critical npm advisories
         run: pnpm audit --audit-level=high
 
+      - name: Record tested browser revision
+        if: always()
+        run: mkdir -p apps/web/test-results && git rev-parse HEAD > apps/web/test-results/tested-revision.txt
+
       - name: Upload Playwright artifacts
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: playwright-artifacts
           path: |
             apps/web/playwright-report/
             apps/web/test-results/
+            apps/web/coverage/
+            config/regression-features.json
           if-no-files-found: ignore
           retention-days: 7
 
@@ -274,13 +280,21 @@ jobs:
         run: pnpm build
       - name: Run real browser, backend, database, broker and object store workflows
         run: pnpm test:fullstack
-      - name: Upload synthetic full-stack failure evidence
-        if: failure()
+      - name: Record tested full-stack revision
+        if: always()
+        run: mkdir -p apps/web/test-results && git rev-parse HEAD > apps/web/test-results/tested-revision.txt
+
+      - name: Upload synthetic full-stack evidence
+        if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: fullstack-failure-evidence
+          name: fullstack-evidence
           path: |
+            apps/web/playwright-report/
             apps/web/test-results/fullstack/
+            apps/web/test-results/fullstack-junit.xml
+            apps/web/test-results/tested-revision.txt
+            config/regression-features.json
             apps/api/target/fullstack-runtime.log
           retention-days: 7
 
