@@ -2,6 +2,9 @@
 set -euo pipefail
 umask 077
 release=$(cd -- "$(dirname -- "$0")/../.." && pwd)
+# N-1 receivers already extract only verified /releases/<SHA> archives.
+USI_EXPECTED_REVISION=${USI_EXPECTED_REVISION:-$(basename -- "$release")}
+[[ "$USI_EXPECTED_REVISION" =~ ^[0-9a-f]{40}$ ]] || { echo 'Exact verified release revision required.' >&2; exit 1; }
 root=${USI_STAGING_ROOT:-/srv/usi-staging}
 state="$root/state"
 export COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-usi-staging}
@@ -33,12 +36,33 @@ for attempt in {1..60}; do
   sleep 2
 done
 [ "$ready" = true ] || { echo 'HTTPS readiness failed; prior images retained; no automatic DB rollback.' >&2; exit 1; }
-# Full authenticated smoke is a first-deployment acceptance step. Later releases
+for service in api web; do
+  container=$("${compose[@]}" ps -q "$service")
+  revision=$(docker inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$container")
+  [ "$revision" = "$USI_EXPECTED_REVISION" ] || { echo "Running $service revision differs from the verified release." >&2; exit 1; }
+done
+python3 "$release/infra/staging/smoke.py" --origin "https://$host" --public-only
+# Full authenticated smoke uses bootstrap only once. Later releases
 # must not depend on retaining/reusing a user's initial bootstrap password.
+authenticated_smoke=false
 if [ "$consumed" = f ]; then
   email=$("${compose[@]}" config --format json | python3 -c 'import json,sys;print(json.load(sys.stdin)["services"]["api"]["environment"]["USI_BOOTSTRAP_ADMIN_EMAIL"])')
   python3 "$release/infra/staging/smoke.py" --origin "https://$host" --email "$email" --password-file "$state/core/bootstrap-admin-password"
+  authenticated_smoke=true
+elif [ -f "$state/smoke/email" ] && [ -f "$state/smoke/password" ]; then
+  email=$(cat "$state/smoke/email")
+  python3 "$release/infra/staging/smoke.py" --origin "https://$host" --email "$email" --password-file "$state/smoke/password"
+  authenticated_smoke=true
+elif [ -e "$state/smoke/email" ] || [ -e "$state/smoke/password" ]; then
+  echo 'Incomplete dedicated smoke credentials; release not recorded.' >&2
+  exit 1
+else
+  echo 'Authenticated release smoke NOT RUN: dedicated staging smoke credentials are not provisioned. Public smoke and exact running revision verified.'
 fi
+python3 - "$state/release-verification.json" "$USI_EXPECTED_REVISION" "$authenticated_smoke" <<'PY'
+import datetime, json, pathlib, sys
+pathlib.Path(sys.argv[1]).write_text(json.dumps({"revision": sys.argv[2], "publicSmoke": "PASS", "authenticatedSmoke": "PASS" if sys.argv[3] == "true" else "NOT RUN", "observedAt": datetime.datetime.now(datetime.timezone.utc).isoformat()}) + "\n", encoding="utf-8")
+PY
 if [ -f "$root/current-release" ]; then cp "$root/current-release" "$root/previous-release"; fi
 printf '%s\n' "$release" > "$root/current-release"
 echo 'Staging readiness passed. Release recorded; volumes preserved. No webhook was changed.'

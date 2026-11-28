@@ -17,9 +17,11 @@ import urllib.parse
 import urllib.request
 
 
-def check(origin: str, email: str, password_file: Path, ca_file: str | None = None) -> None:
+def check(origin: str, email: str | None = None, password_file: Path | None = None, ca_file: str | None = None) -> None:
+    if bool(email) != bool(password_file):
+        raise ValueError("Both smoke account email and password file are required")
     url = urllib.parse.urlsplit(origin)
-    if url.scheme != "https" or not url.hostname or url.path not in ("", "/"):
+    if url.scheme != "https" or not url.hostname or url.path not in ("", "/") or url.username or url.password or url.query or url.fragment:
         raise ValueError("Smoke requires an HTTPS origin")
     context = ssl.create_default_context(cafile=ca_file)
     cookies = http.cookiejar.CookieJar()
@@ -50,6 +52,11 @@ def check(origin: str, email: str, password_file: Path, ca_file: str | None = No
             raise AssertionError("Standalone static application assets are missing")
     request("/actuator/health", expected=404)
     request("/api/v1/auth/me", expected=401)
+    request("/api/v1/cases", expected=401)
+    request("/api/v1/statistics/records", expected=401)
+    if password_file is None:
+        print("PASS: public HTTPS, staging marker, static assets and anonymous API isolation. Authenticated acceptance NOT RUN.")
+        return
     request("/api/v1/auth/login", {"email": email, "password": password_file.read_text(encoding="utf-8").strip()})
     identity = json.loads(request("/api/v1/auth/me"))
     if identity.get("email", "").lower() != email.lower():
@@ -57,7 +64,9 @@ def check(origin: str, email: str, password_file: Path, ca_file: str | None = No
     session = next(c for c in cookies if c.name == "USI_SESSION")
     if not session.secure or not session.has_nonstandard_attr("HttpOnly") or session.get_nonstandard_attr("SameSite").lower() != "lax":
         raise AssertionError("Secure session cookie attributes are missing")
-    request("/api/v1/cases")
+    cases = json.loads(request("/api/v1/cases"))
+    if not isinstance(cases.get("items"), list):
+        raise AssertionError("Case inbox contract is unavailable")
 
     key = base64.b64encode(os.urandom(16)).decode()
     cookie_header = "; ".join(f"{c.name}={c.value}" for c in cookies)
@@ -99,8 +108,13 @@ def check(origin: str, email: str, password_file: Path, ca_file: str | None = No
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--origin", default="https://application-support.duckdns.org")
-    parser.add_argument("--email", required=True)
-    parser.add_argument("--password-file", type=Path, required=True)
+    parser.add_argument("--email")
+    parser.add_argument("--password-file", type=Path)
+    parser.add_argument("--public-only", action="store_true")
     parser.add_argument("--ca-file")
     args = parser.parse_args()
+    if args.public_only and (args.email or args.password_file):
+        parser.error("Public-only checks must not receive credentials")
+    if not args.public_only and (not args.email or not args.password_file):
+        parser.error("Authenticated checks require --email and --password-file")
     check(args.origin.rstrip("/"), args.email, args.password_file, args.ca_file)

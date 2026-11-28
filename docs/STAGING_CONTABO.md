@@ -159,11 +159,26 @@ Full production monitoring/alerting and its acceptance are also outside this sma
 staging bootstrap; bounded container diagnostics do not replace those systems.
 
 Flyway runs the existing append-only migration chain. Deployment waits for private
-dependency/API/web health, then trusted public HTTPS. First deployment additionally
-runs `smoke.py`: actual UI and staging marker, login, Secure/HttpOnly/SameSite=Lax
-session, authenticated API, WebSocket upgrade and STOMP CONNECTED, logout and 401.
-No password, cookie or provider credential is emitted. It does not reuse the initial
-bootstrap password on future releases after the owner may have changed it.
+dependency/API/web health, then trusted public HTTPS. Every release verifies the
+actual API and web container revision labels against the receiver-verified exact SHA,
+then runs `smoke.py --public-only`: actual UI/staging marker, JS/CSS assets, private
+actuator exclusion and anonymous denial of identity, Cases and statistics APIs.
+The release pointer advances only after these checks. A protected
+`state/release-verification.json` records exact running revision and separate public /
+authenticated results; it contains no credentials or customer payloads.
+
+First deployment additionally runs authenticated `smoke.py`: login,
+Secure/HttpOnly/SameSite=Lax session, Case inbox shape, WebSocket upgrade and
+STOMP CONNECTED, logout and 401. Later deployments use this same read-only smoke
+only when an authorized operator has provisioned a dedicated staging account with
+root-only (0600) `state/smoke/email` and `state/smoke/password` files under a 0700
+directory. Do not commit these files, mount them into application containers or put
+the password in command arguments/environment. Do not reuse an owner's bootstrap
+password or create/change credentials automatically. A partial credential pair fails
+the deployment; no pair records authenticated acceptance as NOT RUN, never PASS.
+Provisioning/verification of that dedicated account is a protected operational
+prerequisite for complete authenticated release acceptance. This PR does not perform
+it. No password, cookie or provider credential is emitted.
 
 On failed readiness/smoke the workflow fails; it does not mark success, purge data
 or roll schema backward. Inspect the protected host's `docker compose ... ps/logs`
@@ -210,3 +225,5 @@ Official implementation references: [Docker Ubuntu install](https://docs.docker.
 [MinIO client CA directory](https://min.io/docs/minio/linux/reference/minio-mc.html).
 
 Provider onboarding: [PROVIDER_ONBOARDING.md](PROVIDER_ONBOARDING.md). The API entrypoint supports `USI_JAVA_PREFER_IPV4`; staging defaults it to true because the live VPS Java HTTP client timed out on the advertised IPv6 route while the identical authenticated path over IPv4 succeeded. TLS certificate/hostname verification remains enabled, and other instances can explicitly select false. Bot identifiers and credentials are independent per instance.
+
+N-1 receiver compatibility: an older protected receiver does not export `USI_EXPECTED_REVISION`. The release script therefore accepts its existing verified `/releases/<exact SHA>` directory as the expected revision and still requires both running container labels to match. No protected-host receiver installation or credential provisioning is performed by the PR.

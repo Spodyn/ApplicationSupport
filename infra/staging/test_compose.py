@@ -65,6 +65,7 @@ def main():
             if os.name == "posix" and os.geteuid() != 0:
                 smoke = ["sudo", *smoke]
             run(*smoke, env=env)
+            run(sys.executable, str(ROOT / "infra/staging/smoke.py"), "--origin", f"https://localhost:{https_port}", "--public-only", "--ca-file", str(ca), env=env)
             # Verify the mounted MinIO key/CA with real encrypted object I/O.
             object_check = '''mc alias set staging https://minio:9000 "$(cat /run/usi-core/usi.object-storage.access-key)" "$(cat /run/usi-core/usi.object-storage.secret-key)" >/dev/null
 printf test-only-persistent-object | mc pipe staging/usi-attachments-staging/staging-test.txt >/dev/null
@@ -73,6 +74,7 @@ test "$(mc cat staging/usi-attachments-staging/staging-test.txt)" = test-only-pe
             run(*compose, "down", env=env)
             run(*compose, "up", "-d", "--wait", "--wait-timeout", "300", env=env)
             run(*smoke, env=env)
+            run(sys.executable, str(ROOT / "infra/staging/smoke.py"), "--origin", f"https://localhost:{https_port}", "--public-only", "--ca-file", str(ca), env=env)
             count = subprocess.check_output([*compose, "exec", "-T", "postgres", "psql", "-U", "usi_staging", "-d", "usi_staging", "-Atc", "SELECT count(*) FROM users"], env=env, text=True).strip()
             if count != "1":
                 raise AssertionError("Restart duplicated/lost the bootstrap administrator")
