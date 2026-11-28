@@ -472,7 +472,7 @@
       "feature": "Polish and English interface",
       "status": "IMPLEMENTED",
       "risk": "MEDIUM",
-      "expected": "English default; account-scoped language across refresh and re-login; immediate switching, complete catalogs and locale formatting",
+      "expected": "English default; account-scoped language across refresh and re-login; immediate switching, complete catalogs and locale formatting; unmapped customer details localize the sentinel while mapped customer names remain literal",
       "tests": [
         "apps/web/tests/unit/i18n.test.tsx",
         "apps/web/tests/e2e/application.spec.ts",

@@ -507,6 +507,26 @@ for (const [kind, warningSeconds] of [["FRT", 225], ["NRT", 450]] as const) {
   })
 }
 
+for (const english of [true, false]) {
+  test(`unmapped customer details use the interface language in ${english ? "English" : "Polish"}`, async ({page}) => {
+    await preparePage(page, true, {english, customerId: "00000000-0000-0000-0000-000000000000", customerName: "Nie przypisano"})
+    await page.goto("/cases")
+    const details = page.getByRole("complementary", {name: english ? "Case details" : "Szczegóły sprawy"})
+    const customer = details.locator("dt").filter({hasText: new RegExp(`^${english ? "Customer" : "Klient"}$`)}).locator("xpath=following-sibling::dd[1]")
+    await expect(customer).toHaveText(english ? "Unassigned" : "Nie przypisano")
+    await page.reload()
+    await expect(customer).toHaveText(english ? "Unassigned" : "Nie przypisano")
+  })
+}
+
+test("mapped customer names remain literal even when matching a translation key", async ({page}) => {
+  await preparePage(page, true, {english: true, customerId: "customer", customerName: "Nie przypisano"})
+  await page.goto("/cases")
+  const details = page.getByRole("complementary", {name: "Case details"})
+  const customer = details.locator("dt").filter({hasText: /^Customer$/}).locator("xpath=following-sibling::dd[1]")
+  await expect(customer).toHaveText("Nie przypisano")
+})
+
 for (const provider of ["SLACK", "TEAMS", "TELEGRAM"] as const) {
   for (const mapped of [true, false]) {
     test(`${provider} ${mapped ? "mapped" : "unmapped"} Case card uses its provider channel title`, async ({ page }) => {

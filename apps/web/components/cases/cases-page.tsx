@@ -986,7 +986,7 @@ function CaseDetails({ item, record, activity, items }: {
         </div>}
         {record?.integration && <div>
           <dt className="text-xs text-[#aeb8c8]">{t("Klient")}</dt>
-          <dd className="mt-1 mb-3">{record.customer.name}</dd>
+          <dd className="mt-1 mb-3">{record.customer.id === "unassigned" ? t("Nie przypisano") : record.customer.name}</dd>
           <dt className="text-xs text-[#aeb8c8]">{t("Integracja")}</dt>
           <dd className="mt-1">{record.integration.name}{record.integration.workspace && <><br />{record.integration.workspace}</>}</dd>
           <dd className="mt-1 text-xs text-[#aeb8c8]">{item.source} · {record.integration.externalChannelId}</dd>

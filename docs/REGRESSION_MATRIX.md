@@ -95,3 +95,7 @@ The platform-scoped resolved-read regression first fails with a missing provider
 ## Outbound message mutations
 
 `MESSAGE_MUTATIONS`: MessageMutationIntegrationTests covers both providers, authorization, idempotency, deterministic retries, lease fencing, concurrency, duplicate/stale callbacks, retained content/attachments and unchanged workflow/SLA/send timestamps. SlackMutationHttpTests and TeamsMutationHttpTests verify actual controlled update/delete HTTP, routing, attachment preservation and ambiguous receipts. message-mutations.test.tsx covers transport mapping and EN/PL pending/confirmation behavior; workflows.spec.ts exercises both controlled adapters and another connected browser. Live tenant validation remains NOT RUN. [Contract](OUTBOUND_MESSAGE_MUTATIONS.md).
+
+## Unassigned customer localization (2026-11-28)
+
+The live English Case detail showed the API's Polish fallback name. `application.spec.ts` first reproduces the failure and then asserts English/Polish details across reload and a real mapped customer literally named `Nie przypisano`. Translate only the stable unassigned identity; never translate customer-controlled names. The existing API/service boundary and card layout remain unchanged.
