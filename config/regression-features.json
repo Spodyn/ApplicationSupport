@@ -575,7 +575,8 @@
         "apps/web/tests/unit/inbox-preferences.test.tsx",
         "apps/web/tests/unit/realtime-query-invalidation.test.ts",
         "apps/web/tests/e2e/application.spec.ts",
-        "apps/web/tests/fullstack/workflows.spec.ts"
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/api/src/test/java/com/unifiedsupportinbox/readstate/internal/ResolvedCaseBatchReadServiceIntegrationTests.java"
       ],
       "gap": "Live deployed acceptance pending PR deployment; automated controlled providers and independent sessions cover the contract. Drafts are in memory and do not survive reload."
     }

@@ -455,7 +455,7 @@ function CaseWorkspace({
                     {!separated && <FilterSelect label={t("Dostawca")} value={providerFilter} onChange={(value) => setProviderFilter(value as typeof providerFilter)} options={[{ value: "slack", label: "Slack" }, { value: "teams", label: "Teams" }, { value: "telegram", label: "Telegram" }]} />}
                     <FilterSelect label={t("Właściciel")} value={ownerFilter} onChange={setOwnerFilter} options={(filterOptions.data?.owners ?? []).map((item) => ({ value: item.id, label: item.name }))} />
                   </div>
-                  <button type="button" disabled={markResolvedRead.isPending} onClick={() => { if (window.confirm(t("Potwierdź oznaczenie wszystkich rozwiązanych spraw jako przeczytane."))) markResolvedRead.mutate() }} className="mt-1 w-full border-t border-white/10 px-2.5 py-2 text-left text-[12px] text-violet-300 disabled:opacity-50">{t("Oznacz rozwiązane jako przeczytane")}</button>
+                  <button type="button" disabled={markResolvedRead.isPending || (separated && !activeProvider)} onClick={() => { if (window.confirm(listQuery.provider ? t("Potwierdź oznaczenie wszystkich rozwiązanych spraw z platformy {{platform}} jako przeczytane.", { platform: providerLabel(listQuery.provider) }) : t("Potwierdź oznaczenie wszystkich rozwiązanych spraw jako przeczytane."))) markResolvedRead.mutate(listQuery.provider) }} className="mt-1 w-full border-t border-white/10 px-2.5 py-2 text-left text-[12px] text-violet-300 disabled:opacity-50">{t("Oznacz rozwiązane jako przeczytane")}</button>
                 </div>
               )}
             </div>

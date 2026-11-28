@@ -77,7 +77,9 @@ test('inbox preferences synchronize across sessions while inactive-platform coun
   } finally {
     await context.close()
     await closeFixtureCases(page)
-    expect((await command(page, '/api/v1/admin/cases/' + teamsCase.caseId + '/force-resolve', {resolutionCategory: 'OTHER'})).status()).toBe(200)
+    const cleanup = await page.request.delete('/__test/inbox-platform-fixture', {data: {caseId: teamsCase.caseId}})
+    expect(cleanup.status()).toBe(200)
+    expect(await cleanup.json()).toEqual({cleaned: true})
   }
 })
 

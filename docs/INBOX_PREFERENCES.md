@@ -25,7 +25,11 @@ inbox implementations. Future provider support extends the existing provider
 catalog/domain contract, without another inbox page.
 
 The existing REST `provider` filter scopes every page, matching bulk selection,
-Quick Views and unread/SLA attention filters. Search, advanced filters and server
+Quick Views and unread/SLA attention filters. The existing resolved-read batch
+command accepts an optional `provider` scope, included in its idempotency
+fingerprint. Separated mode always supplies it (and disables the action when
+there is no platform). Omitting the parameter preserves the global command and
+its existing replay fingerprint. Search, advanced filters and server
 ordering remain in effect when switching platforms. The advanced provider filter
 is hidden in separated mode. Each inactive tab requests at most one Case row to
 obtain authoritative filtered counters; events invalidate the shared Case query

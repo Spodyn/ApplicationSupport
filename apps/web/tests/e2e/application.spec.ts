@@ -42,6 +42,7 @@ async function preparePlatformInbox(page: Page, english = true) {
   let mode = "UNIFIED"
   const requests: URL[] = []
   const bulkRequests: string[][] = []
+  const resolvedReadRequests: URL[] = []
   const providers = ["SLACK", "TEAMS", "TELEGRAM"] as const
   const items = providers.flatMap((provider, index) => [0, 1].map((offset) => ({ ...caseListItem,
     id: `018f0000-0000-7000-8000-000000000${301 + index * 2 + offset}`,
@@ -56,6 +57,10 @@ async function preparePlatformInbox(page: Page, english = true) {
       return route.fulfill({ json: { mode } })
     }
     if (url.pathname === "/api/v1/cases/filter-options") return route.fulfill({ json: { customers: [], channels: [], owners: [], providers } })
+    if (url.pathname === "/api/v1/cases/read/mark-resolved") {
+      resolvedReadRequests.push(url)
+      return route.fulfill({ json: { updatedCount: 1 } })
+    }
     if (url.pathname === "/api/v1/cases/bulk") {
       const ids: string[] = route.request().postDataJSON().caseIds
       bulkRequests.push(ids)
@@ -84,7 +89,7 @@ async function preparePlatformInbox(page: Page, english = true) {
       sla: null, ignoreScore: 0, waitingUntil: null, resolutionCategory: null, version: 1,
     } })
   })
-  return { items, requests, bulkRequests }
+  return { items, requests, bulkRequests, resolvedReadRequests }
 }
 
 test("account inbox modes scope server counters, search, pagination and selections while retaining drafts", async ({ page }) => {
@@ -117,6 +122,10 @@ test("account inbox modes scope server counters, search, pagination and selectio
   await expect(page.getByRole("group", { name: "Bulk Actions" }).getByRole("button", { name: "Claim", exact: true })).toBeDisabled()
   await page.getByRole("button", { name: "Filters", exact: true }).click()
   await expect(page.getByRole("combobox", { name: "Provider" })).toHaveCount(0)
+  page.once("dialog", (dialog) => dialog.accept())
+  await page.getByRole("button", { name: "Mark resolved as read", exact: true }).click()
+  await expect.poll(() => fixture.resolvedReadRequests.length).toBe(1)
+  expect(fixture.resolvedReadRequests[0].searchParams.get("provider")).toBe("TEAMS")
   await page.getByRole("button", { name: "Filters", exact: true }).click()
   await page.getByRole("checkbox").first().check()
   await page.getByRole("group", { name: "Bulk Actions" }).getByRole("button", { name: "Resolve", exact: true }).click()
@@ -172,13 +181,18 @@ test("separated inbox deep links select the real provider and an empty catalog n
   await page.goto("/cases?caseId=" + fixture.items[2].id)
   await expect(page.getByRole("group", { name: "Inbox platforms" }).getByRole("button", { name: /Microsoft Teams/ })).toHaveAttribute("aria-pressed", "true")
   await expect(page.locator(`button[data-case-id="${fixture.items[2].id}"]`)).toHaveAttribute("aria-pressed", "true")
-  await page.route("**/api/v1/cases/filter-options", (route) => route.fulfill({ json: { customers: [], channels: [], owners: [], providers: [] } }))
-  fixture.requests.length = 0
-  await page.goto("/cases")
-  await page.reload()
-  await expect(page.getByText("No platforms configured.", { exact: true })).toBeVisible()
-  await expect(page.locator("button[data-case-id]")).toHaveCount(0)
-  expect(fixture.requests).toHaveLength(0)
+  // A fresh page isolates the empty catalog from in-flight requests in the deep-link phase.
+  const empty = await page.context().newPage()
+  try {
+    const emptyFixture = await preparePlatformInbox(empty)
+    await empty.route("**/api/v1/users/me/inbox-preferences", (route) => route.fulfill({ json: { mode: "SEPARATE_BY_PLATFORM" } }))
+    await empty.route("**/api/v1/cases/filter-options", (route) => route.fulfill({ json: { customers: [], channels: [], owners: [], providers: [] } }))
+    await empty.goto("/cases")
+    await empty.reload()
+    await expect(empty.getByText("No platforms configured.", { exact: true })).toBeVisible()
+    await expect(empty.locator("button[data-case-id]")).toHaveCount(0)
+    expect(emptyFixture.requests).toHaveLength(0)
+  } finally { await empty.close() }
 })
 
 test("failed preference writes restore the saved mode and display a localized error", async ({ page }) => {

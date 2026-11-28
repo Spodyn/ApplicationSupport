@@ -336,7 +336,7 @@ export function useInboxWorkflow(caseId?: string) {
 export function useMarkAllResolvedRead() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => serviceRegistry.inbox.markAllResolvedRead(),
+    mutationFn: (provider?: InboxListQuery["provider"]) => serviceRegistry.inbox.markAllResolvedRead(provider),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: queryKeys.inboxCases() }),
   })

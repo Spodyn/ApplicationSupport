@@ -965,6 +965,7 @@
     "Nie udało się wczytać preferencji skrzynki.": "Nie udało się wczytać preferencji skrzynki.",
     "Nie udało się zapisać preferencji skrzynki.": "Nie udało się zapisać preferencji skrzynki.",
     "Platformy skrzynki": "Platformy skrzynki",
-    "Brak skonfigurowanych platform.": "Brak skonfigurowanych platform."
+    "Brak skonfigurowanych platform.": "Brak skonfigurowanych platform.",
+    "Potwierdź oznaczenie wszystkich rozwiązanych spraw z platformy {{platform}} jako przeczytane.": "Potwierdź oznaczenie wszystkich rozwiązanych spraw z platformy {{platform}} jako przeczytane."
   }
 }

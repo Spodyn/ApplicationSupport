@@ -400,6 +400,7 @@ export interface BulkCasesInput {
 
 export interface MarkResolvedCasesReadInput {
   "Idempotency-Key": string
+  "provider"?: Channel
 }
 
 export interface ListDirectConversationsInput {
@@ -601,7 +602,7 @@ export function createApiClient(transport: ApiTransport) {
   snoozeCase: (input: SnoozeCaseInput) => transport.request<SnoozeResponse>({ method: "POST", path: interpolatePath("/api/v1/cases/{caseId}/snooze", { "caseId": input["caseId"] }), headers: { "Idempotency-Key": input["Idempotency-Key"] }, body: input.body }),
   bulkCases: (input: BulkCasesInput) => transport.request<CaseBulkResponse>({ method: "POST", path: "/api/v1/cases/bulk", headers: { "Idempotency-Key": input["Idempotency-Key"] }, body: input.body }),
   getCaseFilterOptions: () => transport.request<CaseFilterOptions>({ method: "GET", path: "/api/v1/cases/filter-options" }),
-  markResolvedCasesRead: (input: MarkResolvedCasesReadInput) => transport.request<BatchReadResponse>({ method: "POST", path: "/api/v1/cases/read/mark-resolved", headers: { "Idempotency-Key": input["Idempotency-Key"] } }),
+  markResolvedCasesRead: (input: MarkResolvedCasesReadInput) => transport.request<BatchReadResponse>({ method: "POST", path: "/api/v1/cases/read/mark-resolved", query: { "provider": input["provider"] }, headers: { "Idempotency-Key": input["Idempotency-Key"] } }),
   listDirectConversations: (input: ListDirectConversationsInput) => transport.request<DirectConversationPage>({ method: "GET", path: "/api/v1/direct-messages/conversations", query: { "cursor": input["cursor"], "limit": input["limit"], "search": input["search"] } }),
   startDirectConversation: (input: StartDirectConversationInput) => transport.request<DirectConversation>({ method: "POST", path: "/api/v1/direct-messages/conversations", body: input.body }),
   getDirectConversation: (input: GetDirectConversationInput) => transport.request<DirectConversation>({ method: "GET", path: interpolatePath("/api/v1/direct-messages/conversations/{id}", { "id": input["id"] }) }),

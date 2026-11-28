@@ -305,8 +305,8 @@ export function createApiInboxRepository(transport: ApiTransport): InboxReposito
     async markRead(caseId, messageId) {
       await client.markCaseRead({ caseId, body: { messageId } })
     },
-    async markAllResolvedRead() {
-      await client.markResolvedCasesRead({ "Idempotency-Key": crypto.randomUUID() })
+    async markAllResolvedRead(provider) {
+      await client.markResolvedCasesRead({ "Idempotency-Key": crypto.randomUUID(), provider: provider?.toUpperCase() as CaseListItem["provider"] | undefined })
     },
     async claim(caseId) {
       try {

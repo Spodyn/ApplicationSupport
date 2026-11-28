@@ -4,6 +4,7 @@ import com.unifiedsupportinbox.ApiProblemException;
 import com.unifiedsupportinbox.IdempotencyResponse;
 import com.unifiedsupportinbox.IdempotencyResult;
 import com.unifiedsupportinbox.IdempotentCommandExecutor;
+import com.unifiedsupportinbox.integration.IntegrationProvider;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -32,17 +33,22 @@ class ResolvedCaseBatchReadService {
     }
 
     IdempotencyResult markResolvedRead(UUID userId, String idempotencyKey) {
+        return markResolvedRead(userId, idempotencyKey, null);
+    }
+
+    IdempotencyResult markResolvedRead(UUID userId, String idempotencyKey, IntegrationProvider provider) {
         Objects.requireNonNull(userId, "userId");
         requireEligibleUser(userId);
         return idempotency.execute(
                 userId,
                 COMMAND_SCOPE,
                 idempotencyKey,
-                Map.of("userId", userId.toString()),
-                () -> execute(userId));
+                provider == null ? Map.of("userId", userId.toString())
+                        : Map.of("userId", userId.toString(), "provider", provider.name()),
+                () -> execute(userId, provider));
     }
 
-    private IdempotencyResponse execute(UUID userId) {
+    private IdempotencyResponse execute(UUID userId, IntegrationProvider provider) {
         List<UpdatedReadPosition> updated = jdbc.query("""
                 WITH latest_message AS (
                     SELECT DISTINCT ON (message.case_id)
@@ -61,6 +67,7 @@ class ResolvedCaseBatchReadService {
                     LEFT JOIN messages current_message ON current_message.id = state.last_read_message_id
                     WHERE state.user_id = ?
                       AND current_case.status = 'RESOLVED'
+                      AND (?::varchar IS NULL OR current_case.provider = ?::varchar)
                       AND (
                           state.last_read_message_id IS NULL
                           OR latest.message_order_at > COALESCE(current_message.provider_created_at, current_message.created_at)
@@ -82,6 +89,8 @@ class ResolvedCaseBatchReadService {
                 rs.getObject("case_id", UUID.class),
                 rs.getObject("last_read_message_id", UUID.class)),
                 userId,
+                provider == null ? null : provider.name(),
+                provider == null ? null : provider.name(),
                 userId);
 
         ObjectNode response = json.createObjectNode();

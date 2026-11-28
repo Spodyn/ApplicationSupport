@@ -108,7 +108,7 @@ export interface InboxRepository {
   getMessages(caseId: string, before?: string): Promise<InboxPage<InboxMessage>>
   getActivity(caseId: string, cursor?: string): Promise<InboxPage<InboxActivity>>
   markRead(caseId: string, messageId: string): Promise<void>
-  markAllResolvedRead(): Promise<void>
+  markAllResolvedRead(provider?: InboxListQuery["provider"]): Promise<void>
   claim(caseId: string): Promise<void>
   ignore(caseId: string, input: InboxIgnoreInput): Promise<void>
   resolve(caseId: string, input: InboxResolveInput): Promise<void>

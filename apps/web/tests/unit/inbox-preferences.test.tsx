@@ -51,3 +51,12 @@ it("uses the same authoritative provider filters for paginated lists and bounded
   expect(requests[0].query).toMatchObject({ provider: "TEAMS", search: "needle", quickView: "SLA", unread: true, ownerId: "owner", limit: 1 })
   expect(requests[1].query).toMatchObject({ ...requests[0].query, limit: 50, cursor: "scope-bound-cursor" })
 })
+
+it("scopes resolved-read commands to the selected provider and keeps the legacy global request", async () => {
+  const request = vi.fn().mockResolvedValue({ updatedCount: 1 })
+  const repository = createApiInboxRepository({ request } as ApiTransport)
+  await repository.markAllResolvedRead("teams")
+  expect(request).toHaveBeenLastCalledWith(expect.objectContaining({ path: "/api/v1/cases/read/mark-resolved", query: { provider: "TEAMS" } }))
+  await repository.markAllResolvedRead()
+  expect(request).toHaveBeenLastCalledWith(expect.objectContaining({ query: { provider: undefined } }))
+})

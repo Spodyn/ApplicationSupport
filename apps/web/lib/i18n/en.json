@@ -965,6 +965,7 @@
     "Nie udało się wczytać preferencji skrzynki.": "Could not load inbox preferences.",
     "Nie udało się zapisać preferencji skrzynki.": "Could not save inbox preferences.",
     "Platformy skrzynki": "Inbox platforms",
-    "Brak skonfigurowanych platform.": "No platforms configured."
+    "Brak skonfigurowanych platform.": "No platforms configured.",
+    "Potwierdź oznaczenie wszystkich rozwiązanych spraw z platformy {{platform}} jako przeczytane.": "Confirm marking all resolved Cases from {{platform}} as read."
   }
 }
