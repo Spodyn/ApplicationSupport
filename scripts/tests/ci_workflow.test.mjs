@@ -86,7 +86,7 @@ test('coverage reduction requires an explicit reason and a mapped replacement', 
 test('nightly evidence preserves mandatory suites, zero retries and exact executed revisions', () => {
   const extended = readFileSync(new URL('../../.github/workflows/regression-extended.yml', import.meta.url), 'utf8')
   assert.match(extended, /23 3 \* \* \*/)
-  assert.match(extended, /pnpm test:fullstack --repeat-each=3/)
+  assert.match(extended, /for repetition in 1 2 3; do/); assert.match(extended, /pnpm test:fullstack \|\| result=\$\?/); assert.doesNotMatch(extended, /--repeat-each/)
   assert.match(extended, /mutation_smoke\.py/)
   assert.doesNotMatch(extended, /--retries|continue-on-error|secrets\./)
   assert.match(workflow, /check-inventory\.mjs --base-ref/)
