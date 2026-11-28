@@ -64,7 +64,7 @@
       "feature": "Slack discovery/mapping",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Complete membership snapshot; inactive disappearance; customer/grouping configuration; source-name Case titles independent of customer mapping; durable rename refresh without identity changes",
+      "expected": "Complete membership snapshot; inactive disappearance; customer/grouping configuration; source-name Case titles independent of customer mapping; durable rename refresh without identity changes; display customer names before opening mapping selectors, preserving inactive mappings",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/channel/internal/ChannelIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/provider/slack/internal/SlackChannelDiscoveryServiceTests.java",
@@ -72,7 +72,8 @@
         "apps/web/tests/unit/api-channel-adapter.test.ts",
         "apps/web/tests/fullstack/workflows.spec.ts",
         "apps/web/tests/unit/inbox-api-adapter.test.ts",
-        "apps/web/tests/e2e/application.spec.ts"
+        "apps/web/tests/e2e/application.spec.ts",
+        "apps/web/tests/unit/settings-presentation.test.tsx"
       ],
       "gap": "Live private/Connect membership acceptance external"
     },
@@ -209,7 +210,8 @@
         "apps/api/src/test/java/com/unifiedsupportinbox/PostgresFlywayLifecycleIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
         "apps/api/src/test/java/com/unifiedsupportinbox/messaging/internal/MessageDeliveryWorkerIntegrationTests.java",
-        "apps/web/tests/unit/operational-sla.test.ts"
+        "apps/web/tests/unit/operational-sla.test.ts",
+        "apps/web/tests/unit/settings-presentation.test.tsx"
       ],
       "gap": "Production SLO/load evidence is not a unit-test pass"
     },
@@ -230,10 +232,13 @@
       "feature": "Notifications and retry workers",
       "status": "IMPLEMENTED",
       "risk": "HIGH",
-      "expected": "Rules/destinations rechecked; bounded retries; idempotent delivery/replay",
+      "expected": "Rules/destinations rechecked; bounded retries; idempotent delivery/replay; new destinations use an actual configured integration/provider and cannot save without one",
       "tests": [
         "apps/api/src/test/java/com/unifiedsupportinbox/notification/internal/NotificationConfigurationIntegrationTests.java",
-        "apps/api/src/test/java/com/unifiedsupportinbox/notification/internal/NotificationDeliveryWorkerIntegrationTests.java"
+        "apps/api/src/test/java/com/unifiedsupportinbox/notification/internal/NotificationDeliveryWorkerIntegrationTests.java",
+        "apps/web/tests/unit/settings-presentation.test.tsx",
+        "apps/web/tests/e2e/application.spec.ts",
+        "apps/web/tests/fullstack/workflows.spec.ts"
       ],
       "gap": "Real provider notifications require explicit sandbox; no ordinary CI external calls"
     },
@@ -476,7 +481,8 @@
       "tests": [
         "apps/web/tests/unit/i18n.test.tsx",
         "apps/web/tests/e2e/application.spec.ts",
-        "apps/web/tests/fullstack/workflows.spec.ts"
+        "apps/web/tests/fullstack/workflows.spec.ts",
+        "apps/web/tests/unit/settings-presentation.test.tsx"
       ],
       "gap": "Preference is browser-specific, not synchronized across devices"
     },

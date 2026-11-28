@@ -194,6 +194,43 @@ test('selected Case survives reload when another active conversation moves ahead
   } finally { await closeFixtureCases(page) }
 })
 
+test('notification Settings persists the actual configured identity without sending an alert', async ({page}) => {
+  await login(page, undefined, true)
+  const integrations = await (await page.request.get('/api/v1/admin/integrations')).json()
+  const first = integrations[0]
+  expect(first.id).toMatch(/^[0-9a-f-]{36}$/)
+  const name = 'Disabled audit destination ' + randomUUID().slice(0, 8)
+  await page.goto('/settings')
+  await page.getByRole('tab', {name: 'Notifications', exact: true}).click()
+  await page.getByRole('button', {name: 'Add destination', exact: true}).click()
+  const dialog = page.getByRole('dialog', {name: 'Add notification destination', exact: true})
+  await expect(dialog.getByRole('combobox')).not.toHaveText(/int-slack|^[0-9a-f-]{36}$/)
+  await dialog.getByRole('textbox', {name: 'Name', exact: true}).fill(name)
+  await dialog.getByRole('textbox', {name: 'Destination channel', exact: true}).fill(fixtures.get(page)!.externalChannelId)
+  await dialog.getByRole('switch').click()
+  const created = page.waitForResponse(response => response.url().endsWith('/api/v1/admin/notifications/destinations')
+    && response.request().method() === 'POST')
+  await dialog.getByRole('button', {name: 'Save', exact: true}).click()
+  const response = await created
+  expect(response.status()).toBe(201)
+  const destination = await response.json()
+  try {
+    expect(destination).toMatchObject({name, integrationId: first.id, provider: first.provider, enabled: false})
+    await expect(dialog).toBeHidden()
+    await expect(page.getByRole('row').filter({hasText: name})).toContainText('Disabled')
+    const rules = await (await page.request.get('/api/v1/admin/notifications/rules')).json()
+    expect(rules.filter((rule: {destinationId: string}) => rule.destinationId === destination.id))
+      .toEqual([expect.objectContaining({enabled: true, eventTypes: ['sla_warning', 'sla_breached']})])
+    await page.reload()
+    await page.getByRole('tab', {name: 'Notifications', exact: true}).click()
+    await expect(page.getByRole('row').filter({hasText: name})).toContainText('Disabled')
+    expect((await (await page.request.get('/api/v1/admin/notifications/destinations')).json())
+      .find((item: {id: string}) => item.id === destination.id)).toMatchObject({integrationId: first.id, provider: first.provider, enabled: false})
+  } finally {
+    expect((await command(page, `/api/v1/admin/notifications/destinations/${destination.id}?version=${destination.version}`, undefined, 'DELETE')).status()).toBe(204)
+  }
+})
+
 test('application hints update a second administrator within two seconds without losing a reply draft', async ({page, browser, baseURL}) => {
   await login(page, undefined, true)
   const viewer = await testAccount(page, 'account')

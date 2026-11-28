@@ -251,7 +251,8 @@
     "Message mutation retry scheduled": "Zaplanowano ponowienie zmiany wiadomości",
     "Message mutation failed": "Zmiana wiadomości nie powiodła się",
     "Message mutation awaiting confirmation": "Zmiana wiadomości oczekuje na potwierdzenie",
-    "Ta wiadomość nie ma edytowalnego zasobu tekstowego.": "Ta wiadomość nie ma edytowalnego zasobu tekstowego."
+    "Ta wiadomość nie ma edytowalnego zasobu tekstowego.": "Ta wiadomość nie ma edytowalnego zasobu tekstowego.",
+    "Wybierz integrację": "Wybierz integrację"
   },
   "auth": {
     "Bezpieczna aktywacja konta": "Bezpieczna aktywacja konta",

@@ -95,3 +95,13 @@ The platform-scoped resolved-read regression first fails with a missing provider
 ## Outbound message mutations
 
 `MESSAGE_MUTATIONS`: MessageMutationIntegrationTests covers both providers, authorization, idempotency, deterministic retries, lease fencing, concurrency, duplicate/stale callbacks, retained content/attachments and unchanged workflow/SLA/send timestamps. SlackMutationHttpTests and TeamsMutationHttpTests verify actual controlled update/delete HTTP, routing, attachment preservation and ambiguous receipts. message-mutations.test.tsx covers transport mapping and EN/PL pending/confirmation behavior; workflows.spec.ts exercises both controlled adapters and another connected browser. Live tenant validation remains NOT RUN. [Contract](OUTBOUND_MESSAGE_MUTATIONS.md).
+
+## Settings audit regressions (2026-11-28)
+
+| Observed defect | Regression | Gate |
+| --- | --- | --- |
+| Channel customer selector shows UUID / `__unmapped__` before opening | `settings-presentation.test.tsx`: EN/PL names, unassigned and inactive mapping; `application.spec.ts`: mapping write preserves grouping/ignored, then reload | web |
+| New notification uses nonexistent `int-slack`, including a Teams-only catalog; empty or removed catalog can still save | `settings-presentation.test.tsx`: actual Teams ID/provider, empty catalog and disappearing integration with preserved draft; `application.spec.ts`: POST/read/reload; `workflows.spec.ts`: actual API/DB destination and rule persistence, disabled destination, cleanup | web, fullstack |
+| Received timestamp remains Polish in English SLA example | `settings-presentation.test.tsx` and `application.spec.ts`: EN/PL example | web |
+
+Eight of nine new component tests fail on the original implementation (the Polish example already passes), then pass after correction. These are presentation/default-selection fixes using existing protected APIs. No live shared configuration was changed; controlled full-stack uses a disabled synthetic destination. Post-deployment acceptance remains separate.

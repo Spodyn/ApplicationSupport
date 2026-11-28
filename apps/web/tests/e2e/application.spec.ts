@@ -966,6 +966,94 @@ test("API user directory opens a fresh account editor for an authorized administ
   expect(externalRequests).toEqual([])
 })
 
+for (const english of [true, false]) {
+  test(`Settings customer names survive mapping changes and reload in ${english ? "English" : "Polish"}`, async ({ page }) => {
+    await preparePage(page, true, {english})
+    await prepareSettingsApi(page, {provider: "TEAMS"})
+    const customerId = "018f0000-0000-7000-8000-000000000401"
+    const replacementId = "018f0000-0000-7000-8000-000000000402"
+    const customers = [{id: customerId, name: "Mapped sandbox customer", active: true},
+      {id: replacementId, name: "Replacement sandbox customer", active: true}]
+    const channels = [
+      {id: "018f0000-0000-7000-8000-000000000501", integrationId: "018f0000-0000-7000-8000-000000000301",
+        provider: "TEAMS", externalChannelId: "external-team", name: "mapped-channel", customerId,
+        customerName: customers[0].name, ignored: false, groupingStrategy: "TEAMS_ROOT_REPLIES", active: true, lastMessageAt: null},
+      {id: "018f0000-0000-7000-8000-000000000502", integrationId: "018f0000-0000-7000-8000-000000000301",
+        provider: "SLACK", externalChannelId: "external-slack", name: "unmapped-channel", customerId: null,
+        customerName: null, ignored: false, groupingStrategy: "SLACK_ROOT_THREAD", active: true, lastMessageAt: null},
+    ]
+    const writes: unknown[] = []
+    await page.route("**/api/v1/admin/customers", route => route.fulfill({json: customers}))
+    await page.route("**/api/v1/admin/channels**", async route => {
+      if (route.request().method() === "PATCH") {
+        const body = route.request().postDataJSON()
+        writes.push(body)
+        channels[0].customerId = body.customerId
+        channels[0].customerName = customers.find(customer => customer.id === body.customerId)!.name
+        return route.fulfill({json: channels[0]})
+      }
+      return route.fulfill({json: channels})
+    })
+    await page.goto("/settings")
+    await page.getByRole("tab", {name: english ? "Channels" : "Kanały", exact: true}).click()
+    const mapped = page.getByRole("combobox", {name: `${english ? "Customer" : "Klient"}: mapped-channel`, exact: true})
+    await expect(mapped.locator('[data-slot="select-value"]')).toHaveText("Mapped sandbox customer")
+    await expect(page.getByRole("combobox", {name: `${english ? "Customer" : "Klient"}: unmapped-channel`, exact: true}).locator('[data-slot="select-value"]'))
+      .toHaveText(english ? "Unassigned" : "Nie przypisano")
+    await mapped.click()
+    await page.getByRole("option", {name: "Replacement sandbox customer", exact: true}).click()
+    await expect(mapped.locator('[data-slot="select-value"]')).toHaveText("Replacement sandbox customer")
+    expect(writes).toEqual([{customerId: replacementId, ignored: false, groupingStrategy: "TEAMS_ROOT_REPLIES"}])
+    await page.reload()
+    await page.getByRole("tab", {name: english ? "Channels" : "Kanały", exact: true}).click()
+    await expect(mapped.locator('[data-slot="select-value"]')).toHaveText("Replacement sandbox customer")
+    await page.getByRole("tab", {name: "SLA", exact: true}).click()
+    const panel = page.getByRole("tabpanel", {name: "SLA"})
+    await expect(panel).toContainText(english ? /Mon.*16:30/ : /pon.*16:30/)
+    if (english) await expect(panel).not.toContainText("pon.")
+  })
+}
+
+test("Settings creates a disabled notification destination using a real configured Teams identity", async ({page}) => {
+  await preparePage(page, true, {english: true})
+  await prepareSettingsApi(page, {provider: "TEAMS"})
+  const destinations: Record<string, unknown>[] = [], rules: Record<string, unknown>[] = []
+  const writes: {path: string; body: Record<string, unknown>}[] = []
+  await page.route("**/api/v1/admin/notifications/**", async route => {
+    const path = new URL(route.request().url()).pathname
+    const items = path.endsWith("/destinations") ? destinations : path.endsWith("/rules") ? rules : null
+    if (!items) return route.fallback()
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON()
+      writes.push({path, body})
+      const item = {...body, id: path.endsWith("/destinations") ? "018f0000-0000-7000-8000-000000000601" : "018f0000-0000-7000-8000-000000000602",
+        version: 0, secretConfigured: false, configConfigured: false, createdAt: "2026-11-28T10:00:00Z", updatedAt: "2026-11-28T10:00:00Z"}
+      items.push(item)
+      return route.fulfill({status: 201, json: item})
+    }
+    return route.fulfill({json: items})
+  })
+  await page.goto("/settings")
+  await page.getByRole("tab", {name: "Notifications", exact: true}).click()
+  await page.getByRole("button", {name: "Add destination", exact: true}).click()
+  const dialog = page.getByRole("dialog", {name: "Add notification destination", exact: true})
+  await expect(dialog.getByRole("combobox").locator('[data-slot="select-value"]')).toHaveText("Microsoft Teams · Acme Workspace")
+  await dialog.getByRole("textbox", {name: "Name", exact: true}).fill("Sandbox alert destination")
+  await dialog.getByRole("textbox", {name: "Destination channel", exact: true}).fill("sandbox-channel")
+  await dialog.getByRole("switch").click()
+  await dialog.getByRole("button", {name: "Save", exact: true}).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole("row").filter({hasText: "Sandbox alert destination"})).toBeVisible()
+  expect(writes[0]).toEqual({path: "/api/v1/admin/notifications/destinations", body: {
+    name: "Sandbox alert destination", provider: "TEAMS", integrationId: "018f0000-0000-7000-8000-000000000301",
+    targetRef: "sandbox-channel", enabled: false,
+  }})
+  expect(writes).toHaveLength(2)
+  await page.reload()
+  await page.getByRole("tab", {name: "Notifications", exact: true}).click()
+  await expect(page.getByRole("row").filter({hasText: "Sandbox alert destination"})).toContainText("Disabled")
+})
+
 test("Settings używa realnego common API do testowania i zmiany statusu integracji", async ({ page }) => {
   const { externalRequests } = await preparePage(page)
   const { writes } = await prepareSettingsApi(page)
